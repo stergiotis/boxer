@@ -83,6 +83,33 @@ impl ReplayReader {
 /// are decoded. A multiple of every element width.
 const SLICE_BLOCK_BYTES: usize = 64 * 1024;
 
+/// The largest single length-prefixed field (a string, a slice, a deferred
+/// block) the reader accepts, in bytes. Every such field is preceded by a
+/// `u32` length the peer chose, and the reader allocates that much before
+/// reading it; a stream that has lost its place reads arbitrary bytes as a
+/// length — up to 4 GiB per field, times the element width for a slice — and
+/// would end the process in an allocation failure rather than an error. The
+/// bound is set at the largest field the Go side can usefully send: an image's
+/// pixels travel as one `u32` per pixel, and 1 GiB is a 16384 × 16384 image,
+/// the largest texture side GPUs commonly offer (larger ones are refused as
+/// textures anyway).
+pub const MAX_FIELD_BYTES: usize = 1024 * 1024 * 1024;
+
+/// How many elements a reader reserves up front for a count the peer sent;
+/// a larger count still reads, growing the vector as its elements arrive.
+const PREALLOC_ELEMENTS_MAX: usize = 4096;
+
+/// `len` elements of `width` bytes, or [`FffiError::FieldTooLarge`] when that
+/// exceeds [`MAX_FIELD_BYTES`].
+#[inline(always)]
+fn check_field_len(len: usize, width: usize) -> FffiResult<usize> {
+    let bytes = (len as u64).saturating_mul(width as u64);
+    if bytes > MAX_FIELD_BYTES as u64 {
+        return Err(FffiError::FieldTooLarge(bytes, MAX_FIELD_BYTES));
+    }
+    Ok(len)
+}
+
 pub struct ImZeroFffiIo<R: std::io::BufRead, W: std::io::Write> {
     pub r: R,
     pub w: W,
@@ -439,6 +466,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         let len_offset = self.read_bytes_count;
         let len = self.read_plain_u32()?;
         let len = if len == u32::MAX { 0 } else { len };
+        check_field_len(len as usize, 1)?;
         let body_offset = self.read_bytes_count;
         let mut buffer: Vec<u8> = vec![0; len as usize];
         // read_bytes_count already updated by read_plain_u32 above;
@@ -510,7 +538,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         &mut self,
         decode: impl Fn([u8; N]) -> T,
     ) -> FffiResult<Vec<T>> {
-        let len = self.read_slice_len()?;
+        let len = check_field_len(self.read_slice_len()?, N)?;
         let mut v = Vec::with_capacity(len);
         let mut block = std::mem::take(&mut self.slice_block);
         block.resize(SLICE_BLOCK_BYTES, 0);
@@ -550,14 +578,15 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         self.read_plain_le_h(u32::from_le_bytes)
     }
     pub fn read_plain_u8h(&mut self) -> FffiResult<Vec<u8>> {
-        let len = self.read_slice_len()?;
+        let len = check_field_len(self.read_slice_len()?, 1)?;
         let mut v = vec![0u8; len];
         self.read_exact_active(&mut v)?;
         Ok(v)
     }
     pub fn read_plain_sh(&mut self) -> FffiResult<Vec<String>> {
-        let len = self.read_slice_len()?;
-        let mut v = Vec::with_capacity(len);
+        // Each element carries at least its own 4-byte length.
+        let len = check_field_len(self.read_slice_len()?, 4)?;
+        let mut v = Vec::with_capacity(len.min(PREALLOC_ELEMENTS_MAX));
         for _ in 0..len {
             v.push(self.read_plain_s()?);
         }
@@ -609,11 +638,11 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     ) -> FffiResult<std::collections::HashMap<(u64, u32), Vec<u8>>> {
         let count = self.read_plain_u32()? as usize;
         self.deferred_blocks_read += count as u64;
-        let mut map = std::collections::HashMap::with_capacity(count);
+        let mut map = std::collections::HashMap::with_capacity(count.min(PREALLOC_ELEMENTS_MAX));
         for _ in 0..count {
             let key_0 = self.read_plain_u64()?;
             let key_1 = self.read_plain_u32()?;
-            let buf_len = self.read_plain_u32()? as usize;
+            let buf_len = check_field_len(self.read_plain_u32()? as usize, 1)?;
             let mut buf = vec![0u8; buf_len];
             self.read_exact_active(&mut buf)?;
             map.insert((key_0, key_1), buf);
@@ -642,11 +671,11 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         let mut entries = vec![(0u32, 0u32); total];
         // Pre-size slab: average ~40 bytes per block is a reasonable estimate.
         // extend_from_slice will grow if needed, but this avoids most reallocations.
-        let mut slab = Vec::with_capacity(count * 40);
+        let mut slab = Vec::with_capacity(count.min(PREALLOC_ELEMENTS_MAX) * 40);
         for _ in 0..count {
             let row = self.read_plain_u64()?;
             let col = self.read_plain_u32()?;
-            let buf_len = self.read_plain_u32()? as usize;
+            let buf_len = check_field_len(self.read_plain_u32()? as usize, 1)?;
             let offset = slab.len() as u32;
             slab.resize(slab.len() + buf_len, 0u8);
             self.read_exact_active(&mut slab[offset as usize..offset as usize + buf_len])?;
@@ -669,7 +698,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         for _ in 0..count {
             let _key_0 = self.read_plain_u64()?;
             let _key_1 = self.read_plain_u32()?;
-            let buf_len = self.read_plain_u32()? as usize;
+            let buf_len = check_field_len(self.read_plain_u32()? as usize, 1)?;
             self.skip(buf_len)?;
         }
         Ok(())
@@ -681,11 +710,11 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     ) -> FffiResult<std::collections::HashMap<(u32, u32), Vec<u8>>> {
         let count = self.read_plain_u32()? as usize;
         self.deferred_blocks_read += count as u64;
-        let mut map = std::collections::HashMap::with_capacity(count);
+        let mut map = std::collections::HashMap::with_capacity(count.min(PREALLOC_ELEMENTS_MAX));
         for _ in 0..count {
             let key_0 = self.read_plain_u32()?;
             let key_1 = self.read_plain_u32()?;
-            let buf_len = self.read_plain_u32()? as usize;
+            let buf_len = check_field_len(self.read_plain_u32()? as usize, 1)?;
             let mut buf = vec![0u8; buf_len];
             self.read_exact_active(&mut buf)?;
             map.insert((key_0, key_1), buf);
@@ -700,7 +729,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         for _ in 0..count {
             let _key_0 = self.read_plain_u32()?;
             let _key_1 = self.read_plain_u32()?;
-            let buf_len = self.read_plain_u32()? as usize;
+            let buf_len = check_field_len(self.read_plain_u32()? as usize, 1)?;
             self.skip(buf_len)?;
         }
         Ok(())
@@ -712,10 +741,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     ) -> FffiResult<std::collections::HashMap<u32, Vec<u8>>> {
         let count = self.read_plain_u32()? as usize;
         self.deferred_blocks_read += count as u64;
-        let mut map = std::collections::HashMap::with_capacity(count);
+        let mut map = std::collections::HashMap::with_capacity(count.min(PREALLOC_ELEMENTS_MAX));
         for _ in 0..count {
             let key = self.read_plain_u32()?;
-            let buf_len = self.read_plain_u32()? as usize;
+            let buf_len = check_field_len(self.read_plain_u32()? as usize, 1)?;
             let mut buf = vec![0u8; buf_len];
             self.read_exact_active(&mut buf)?;
             map.insert(key, buf);
@@ -729,7 +758,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         self.deferred_blocks_read += count as u64;
         for _ in 0..count {
             let _key = self.read_plain_u32()?;
-            let buf_len = self.read_plain_u32()? as usize;
+            let buf_len = check_field_len(self.read_plain_u32()? as usize, 1)?;
             self.skip(buf_len)?;
         }
         Ok(())
@@ -741,10 +770,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     ) -> FffiResult<std::collections::HashMap<u64, Vec<u8>>> {
         let count = self.read_plain_u32()? as usize;
         self.deferred_blocks_read += count as u64;
-        let mut map = std::collections::HashMap::with_capacity(count);
+        let mut map = std::collections::HashMap::with_capacity(count.min(PREALLOC_ELEMENTS_MAX));
         for _ in 0..count {
             let key = self.read_plain_u64()?;
-            let buf_len = self.read_plain_u32()? as usize;
+            let buf_len = check_field_len(self.read_plain_u32()? as usize, 1)?;
             let mut buf = vec![0u8; buf_len];
             self.read_exact_active(&mut buf)?;
             map.insert(key, buf);
@@ -758,7 +787,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         self.deferred_blocks_read += count as u64;
         for _ in 0..count {
             let _key = self.read_plain_u64()?;
-            let buf_len = self.read_plain_u32()? as usize;
+            let buf_len = check_field_len(self.read_plain_u32()? as usize, 1)?;
             self.skip(buf_len)?;
         }
         Ok(())
@@ -892,5 +921,65 @@ mod tests {
         wire.extend_from_slice(&5u32.to_le_bytes());
         wire.extend_from_slice(&[0u8; 4 * 3 + 2]);
         assert!(io_over(wire).read_plain_u32h().is_err());
+    }
+
+    fn prefixed(len: u32) -> Vec<u8> {
+        let mut wire = len.to_le_bytes().to_vec();
+        wire.extend_from_slice(&[0u8; 16]);
+        wire
+    }
+
+    fn too_large<T>(r: crate::fffi::common::FffiResult<T>) -> bool {
+        matches!(r, Err(crate::fffi::common::FffiError::FieldTooLarge(..)))
+    }
+
+    /// A length prefix past `MAX_FIELD_BYTES` fails before anything is
+    /// allocated: a stream that lost its place reads arbitrary bytes as
+    /// lengths, and allocating them would abort the process.
+    #[test]
+    fn an_oversized_length_prefix_is_an_error() {
+        let cap = super::MAX_FIELD_BYTES as u32;
+        assert!(too_large(io_over(prefixed(cap + 1)).read_plain_s()));
+        assert!(too_large(io_over(prefixed(cap + 1)).read_plain_u8h()));
+        assert!(too_large(io_over(prefixed(cap / 8 + 1)).read_plain_u64h()));
+        assert!(too_large(io_over(prefixed(cap / 4 + 1)).read_plain_f32h()));
+        assert!(too_large(io_over(prefixed(cap / 4 + 1)).read_plain_sh()));
+        // u32::MAX - 1, one short of the nil sentinel.
+        assert!(too_large(io_over(prefixed(u32::MAX - 1)).read_plain_u32h()));
+
+        let mut map = 1u32.to_le_bytes().to_vec();
+        map.extend_from_slice(&7u64.to_le_bytes());
+        map.extend_from_slice(&3u32.to_le_bytes());
+        map.extend_from_slice(&(cap + 1).to_le_bytes());
+        assert!(too_large(
+            io_over(map.clone()).read_deferred_block_map_u64_u32()
+        ));
+        assert!(too_large(
+            io_over(map.clone()).skip_deferred_block_map_u64_u32()
+        ));
+        assert!(too_large(
+            io_over(map).read_deferred_block_map_dense_u64_u32(8, 4)
+        ));
+    }
+
+    /// A length within the cap is not refused for its size: one the wire
+    /// cannot back is the ordinary end-of-stream error.
+    #[test]
+    fn a_length_within_the_cap_reads_or_ends_the_stream() {
+        let r = io_over(prefixed(1 << 20)).read_plain_u8h();
+        assert!(
+            matches!(r, Err(crate::fffi::common::FffiError::Io(_))),
+            "{r:?}"
+        );
+        // A large string count reserves a bounded vector and then fails on
+        // the missing elements.
+        let r = io_over(prefixed(1 << 20)).read_plain_sh();
+        assert!(
+            matches!(r, Err(crate::fffi::common::FffiError::Io(_))),
+            "{r:?}"
+        );
+        let mut wire = 3u32.to_le_bytes().to_vec();
+        wire.extend_from_slice(b"abc");
+        assert_eq!(io_over(wire).read_plain_s().unwrap(), "abc");
     }
 }

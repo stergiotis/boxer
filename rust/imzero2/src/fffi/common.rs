@@ -13,5 +13,10 @@ pub enum FffiError {
     /// effect marks.
     #[error("write of {0} bytes toward the server during a capture replay")]
     WriteDuringCaptureReplay(usize),
+    /// A length prefix larger than any field the Go side writes: the stream
+    /// is desynchronised (or the peer is not the Go side), and allocating
+    /// what it asks for would abort the process instead of failing.
+    #[error("length prefix of {0} bytes exceeds the {1}-byte field cap; the stream is out of step")]
+    FieldTooLarge(u64, usize),
 }
 pub type FffiResult<T> = Result<T, FffiError>;
