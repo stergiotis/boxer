@@ -18,3 +18,12 @@ var MintedColumns = []recordstore.ColumnSpec{
 // MintedTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
 const MintedTableStamp = "boxer-table/1 kind=minted columns=ca6fb9e6b1ff9ef3 naming=2"
+
+// MintedSchemaContract is the contract of a MintedStore bound to table (""
+// binds MintedTableName): what a schema check needs, without a store.
+func MintedSchemaContract(table string) recordstore.TableContract {
+	if table == "" {
+		table = MintedTableName
+	}
+	return recordstore.TableContract{Kind: "minted", Table: table, Columns: MintedColumns, Stamp: MintedTableStamp}
+}

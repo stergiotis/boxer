@@ -397,7 +397,7 @@ func (inst *JobStore) EnsureTable(ctx context.Context) (err error) {
 // the generated columns and the stamp its CREATE TABLE writes, bound to
 // the configured read table. A schema check needs nothing else.
 func (inst *JobStore) SchemaContract() recordstore.TableContract {
-	return recordstore.TableContract{Kind: "watchbill", Table: inst.readTable(), Columns: JobColumns, Stamp: JobTableStamp}
+	return JobSchemaContract(inst.readTable())
 }
 
 // JudgeSchema reads the live table's columns and stamp and judges them

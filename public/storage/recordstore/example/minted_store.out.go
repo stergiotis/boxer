@@ -367,7 +367,7 @@ func (inst *MintedStore) EnsureTable(ctx context.Context) (err error) {
 // the generated columns and the stamp its CREATE TABLE writes, bound to
 // the configured read table. A schema check needs nothing else.
 func (inst *MintedStore) SchemaContract() recordstore.TableContract {
-	return recordstore.TableContract{Kind: "minted", Table: inst.readTable(), Columns: MintedColumns, Stamp: MintedTableStamp}
+	return MintedSchemaContract(inst.readTable())
 }
 
 // JudgeSchema reads the live table's columns and stamp and judges them

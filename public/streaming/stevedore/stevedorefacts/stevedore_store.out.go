@@ -353,7 +353,7 @@ func (inst *StevedoreStore) takeWrittenN(n int) iter.Seq[recordstore.WrittenKey[
 // the generated columns and the stamp its CREATE TABLE writes, bound to
 // the configured read table. A schema check needs nothing else.
 func (inst *StevedoreStore) SchemaContract() recordstore.TableContract {
-	return recordstore.TableContract{Kind: "facts", Table: inst.readTable(), Columns: StevedoreColumns, Stamp: StevedoreTableStamp}
+	return StevedoreSchemaContract(inst.readTable())
 }
 
 // JudgeSchema reads the live table's columns and stamp and judges them

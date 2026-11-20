@@ -198,3 +198,12 @@ var SysmetricsColumns = []recordstore.ColumnSpec{
 // SysmetricsTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
 const SysmetricsTableStamp = "boxer-table/1 kind=facts columns=b9f169be98d23fa6 naming=2 vocab=957830f0f0484df4"
+
+// SysmetricsSchemaContract is the contract of a SysmetricsStore bound to table (""
+// binds SysmetricsTableName): what a schema check needs, without a store.
+func SysmetricsSchemaContract(table string) recordstore.TableContract {
+	if table == "" {
+		table = SysmetricsTableName
+	}
+	return recordstore.TableContract{Kind: "facts", Table: table, Columns: SysmetricsColumns, Stamp: SysmetricsTableStamp}
+}

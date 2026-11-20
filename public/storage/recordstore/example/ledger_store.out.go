@@ -414,7 +414,7 @@ func (inst *LedgerStore) EnsureTable(ctx context.Context) (err error) {
 // the generated columns and the stamp its CREATE TABLE writes, bound to
 // the configured read table. A schema check needs nothing else.
 func (inst *LedgerStore) SchemaContract() recordstore.TableContract {
-	return recordstore.TableContract{Kind: "ledger", Table: inst.readTable(), Columns: LedgerColumns, Stamp: LedgerTableStamp}
+	return LedgerSchemaContract(inst.readTable())
 }
 
 // JudgeSchema reads the live table's columns and stamp and judges them

@@ -60,3 +60,12 @@ var DeviceColumns = []recordstore.ColumnSpec{
 // DeviceTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
 const DeviceTableStamp = "boxer-table/1 kind=device columns=13a76b382c0ea57c naming=2 vocab=9384081701e28ff8"
+
+// DeviceSchemaContract is the contract of a DeviceStore bound to table (""
+// binds DeviceTableName): what a schema check needs, without a store.
+func DeviceSchemaContract(table string) recordstore.TableContract {
+	if table == "" {
+		table = DeviceTableName
+	}
+	return recordstore.TableContract{Kind: "device", Table: table, Columns: DeviceColumns, Stamp: DeviceTableStamp}
+}

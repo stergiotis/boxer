@@ -350,7 +350,7 @@ func (inst *PresenceStore) takeWrittenN(n int) iter.Seq[recordstore.WrittenKey[u
 // the generated columns and the stamp its CREATE TABLE writes, bound to
 // the configured read table. A schema check needs nothing else.
 func (inst *PresenceStore) SchemaContract() recordstore.TableContract {
-	return recordstore.TableContract{Kind: "facts", Table: inst.readTable(), Columns: PresenceColumns, Stamp: PresenceTableStamp}
+	return PresenceSchemaContract(inst.readTable())
 }
 
 // JudgeSchema reads the live table's columns and stamp and judges them

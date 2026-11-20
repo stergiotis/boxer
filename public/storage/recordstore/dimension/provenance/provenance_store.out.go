@@ -365,7 +365,7 @@ func (inst *ProvenanceStore) EnsureTable(ctx context.Context) (err error) {
 // the generated columns and the stamp its CREATE TABLE writes, bound to
 // the configured read table. A schema check needs nothing else.
 func (inst *ProvenanceStore) SchemaContract() recordstore.TableContract {
-	return recordstore.TableContract{Kind: "provenance", Table: inst.readTable(), Columns: ProvenanceColumns, Stamp: ProvenanceTableStamp}
+	return ProvenanceSchemaContract(inst.readTable())
 }
 
 // JudgeSchema reads the live table's columns and stamp and judges them

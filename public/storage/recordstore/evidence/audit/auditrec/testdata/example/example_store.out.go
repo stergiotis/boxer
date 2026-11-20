@@ -424,7 +424,7 @@ func (inst *ExampleStore) EnsureTable(ctx context.Context) (err error) {
 // the generated columns and the stamp its CREATE TABLE writes, bound to
 // the configured read table. A schema check needs nothing else.
 func (inst *ExampleStore) SchemaContract() recordstore.TableContract {
-	return recordstore.TableContract{Kind: "auditexample", Table: inst.readTable(), Columns: ExampleColumns, Stamp: ExampleTableStamp}
+	return ExampleSchemaContract(inst.readTable())
 }
 
 // JudgeSchema reads the live table's columns and stamp and judges them

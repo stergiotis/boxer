@@ -18,3 +18,12 @@ var SeqColumns = []recordstore.ColumnSpec{
 // SeqTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
 const SeqTableStamp = "boxer-table/1 kind=seq columns=d662a6f0db556a67 naming=2"
+
+// SeqSchemaContract is the contract of a SeqStore bound to table (""
+// binds SeqTableName): what a schema check needs, without a store.
+func SeqSchemaContract(table string) recordstore.TableContract {
+	if table == "" {
+		table = SeqTableName
+	}
+	return recordstore.TableContract{Kind: "seq", Table: table, Columns: SeqColumns, Stamp: SeqTableStamp}
+}

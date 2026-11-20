@@ -393,7 +393,7 @@ func (inst *SeqStore) EnsureTable(ctx context.Context) (err error) {
 // the generated columns and the stamp its CREATE TABLE writes, bound to
 // the configured read table. A schema check needs nothing else.
 func (inst *SeqStore) SchemaContract() recordstore.TableContract {
-	return recordstore.TableContract{Kind: "seq", Table: inst.readTable(), Columns: SeqColumns, Stamp: SeqTableStamp}
+	return SeqSchemaContract(inst.readTable())
 }
 
 // JudgeSchema reads the live table's columns and stamp and judges them

@@ -439,7 +439,7 @@ func (inst *PushoutStore) EnsureTable(ctx context.Context) (err error) {
 // the generated columns and the stamp its CREATE TABLE writes, bound to
 // the configured read table. A schema check needs nothing else.
 func (inst *PushoutStore) SchemaContract() recordstore.TableContract {
-	return recordstore.TableContract{Kind: "pushout", Table: inst.readTable(), Columns: PushoutColumns, Stamp: PushoutTableStamp}
+	return PushoutSchemaContract(inst.readTable())
 }
 
 // JudgeSchema reads the live table's columns and stamp and judges them

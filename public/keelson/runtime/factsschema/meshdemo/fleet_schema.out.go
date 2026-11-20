@@ -198,3 +198,12 @@ var FleetColumns = []recordstore.ColumnSpec{
 // FleetTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
 const FleetTableStamp = "boxer-table/1 kind=facts columns=b9f169be98d23fa6 naming=2 vocab=e5c8f7f04c913a1f"
+
+// FleetSchemaContract is the contract of a FleetStore bound to table (""
+// binds FleetTableName): what a schema check needs, without a store.
+func FleetSchemaContract(table string) recordstore.TableContract {
+	if table == "" {
+		table = FleetTableName
+	}
+	return recordstore.TableContract{Kind: "facts", Table: table, Columns: FleetColumns, Stamp: FleetTableStamp}
+}

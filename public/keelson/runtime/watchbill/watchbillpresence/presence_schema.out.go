@@ -198,3 +198,12 @@ var PresenceColumns = []recordstore.ColumnSpec{
 // PresenceTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
 const PresenceTableStamp = "boxer-table/1 kind=facts columns=b9f169be98d23fa6 naming=2 vocab=dff246676d305506"
+
+// PresenceSchemaContract is the contract of a PresenceStore bound to table (""
+// binds PresenceTableName): what a schema check needs, without a store.
+func PresenceSchemaContract(table string) recordstore.TableContract {
+	if table == "" {
+		table = PresenceTableName
+	}
+	return recordstore.TableContract{Kind: "facts", Table: table, Columns: PresenceColumns, Stamp: PresenceTableStamp}
+}

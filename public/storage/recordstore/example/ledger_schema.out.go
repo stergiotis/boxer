@@ -115,3 +115,12 @@ var LedgerColumns = []recordstore.ColumnSpec{
 // LedgerTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
 const LedgerTableStamp = "boxer-table/1 kind=ledger columns=0da8a3f17a492495 naming=2 vocab=2cfc1079f89b864c"
+
+// LedgerSchemaContract is the contract of a LedgerStore bound to table (""
+// binds LedgerTableName): what a schema check needs, without a store.
+func LedgerSchemaContract(table string) recordstore.TableContract {
+	if table == "" {
+		table = LedgerTableName
+	}
+	return recordstore.TableContract{Kind: "ledger", Table: table, Columns: LedgerColumns, Stamp: LedgerTableStamp}
+}

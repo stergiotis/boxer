@@ -427,7 +427,7 @@ func (inst *MddocStore) takeWrittenN(n int) iter.Seq[recordstore.WrittenKey[uint
 // the generated columns and the stamp its CREATE TABLE writes, bound to
 // the configured read table. A schema check needs nothing else.
 func (inst *MddocStore) SchemaContract() recordstore.TableContract {
-	return recordstore.TableContract{Kind: "facts", Table: inst.readTable(), Columns: MddocColumns, Stamp: MddocTableStamp}
+	return MddocSchemaContract(inst.readTable())
 }
 
 // JudgeSchema reads the live table's columns and stamp and judges them

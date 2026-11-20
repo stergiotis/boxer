@@ -285,3 +285,12 @@ var EntryVaultColumns = []recordstore.ColumnSpec{
 // EntryVaultTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
 const EntryVaultTableStamp = "boxer-table/1 kind=agentrunentryvault columns=f87f4ca4631ff22e naming=2 vocab=bdc4302216ad2f52"
+
+// EntryVaultSchemaContract is the contract of a EntryVaultStore bound to table (""
+// binds EntryVaultTableName): what a schema check needs, without a store.
+func EntryVaultSchemaContract(table string) recordstore.TableContract {
+	if table == "" {
+		table = EntryVaultTableName
+	}
+	return recordstore.TableContract{Kind: "agentrunentryvault", Table: table, Columns: EntryVaultColumns, Stamp: EntryVaultTableStamp}
+}

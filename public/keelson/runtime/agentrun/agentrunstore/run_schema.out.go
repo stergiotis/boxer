@@ -256,3 +256,12 @@ var RunColumns = []recordstore.ColumnSpec{
 // RunTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
 const RunTableStamp = "boxer-table/1 kind=agentrun columns=68011e3bc34e2e3c naming=2 vocab=0c478444bacc1265"
+
+// RunSchemaContract is the contract of a RunStore bound to table (""
+// binds RunTableName): what a schema check needs, without a store.
+func RunSchemaContract(table string) recordstore.TableContract {
+	if table == "" {
+		table = RunTableName
+	}
+	return recordstore.TableContract{Kind: "agentrun", Table: table, Columns: RunColumns, Stamp: RunTableStamp}
+}

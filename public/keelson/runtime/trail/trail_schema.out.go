@@ -198,3 +198,12 @@ var TrailColumns = []recordstore.ColumnSpec{
 // TrailTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
 const TrailTableStamp = "boxer-table/1 kind=facts columns=b9f169be98d23fa6 naming=2 vocab=39cfcc42841b72a9"
+
+// TrailSchemaContract is the contract of a TrailStore bound to table (""
+// binds TrailTableName): what a schema check needs, without a store.
+func TrailSchemaContract(table string) recordstore.TableContract {
+	if table == "" {
+		table = TrailTableName
+	}
+	return recordstore.TableContract{Kind: "facts", Table: table, Columns: TrailColumns, Stamp: TrailTableStamp}
+}
