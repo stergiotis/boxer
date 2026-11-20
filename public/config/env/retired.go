@@ -69,6 +69,19 @@ func RetiredVars() (out []Retired) {
 // warns about: the ones boxer owns.
 var WatchedPrefixes = []string{"BOXER_", "IMZERO2_"}
 
+// ScriptOwned are names in a watched namespace that the repository's shell
+// scripts read and set for themselves (build flags, benchmark and fuzz
+// knobs); a Go process inherits them and does not read them, so they are not
+// reported. A test in public/app holds every such name under scripts/ to be
+// either registered or listed here.
+var ScriptOwned = []string{
+	"BOXER_BENCH_BASE", "BOXER_BENCH_COUNT", "BOXER_BENCH_MATCH", "BOXER_BENCH_OUT", "BOXER_BENCH_TIME",
+	"BOXER_COVERLANE_COVERPKG", "BOXER_COVERLANE_DIR",
+	"BOXER_FUZZ_LOG_DIR", "BOXER_FUZZ_MATCH", "BOXER_FUZZ_PARALLEL", "BOXER_FUZZ_TIME",
+	"BOXER_GO_FLAGS", "BOXER_GO_TAGS", "BOXER_IDL_CHECK", "BOXER_ROOT",
+	"IMZERO2_FFMPEG_SRC",
+}
+
 // EnvFindingKindE says why a set variable is reported.
 type EnvFindingKindE uint8
 
@@ -115,6 +128,9 @@ func CheckEnviron(environ []string) (findings []EnvFinding) {
 			continue
 		}
 		if _, known := slices.BinarySearch(knownNames, name); known {
+			continue
+		}
+		if slices.Contains(ScriptOwned, name) {
 			continue
 		}
 		findings = append(findings, EnvFinding{Kind: EnvFindingUnregistered, Name: name})
