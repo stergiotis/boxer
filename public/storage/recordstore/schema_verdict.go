@@ -164,7 +164,7 @@ func (inst SchemaVerdict) Summary() string {
 	switch inst.Verdict {
 	case SchemaVerdictMigratable:
 		if n := len(inst.Missing); n > 0 {
-			b.WriteString(" — " + strconv.Itoa(n) + " column(s) missing")
+			b.WriteString(" — " + strconv.Itoa(n) + " column(s) missing (" + abbreviate(inst.Missing, 3) + ")")
 		}
 		if n := len(inst.Renames); n > 0 {
 			b.WriteString(" — " + strconv.Itoa(n) + " column(s) under an older aspect spelling")
@@ -440,6 +440,14 @@ func stringAccessor(rec arrow.RecordBatch, name string) (get func(int) string, e
 		err = eb.Build().Str("column", name).Stringer("type", a.DataType()).Errorf("column is not a string")
 	}
 	return
+}
+
+// abbreviate joins the first n of names and counts the rest.
+func abbreviate(names []string, n int) string {
+	if len(names) <= n {
+		return strings.Join(names, ", ")
+	}
+	return strings.Join(names[:n], ", ") + ", … " + strconv.Itoa(len(names)-n) + " more"
 }
 
 func quoteLiteral(s string) string {
