@@ -223,6 +223,20 @@ declaration went with it. The `Argv` mechanism above is unchanged and still
 carries `clickhouse local`. The spawning inventory in §Decision names the
 package as it stood when written.
 
+### 2026-11-20 — A child no longer inherits secrets it was not declared to need
+
+Every child a `Program` starts — whether it inherits the parent's
+environment or the caller passes `Opts.Env` — has the registry's `Sensitive`
+variables removed, except those named in the new `InheritSensitive` field or
+all of them under `InheritAllSensitive`. The latter is set on the children
+that are themselves boxer code and read the same secrets: the `go` toolchain
+(`go run`, `go test`), the watchbill job child, a scene's host and the
+deploy carrier. ffmpeg, `clickhouse local`, the Rust client and the rest
+keep none; `clickhouse local` connects to no server, so it has no use for
+the ClickHouse password. The registry knows only the variables of packages
+linked into the binary, so a secret no linked package declares is not
+recognised and still passes through.
+
 ## Deferred
 
 - `OverrideEnv` is populated for `clickhouse-local` (`BOXER_CLICKHOUSE_LOCAL`, a

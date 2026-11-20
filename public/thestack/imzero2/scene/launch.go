@@ -22,10 +22,13 @@ import (
 
 // hostProgram is the imzero2 host a scene launches: this executable for the
 // `scene` command, a freshly built one for a Go test. Local, so the caller
-// supplies the path and the registry records the role.
+// supplies the path and the registry records the role. A boxer host, it
+// reads the same secrets this process does (a scene on a real model needs
+// the model's key).
 var hostProgram = extbin.Declare(extbin.Program{
-	Name: "imzero2 host (scene)",
-	Kind: extbin.Local,
+	Name:                "imzero2 host (scene)",
+	Kind:                extbin.Local,
+	InheritAllSensitive: true,
 })
 
 // Options is what a launch needs besides the scene's own spec.

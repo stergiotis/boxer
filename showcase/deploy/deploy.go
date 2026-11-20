@@ -42,9 +42,10 @@ import (
 // here purely so they appear in the audited program registry.
 var (
 	deployCarrier = extbin.Declare(extbin.Program{
-		Name:        "deploy-carrier",
-		Kind:        extbin.Local,
-		InstallHint: "built by the deploy build step (main_go)",
+		Name:                "deploy-carrier",
+		Kind:                extbin.Local,
+		InstallHint:         "built by the deploy build step (main_go)",
+		InheritAllSensitive: true,
 	})
 	deployWsProbe = extbin.Declare(extbin.Program{
 		Name:        "deploy-ws-probe",

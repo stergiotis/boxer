@@ -11,6 +11,8 @@ import (
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // The override variables the fixtures below honour, declared as every
@@ -25,6 +27,19 @@ var (
 		Name:        "BOXER_RESOLVE_OV",
 		Description: "test fixture: path override of the boxer-resolve-absent-xyz program",
 		Category:    env.CategoryTestIntegration,
+	})
+	// Two Sensitive fixtures: one no program declares, one a fixture keeps.
+	_ = env.NewString(env.Spec{
+		Name:        "EXTBIN_TEST_SECRET",
+		Description: "test fixture: a secret no child keeps",
+		Category:    env.CategoryTestIntegration,
+		Sensitive:   true,
+	})
+	_ = env.NewString(env.Spec{
+		Name:        "EXTBIN_TEST_KEPT",
+		Description: "test fixture: a secret one fixture program keeps",
+		Category:    env.CategoryTestIntegration,
+		Sensitive:   true,
 	})
 )
 
@@ -313,4 +328,29 @@ func TestClickHouseLocalMeetsTheFloor(t *testing.T) {
 	if v == "" {
 		t.Fatal("the probe reported no version")
 	}
+}
+
+func TestChildEnvDropsUndeclaredSecrets(t *testing.T) {
+	base := []string{"PATH=/bin", "EXTBIN_TEST_SECRET=s3cret", "EXTBIN_TEST_KEPT=k3pt", "EXTBIN_TEST_PLAIN=x"}
+	plain := &Program{Name: "plain"}
+	out := plain.childEnv(base)
+	assert.NotContains(t, out, "EXTBIN_TEST_SECRET=s3cret")
+	assert.NotContains(t, out, "EXTBIN_TEST_KEPT=k3pt")
+	assert.Contains(t, out, "PATH=/bin")
+	assert.Contains(t, out, "EXTBIN_TEST_PLAIN=x")
+
+	keeps := &Program{Name: "keeps", InheritSensitive: []string{"EXTBIN_TEST_KEPT"}}
+	out = keeps.childEnv(base)
+	assert.NotContains(t, out, "EXTBIN_TEST_SECRET=s3cret")
+	assert.Contains(t, out, "EXTBIN_TEST_KEPT=k3pt")
+
+	host := &Program{Name: "host", InheritAllSensitive: true}
+	assert.Equal(t, base, host.childEnv(base))
+}
+
+func TestChildEnvStripsTheInheritedEnvironment(t *testing.T) {
+	t.Setenv("EXTBIN_TEST_SECRET", "s3cret")
+	out := (&Program{Name: "plain"}).childEnv(nil)
+	require.NotNil(t, out)
+	assert.NotContains(t, out, "EXTBIN_TEST_SECRET=s3cret")
 }

@@ -20,7 +20,9 @@ package extbin
 import (
 	"bytes"
 	"context"
+	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -113,6 +115,16 @@ type Program struct {
 	// MinVersionNeeds names one behaviour that needs MinVersion, for the
 	// refusal.
 	MinVersionNeeds string
+
+	// InheritSensitive names the Sensitive registry variables (env.Spec
+	// Sensitive, ADR-0009) this program's child keeps. Every other Sensitive
+	// variable is removed from the child's environment, whether it inherits
+	// the parent's or the caller passes Opts.Env: a secret this process
+	// holds reaches only the children declared to need it.
+	InheritSensitive []string
+	// InheritAllSensitive keeps every Sensitive variable: for a child that is
+	// itself a boxer host and reads the same secrets this process does.
+	InheritAllSensitive bool
 }
 
 // Opts configures a single invocation.
@@ -127,7 +139,9 @@ type Opts struct {
 	Path string
 	// Env sets the child environment, exactly like exec.Cmd.Env: nil inherits
 	// the parent's, non-nil replaces it wholesale. Callers wanting
-	// os.Environ()+X or key-overrides compute that slice here.
+	// os.Environ()+X or key-overrides compute that slice here. Either way the
+	// Sensitive registry variables the program does not declare in
+	// InheritSensitive are removed.
 	Env []string
 }
 
@@ -190,7 +204,7 @@ func (p *Program) Command(ctx context.Context, o Opts, args ...string) (cmd *exe
 	argv = append(argv, args...)
 	cmd = exec.CommandContext(ctx, name, argv...)
 	cmd.Dir = o.Dir
-	cmd.Env = o.Env
+	cmd.Env = p.childEnv(o.Env)
 	return
 }
 
@@ -368,8 +382,55 @@ func (p *Program) goToolFallback(ctx context.Context, o Opts, args []string) (cm
 	}
 	cmd = exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = o.Dir
-	cmd.Env = o.Env
+	cmd.Env = p.childEnv(o.Env)
 	return cmd, true
+}
+
+// childEnv is the environment a child of p starts with: base (the parent's
+// when nil) without the Sensitive registry variables p does not declare it
+// keeps. It returns nil — inherit unchanged — when there is nothing to
+// remove, so an exec.Cmd built from it behaves as before.
+func (p *Program) childEnv(base []string) (out []string) {
+	if p.InheritAllSensitive {
+		return base
+	}
+	drop := p.sensitiveToDrop()
+	if len(drop) == 0 {
+		return base
+	}
+	inherited := base == nil
+	if inherited {
+		base = os.Environ() //boxer:lint disable=CS011 reason="the child inherits the ambient environment; this only removes registry-declared secrets from it"
+	}
+	out = make([]string, 0, len(base))
+	removed := false
+	for _, kv := range base {
+		name, _, _ := strings.Cut(kv, "=")
+		if _, secret := drop[name]; secret {
+			removed = true
+			continue
+		}
+		out = append(out, kv)
+	}
+	if !removed && inherited {
+		return nil
+	}
+	return
+}
+
+// sensitiveToDrop is the set of Sensitive registry variable names p's child
+// does not keep.
+func (p *Program) sensitiveToDrop() (drop map[string]struct{}) {
+	for _, spec := range env.All() {
+		if !spec.Sensitive || slices.Contains(p.InheritSensitive, spec.Name) {
+			continue
+		}
+		if drop == nil {
+			drop = make(map[string]struct{})
+		}
+		drop[spec.Name] = struct{}{}
+	}
+	return
 }
 
 func (p *Program) notFound(cause error) (err error) {

@@ -51,10 +51,13 @@ var (
 var (
 	// Go is the `go` binary itself (`go env`, `go build`). Reproducibility
 	// comes from the go.mod toolchain directive + GOTOOLCHAIN.
+	// It keeps every Sensitive variable: `go run` and `go test` run boxer
+	// code that reads the same secrets this process does.
 	Go = Declare(Program{
-		Name:        "go",
-		Kind:        GoToolchain,
-		InstallHint: "the Go toolchain (https://go.dev/dl)",
+		Name:                "go",
+		Kind:                GoToolchain,
+		InstallHint:         "the Go toolchain (https://go.dev/dl)",
+		InheritAllSensitive: true,
 	})
 
 	// SCC is the scc code-counter, pinned in go.mod's tool block and invoked as

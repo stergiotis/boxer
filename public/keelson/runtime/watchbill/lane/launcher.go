@@ -43,10 +43,12 @@ type LauncherI interface {
 
 // childProgram is the executable a job child runs: this one, for the host,
 // so a cover-built host spawns a cover-built child (ADR-0344 §SD4). Local,
-// so the caller supplies the path and the registry records the role.
+// so the caller supplies the path and the registry records the role. Being
+// this binary, it reads the same secrets this process does.
 var childProgram = extbin.Declare(extbin.Program{
-	Name: "watchbill job child",
-	Kind: extbin.Local,
+	Name:                "watchbill job child",
+	Kind:                extbin.Local,
+	InheritAllSensitive: true,
 })
 
 // DefaultChildArgs is the verb a job child runs: `watchbill run --job <id>`
