@@ -36,14 +36,14 @@ job, err := inst.queue.Enqueue(watchbill.Request{Kind: "tender.download", Subjec
 ```
 
 The five verbs — enqueue, cancel, retry, get, list — are River's client
-verbs on `watchbill.job.<op>`, request/reply with generated codecs. The
+verbs on `runtime.watchbill.job.<op>`, request/reply with generated codecs. The
 worker that serves them attributes an enqueue to the bus envelope's
 sender, so the owner app on the row is never a field the caller wrote.
 
 ## What the schematic shows
 
-- **Subjects.** The five request subjects, the doorbell `watchbill.wake`
-  a store holder rings after a row, and `watchbill.changed`, which the
+- **Subjects.** The five request subjects, the doorbell `runtime.watchbill.wake`
+  a store holder rings after a row, and `runtime.watchbill.changed`, which the
   worker publishes after every row it flushed — never before.
 - **Backends.** The worker is the service, under the id
   `runtime.watchbill`; `SqlStore` is the production store over the

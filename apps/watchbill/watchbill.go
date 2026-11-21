@@ -4,7 +4,7 @@
 // (ADR-0253), cancel and
 // retry through the client, and the task monitor for live runs. Nothing
 // here waits on a store from the frame goroutine: a poller refreshes on a
-// tick and on every watchbill.changed, and each verb runs as one piece of
+// tick and on every runtime.watchbill.changed, and each verb runs as one piece of
 // work on the instance's lifetime scope and lands its outcome for the
 // next frame.
 package watchbill
@@ -251,7 +251,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	if bus := ctx.Bus(); bus != nil {
 		unsub, subErr := bus.Subscribe(wb.SubjectChanged, func(*app.Msg) { inst.markDirty() })
 		if subErr != nil {
-			inst.logger.Debug().Err(subErr).Msg("watchbill app: not hearing watchbill.changed")
+			inst.logger.Debug().Err(subErr).Msg("watchbill app: not hearing runtime.watchbill.changed")
 		} else {
 			inst.unsub = unsub
 		}

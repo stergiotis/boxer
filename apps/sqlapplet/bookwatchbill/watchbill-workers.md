@@ -24,7 +24,7 @@ a process that links its handler.
 
 The row marked `local` is this process's own worker, and it alone carries
 the live fields: the job ids it holds, its last poll, whether it serves
-`watchbill.job.*` on the bus and whether it reads heartbeats and so rescues
+`runtime.watchbill.job.*` on the bus and whether it reads heartbeats and so rescues
 what a dead run left.
 
 ```sql

@@ -62,7 +62,7 @@ run left.
 
 A poller reads off the frame: every two seconds while Auto-refresh is on,
 and at once after Refresh, a filter change, a verb, or a
-`watchbill.changed` announcement from a worker. One read lists at most
+`runtime.watchbill.changed` announcement from a worker. One read lists at most
 500 jobs under the state filter, then the selected job's trail and the
 worker rows. A failed list keeps the rows you had and shows the error; a
 timeout adds "No worker answered: the process's watchbill service needs a

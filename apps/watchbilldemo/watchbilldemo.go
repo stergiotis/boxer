@@ -7,7 +7,7 @@
 //
 // Every bus request is answered by the worker, which may be a store read
 // away; none runs on the frame goroutine. A poller refreshes the list on a
-// tick and on every watchbill.changed it hears, and each verb runs as one
+// tick and on every runtime.watchbill.changed it hears, and each verb runs as one
 // piece of work on the instance's lifetime scope (W5) and lands its
 // outcome under the app's mutex for the next frame to show.
 package watchbilldemo
@@ -145,7 +145,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	if bus := ctx.Bus(); bus != nil {
 		unsub, subErr := bus.Subscribe(watchbill.SubjectChanged, func(*app.Msg) { inst.markDirty() })
 		if subErr != nil {
-			inst.logger.Debug().Err(subErr).Msg("watchbilldemo: not hearing watchbill.changed")
+			inst.logger.Debug().Err(subErr).Msg("watchbilldemo: not hearing runtime.watchbill.changed")
 		} else {
 			inst.unsub = unsub
 		}

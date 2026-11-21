@@ -53,7 +53,7 @@ are the same transition the row's Cancel asks for.
 ## How the list arrives
 
 A poller refreshes off the frame: every two seconds, and sooner on
-**Refresh** and on every `watchbill.changed` announcement a worker makes.
+**Refresh** and on every `runtime.watchbill.changed` announcement a worker makes.
 Each verb runs as one piece of work on the window's lifetime scope and
 lands its outcome for the next frame. A paused window reads nothing until
 it resumes. Jobs in flight are the worker's, not the window's: closing the

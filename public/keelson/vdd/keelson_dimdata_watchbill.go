@@ -6,7 +6,7 @@ import (
 )
 
 // Watchbill client-protocol memberships (ADR-0234): the request DTO an app
-// publishes on `watchbill.job.<op>` and the reply the worker answers with.
+// publishes on `runtime.watchbill.job.<op>` and the reply the worker answers with.
 // The job row itself is not here — it lives on the store-owned watchbill
 // table under the runtime vocabulary (ADR-0223 §SD1); these are the wire
 // forms that cross the bus, and they mirror River's client verbs (insert,

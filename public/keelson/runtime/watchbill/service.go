@@ -49,7 +49,7 @@ func (inst *Worker) attest(msg *app.Msg, req watchbillrequest.WatchbillRequest) 
 }
 
 // The client protocol is served by the worker (ADR-0234 §SD1): the process
-// that holds the store answers `watchbill.job.<op>` on the bus, so an app
+// that holds the store answers `runtime.watchbill.job.<op>` on the bus, so an app
 // with a bus client and [ClientCaps] reaches the queue without a store
 // handle. The five verbs are River's client verbs. Every answer is a
 // watchbillreply.WatchbillReply: a refusal is Ok false with a Reason.

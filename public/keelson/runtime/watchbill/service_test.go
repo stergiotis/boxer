@@ -20,7 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
-// serviceFixture is a worker serving watchbill.job.* on an in-proc bus,
+// serviceFixture is a worker serving runtime.watchbill.job.* on an in-proc bus,
 // with a handler that blocks until released, and a client with
 // ClientCaps and nothing else.
 type serviceFixture struct {

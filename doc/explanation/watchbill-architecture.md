@@ -39,10 +39,10 @@ records it.
  │  │ poll ─► claim ─► run as keelson task ─► settle + event    │ │  │  │ same Worker, no  │ │
  │  │ sweep (heartbeat join) · expire · honour cancels           │ │  │  │ bus; heartbeat + │ │
  │  │ presence: started / stopped                                │ │  │  │ presence rows    │ │
- │  │ serves  watchbill.job.{enqueue,cancel,retry,get,list}      │ │  │  └──────────────────┘ │
- │  │ hears   watchbill.wake        says  watchbill.changed      │ │  └───────────────────────┘
+ │  │ serves  runtime.watchbill.job.{enqueue,cancel,…}           │ │  │  └──────────────────┘ │
+ │  │ hears   runtime.watchbill.wake, says …changed              │ │  └───────────────────────┘
  │  └──────────▲──────────────────────────────▲──────────────────┘ │
- │             │ request/reply (codecs:        │ task.<jobid>.*     │
+ │             │ request/reply (codecs:        │ runtime.task.<id>.*│
  │             │ watchbillRequest/Reply)       │ progress · cancel  │
  │  ═══════════╪══════════════ in-process bus (inprocbus) ═════════╪═══════════════════════   │
  │             │                               │                    │
@@ -85,9 +85,9 @@ process, never the truth.
 ## How a job travels
 
 1. An app holding `ClientCaps` calls the typed client, which publishes a
-   request on `watchbill.job.enqueue` and waits for the reply.
+   request on `runtime.watchbill.job.enqueue` and waits for the reply.
 2. The worker serving that subject writes a queued row, wakes itself,
-   announces the row on `watchbill.changed`, and replies with the row as
+   announces the row on `runtime.watchbill.changed`, and replies with the row as
    written. The owner app on the row is the bus envelope's sender, never a
    field the caller wrote.
 3. On its next pass the worker reads the queue, claims the row by one

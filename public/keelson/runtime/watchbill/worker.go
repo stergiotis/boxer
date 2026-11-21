@@ -278,7 +278,7 @@ type Status struct {
 	Poll         time.Duration
 	AbandonAfter time.Duration
 	Keep         time.Duration
-	// Serving is true when the worker answers watchbill.job.* on a bus.
+	// Serving is true when the worker answers runtime.watchbill.job.* on a bus.
 	Serving bool
 	// Sweeping is true when the worker has a liveness source and so
 	// rescues abandoned claims.

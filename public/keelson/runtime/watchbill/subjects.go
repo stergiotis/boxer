@@ -16,20 +16,20 @@ const WorkerAppId app.AppIdT = "runtime.watchbill"
 const (
 	// SubjectWake is published by whoever wrote a job row, so the worker
 	// polls now rather than at its interval.
-	SubjectWake = "watchbill.wake"
+	SubjectWake = "runtime.watchbill.wake"
 	// SubjectChanged is published by the worker after every row it wrote
 	// and flushed — never before.
-	SubjectChanged = "watchbill.changed"
+	SubjectChanged = "runtime.watchbill.changed"
 )
 
-// The client protocol (ADR-0234 §SD1): `watchbill.job.<op>` is a
+// The client protocol (ADR-0234 §SD1): `runtime.watchbill.job.<op>` is a
 // request/reply subject the worker serves. The payload is a
 // watchbillrequest.WatchbillRequest, the reply a
 // watchbillreply.WatchbillReply, and the op in the subject and in the
 // payload must agree. The verbs are River's client verbs.
 const (
-	SubjectJobPrefix = "watchbill.job."
-	SubjectJobAll    = "watchbill.job.*"
+	SubjectJobPrefix = "runtime.watchbill.job."
+	SubjectJobAll    = "runtime.watchbill.job.*"
 )
 
 // SubjectJob is the request subject for op.

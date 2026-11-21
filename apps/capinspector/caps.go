@@ -310,7 +310,7 @@ var Registry = map[CapId]CapSpec{
 	CapWatchbill: {
 		Id:            CapWatchbill,
 		Display:       "watchbill durable work",
-		SubjectFamily: "watchbill.job.{enqueue|cancel|retry|get|list} (request/reply), watchbill.wake, watchbill.changed",
+		SubjectFamily: "runtime.watchbill.job.{enqueue|cancel|retry|get|list} (request/reply), runtime.watchbill.wake, runtime.watchbill.changed",
 		Description: "Durable work as rows on one substrate (ADR-0223): a job is a " +
 			"row on a store-owned table claimed by one guarded update, every " +
 			"transition is an event row, and a running job is a keelson task " +

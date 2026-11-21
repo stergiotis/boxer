@@ -1,5 +1,5 @@
 // Package watchbillrequest is the leeway-coded wire form of a watchbill
-// client request, published on `watchbill.job.<op>` (ADR-0234 §SD1). One
+// client request, published on `runtime.watchbill.job.<op>` (ADR-0234 §SD1). One
 // DTO serves the five verbs, River's client surface on the bus: enqueue
 // reads the job fields, cancel / retry / get read Id, list reads the
 // filter. The requesting app is not a payload field — the worker

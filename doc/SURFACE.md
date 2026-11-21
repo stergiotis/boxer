@@ -874,7 +874,7 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 - `public/keelson/runtime/codec/taskerror` — Package taskerror is the leeway-coded wire form of the terminal-failure payload published on `runtime.task.<id>.error`.
 - `public/keelson/runtime/codec/taskprogress` — Package taskprogress is the leeway-coded wire form of the periodic progress payload published on `runtime.task.<id>.progress`.
 - `public/keelson/runtime/codec/watchbillreply` — Package watchbillreply is the leeway-coded wire form of the worker's answer to a watchbill client request (ADR-0234 §SD1), sibling to keelson/runtime/codec/watchbillrequest.
-- `public/keelson/runtime/codec/watchbillrequest` — Package watchbillrequest is the leeway-coded wire form of a watchbill client request, published on `watchbill.job.<op>` (ADR-0234 §SD1).
+- `public/keelson/runtime/codec/watchbillrequest` — Package watchbillrequest is the leeway-coded wire form of a watchbill client request, published on `runtime.watchbill.job.<op>` (ADR-0234 §SD1).
 - `public/keelson/runtime/codec/watchevent` — Package watchevent is the leeway-coded wire form of one filesystem-watch event published on `runtime.fs.handle.{uuid}.event`.
 - `public/keelson/runtime/codec/watchreply` — Package watchreply is the leeway-coded wire form of the watch-reply payload on `runtime.fs.handle.{uuid}.watch`.
 - `public/keelson/runtime/codec/watchrequest` — Package watchrequest is the leeway-coded wire form of the watch-request payload on `runtime.fs.handle.{uuid}.watch`.

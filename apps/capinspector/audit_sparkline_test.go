@@ -153,7 +153,7 @@ func TestCounters_Snapshot_EveryRegisteredCap(t *testing.T) {
 		CapFs:           "runtime.fs.dialog.read",
 		CapPersist:      "runtime.persist.play.editor.set",
 		CapTask:         "runtime.task.start",
-		CapWatchbill:    "watchbill.job.enqueue",
+		CapWatchbill:    "runtime.watchbill.job.enqueue",
 		CapAppState:     "runtime.appstate.delete",
 		CapKeelsonQuery: "keelson.query.apps",
 		CapAdhoc:        "runtime.adhoc.publish",

@@ -15,7 +15,7 @@ import (
 
 // Client is the queue as an app sees it (ADR-0234 §SD1): five verbs over
 // a bus client that holds [ClientCaps], answered by whichever worker in
-// the process serves `watchbill.job.*`. It is River's Client on the bus:
+// the process serves `runtime.watchbill.job.*`. It is River's Client on the bus:
 // Enqueue is Insert, and the rest carry their names. The zero value is
 // unusable; take one from [NewClient] with the bus the host minted for
 // the app (its MountContextI.Bus()).
