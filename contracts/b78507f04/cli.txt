@@ -139,6 +139,11 @@ boxer code analysis sccapplet --revision
 boxer code gen-builder-tests
 boxer code gen-builder-tests --out
 boxer code gen-builder-tests --pkg
+boxer code importmove
+boxer code importmove --dryRun
+boxer code importmove --keep
+boxer code importmove --map
+boxer code importmove --root
 boxer compression
 boxer compression dict
 boxer compression dict --encoding
