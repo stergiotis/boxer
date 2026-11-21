@@ -15,7 +15,7 @@ import (
 )
 
 // ADR-0188 §SD3: retract is leave → notify → unload. A consumer subscribed
-// to adhoc.event.> sees `published` on every publish and `retracted` at the
+// to runtime.adhoc.event.> sees `published` on every publish and `retracted` at the
 // leave step; the provider answers during the grace and not after.
 
 type eventLog struct {
@@ -62,7 +62,7 @@ func TestWithdrawal_TwoPhaseWithEvents(t *testing.T) {
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
 
 	producer := bus.NewClient("test.producer", []app.SubjectFilter{
-		{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"},
+		{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"},
 	})
 	consumer := bus.NewClient("test.consumer", []app.SubjectFilter{
 		{Pattern: SubjectEventAll, Direction: app.CapDirectionSub, Reason: "test"},
@@ -155,7 +155,7 @@ func TestResolveVerify_AnswersLivenessAndSuccessor(t *testing.T) {
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
-	producer := bus.NewClient("test.producer", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth}})
+	producer := bus.NewClient("test.producer", []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth}})
 	consumer := bus.NewClient("test.consumer", []app.SubjectFilter{{Pattern: SubjectResolve, Direction: app.CapDirectionPub}})
 
 	// Nothing under the alias, and a handle nobody minted: not live, no successor.

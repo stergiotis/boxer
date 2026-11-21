@@ -187,7 +187,7 @@ func TestAClosedWindowsBundleIsAuditedAsWithdrawn(t *testing.T) {
 	d := &fakeDispatcher{call: agentCall()}
 	d.call.App, d.call.Instance = "test.app", 5
 	svc.SetDispatcher(d)
-	caps := []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
+	caps := []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
 	window := bus.NewClient("test.app", caps)
 	window.SetInstanceKey(5)
 

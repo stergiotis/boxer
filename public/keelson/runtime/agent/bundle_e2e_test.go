@@ -70,7 +70,7 @@ func TestABundleCrossesWindowsWithItsProvenance(t *testing.T) {
 	t.Cleanup(func() { _ = svc.Close(ctx) })
 	svc.SetDispatcher(r.svc)
 
-	caps := []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
+	caps := []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
 	window := func(key uint64) (l *play.PlayLauncher) {
 		// play's own capabilities, as its manifest declares them: a lane
 		// on blanket ones passed while play could not publish at all.

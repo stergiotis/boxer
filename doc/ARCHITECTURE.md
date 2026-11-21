@@ -679,14 +679,14 @@ answered.
 ### 3.5 Ad-hoc datasets — ephemeral by cryptography
 
 ```text
- producer app ── adhoc.publish ──▶ adhocdata service ──▶ sealed.File: an unnamed inode (O_TMPFILE)
+ producer app ── runtime.adhoc.publish ──▶ adhocdata service ──▶ sealed.File: an unnamed inode (O_TMPFILE)
  (Publisher: one alias, one handle)  (runtime.adhoc)      AEAD-chunked Arrow IPC; the key is a field
                                        │                  of the file object, nowhere else
                                        ├── one record per dataset: owner (app, instance) · revision
                                        ├── catalog keelson('adhoc') · handle adhoc_<random>
-                                       └── adhoc.event.published / .retracted (hints)
+                                       └── runtime.adhoc.event.published / .retracted (hints)
  consumer:  datasets: [items]  (applet frontmatter, or a play launch config)
-            Follower: subscribe, resolve alias → handle (adhoc.resolve = truth), bind, keep in step
+            Follower: subscribe, resolve alias → handle (runtime.adhoc.resolve = truth), bind, keep in step
  query:  SELECT … FROM keelson('items')      — or a bare `items`
            ─▶ alias → handle ─▶ url('http://127.0.0.1:<p>/table/<handle>','ArrowStream','<structure>')
            ─▶ /table opens the record; plaintext rides loopback only ─▶ a chlocal worker

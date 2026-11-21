@@ -405,7 +405,7 @@ embedded explorer that published would hold its handles until process exit. Add
 `EmbeddedApp.Close()` for hosts that can call it and state the gap plainly; it is
 bounded by handle reuse (at most two per instance) and the ephemeral store. In
 practice the embedded case degrades earlier and more visibly: the host's bus client
-carries the *host app's* manifest caps, which will not include `adhoc.publish`, so
+carries the *host app's* manifest caps, which will not include `runtime.adhoc.publish`, so
 the publish is refused with a clear status line rather than silently doing nothing.
 
 ### B4. UI
@@ -499,7 +499,7 @@ All of it is in this repository; no downstream consumer needs a change.
    classification; `(?i)` versus `(?i:` depth behaviour; per-line independence in
    `HighlightLines`; Arrow record shape for both datasets; seeded-SQL contents;
    publish/open against a fake bus (the downstream `fakeEvalBus` pattern — route
-   `Request` by subject, answer `adhoc.publish` and `windowhost.open` — is the
+   `Request` by subject, answer `runtime.adhoc.publish` and `windowhost.open` — is the
    template).
 3. Regression: the existing `regex_explorer` suite (781 lines) must stay green.
    Demo scenes are already flagged `NonDeterministic`, so the new affordance row

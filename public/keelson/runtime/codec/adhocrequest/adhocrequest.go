@@ -1,6 +1,6 @@
 // Package adhocrequest is the leeway-coded wire form of a request to the
-// ad-hoc dataset capability (ADR-0240 §SD8): `adhoc.publish`,
-// `adhoc.resolve` and `adhoc.retract` share one kind under an op symbol,
+// ad-hoc dataset capability (ADR-0240 §SD8): `runtime.adhoc.publish`,
+// `runtime.adhoc.resolve` and `runtime.adhoc.retract` share one kind under an op symbol,
 // the watchbill shape. A verb leaves the fields it does not use zero:
 // publish carries alias, an optional handle to republish onto, the
 // keep-after-close flag and the stream; resolve carries the alias and an

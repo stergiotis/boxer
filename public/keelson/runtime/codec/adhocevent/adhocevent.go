@@ -1,7 +1,7 @@
 // Package adhocevent is the leeway-coded wire form of the ad-hoc dataset
 // capability's announcements (ADR-0240 §SD8; ADR-0188 §SD3):
-// `adhoc.event.published` on every publish and republish,
-// `adhoc.event.retracted` at the leave step of a withdrawal. Events are
+// `runtime.adhoc.event.published` on every publish and republish,
+// `runtime.adhoc.event.retracted` at the leave step of a withdrawal. Events are
 // hints — a consumer resolves to learn the truth — so the payload is the
 // identity of what moved and nothing more.
 //
@@ -46,7 +46,7 @@ type AdhocEvent struct {
 	Revision uint64 `lw:"adhocRevision,u64Array"`
 
 	// Bundle is the bundle the dataset belongs to, empty for one published
-	// on its own. On `adhoc.bundle.event.*` it names the bundle that moved,
+	// on its own. On `runtime.adhoc.bundle.event.*` it names the bundle that moved,
 	// with Handle and Alias empty and Revision the bundle's (ADR-0288
 	// §SD2).
 	Bundle string `lw:"adhocBundle,symbol"`

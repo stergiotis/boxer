@@ -28,7 +28,7 @@ the applet's binding follows — it binds without polling when a dataset
 appears under the alias, re-runs under Live when its handle is republished,
 unbinds and says so when its handle is retracted, and rebinds on the next
 publish, whichever producer that is. A retract is two-phase: the dataset
-leaves the namespace at once (the catalog and `adhoc.resolve` stop naming
+leaves the namespace at once (the catalog and `runtime.adhoc.resolve` stop naming
 it) and its provider, key and file go after a bounded grace, so a query that
 had already resolved the handle completes. All of it crosses windows, and
 all of its state is a query (`keelson('adhoc')`, `keelson('subscriptions')`).
@@ -64,7 +64,7 @@ Notification is a separate facility in both worlds. Linux has `inotify(7)`
 its directory) and `fanotify(7)`; BSD and macOS have `kqueue(2)` with
 `EVFILT_VNODE` (`NOTE_DELETE`, `NOTE_RENAME`, `NOTE_REVOKE`); macOS adds
 FSEvents, which is path-level, coalesced and may degrade to "rescan this
-subtree". boxer's `adhoc.event.published` / `adhoc.event.retracted` are the
+subtree". boxer's `runtime.adhoc.event.published` / `runtime.adhoc.event.retracted` are the
 same add-on, per event, immediate, in-process, and — the part the file
 systems never had — carrying the provider's identity and revision.
 

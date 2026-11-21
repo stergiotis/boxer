@@ -168,8 +168,8 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	m := (&PlayLauncher{}).Manifest()
 	// Ten declared Caps: fs dialog + chlocalbroker pool for the time-range
 	// evaluator + windowhost.open for the Save-as-applet launch (ADR-0135
-	// §SD7) + adhoc.publish for the timeseries fixture lab (ADR-0163 §SD7) +
-	// adhoc.resolve and adhoc.event.> for a launched window that follows
+	// §SD7) + runtime.adhoc.publish for the timeseries fixture lab (ADR-0163 §SD7) +
+	// runtime.adhoc.resolve and runtime.adhoc.event.> for a launched window that follows
 	// dataset aliases (ADR-0240 §SD7) + clipboard.write for the Copy buttons
 	// + the regex explorer's own chlocalbroker pool, which gloss/regexp's
 	// block face embeds. The applet-store save cap moved
@@ -181,12 +181,12 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// is granted, so adding one has to be a deliberate edit here rather than
 	// something that rides along with a feature.
 	//
-	// Three more open ad-hoc bundles (ADR-0288 §SD4): adhoc.bundle.resolve
-	// and adhoc.bundle.event.> for a window that follows one, and
+	// Three more open ad-hoc bundles (ADR-0288 §SD4): runtime.adhoc.bundle.resolve
+	// and runtime.adhoc.bundle.event.> for a window that follows one, and
 	// keelson.query.adhoc_bundles for list_bundles. The Model tab's
 	// runtime.llm.complete and keelson.query.sql_passes left with the tab
-	// (ADR-0254, Updates 2026-10-07). adhoc.bundle.publish for
-	// publish_result and the Publish menu, adhoc.read for the column values
+	// (ADR-0254, Updates 2026-10-07). runtime.adhoc.bundle.publish for
+	// publish_result and the Publish menu, runtime.adhoc.read for the column values
 	// list_bundles shows (ADR-0288 §SD4, §SD5). task.> for the query runs,
 	// write runs, projector, vector-field builds and publishes the window
 	// starts, which run as keelson tasks owned by it. externaledit.offer,

@@ -42,7 +42,7 @@ func readService(t *testing.T) (svc *Service, bus *inprocbus.Inst) {
 // audited too (ADR-0288 §SD6).
 func TestReadAllEReturnsTheSealedStream(t *testing.T) {
 	svc, bus := readService(t)
-	caps := []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
+	caps := []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
 	producer := bus.NewClient("test.play", caps)
 	producer.SetInstanceKey(1)
 	reader := bus.NewClient("test.notebook", caps)
@@ -73,7 +73,7 @@ func TestReadAllEReturnsTheSealedStream(t *testing.T) {
 // A bundle's name reads its one dataset; one of several names them.
 func TestABundleNameReadsItsOneDataset(t *testing.T) {
 	_, bus := readService(t)
-	caps := []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
+	caps := []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
 	producer := bus.NewClient("test.play", caps)
 	producer.SetInstanceKey(1)
 	reader := bus.NewClient("test.notebook", caps)
@@ -95,7 +95,7 @@ func TestABundleNameReadsItsOneDataset(t *testing.T) {
 
 func TestReadAllECatchesADigestMismatch(t *testing.T) {
 	svc, bus := readService(t)
-	c := bus.NewClient("test.app", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
+	c := bus.NewClient("test.app", []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	res, err := svc.Publish(PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 4, 5)})
 	require.NoError(t, err)
 	svc.mu.RLock()
@@ -115,7 +115,7 @@ func TestAnAgentsReadIsAttested(t *testing.T) {
 	svc.SetDispatcher(d)
 	_, err := svc.Publish(PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 1)})
 	require.NoError(t, err)
-	reader := bus.NewClient("test.notebook", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
+	reader := bus.NewClient("test.notebook", []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	reader.SetInstanceKey(2)
 
 	// Held to the grant as a run in play is (§SD6): refused, naming what
@@ -137,7 +137,7 @@ func TestAnAgentsReadIsAttested(t *testing.T) {
 	require.True(t, audits[0].Context.Has)
 	assert.Equal(t, "turn-2", audits[0].Context.Val.Turn)
 
-	other := bus.NewClient("test.other", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
+	other := bus.NewClient("test.other", []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	_, err = ReadAll(t.Context(), other, "items", oboOf(d.call))
 	require.Error(t, err, "another app cannot read under the call")
 }
@@ -151,7 +151,7 @@ func TestAnAgentsReadOfABundleNeedsTheBundle(t *testing.T) {
 	svc.SetDispatcher(d)
 	_, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t)})
 	require.NoError(t, err)
-	reader := bus.NewClient("test.notebook", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
+	reader := bus.NewClient("test.notebook", []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	reader.SetInstanceKey(2)
 	_, err = ReadAll(t.Context(), reader, "sales__orders", oboOf(d.call))
 	var ge *GrantError
@@ -180,7 +180,7 @@ func TestATaskReadsWhatItPublished(t *testing.T) {
 	_, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
 		By: windowA, OnBehalfOf: oboOf(d.call)})
 	require.NoError(t, err)
-	window := bus.NewClient(windowA.App, []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
+	window := bus.NewClient(windowA.App, []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	window.SetInstanceKey(windowA.Instance)
 
 	got, err := ReadAll(t.Context(), window, "sales__orders", oboOf(d.call))
@@ -210,7 +210,7 @@ func TestColumnValuesAreReadAsTheDataIs(t *testing.T) {
 	_, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
 		By: windowA, OnBehalfOf: oboOf(d.call)})
 	require.NoError(t, err)
-	window := bus.NewClient(windowA.App, []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
+	window := bus.NewClient(windowA.App, []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	window.SetInstanceKey(windowA.Instance)
 
 	got, err := ReadColumns(t.Context(), window, "sales__orders", nil)

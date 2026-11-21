@@ -96,8 +96,8 @@ func (inst Identity) IsRuntime() (yes bool) { return inst.App == "" }
 
 // Config parameterises the capability Service.
 type Config struct {
-	// Bus, when non-nil, backs the adhoc.publish/retract/resolve
-	// request/reply subjects and the adhoc.event.* announcements. Nil
+	// Bus, when non-nil, backs the runtime.adhoc.publish/retract/resolve
+	// request/reply subjects and the runtime.adhoc.event.* announcements. Nil
 	// leaves only the in-process Go methods.
 	Bus *inprocbus.Inst
 	// Registry is where dataset handles register as providers; defaults to
@@ -627,7 +627,7 @@ func (inst *Service) Resolve(alias string) (res ResolveResult, err error) {
 
 // Retract withdraws a dataset in two phases (ADR-0188 §SD3, ADR-0240
 // §SD4). LEAVE, now: the record leaves the live set, so the catalog and
-// Resolve stop naming it, its quota is released, and adhoc.event.retracted
+// Resolve stop naming it, its quota is released, and runtime.adhoc.event.retracted
 // goes out. UNLOAD, after the grace: the provider is unregistered and the
 // sealed file retires — at once if no reader is open, else with the last
 // reader or at a second grace, whichever comes first. Only the publisher

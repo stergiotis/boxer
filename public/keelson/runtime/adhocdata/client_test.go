@@ -23,7 +23,7 @@ func TestPublishAndRetractViaBus(t *testing.T) {
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
 
 	caller := bus.NewClient("test.embedder", []app.SubjectFilter{
-		{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"},
+		{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"},
 	})
 
 	res, err := PublishRequest(t.Context(), caller, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 1, 2, 3)})

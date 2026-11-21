@@ -421,7 +421,7 @@ func TestFollowerLiveWithdrawal(t *testing.T) {
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
 
 	producer := bus.NewClient("test.producer", []app.SubjectFilter{
-		{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"},
+		{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"},
 	})
 	consumer := bus.NewClient("test.consumer", []app.SubjectFilter{
 		{Pattern: SubjectResolve, Direction: app.CapDirectionPub, Reason: "test"},

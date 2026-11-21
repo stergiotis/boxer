@@ -80,7 +80,7 @@ func (inst *Service) handleReadColumns(msg *app.Msg, req adhocrequest.AdhocReque
 }
 
 // ReadColumns reads the column summaries of the newest live dataset under
-// alias, values included, over adhoc.read: the read ReadAll makes, held
+// alias, values included, over runtime.adhoc.read: the read ReadAll makes, held
 // to the same grant, without the stream. obo is the agent's call the read
 // is work of, nil when it is none.
 func ReadColumns(ctx context.Context, bus app.BusI, alias string, obo *app.OnBehalfOf) (res ColumnsResult, err error) {

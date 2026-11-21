@@ -334,7 +334,7 @@ var WindowSize = env.NewString(env.Spec{
 })
 
 // DatasetEvents is a fault-injection knob for the dataset binder's event path
-// (ADR-0188 §SD3). "on" subscribes to adhoc.event.> and acts on the events
+// (ADR-0188 §SD3). "on" subscribes to runtime.adhoc.event.> and acts on the events
 // (the default); "drop" subscribes but discards every event, which is what a
 // slow consumer on NATS core experiences and leaves the reconcile tick alone
 // to keep the binding in step; "off" does not subscribe at all, the

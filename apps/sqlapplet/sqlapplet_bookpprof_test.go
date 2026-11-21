@@ -109,7 +109,7 @@ func TestMintPprofBook(t *testing.T) {
 			hasResolve = true
 		}
 	}
-	assert.True(t, hasResolve, "a dataset-declaring applet needs Pub on adhoc.resolve")
+	assert.True(t, hasResolve, "a dataset-declaring applet needs Pub on runtime.adhoc.resolve")
 
 	// A dataset-less applet keeps the two-cap escape-hatch surface.
 	m, ok = reg.LookupManifest(app.AppIdT(appletIdPrefix + "runtime-apps"))

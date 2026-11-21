@@ -21,24 +21,24 @@ import (
 // codec pair (§SD8); the resolve step is the audited hand-out moment;
 // there is no grant.
 const (
-	SubjectPublish = "adhoc.publish"
-	SubjectRetract = "adhoc.retract"
-	SubjectResolve = "adhoc.resolve"
+	SubjectPublish = "runtime.adhoc.publish"
+	SubjectRetract = "runtime.adhoc.retract"
+	SubjectResolve = "runtime.adhoc.resolve"
 )
 
 // Bundle subjects (ADR-0288 §SD2): the same request and reply
-// kinds, carrying a bundle. Bundle events sit outside `adhoc.event.>`, so
+// kinds, carrying a bundle. Bundle events sit outside `runtime.adhoc.event.>`, so
 // a consumer that follows datasets never decodes one; a consumer that
-// follows bundles declares `Sub adhoc.bundle.event.>`
+// follows bundles declares `Sub runtime.adhoc.bundle.event.>`
 // (SubjectBundleEventAll). Each dataset of a bundle still announces its
-// own publish and retract on `adhoc.event.*`, naming the bundle.
+// own publish and retract on `runtime.adhoc.event.*`, naming the bundle.
 const (
-	SubjectBundlePublish        = "adhoc.bundle.publish"
-	SubjectBundleRetract        = "adhoc.bundle.retract"
-	SubjectBundleResolve        = "adhoc.bundle.resolve"
-	SubjectBundleEventPublished = "adhoc.bundle.event.published"
-	SubjectBundleEventRetracted = "adhoc.bundle.event.retracted"
-	SubjectBundleEventAll       = "adhoc.bundle.event.>"
+	SubjectBundlePublish        = "runtime.adhoc.bundle.publish"
+	SubjectBundleRetract        = "runtime.adhoc.bundle.retract"
+	SubjectBundleResolve        = "runtime.adhoc.bundle.resolve"
+	SubjectBundleEventPublished = "runtime.adhoc.bundle.event.published"
+	SubjectBundleEventRetracted = "runtime.adhoc.bundle.event.retracted"
+	SubjectBundleEventAll       = "runtime.adhoc.bundle.event.>"
 )
 
 // Event subjects (fire-and-forget, the generated adhocevent codec —
@@ -49,11 +49,11 @@ const (
 // two-phase withdrawal — the dataset has already stopped resolving when the
 // event goes out, and its provider stays queryable for RetractGrace so a
 // query that had already resolved the handle completes. Consumers declare
-// `Sub adhoc.event.>` (SubjectEventAll) to receive them.
+// `Sub runtime.adhoc.event.>` (SubjectEventAll) to receive them.
 const (
-	SubjectEventPublished = "adhoc.event.published"
-	SubjectEventRetracted = "adhoc.event.retracted"
-	SubjectEventAll       = "adhoc.event.>"
+	SubjectEventPublished = "runtime.adhoc.event.published"
+	SubjectEventRetracted = "runtime.adhoc.event.retracted"
+	SubjectEventAll       = "runtime.adhoc.event.>"
 )
 
 // Event is one dataset transition as consumers see it (decoded from the
@@ -97,7 +97,7 @@ func (inst EventOpE) String() (s string) {
 	return
 }
 
-// DecodeEvent decodes an adhoc.event.* payload. Consumers that subscribe
+// DecodeEvent decodes an runtime.adhoc.event.* payload. Consumers that subscribe
 // directly (rather than through SubscribeEvents) call it in their handler.
 func DecodeEvent(subject string, payload []byte) (ev Event, err error) {
 	w, err := buscodec.Decode[adhocevent.AdhocEvent](payload)
@@ -122,7 +122,7 @@ func DecodeEvent(subject string, payload []byte) (ev Event, err error) {
 	return
 }
 
-// publishEvent emits one adhoc.event.* message; a service without a bus
+// publishEvent emits one runtime.adhoc.event.* message; a service without a bus
 // (in-process Go callers only) emits nothing. Failures are logged, not
 // returned: an event is best-effort notification, the state transition it
 // reports has already happened.

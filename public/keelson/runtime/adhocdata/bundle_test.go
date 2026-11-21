@@ -217,7 +217,7 @@ func TestBundleOverTheBus(t *testing.T) {
 	svc, err := NewService(Config{Bus: bus, Registry: introspect.NewRegistry(), Dir: t.TempDir(), Log: logger})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
-	caps := []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
+	caps := []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
 
 	var mu sync.Mutex
 	var bundleEvents, datasetEvents []Event
@@ -275,7 +275,7 @@ func TestResolveBundleRequestNamesNothingLive(t *testing.T) {
 	svc, err := NewService(Config{Bus: bus, Registry: introspect.NewRegistry(), Dir: t.TempDir(), Log: logger})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
-	c := bus.NewClient("test.app", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
+	c := bus.NewClient("test.app", []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	_, err = ResolveBundleRequest(t.Context(), c, "nothing", nil)
 	assert.True(t, errors.Is(err, ErrNoLiveBundle), err)
 }

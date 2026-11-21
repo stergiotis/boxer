@@ -26,7 +26,7 @@ func TestPublisherReusesItsHandle(t *testing.T) {
 	svc, err := NewService(Config{Bus: bus, Registry: introspect.NewRegistry(), Dir: t.TempDir(), Log: logger})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
-	client := bus.NewClient("test.app", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth}})
+	client := bus.NewClient("test.app", []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth}})
 	client.SetInstanceKey(1)
 
 	pub := NewPublisher("series", true)

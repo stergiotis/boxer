@@ -45,7 +45,7 @@ import (
 //
 // Off the caller's thread is not a preference for any of those requests: a
 // bus Request waits the full request timeout when nothing serves the
-// subject, and adhoc.* is unbound whenever the ad-hoc service failed to
+// subject, and runtime.adhoc.* is unbound whenever the ad-hoc service failed to
 // start.
 //
 // The caller's thread owns the binding side — [TargetI] and whatever it
@@ -115,8 +115,8 @@ func ParseEventsMode(s string) (m EventsModeE) {
 
 // FollowerConfig parameterises a Follower.
 type FollowerConfig struct {
-	// Bus is the consumer's client; it needs Pub adhoc.resolve and, for the
-	// fast path, Sub adhoc.event.>. nil builds no follower.
+	// Bus is the consumer's client; it needs Pub runtime.adhoc.resolve and, for the
+	// fast path, Sub runtime.adhoc.event.>. nil builds no follower.
 	Bus app.BusI
 	Log zerolog.Logger
 	// Aliases are the declared aliases to keep bound. Empty builds no

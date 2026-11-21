@@ -132,7 +132,7 @@ func (inst *EmbeddedApp) Render() {
 // datasets belong to the host's window and the runtime retracts them when
 // that window closes (ADR-0240 §SD5). In practice the embedded case never publishes
 // anyway — the host's bus client carries the *host app's* manifest caps,
-// which will not include adhoc.publish, so the publish is refused with a
+// which will not include runtime.adhoc.publish, so the publish is refused with a
 // reason in the status line rather than silently doing nothing.
 //
 // Safe to call more than once.

@@ -76,7 +76,7 @@ type Snapshot struct {
 	// (Phase B); false leaves fs.* unbound.
 	FsBrokerActive bool
 	// AdhocActive reports whether the ad-hoc dataset capability started
-	// (ADR-0240 §SD3); false leaves adhoc.* unbound.
+	// (ADR-0240 §SD3); false leaves runtime.adhoc.* unbound.
 	AdhocActive bool
 	// PersistBackend names the persist.NewService backend: "store"
 	// when app state is written to boxer.persiststate through the

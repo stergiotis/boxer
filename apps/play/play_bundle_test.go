@@ -107,7 +107,7 @@ func bundleLauncher(t *testing.T) (l *PlayLauncher, h app.OperationsHandlerI, pu
 	require.NoError(t, err)
 	svc.SetDispatcher(attestAll{})
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
-	caps := []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
+	caps := []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
 	l, h = opsLauncher(t)
 	l.inner.client = NewClient(ClientConfig{URL: "http://ch.example:8123/"}, nil)
 	l.bus, l.log = bus.NewClient("test.play", caps), logger

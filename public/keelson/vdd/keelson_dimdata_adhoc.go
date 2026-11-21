@@ -6,8 +6,8 @@ import (
 )
 
 // Ad-hoc dataset memberships (ADR-0240 §SD8): the request an app publishes
-// on `adhoc.publish` / `adhoc.resolve` / `adhoc.retract`, the service's
-// reply, the `adhoc.event.*` announcement, and the bus's own
+// on `runtime.adhoc.publish` / `runtime.adhoc.resolve` / `runtime.adhoc.retract`, the service's
+// reply, the `runtime.adhoc.event.*` announcement, and the bus's own
 // `runtime.instance.closed` (§SD5). One request kind carries the three
 // verbs under an op symbol and one reply kind answers all three, the
 // watchbill shape (ADR-0234): a verb that needs a field leaves the others
@@ -70,7 +70,7 @@ var (
 				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )
 
-// Bundle memberships (ADR-0288 §SD2): `adhoc.bundle.publish`,
+// Bundle memberships (ADR-0288 §SD2): `runtime.adhoc.bundle.publish`,
 // `.resolve` and `.retract` ride the same request and reply kinds, so a
 // bundle adds only what one dataset never needed — the bundle alias, the
 // applet document, and parallel lists of local names, streams and handles.
@@ -112,7 +112,7 @@ var (
 )
 
 // MembAdhocStreamDigest is the content digest of a dataset's stream as
-// sealed, which an `adhoc.read` reply carries beside the stream so the
+// sealed, which an `runtime.adhoc.read` reply carries beside the stream so the
 // reader can check what it received (ADR-0288 §SD6).
 var MembAdhocStreamDigest = KeelsonHrNkRegistry.MustBegin("adhocStreamDigest", 237).
 	MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()

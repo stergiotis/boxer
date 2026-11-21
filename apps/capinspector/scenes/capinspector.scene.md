@@ -35,8 +35,8 @@ accessibility node, so the scene does not open it.
 {"do":"note","text":"--- a status-bar chip retargets the open window (the raise path) ---"}
 {"do":"click","contains":"persist:","role":"button"}
 {"do":"wait","value":"runtime.persist.* state","role":"label"}
-{"do":"click","contains":"adhoc ","role":"button","comment":"the status segment (\"adhoc\" and a state glyph), not the picker's \"adhoc.*\"; the segment has its own entry now"}
-{"do":"wait","value":"adhoc.* ad-hoc datasets","role":"label"}
+{"do":"click","contains":"adhoc ","role":"button","comment":"the status segment (\"adhoc\" and a state glyph), not the picker's \"runtime.adhoc.*\"; the segment has its own entry now"}
+{"do":"wait","value":"runtime.adhoc.* ad-hoc datasets","role":"label"}
 
 {"do":"note","text":"--- the picker; the graph, its legend and the activity strip ---"}
 {"do":"click","name":"Audit + facts backend","role":"button","settleMs":1200,"comment":"the first frame of a cap lays the graph out; give it a moment"}

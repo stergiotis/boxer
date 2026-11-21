@@ -28,7 +28,7 @@ func viewRig(t *testing.T) (bus *inprocbus.Inst, publisher app.BusI, viewBus app
 	svc, err := adhocdata.NewService(adhocdata.Config{Bus: bus, Registry: introspect.NewRegistry(), Dir: t.TempDir(), Log: zerolog.Nop()})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
-	publisher = bus.NewClient("test.producer", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
+	publisher = bus.NewClient("test.producer", []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	viewBus = bus.NewClient("test.receiver", BundleViewCaps)
 	return
 }
@@ -150,7 +150,7 @@ func TestAnAgentsDocumentRunsAsItsTask(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
 	svc.SetDispatcher(viewDispatcher{})
-	publisher := bus.NewClient("test.producer", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
+	publisher := bus.NewClient("test.producer", []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	spec := play.BundleSpec{Alias: "counts", Sql: "SELECT * FROM keelson('result')", Tabs: []string{"table"},
 		Datasets:   []adhocdata.BundleDatasetInput{{LocalName: "result", ArrowIPCStream: viewInts(t, 1)}},
 		OnBehalfOf: &app.OnBehalfOf{Task: "task-9", Epoch: 1, Call: "task-9-1"}}

@@ -14,10 +14,10 @@ import (
 )
 
 // PublishRequest publishes — or, with in.Handle set, republishes — a
-// dataset via the adhoc.publish capability subject and returns the minted
+// dataset via the runtime.adhoc.publish capability subject and returns the minted
 // or reused handle (ADR-0134 SD2). It is how an in-process app (e.g. an
 // embedder) drives the capability without holding a Service reference; the
-// caller's bus client needs Pub on adhoc.publish. The publisher is the
+// caller's bus client needs Pub on runtime.adhoc.publish. The publisher is the
 // envelope's sender and instance; in.By is ignored on this path.
 func PublishRequest(ctx context.Context, bus app.BusI, in PublishInput) (res PublishResult, err error) {
 	rep, err := request(ctx, bus, SubjectPublish, adhocrequest.AdhocRequest{
@@ -56,10 +56,10 @@ func request(ctx context.Context, bus app.BusI, subject string, req adhocrequest
 }
 
 // ResolveRequest maps a stable alias to the newest live dataset published
-// under it via the adhoc.resolve subject (ADR-0134 §SD4, update
+// under it via the runtime.adhoc.resolve subject (ADR-0134 §SD4, update
 // 2026-08-01). It is how a standalone applet binds its declared
 // `datasets:` aliases at open; the caller's bus client needs Pub on
-// adhoc.resolve.
+// runtime.adhoc.resolve.
 func ResolveRequest(ctx context.Context, bus app.BusI, alias string) (res ResolveResult, err error) {
 	res, _, err = resolve(ctx, bus, alias, "")
 	return
@@ -109,7 +109,7 @@ func resolve(ctx context.Context, bus app.BusI, alias string, boundHandle string
 	return res, boundLive, nil
 }
 
-// RetractRequest retracts a dataset via the adhoc.retract subject.
+// RetractRequest retracts a dataset via the runtime.adhoc.retract subject.
 func RetractRequest(ctx context.Context, bus app.BusI, handle string) (err error) {
 	_, err = request(ctx, bus, SubjectRetract, adhocrequest.AdhocRequest{
 		At: time.Now().UTC(), Op: adhocrequest.OpRetract, Handle: handle,
@@ -119,7 +119,7 @@ func RetractRequest(ctx context.Context, bus app.BusI, handle string) (err error
 
 // SubscribeEvents delivers every dataset transition the service publishes
 // (ADR-0188 §SD3) to handler, decoded. The caller's bus must carry
-// `Sub adhoc.event.>`; the returned unsubscribe releases the subscription
+// `Sub runtime.adhoc.event.>`; the returned unsubscribe releases the subscription
 // (the host releases it at the closing edge as well). Payloads that fail
 // to decode are dropped with a log line by the caller's own choosing —
 // handler is only ever invoked with a well-formed Event.
@@ -142,9 +142,9 @@ func SubscribeEvents(bus app.BusI, handler func(ev Event)) (unsubscribe func(), 
 }
 
 // PublishBundleRequest publishes — or, under an alias the caller already
-// holds, republishes — a bundle via adhoc.bundle.publish (ADR-0288
+// holds, republishes — a bundle via runtime.adhoc.bundle.publish (ADR-0288
 // §SD2). The caller's bus client needs Pub on
-// adhoc.bundle.publish; the publisher is the envelope's sender, and in.By
+// runtime.adhoc.bundle.publish; the publisher is the envelope's sender, and in.By
 // is ignored. The result carries no document: the caller has it.
 func PublishBundleRequest(ctx context.Context, bus app.BusI, in BundlePublishInput) (res BundleResult, err error) {
 	req := adhocrequest.AdhocRequest{
@@ -167,7 +167,7 @@ func PublishBundleRequest(ctx context.Context, bus app.BusI, in BundlePublishInp
 
 // ResolveBundleRequest returns the live bundle under alias — its document
 // and its datasets' local names, aliases and handles — via
-// adhoc.bundle.resolve. Nothing live is a typed ErrNoLiveBundle. obo is
+// runtime.adhoc.bundle.resolve. Nothing live is a typed ErrNoLiveBundle. obo is
 // the agent's call the resolve is work of, nil when it is none.
 func ResolveBundleRequest(ctx context.Context, bus app.BusI, alias string, obo *app.OnBehalfOf) (res BundleResult, err error) {
 	payload, err := buscodec.Encode(adhocrequest.AdhocRequest{
@@ -194,7 +194,7 @@ func ResolveBundleRequest(ctx context.Context, bus app.BusI, alias string, obo *
 	return bundleResultOf(rep), nil
 }
 
-// RetractBundleRequest retracts a bundle whole via adhoc.bundle.retract;
+// RetractBundleRequest retracts a bundle whole via runtime.adhoc.bundle.retract;
 // obo is the agent's call the retract is work of, nil when it is none.
 func RetractBundleRequest(ctx context.Context, bus app.BusI, alias string, obo *app.OnBehalfOf) (err error) {
 	_, err = request(ctx, bus, SubjectBundleRetract, adhocrequest.AdhocRequest{

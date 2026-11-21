@@ -847,7 +847,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			Trail:    rt.Trail,
 		})
 		if adhocErr != nil {
-			logger.Warn().Err(adhocErr).Msg("adhocdata: service start failed; adhoc.* will be unbound")
+			logger.Warn().Err(adhocErr).Msg("adhocdata: service start failed; runtime.adhoc.* will be unbound")
 		} else {
 			rt.Adhoc = adhocSvc
 			rt.OnClose(func(ctx context.Context) {

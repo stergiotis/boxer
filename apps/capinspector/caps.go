@@ -61,7 +61,7 @@ const (
 // adhocSubjectPrefix is the common prefix of every adhocdata subject
 // (adhocdata.SubjectPublish and siblings); the package names the subjects
 // one by one and exports no prefix of its own.
-const adhocSubjectPrefix = "adhoc."
+const adhocSubjectPrefix = "runtime.adhoc."
 
 // BackendImpl is one realisation of a capability's contract. A cap
 // can have several (e.g. Facts: InMemoryFactsStore vs chstore.Store);
@@ -400,8 +400,8 @@ var Registry = map[CapId]CapSpec{
 	},
 	CapAdhoc: {
 		Id:            CapAdhoc,
-		Display:       "adhoc.* ad-hoc datasets",
-		SubjectFamily: "adhoc.{publish|retract|resolve|read} (request/reply), adhoc.bundle.*, adhoc.event.*",
+		Display:       "runtime.adhoc.* ad-hoc datasets",
+		SubjectFamily: "runtime.adhoc.{publish|retract|resolve|read} (request/reply), runtime.adhoc.bundle.*, runtime.adhoc.event.*",
 		Description: "Handing a table an app computed to SQL without storing it " +
 			"(ADR-0240): the app publishes an Arrow stream under an alias, " +
 			"the service seals it into a file with no name under a key that " +

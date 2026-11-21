@@ -79,7 +79,7 @@ func addPublishResultOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		Follows: []string{"only a whole main result is published: one the row cap cut short is refused, as is one still loading or failed",
 			"the publish runs off the frame; list_bundles reports this window's last publish and the bundle once it is live",
 			"the bundle lives as long as this window, and publishing again under its alias replaces it",
-			"another window opens it with open_bundle; another app reads the dataset whole with adhoc.read"}},
+			"another window opens it with open_bundle; another app reads the dataset whole with runtime.adhoc.read"}},
 		func(inst *PlayLauncher, call app.OperationCall, in PublishResultArgs) (out PublishResultOutcome, err error) {
 			return inst.publishResult(call, in)
 		})

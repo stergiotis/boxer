@@ -29,12 +29,12 @@ import (
 //
 // A sealed table — an ad-hoc dataset — is refused whatever the grant: play
 // is the one place a dataset is queried, and another app reads one whole
-// through adhoc.read (ADR-0288 §SD6). Without the refusal a
+// through runtime.adhoc.read (ADR-0288 §SD6). Without the refusal a
 // grant pattern wide enough to cover a handle would make this a second
 // query surface over datasets, outside play's agent limits and history.
 func Gate(reg *introspect.Registry, sql string, table string) (bare string, reason string) {
 	if reg.IsSealed(table) {
-		return "", table + " is an ad-hoc dataset: query it in play, or read it whole through adhoc.read"
+		return "", table + " is an ad-hoc dataset: query it in play, or read it whole through runtime.adhoc.read"
 	}
 	bare, err := keelsonsql.RewriteToBare(reg, sql)
 	if err != nil {

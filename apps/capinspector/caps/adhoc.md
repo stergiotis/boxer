@@ -21,9 +21,9 @@ process frees it.
 
 ## What the schematic shows
 
-**Subjects.** `adhoc.publish`, `adhoc.retract`, `adhoc.resolve` and
-`adhoc.read`, request/reply; `adhoc.event.*` announces a publish or a
-retraction as a hint, and `adhoc.bundle.*` does the same for a named group of
+**Subjects.** `runtime.adhoc.publish`, `runtime.adhoc.retract`, `runtime.adhoc.resolve` and
+`runtime.adhoc.read`, request/reply; `runtime.adhoc.event.*` announces a publish or a
+retraction as a hint, and `runtime.adhoc.bundle.*` does the same for a named group of
 datasets. An app declares the subjects it uses on its manifest.
 
 **Backend.** One service, `adhocdata.Service`, over the `sealed` store: each
