@@ -22,13 +22,13 @@ itself; ADR-0389 states its tier.
 
 | Section | Packages |
 | --- | ---: |
-| [Stable](#stable) | 65 |
-| [Experimental](#experimental) | 278 |
+| [Stable](#stable) | 74 |
+| [Experimental](#experimental) | 280 |
 | [Internal](#internal) | 16 |
 | [Test support](#test-support) | 14 |
-| [Tools](#tools) | 87 |
+| [Tools](#tools) | 90 |
 | [Demos and examples](#demos-and-examples) | 40 |
-| [Unclassified](#unclassified) | 222 |
+| [Unclassified](#unclassified) | 208 |
 
 ## Stable
 
@@ -38,6 +38,10 @@ Covered by the compatibility promise in [VERSIONING.md](../VERSIONING.md): an in
 
 - `public/analytics/stats/letterval` — Package letterval computes letter-value summaries (Hofmann, Wickham & Kafadar 2017) from any source that can answer Quantile/CDF queries.
 - `public/analytics/stats/tdigest` — Package tdigest provides a streaming quantile sketch with tail-biased accuracy, based on Dunning 2019 (arXiv:1902.04023).
+
+### caching
+
+- `public/caching` — Package caching is a read-through cache for work that can be suspended and replayed — ETL steps, build graphs, traversals — where fetching is expensive and computing is cheap.
 
 ### config
 
@@ -62,6 +66,7 @@ Covered by the compatibility promise in [VERSIONING.md](../VERSIONING.md): an in
 
 ### functional
 
+- `public/functional` — Package functional holds small generic helpers over iterators and values: projecting and swapping iter.Seq2 pairs ([IterLeftOnly], [IterRightOnly], [IterInterchanged]), lifting an iter.Seq into an iter.Seq2 ([MakeIter2FromIter1], [MakeIter2FromIter1Indexed]), one-value iterators, [TranslateEmpty], and [NilIteratorValueType], the element type of an iterator used only as a scope (`for range x.KeepIter()`).
 - `public/functional/option` — Package option provides a typed Some/None carrier for fields that may be present or absent.
 
 ### identity
@@ -69,6 +74,7 @@ Covered by the compatibility promise in [VERSIONING.md](../VERSIONING.md): an in
 - `public/identity/callident` — Package callident carries who a call is made for on its context (ADR-0295 §SD1): the run, app and window the host vouches for, and the principal, purpose and correlation the caller states.
 - `public/identity/fibonacci` — Package fibonacci is the tag-planning layer over the fibonacci-coded identifier scheme (ADR-0106 SD4): given how many ids a category must hold, or how wide a code it may spend, it answers which tag values qualify.
 - `public/identity/fibonaccicode` — Package fibonaccicode encodes and decodes Fibonacci codes (Zeckendorf representations terminated by a "11" comma) in a uint64, MSB-aligned.
+- `public/identity/identifier` — Package identifier defines boxer's 64-bit tagged ids: a [TaggedId] is a tag ([IdTag]) in the high bits followed by an id body ([UntaggedId]) in the rest.
 - `public/identity/tagmint` — Package tagmint is the authority for identifier tag values: the one place a tag value is claimed, and the only source of the token the registries that mint tagged ids demand.
 
 ### keelson
@@ -87,11 +93,20 @@ Covered by the compatibility promise in [VERSIONING.md](../VERSIONING.md): an in
 
 - `public/math/numerical/timeticks` — Package timeticks generates calendar-aware tick layouts for time axes.
 
+### observability
+
+- `public/observability/eh` — Package eh builds errors that carry the stack of the call site and, optionally, structured data, and reads them back for logs and records.
+- `public/observability/eh/eb` — Package eb is the builder that attaches structured fields to an error:
+- `public/observability/ph` — Package ph turns a recovered panic into an error, and holds the panic boundaries a runtime-owned entry point is built from (ADR-0386).
+
 ### semistructured
 
 - `public/semistructured/cbor/diag` — Package diag renders CBOR bytes as RFC 8949 §8 diagnostic notation — ADR-0219 §SD6: the pretty-printer under the cbordiag widget and the `cbor diagnostics --pretty` CLI.
+- `public/semistructured/leeway/dml/runtime` — Package runtime is the support code leeway-generated write sides import: the interfaces a generated attribute and membership builder implement (one per membership channel), the error-accumulating contract ([ErrorHandlingI]), helpers such as [AppendFixedText], and [DeferredSectionBuffer], which lets several typed contributions to one entity be emitted section by section in a fixed order.
 - `public/semistructured/leeway/marshall/clickhouse/componentsql` — Package componentsql publishes the ADR-0066 read-back artefacts a component definition generates, and the registry a SQL-authoring surface looks them up in (ADR-0189).
 - `public/semistructured/leeway/membership` — Package membership is the low-level wire identity of a Leeway membership and its string representation, role-agnostic.
+- `public/semistructured/leeway/naming` — Package naming is the vocabulary of names in a leeway schema: a [StylableName] (a table, section or column name that converts between naming styles without losing what it refers to) and a [Key] (an identifier used as is, such as a streaming or co-section group).
+- `public/semistructured/leeway/readaccess/runtime` — Package runtime is the support code leeway-generated read sides import: the interfaces generated readers implement ([ColumnIndexHandlingI], [SectionMethodsI], one InAttributeMembership…I per membership channel), the index types ([EntityIdx], [AttributeIdx]) and the lookup accelerators that map an entity to its attributes in a loaded record.
 - `public/semistructured/markdown/obsidian/ext/blockid` — Package blockid parses Obsidian block identifiers (ADR-0347 §SD4): a trailing ` ^id` on the last line of a block names that block, so a link `[[note#^id]]` can reach it.
 
 ### storage
@@ -282,6 +297,7 @@ Public and usable, but may change in any MINOR version without a deprecation win
 - `public/keelson/runtime/queryengine/chlocal` — Package chlocal delivers query results from the chlocal broker ([ADR-0028]) as a runstream — engine 1 of [ADR-0144]'s three, and the one that has the least.
 - `public/keelson/runtime/queryengine/chserver` — Package chserver delivers query results from a ClickHouse server over the synchronous HTTP interface — engine 2 of [ADR-0144]'s three, and the only one that plays all three roles.
 - `public/keelson/runtime/runstream` — Package runstream is the result-frame contract of a query run (the E3 extension point of doc/explanation/query-system-requirements.md).
+- `public/keelson/runtime/schemacheck` — Package schemacheck is the one schema check a process runs over the stored tables it uses (ADR-0387): each table's live columns and stamp are judged against the columns the binary was generated for, the verdicts are kept on a board an operator reads as keelson('schema_tables'), and every table whose verdict is not ok gets one log line.
 - `public/keelson/runtime/sealed` — Package sealed holds bytes that must not outlive the process that wrote them (ADR-0240 §SD1).
 - `public/keelson/runtime/servicehost` — Package servicehost mounts headless apps — services — at boot and stops them at shutdown (ADR-0352).
 - `public/keelson/runtime/sysmetricsbus` — Package sysmetricsbus carries system-metrics snapshots over a bus as a unidirectional publish/subscribe data plane (ADR-0090).
@@ -414,6 +430,7 @@ Public and usable, but may change in any MINOR version without a deprecation win
 - `public/storage/recordstore/gen` — Package gen is the recordstore generator (ADR-0100 SD6): one invocation takes a leeway TableDesc, a set of component DTO sources and the envelope-role bindings, and emits a complete store package by driving the existing leeway generators (dml, ddl/clickhouse, readaccess, marshallgen) and then emitting the store glue over their output.
 - `public/storage/recordstore/ipcexec` — Package ipcexec is the write-only recordstore executor: a generated store pointed at it appends every flushed batch to one Arrow IPC *stream* — the shape `INSERT INTO t FORMAT ArrowStream` loads — instead of a ClickHouse table.
 - `public/storage/recordstore/rowcas` — Package rowcas composes the statements of a compare-and-set on one row of a ClickHouse MergeTree table, and carries the conditions under which that is what they are.
+- `public/storage/recordstore/schemaplan` — Package schemaplan derives the statements that bring a stored table to the columns its store was generated for, when the change is mechanical (ADR-0387): generated columns the table lacks are added, columns present under an aspect-only variant of their name (ADR-0182) are renamed and given the generated codec, a plain MergeTree table without an insert deduplication window gets one, and the table is stamped with the generating schema.
 
 ### streaming
 
@@ -578,6 +595,7 @@ Command and governance packages of this repository's tooling. Their Go API is ou
 - `public/app/commands/queryrunsd` — Package queryrunsd is the standalone query-run capture service (ADR-0115 S1): it serves the loopback /pull endpoint that the ClickHouse-owned refreshable materialized view reads every cadence, turning terminal system.query_log events into boxer.facts rows of kind QueryRun.
 - `public/app/commands/runtimecodegen` — Package runtimecodegen is the CLI wiring for the runtime/factsschema code generator.
 - `public/app/commands/sample`
+- `public/app/commands/schema` — Package schema is `boxer schema`: the stored boxer tables judged against the columns this build was generated for, and the mechanical part of bringing them in line (ADR-0387).
 - `public/app/commands/swisstopo`
 - `public/app/commands/sysmetricsd` — Package sysmetricsd is the standalone system-metrics scraper service (ADR-0090 SD2/P3): the sole /proc reader, sampling the host through the sysmetrics collectors and publishing each per-tick BundleSnapshot one-way over NATS for any consumer.
 - `public/app/commands/viewerfixture` — Package viewerfixture prepares and checks the media fixtures scripts/ci/viewer_wine_smoke.sh drives the packaged Windows viewer with (ADR-0243).
@@ -615,6 +633,7 @@ Command and governance packages of this repository's tooling. Their Go API is ou
 
 - `public/gov`
 - `public/gov/adrcorpus` — Package adrcorpus reads the doc/adr corpus into a queryable model: one [Adr] per decision, the [Subtask] sub-items each one declares for itself, and every [CodeRef] citing an ADR number from source.
+- `public/gov/adrindex` — Package adrindex generates doc/adr/INDEX.md, a table of every ADR with its number, title, status, date and the ADRs that supersede it.
 - `public/gov/buildtags` — Package buildtags verifies a repository's ./tags file against the build-tag contract boxer publishes through its module pin.
 - `public/gov/callsites` — Package callsites surveys the call expressions of Go packages and classifies each site's dispatch: monomorphic, static-polymorphic (generics), dynamic-polymorphic (interfaces, func values), conversion or builtin — optionally joined with the compiler's own devirtualization and inlining decisions parsed from `go build -gcflags=-m`.
 - `public/gov/capmapanchors` — Package capmapanchors resolves a competence's anchors against the tree (ADR-0337 §SD1) and reads the evidence the tree carries for them (§SD3).
@@ -626,6 +645,7 @@ Command and governance packages of this repository's tooling. Their Go API is ou
 - `public/gov/changelogindex` — Package changelogindex generates doc/changelog/INDEX.md — a cross-window table of contents over the hand-compiled changelog entries.
 - `public/gov/codelint`
 - `public/gov/commitdigest`
+- `public/gov/contracts` — Package contracts collects what boxer promises across a release — the stored, wire and command-line shapes another build or a deployment depends on — as a snapshot, and compares a tree against a committed one (ADR-0388).
 - `public/gov/datacatalog` — Package datacatalog answers, as data, what a live ClickHouse instance holds: which tables are leeway-mapped, what leeway schema each one carries, which tables contain one another, and which of the remaining opaque tables a play panel could render (ADR-0170).
 - `public/gov/datacatalog/panelshapes` — Package panelshapes is the vocabulary of result contracts a play panel can render, written as RE2 patterns over the data catalog's normalized schema string (ADR-0170 §SD4, §SD5).
 - `public/gov/doclint`
@@ -744,10 +764,6 @@ Illustrative and demonstration code. Outside the promise.
 
 Packages that declare no tier. Outside the promise; an app package under `apps/` is here unless its declaration says otherwise.
 
-### app
-
-- `public/app/commands/schema` — Package schema is `boxer schema`: the stored boxer tables judged against the columns this build was generated for, and the mechanical part of bringing them in line (ADR-0387).
-
 ### apps
 
 - `apps/appstate` — Package appstate is the app-state manager window (ADR-0185 §SD6): what each app keeps across restarts — persisted values, saved workingsets, column-width overrides — read from keelson('app_state'), with a delete per entry and a forget per app through the runtime.appstate seam.
@@ -756,7 +772,6 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 
 ### caching
 
-- `public/caching` — Package caching is a read-through cache for work that can be suspended and replayed — ETL steps, build graphs, traversals — where fetching is expensive and computing is cheap.
 - `public/caching/diskbacked`
 
 ### compiletimeflags
@@ -784,18 +799,9 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 
 - `public/fs/fsmatch` — Package fsmatch is the seam through which a file system runs a path filter itself.
 
-### functional
-
-- `public/functional` — Package functional holds small generic helpers over iterators and values: projecting and swapping iter.Seq2 pairs ([IterLeftOnly], [IterRightOnly], [IterInterchanged]), lifting an iter.Seq into an iter.Seq2 ([MakeIter2FromIter1], [MakeIter2FromIter1Indexed]), one-value iterators, [TranslateEmpty], and [NilIteratorValueType], the element type of an iterator used only as a scope (`for range x.KeepIter()`).
-
 ### generic
 
 - `public/generic`
-
-### gov
-
-- `public/gov/adrindex` — Package adrindex generates doc/adr/INDEX.md, a table of every ADR with its number, title, status, date and the ADRs that supersede it.
-- `public/gov/contracts` — Package contracts collects what boxer promises across a release — the stored, wire and command-line shapes another build or a deployment depends on — as a snapshot, and compares a tree against a committed one (ADR-0388).
 
 ### hashing
 
@@ -804,7 +810,6 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 ### identity
 
 - `public/identity/identgen/internalized` — Package internalized is the Badger-backed get-or-assign identifier.IdGeneratorI: it maps a natural key to a stable surrogate id, persisting the mapping in an embedded store.
-- `public/identity/identifier` — Package identifier defines boxer's 64-bit tagged ids: a [TaggedId] is a tag ([IdTag]) in the high bits followed by an id body ([UntaggedId]) in the rest.
 - `public/identity/identsql` — Package identsql is the ClickHouse surface of the fibonacci-coded tagged identifiers (ADR-0106 SD5): the LW_ID_* macro family as a nanopass expansion pass, and the equivalent CREATE FUNCTION statements so hand-written SQL against a prepared database can use the same names unexpanded.
 
 ### keelson
@@ -906,7 +911,6 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 - `public/keelson/runtime/queryrunfacts` — Package queryrunfacts is the pure library of the queryrunsd capture pipeline (ADR-0115 S1): it turns terminal system.query_log events into boxer.facts entities of kind QueryRun.
 - `public/keelson/runtime/queryrunsvc` — Package queryrunsvc is the query-run capture service (ADR-0115 S1): a stateless, idempotent, loopback-only HTTP endpoint that a ClickHouse-owned refreshable materialized view pulls.
 - `public/keelson/runtime/runinfo` — Package runinfo captures the identity of a single process boot — a "run" — and makes it discoverable to every app launched inside that run via two channels: the BOXER_RUN_ID environment variable, and a zerolog field on the base logger that app loggers derive from.
-- `public/keelson/runtime/schemacheck` — Package schemacheck is the one schema check a process runs over the stored tables it uses (ADR-0387): each table's live columns and stamp are judged against the columns the binary was generated for, the verdicts are kept on a board an operator reads as keelson('schema_tables'), and every table whose verdict is not ok gets one log line.
 - `public/keelson/runtime/statestore` — Package statestore is the typed surface of the two state kinds that are not persist values: saved workingsets (ADR-0148) and table column-width overrides (ADR-0151).
 - `public/keelson/runtime/task/estimator` — Package estimator is the throughput + humanized-form computation that gates emission inside a task.Handle.
 - `public/keelson/runtime/task/supervisor` — Package supervisor is the ADR-0038 M3 audit + heartbeat layer for the task primitive.
@@ -935,9 +939,6 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 
 ### observability
 
-- `public/observability/eh` — Package eh builds errors that carry the stack of the call site and, optionally, structured data, and reads them back for logs and records.
-- `public/observability/eh/eb` — Package eb is the builder that attaches structured fields to an error:
-- `public/observability/ph` — Package ph turns a recovered panic into an error, and holds the panic boundaries a runtime-owned entry point is built from (ADR-0386).
 - `public/observability/vcs`
 
 ### rust
@@ -949,10 +950,7 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 - `public/semistructured/cbor`
 - `public/semistructured/cbor/builder`
 - `public/semistructured/leeway/canonicaltypes/ctabb` — Package ctabb holds every primitive canonical type as a ready-made Go value, named by its abbreviation: U64 is `u64`, Sh is `sh` (an array of strings), Z64 is `z64`.
-- `public/semistructured/leeway/dml/runtime` — Package runtime is the support code leeway-generated write sides import: the interfaces a generated attribute and membership builder implement (one per membership channel), the error-accumulating contract ([ErrorHandlingI]), helpers such as [AppendFixedText], and [DeferredSectionBuffer], which lets several typed contributions to one entity be emitted section by section in a fixed order.
-- `public/semistructured/leeway/naming` — Package naming is the vocabulary of names in a leeway schema: a [StylableName] (a table, section or column name that converts between naming styles without losing what it refers to) and a [Key] (an identifier used as is, such as a streaming or co-section group).
 - `public/semistructured/leeway/readaccess/fatruntime`
-- `public/semistructured/leeway/readaccess/runtime` — Package runtime is the support code leeway-generated read sides import: the interfaces generated readers implement ([ColumnIndexHandlingI], [SectionMethodsI], one InAttributeMembership…I per membership channel), the index types ([EntityIdx], [AttributeIdx]) and the lookup accelerators that map an entity to its attributes in a loaded record.
 - `public/semistructured/markdown/mdgraph` — Package mdgraph turns a corpus of extracted Markdown documents into a document graph: a node per note, per tag and per unresolved link target, an edge per note-to-note link or embed and per note-to-tag use (ADR-0353).
 - `public/semistructured/markdown/obsidian`
 - `public/semistructured/markdown/obsidian/ext/callout`
@@ -976,7 +974,6 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 - `public/storage/recordstore/evidence/anchor/anchorsql` — Package anchorsql is a durable anchor store (ADR-0314 §SD2, by scope since ADR-0327 §SD7): the anchor.StoreI contract over one append-only ClickHouse table, for an organisation that runs its anchor store on a ClickHouse server outside any person's control (ADR-0314, update of 2026-10-13).
 - `public/storage/recordstore/evidence/audit/auditrec` — Package auditrec is the recorder of audit events below the keelson runtime (ADR-0330): a sealed, buffered writer over a store a consumer generates with recordstore/gen, reached through a thin adapter ([StoreI], [BatchI]).
 - `public/storage/recordstore/pushoutstore` — Package pushoutstore adapts a generated recordstore to the pushout repo.StorageI persistence seam (ADR-0100 S3, ADR-0079, ADR-0221): envelopes, the applied log, the snapshot and the retention ledger persist as append-only rows of one ClickHouse fact table keyed by a string namespace ("env/<hex>", "log", "snapshot", "retention").
-- `public/storage/recordstore/schemaplan` — Package schemaplan derives the statements that bring a stored table to the columns its store was generated for, when the change is mechanical (ADR-0387): generated columns the table lacks are added, columns present under an aspect-only variant of their name (ADR-0182) are renamed and given the generated codec, a plain MergeTree table without an insert deduplication window gets one, and the table is stamped with the generating schema.
 
 ### thestack
 
