@@ -23,7 +23,7 @@ const (
 // LabelContext is a context whose profiler labels name the window key of
 // appId, for pprof.SetGoroutineLabels. Build it once per window.
 func LabelContext(appId app.AppIdT, key uint64) (ctx context.Context) {
-	ctx = pprof.WithLabels(context.Background(), pprof.Labels(LabelWindow, strconv.FormatUint(key, 10), LabelApp, string(appId)))
+	ctx = pprof.WithLabels(context.Background(), pprof.Labels(LabelWindow, strconv.FormatUint(key, 10), LabelApp, string(appId))) //boxer:lint disable=CS020 reason="a profiler-label carrier for pprof.SetGoroutineLabels, never used for I/O"
 	return
 }
 

@@ -1,25 +1,27 @@
 package bad
 
 import (
+	"context"
+
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 )
 
 // A raw request with the subject constant.
-func viaConst(b app.BusI, text string) {
-	_, _ = b.Request(clipboardbroker.SubjectWrite, []byte(text)) // want a CS015 finding here
+func viaConst(ctx context.Context, b app.BusI, text string) {
+	_, _ = b.Request(ctx, clipboardbroker.SubjectWrite, []byte(text)) // want a CS015 finding here
 }
 
 // The subject spelled out.
-func viaLiteral(b app.BusI, text string) {
-	_, _ = b.Request("clipboard.write", []byte(text)) // want a CS015 finding here
+func viaLiteral(ctx context.Context, b app.BusI, text string) {
+	_, _ = b.Request(ctx, "clipboard.write", []byte(text)) // want a CS015 finding here
 }
 
 // The subject through a local constant.
 const subject = clipboardbroker.SubjectWrite
 
-func viaLocalConst(b app.BusI, text string) {
-	_, _ = b.Request(subject, []byte(text)) // want a CS015 finding here
+func viaLocalConst(ctx context.Context, b app.BusI, text string) {
+	_, _ = b.Request(ctx, subject, []byte(text)) // want a CS015 finding here
 }
 
 // A Request method on a type of the package's own, same subject.
@@ -32,10 +34,10 @@ func viaOwnType(text string) {
 }
 
 // The unlabelled text call, called and taken as a value.
-func viaWriteText(b app.BusI, text string) {
-	_ = clipboardbroker.WriteText(b, text) // want a CS015 finding here
+func viaWriteText(ctx context.Context, b app.BusI, text string) {
+	_ = clipboardbroker.WriteText(ctx, b, text) // want a CS015 finding here
 }
 
-func viaValue() func(app.BusI, string) error {
+func viaValue() func(context.Context, app.BusI, string) error {
 	return clipboardbroker.WriteText // want a CS015 finding here
 }

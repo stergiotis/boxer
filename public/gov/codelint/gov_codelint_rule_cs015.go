@@ -95,7 +95,18 @@ func (inst *RuleCS015) run(pass *analysis.Pass) (res any, err error) {
 			switch v := n.(type) {
 			case *ast.CallExpr:
 				sel, ok := v.Fun.(*ast.SelectorExpr)
-				if !ok || sel.Sel.Name != "Request" || len(v.Args) == 0 || !isClipboardWriteSubject(pass, v.Args[0]) {
+				if !ok || sel.Sel.Name != "Request" || len(v.Args) == 0 {
+					return
+				}
+				// The subject follows the ctx app.BusI.Request takes first.
+				subject := v.Args[0]
+				if tv, has := pass.TypesInfo.Types[subject]; has && tv.Type != nil && isContextType(tv.Type) {
+					if len(v.Args) < 2 {
+						return
+					}
+					subject = v.Args[1]
+				}
+				if !isClipboardWriteSubject(pass, subject) {
 					return
 				}
 				pass.Report(analysis.Diagnostic{

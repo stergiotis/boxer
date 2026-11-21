@@ -1254,7 +1254,7 @@ func (inst *Inst) reapClosed() {
 		cl := inst.reapWindow(inst.ctx, w, defaultStopReason(w), "windowhost: unmount error")
 		if cl.isDrained() {
 			// Nothing to wait for: released now, as before the drain step.
-			inst.drainAndRelease(inst.ctx, inst.ctx, cl, facts, runId)
+			inst.drainAndRelease(inst.ctx, time.Time{}, cl, facts, runId)
 			continue
 		}
 		inst.releaseLater(cl, facts, runId)

@@ -54,6 +54,7 @@ func (p workingsetsProvider) Snapshot(proj introspect.Projection) (arrow.RecordB
 	var rows []statestore.WorkingsetRow
 	if p.state != nil {
 		var err error
+		// deferred: the query's ctx, once Snapshot takes one (ADR-0395).
 		rows, err = p.state.ListWorkingsets(context.TODO())
 		if err != nil {
 			return nil, err

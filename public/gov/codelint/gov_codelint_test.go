@@ -807,3 +807,44 @@ func TestCS017_FlagsAGoroutineNoScopeOrTaskOwns(t *testing.T) {
 		t.Errorf("unexpected finding: %+v", f)
 	}
 }
+
+func TestCS020_FlagsRootsAndHiddenIo(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs020/bad")
+	require.NoError(t, err)
+
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS020ForPrefixes("github.com/stergiotis/boxer/public/gov/codelint/testdata"))
+
+	var findings []codelint.Finding
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		findings = append(findings, f)
+	}
+
+	require.Len(t, findings, 3, "expected 3 CS020 findings (Background, a hidden storage call, TODO)")
+	for _, f := range findings {
+		assert.Equal(t, "CS020", f.RuleId)
+		assert.Equal(t, codelint.FindingSeverityError, f.Severity)
+	}
+}
+
+func TestCS020_PassesCtxTakersUnexportedAndAnnotatedRoots(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs020/good")
+	require.NoError(t, err)
+
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS020ForPrefixes("github.com/stergiotis/boxer/public/gov/codelint/testdata"))
+
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		t.Fatalf("unexpected finding: %+v", f)
+	}
+}

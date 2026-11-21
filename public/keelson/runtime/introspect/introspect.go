@@ -65,6 +65,10 @@ type Provider interface {
 	// columns; the engine re-validates via clickhouse-local, so a
 	// superset is always safe (ADR-0094 §SD4). The returned batch is
 	// owned by the caller, which must Release it.
+	//
+	// deferred: Snapshot, SnapshotArgs and SnapshotWhere take the query's
+	// context (ADR-0395). The providers that read a store root their own
+	// until then; codelint CS020's baseline holds them.
 	Snapshot(proj Projection) (arrow.RecordBatch, error)
 }
 

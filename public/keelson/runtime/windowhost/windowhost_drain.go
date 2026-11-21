@@ -85,10 +85,16 @@ func (inst closing) isDrained() (drained bool) {
 }
 
 // drainAndRelease waits for the lifetime scopes of the windows to unload,
-// bounded by drainCtx, then closes their bus clients and writes the stop
-// row under writeCtx. The two are apart so a drain that uses up its budget
-// does not also cost the window its stop row.
-func (inst *Inst) drainAndRelease(drainCtx context.Context, writeCtx context.Context, cl closing, facts factsstore.FactsStoreI, runId string) {
+// under ctx and until drainBy when it is set, then closes their bus clients
+// and writes the stop row under ctx itself. The two bounds are apart so a
+// drain that uses up its budget does not also cost the window its stop row.
+func (inst *Inst) drainAndRelease(ctx context.Context, drainBy time.Time, cl closing, facts factsstore.FactsStoreI, runId string) {
+	drainCtx := ctx
+	if !drainBy.IsZero() {
+		var cancel context.CancelFunc
+		drainCtx, cancel = context.WithDeadline(ctx, drainBy)
+		defer cancel()
+	}
 	for _, uw := range cl.unload {
 		if uw.lifetime == nil {
 			continue
@@ -106,7 +112,7 @@ func (inst *Inst) drainAndRelease(drainCtx context.Context, writeCtx context.Con
 		uw.unload(inst.logger)
 	}
 	if facts != nil {
-		emitStopped(writeCtx, facts, inst.logger, runId, cl.w, cl.reason)
+		emitStopped(ctx, facts, inst.logger, runId, cl.w, cl.reason)
 	}
 }
 
@@ -116,9 +122,7 @@ func (inst *Inst) releaseLater(cl closing, facts factsstore.FactsStoreI, runId s
 	inst.drains.pending.Add(1)
 	go func() {
 		defer inst.drains.pending.Done()
-		ctx, cancel := context.WithTimeout(inst.ctx, onClose)
-		defer cancel()
-		inst.drainAndRelease(ctx, inst.ctx, cl, facts, runId)
+		inst.drainAndRelease(inst.ctx, time.Now().Add(onClose), cl, facts, runId)
 	}()
 }
 
@@ -127,14 +131,15 @@ func (inst *Inst) releaseLater(cl closing, facts factsstore.FactsStoreI, runId s
 // shutdownCtx; the stop rows are written under shutdownCtx itself.
 func (inst *Inst) releaseAll(shutdownCtx context.Context, cls []closing, facts factsstore.FactsStoreI, runId string) {
 	_, onShutdown := inst.drainDeadlines()
-	ctx, cancel := context.WithTimeout(shutdownCtx, onShutdown)
+	drainBy := time.Now().Add(onShutdown)
+	ctx, cancel := context.WithDeadline(shutdownCtx, drainBy)
 	defer cancel()
 	var wg sync.WaitGroup
 	for _, cl := range cls {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			inst.drainAndRelease(ctx, shutdownCtx, cl, facts, runId)
+			inst.drainAndRelease(shutdownCtx, drainBy, cl, facts, runId)
 		}()
 	}
 	wg.Wait()

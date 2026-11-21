@@ -488,7 +488,7 @@ func (inst *Inst) ReapAll(ctx context.Context, reason string) {
 		stopReason := reason
 		pprof.SetGoroutineLabels(s.labels)
 		umErr := ph.Guard(func() error { return s.appInst.Unmount(s.mountCtx) })
-		pprof.SetGoroutineLabels(context.Background())
+		pprof.SetGoroutineLabels(context.Background()) //boxer:lint disable=CS020 reason="clears the goroutine's profiler labels; no I/O"
 		if umErr != nil {
 			inst.cfg.Log.Warn().Err(umErr).Str("id", string(s.manifest.Id)).Msg("servicehost: Unmount failed")
 			stopReason = StopReasonUnmountError
