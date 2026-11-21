@@ -16,7 +16,8 @@ moves packages so that a library does not import the app platform, splits the
 environment registry's CLI and test helpers out of its core, and changes a few
 exported names. No stored table and no wire format changes. A consuming module
 changes import paths and call spellings, then regenerates the code it generates
-with boxer's generators.
+with boxer's generators. Changes of behaviour that compile unchanged are listed
+in [2026-11-behaviour-changes.md](./2026-11-behaviour-changes.md).
 
 ## When to use this recipe
 
