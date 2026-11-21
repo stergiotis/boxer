@@ -58,7 +58,9 @@ install() {
     local tgz="$dir/$CH_ASSET"
     curl -fsSL --retry 3 -o "$tgz" "$CH_URL"
     echo "$CH_SHA256  $tgz" | sha256sum -c -
-    tar -xzf "$tgz" -C "$dir" --strip-components=3 --wildcards '*/usr/bin/clickhouse'
+    # --no-same-owner: run as root (a CI container, a user namespace), tar
+    # would give the file the archive's owner, which may not exist there.
+    tar -xzf "$tgz" -C "$dir" --no-same-owner --strip-components=3 --wildcards '*/usr/bin/clickhouse'
     rm -f -- "$tgz"
     chmod +x "$bin"
     "$bin" --version
