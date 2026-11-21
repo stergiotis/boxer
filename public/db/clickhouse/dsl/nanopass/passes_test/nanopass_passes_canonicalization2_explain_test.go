@@ -71,9 +71,12 @@ type clickHouseTestClient struct {
 	httpCli  *http.Client
 }
 
+// newClickHouseTestClient takes the endpoint with or without a trailing slash
+// (the registry's example has none, CLICKHOUSE_URL's default has one); the
+// paths below are appended to it without one.
 func newClickHouseTestClient(endpoint string) *clickHouseTestClient {
 	return &clickHouseTestClient{
-		endpoint: endpoint,
+		endpoint: strings.TrimRight(endpoint, "/"),
 		httpCli:  &http.Client{Timeout: 5 * time.Second},
 	}
 }
