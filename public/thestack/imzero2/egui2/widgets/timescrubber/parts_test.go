@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 )
 
 // A hidden part takes its keys with it; Home and End stay while either of

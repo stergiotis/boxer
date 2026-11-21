@@ -98,9 +98,12 @@ type snapshot struct {
 type Engine struct {
 	catalog *app.OperationsCatalog
 	h       app.OperationsHandlerI
-	// life is the window's lifetime: what a gesture runs under, and what
-	// bounds a queued command, whose request was answered before it ran.
+	// life is the window's lifetime: what bounds a queued command, whose
+	// request was answered before it ran.
 	life context.Context
+	// gestureCall is the call a gesture hands its handler: the person, under
+	// the window's lifetime.
+	gestureCall app.OperationCall
 
 	mu       sync.Mutex
 	queue    []*call
@@ -149,11 +152,12 @@ type Engine struct {
 func New(life context.Context, catalog *app.OperationsCatalog, h app.OperationsHandlerI) (inst *Engine) {
 	inst = &Engine{
 		catalog: catalog, h: h, life: life,
-		calls:   make(map[string]*call),
-		values:  make(map[string]any),
-		revs:    make(map[string]uint64),
-		writers: make(map[string]string),
-		viewed:  make(chan struct{}), queryWait: QueryWait, clock: time.Now,
+		gestureCall: app.OperationCall{Writer: opwire.WriterPerson}.WithContext(life),
+		calls:       make(map[string]*call),
+		values:      make(map[string]any),
+		revs:        make(map[string]uint64),
+		writers:     make(map[string]string),
+		viewed:      make(chan struct{}), queryWait: QueryWait, clock: time.Now,
 	}
 	for _, r := range catalog.Resources {
 		inst.resourceSet = append(inst.resourceSet, r.Name)
@@ -747,7 +751,7 @@ func (inst *Engine) Gesture(op string, args []byte) (result []byte, err error) {
 		return
 	}
 	entrypoint.Human(func() {
-		result, err = inst.h.ApplyCommand(app.OperationCall{Writer: opwire.WriterPerson}.WithContext(inst.life), op, args)
+		result, err = inst.h.ApplyCommand(inst.gestureCall, op, args)
 	})
 	out := outcomeOfError(err)
 	if out.Phase == opwire.PhaseUnspecified {

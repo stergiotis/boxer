@@ -31,7 +31,7 @@ func Fail(registry string, err error) {
 		return
 	}
 	mu.Lock()
-	failures = append(failures, eh.Errorf("%s: %w", registry, err))
+	failures = append(failures, eh.Errorf("%s: %w", registry, err)) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 	mu.Unlock()
 }
 

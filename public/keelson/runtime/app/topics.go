@@ -105,24 +105,24 @@ func RegisterTopic(t TopicT) {
 func AddTopic(t TopicT) (err error) {
 	s := string(t)
 	if s == "" || s[0] < 'a' || s[0] > 'z' {
-		err = eb.Build().Str("topic", s).Errorf("topic %q is not a lower-case token", s)
+		err = eb.Build().Str("topic", s).Errorf("topic %q is not a lower-case token", s) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 		return
 	}
 	for i := 0; i < len(s); i++ {
 		ch := s[i]
 		if !((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-') {
-			err = eb.Build().Str("topic", s).Errorf("topic %q has a byte outside [a-z0-9-]", s)
+			err = eb.Build().Str("topic", s).Errorf("topic %q has a byte outside [a-z0-9-]", s) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 			return
 		}
 	}
 	topicsMu.Lock()
 	defer topicsMu.Unlock()
 	if slices.Contains(topics, t) {
-		err = eb.Build().Str("topic", s).Errorf("topic %q is already in the vocabulary", s)
+		err = eb.Build().Str("topic", s).Errorf("topic %q is already in the vocabulary", s) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 		return
 	}
 	if len(topics) >= MaxTopics {
-		err = eb.Build().Str("topic", s).Errorf("the topic vocabulary holds %d topics already", MaxTopics)
+		err = eb.Build().Str("topic", s).Errorf("the topic vocabulary holds %d topics already", MaxTopics) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 		return
 	}
 	next := make([]TopicT, len(topics), len(topics)+1)

@@ -206,16 +206,14 @@ from a per-frame counter will drift.
 
 ## Reaching a store
 
-The store arrives as an optional frame-context capability, the shape
-[ADR-0382](../adr/0382-embedding-is-by-role-a-pane-under-its-host-and-no-host-mediated-embed.md) §SD4 settled for host-held
-collaborators. Acquire it once, on a frame:
+The store arrives as a mount value the host sets under `colwidth.StoreKey`
+([ADR-0396](../adr/0396-the-app-contract-a-host-promises.md) §4), read
+through `colwidth.StoreOf`. Acquire it once:
 
 ```go
-if h, ok := ctx.(colwidth.HostI); ok {
-    if st := h.ColumnWidthStore(); st != nil {
-        res, _ = colwidth.New(st, colwidth.Opts{AppId: ctx.AppId(), MinPoints: minWidth, MaxPoints: maxWidth})
-        _ = res.Load()
-    }
+if st := colwidth.StoreOf(ctx); st != nil {
+    res, _ = colwidth.New(app.ContextOf(ctx), st, colwidth.Opts{AppId: ctx.AppId(), MinPoints: minWidth, MaxPoints: maxWidth})
+    _ = res.Load()
 }
 ```
 

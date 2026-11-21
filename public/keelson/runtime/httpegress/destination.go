@@ -104,18 +104,18 @@ func Register(spec DestinationSpec) {
 // Add is Register returning the refusal instead of recording it.
 func Add(spec DestinationSpec) (err error) {
 	if !ValidDestinationName(spec.Name) {
-		err = eb.Build().Str("destination", spec.Name).Errorf("httpegress: invalid destination name %q", spec.Name)
+		err = eb.Build().Str("destination", spec.Name).Errorf("httpegress: invalid destination name %q", spec.Name) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 		return
 	}
 	if spec.Resolve == nil {
-		err = eb.Build().Str("destination", spec.Name).Errorf("httpegress: destination %q has no resolve function", spec.Name)
+		err = eb.Build().Str("destination", spec.Name).Errorf("httpegress: destination %q has no resolve function", spec.Name) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 		return
 	}
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 	for _, s := range registry.specs {
 		if s.Name == spec.Name {
-			err = eb.Build().Str("destination", spec.Name).Errorf("httpegress: destination %q is registered twice", spec.Name)
+			err = eb.Build().Str("destination", spec.Name).Errorf("httpegress: destination %q is registered twice", spec.Name) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 			return
 		}
 	}

@@ -2,8 +2,8 @@ package spectrumdisplay
 
 import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 	"testing"
 
 	"github.com/stretchr/testify/require"

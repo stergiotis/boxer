@@ -11,8 +11,8 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/stats/tdigest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -37,25 +37,23 @@ the sort resets on every frame and the grid fits its columns on every frame.
 
 ## Acquire the width resolver on the first frame
 
-The store comes from the frame context, so it cannot be picked up in Mount.
+The store is a mount value the host hands the app (`colwidth.StoreOf`).
 Ask once, and accept that it may be absent — then widths are not kept and
 everything else works:
 
 ```go
 if !inst.widthsInit {
     inst.widthsInit = true
-    if h, ok := ctx.(colwidth.HostI); ok {
-        if store := h.ColumnWidthStore(); store != nil {
-            d := styletokens.ActiveDensity()
-            res, err := colwidth.New(store, colwidth.Opts{
-                AppId: ctx.AppId(), InstanceKey: ctx.InstanceKey(),
-                MinPoints: float64(recordtable.DragMinWidth(d)),
-                MaxPoints: float64(recordtable.MaxColumnWidth),
-            })
-            if err == nil {
-                _ = res.Load() // a failed load only means no stored widths this session
-                inst.widths = res
-            }
+    if store := colwidth.StoreOf(ctx); store != nil {
+        d := styletokens.ActiveDensity()
+        res, err := colwidth.New(app.ContextOf(ctx), store, colwidth.Opts{
+            AppId: ctx.AppId(), InstanceKey: ctx.InstanceKey(),
+            MinPoints: float64(recordtable.DragMinWidth(d)),
+            MaxPoints: float64(recordtable.MaxColumnWidth),
+        })
+        if err == nil {
+            _ = res.Load() // a failed load only means no stored widths this session
+            inst.widths = res
         }
     }
 }

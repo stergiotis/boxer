@@ -118,7 +118,7 @@ func ValidateCapPattern(pattern string) (err error) {
 	tokens := strings.Split(pattern, ".")
 	for _, tok := range tokens {
 		if tok == "" {
-			err = eb.Build().Str("pattern", pattern).Errorf("capability pattern %q has an empty token", pattern)
+			err = eb.Build().Str("pattern", pattern).Errorf("capability pattern %q has an empty token", pattern) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 			return
 		}
 	}
@@ -126,13 +126,11 @@ func ValidateCapPattern(pattern string) (err error) {
 	case SubjectRootRuntime, SubjectRootApp, SubjectRootInbox:
 	case SubjectRootExt:
 		if len(tokens) < 3 || tokens[1] == "*" || tokens[1] == ">" {
-			err = eb.Build().Str("pattern", pattern).
-				Errorf("capability pattern %q: an ext subject is ext.<module-token>.<service>…, with the module token spelled out", pattern)
+			err = eb.Build().Str("pattern", pattern).Errorf("capability pattern %q: an ext subject is ext.<module-token>.<service>…, with the module token spelled out", pattern) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 			return
 		}
 	default:
-		err = eb.Build().Str("pattern", pattern).
-			Errorf("capability pattern %q starts outside the subject grammar: a runtime service is runtime.<service>.…, an app's own subject app.<alias>.…, another module's service ext.<module-token>.<service>.… (ADR-0396 §6)", pattern)
+		err = eb.Build().Str("pattern", pattern).Errorf("capability pattern %q starts outside the subject grammar: a runtime service is runtime.<service>.…, an app's own subject app.<alias>.…, another module's service ext.<module-token>.<service>.… (ADR-0396 §6)", pattern) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 		return
 	}
 	return
@@ -147,7 +145,7 @@ func ValidateAlias(alias string) (err error) {
 	}
 	for i := 0; i < len(alias); i++ {
 		if !isAliasByte(alias[i]) {
-			err = eb.Build().Str("alias", alias).Errorf("alias %q has a byte outside [A-Za-z0-9_-]", alias)
+			err = eb.Build().Str("alias", alias).Errorf("alias %q has a byte outside [A-Za-z0-9_-]", alias) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 			return
 		}
 	}
@@ -499,8 +497,7 @@ func (inst Manifest) Validate() (err error) {
 	}
 	for _, t := range inst.Topics {
 		if !t.IsRegistered() {
-			err = eb.Build().Str("id", string(inst.Id)).Str("topic", string(t)).
-				Errorf("manifest: topic %q is not in the vocabulary; a module adds one with app.RegisterTopic before the manifests that declare it", t)
+			err = eb.Build().Str("id", string(inst.Id)).Str("topic", string(t)).Errorf("manifest: topic %q is not in the vocabulary; a module adds one with app.RegisterTopic before the manifests that declare it", t) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 			return
 		}
 	}

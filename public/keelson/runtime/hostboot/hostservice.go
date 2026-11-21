@@ -40,7 +40,7 @@ func AddHostService(name string, start HostServiceStartFunc) (err error) {
 	hostServices.mu.Lock()
 	defer hostServices.mu.Unlock()
 	if slices.Contains(hostServices.names, name) {
-		err = eb.Build().Str("name", name).Errorf("hostboot: host service %q is registered twice", name)
+		err = eb.Build().Str("name", name).Errorf("hostboot: host service %q is registered twice", name) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 		return
 	}
 	hostServices.names = append(hostServices.names, name)

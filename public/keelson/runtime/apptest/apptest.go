@@ -213,7 +213,7 @@ func FrameHeadless(t testing.TB, reg *app.Registry, id app.AppIdT, opts FrameOpt
 		prev := c.OnIdViolation(func(what string, vid uint64) {
 			violations = append(violations, what)
 		})
-		defer c.OnIdViolation(prev)
+		defer func() { c.OnIdViolation(prev) }()
 	}
 	a, err := reg.Open(id)
 	if err != nil {

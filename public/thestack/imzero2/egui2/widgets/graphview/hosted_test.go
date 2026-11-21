@@ -10,8 +10,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	cam "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/camera"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
+	cam "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/camera"
 )
 
 // hostScene drives a View through the hosted pair against registers scripted

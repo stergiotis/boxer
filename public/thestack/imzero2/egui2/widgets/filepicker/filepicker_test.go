@@ -12,8 +12,8 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsbrowser"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsbrowser"
 )
 
 // testIds is the id stack every dialog in these tests is built on; only the

@@ -212,9 +212,7 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 	newAlias := m.SubjectAlias()
 	for i := range inst.entries {
 		if inst.entries[i].manifest.SubjectAlias() == newAlias {
-			err = eb.Build().Str("id", string(m.Id)).Str("alias", newAlias).
-				Str("collidesWith", string(inst.entries[i].manifest.Id)).
-				Errorf("registry: alias %q of %s is already the alias of %s; set Manifest.Alias on one of them", newAlias, m.Id, inst.entries[i].manifest.Id)
+			err = eb.Build().Str("id", string(m.Id)).Str("alias", newAlias).Str("collidesWith", string(inst.entries[i].manifest.Id)).Errorf("registry: alias %q of %s is already the alias of %s; set Manifest.Alias on one of them", newAlias, m.Id, inst.entries[i].manifest.Id) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 			return
 		}
 	}

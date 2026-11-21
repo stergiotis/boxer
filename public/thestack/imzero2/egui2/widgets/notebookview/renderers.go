@@ -47,11 +47,11 @@ func AddRenderer(name string, build RendererFactory) (err error) {
 		return
 	}
 	if name == mdnotebook.RendererTable || name == RendererKV {
-		err = eb.Build().Str("renderer", name).Errorf("notebookview: the renderer %q is built in", name)
+		err = eb.Build().Str("renderer", name).Errorf("notebookview: the renderer %q is built in", name) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 		return
 	}
 	if _, taken := renderers[name]; taken {
-		err = eb.Build().Str("renderer", name).Errorf("notebookview: renderer %q is registered twice", name)
+		err = eb.Build().Str("renderer", name).Errorf("notebookview: renderer %q is registered twice", name) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 		return
 	}
 	renderers[name] = build

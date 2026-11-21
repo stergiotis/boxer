@@ -55,7 +55,7 @@ func Add(kind string, probe ProbeFunc) (err error) {
 	mu.Lock()
 	defer mu.Unlock()
 	if _, dup := probes[kind]; dup {
-		err = eb.Build().Str("kind", kind).Errorf("kindcheck: kind %q is registered twice", kind)
+		err = eb.Build().Str("kind", kind).Errorf("kindcheck: kind %q is registered twice", kind) //boxer:lint disable=CS013 reason="a registration or manifest refusal is read as text when a host refuses to start: the name it refuses belongs in the message"
 		return
 	}
 	probes[kind] = probe
