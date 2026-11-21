@@ -1,7 +1,8 @@
 // Package chstore is the ClickHouse-backed factsstore.FactsStoreI per
 // ADR-0026 M2.5c. Writes go through the generated leeway DML builders
-// (runtime/factsschema/dml.InEntityFacts) and ship as Arrow IPC via
-// chclient.InsertArrow. Reads (the app trail, the log rows, the run events, the
+// (runtime/factsschema/dml.InEntityFacts) and ship as Arrow IPC through the
+// store's record-store executor, which applies an insert transform a
+// deployment registered for the facts table (ADR-0402). Reads (the app trail, the log rows, the run events, the
 // launch statistics) are hand-composed leeway-shaped SELECTs against the array-encoded
 // membership columns — the code class ADR-0105 D5 replaces with generated
 // stores kind by kind. App state left this table for its own generated
@@ -132,12 +133,12 @@ func ConfigWithEnvDefaults(cfg Config) (out Config) {
 
 // Store is the live-CH FactsStoreI. Each Write* call constructs a fresh
 // InEntityFacts builder, encodes one row, and ships it as a single-record
-// Arrow IPC batch through chclient.InsertArrow.
+// Arrow IPC batch through the store's executor.
 type Store struct {
 	cfg Config
 	cli *chclient.Client
-	// exec is cli as the executor the reads go through: statements out,
-	// Arrow record batches back.
+	// exec is cli as the executor the reads and the inserts go through:
+	// statements out, Arrow record batches back.
 	exec      *storeexec.Executor
 	allocator memory.Allocator
 	// ids mints the row ids (ADR-0397 §SD2): leased from the id stream of
@@ -925,7 +926,10 @@ func (inst *Store) shipRecords(ctx context.Context, ent *dml.InEntityFacts) (err
 			r.Release()
 		}
 	}()
-	err = inst.cli.InsertArrow(ctx, inst.qualifiedTable(), records)
+	// Through the executor, which applies a transform registered for the
+	// facts table (ADR-0402 §SD1): the generated stores' inserts take the
+	// same path.
+	err = inst.exec.InsertArrow(ctx, inst.qualifiedTable(), records)
 	if err != nil {
 		err = eh.Errorf("chstore: insert arrow: %w", err)
 		return
