@@ -9,6 +9,9 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/science/imaging"
+	"github.com/stergiotis/boxer/public/science/imaging/decode/fits"
+	"github.com/stergiotis/boxer/public/science/imaging/decode/npy"
+	"github.com/stergiotis/boxer/public/science/imaging/decode/tiff"
 )
 
 // FormatE is a file format this package reads. The zero value is a format it
@@ -18,7 +21,21 @@ type FormatE uint8
 const (
 	FormatPNG FormatE = iota + 1
 	FormatJPEG
+	// FormatTIFF is a classic TIFF or a BigTIFF, in either byte order; it
+	// is read as a stack ([DecodeStack]).
+	FormatTIFF
+	// FormatFITS is a FITS file, or one wrapped in gzip; it is read as a
+	// stack.
+	FormatFITS
+	// FormatNPY is a NumPy NPY array; it is read as a stack.
+	FormatNPY
+	// FormatNPZ is a NumPy NPZ archive of NPY arrays; it is read as a
+	// stack, from its only array.
+	FormatNPZ
 )
+
+// AllFormats lists the formats this package reads.
+var AllFormats = []FormatE{FormatPNG, FormatJPEG, FormatTIFF, FormatFITS, FormatNPY, FormatNPZ}
 
 func (inst FormatE) String() string {
 	switch inst {
@@ -26,8 +43,26 @@ func (inst FormatE) String() string {
 		return "png"
 	case FormatJPEG:
 		return "jpeg"
+	case FormatTIFF:
+		return "tiff"
+	case FormatFITS:
+		return "fits"
+	case FormatNPY:
+		return "npy"
+	case FormatNPZ:
+		return "npz"
 	}
 	return "unknown"
+}
+
+// IsStack reports whether the format is read into an [imaging.Stack] by
+// [DecodeStack], and not into an image by [Decode] or [DecodeTiled].
+func (inst FormatE) IsStack() bool {
+	switch inst {
+	case FormatTIFF, FormatFITS, FormatNPY, FormatNPZ:
+		return true
+	}
+	return false
 }
 
 // DefaultMaxPixels bounds a decode at 64 megapixels: an 8192 × 8192 image,
@@ -37,19 +72,41 @@ const DefaultMaxPixels int64 = 64 << 20
 // Options configures a decode. The zero value is usable.
 type Options struct {
 	// MaxPixels refuses a file with more pixels than this before decoding
-	// it; 0 means [DefaultMaxPixels].
+	// it — for a stack format, a plane with more; 0 means
+	// [DefaultMaxPixels].
 	MaxPixels int64
+	// MaxBytes refuses a stack whose samples, every plane, take more bytes
+	// than this, from the file's header before samples are read; 0 takes
+	// the reader's own default. [Decode] and [DecodeTiled] do not read it.
+	MaxBytes int64
+	// MaxPlanes refuses a stack of more planes than this; 0 takes the
+	// reader's own default. The TIFF reader bounds its planes through
+	// MaxBytes and its directory count, and does not read it.
+	MaxPlanes int
 }
 
 var pngSignature = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
 
-// Sniff tells the format of a file from its first bytes.
+// npyMagic begins an NPY file; an NPZ archive is a zip of them.
+var npyMagic = []byte("\x93NUMPY")
+
+// Sniff tells the format of a file from its first bytes. A gzip-wrapped
+// FITS file is told by decompressing its first bytes, and an NPZ archive
+// by its first member's name, which data must hold.
 func Sniff(data []byte) FormatE {
 	switch {
 	case bytes.HasPrefix(data, pngSignature):
 		return FormatPNG
 	case len(data) >= 3 && data[0] == 0xff && data[1] == 0xd8 && data[2] == 0xff:
 		return FormatJPEG
+	case tiff.Sniff(data):
+		return FormatTIFF
+	case fits.Sniff(data):
+		return FormatFITS
+	case bytes.HasPrefix(data, npyMagic):
+		return FormatNPY
+	case npy.Sniff(data):
+		return FormatNPZ
 	}
 	return 0
 }
@@ -69,6 +126,9 @@ func Decode(data []byte, sourceName string, opts Options) (img imaging.Image, er
 		cfg, err = png.DecodeConfig(bytes.NewReader(data))
 	case FormatJPEG:
 		cfg, err = jpeg.DecodeConfig(bytes.NewReader(data))
+	case FormatTIFF, FormatFITS, FormatNPY, FormatNPZ:
+		return img, eb.Build().Str("source", sourceName).Stringer("format", format).
+			Errorf("the file is a format read as a stack; DecodeStack reads it")
 	default:
 		return img, eb.Build().Str("source", sourceName).Errorf("not a PNG or a JPEG file")
 	}

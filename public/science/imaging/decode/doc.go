@@ -1,8 +1,9 @@
 // Package decode reads a PNG or a JPEG file into an [imaging.Image] without
 // passing its samples through 8 bits or through premultiplied alpha (ADR-0373
-// §SD10). The pixel decoding is the standard library's; what this package
-// adds is the way from a decoded picture to planes, and the record of what
-// the file stored.
+// §SD10), and is the one way in to the readers of TIFF, FITS and NPY files,
+// which give a stack (see Stacks). The pixel decoding of PNG and JPEG is the
+// standard library's; what this package adds is the way from a decoded
+// picture to planes, and the record of what the file stored.
 //
 // # What comes out
 //
@@ -42,4 +43,16 @@
 // A file's statement about its colour encoding — an sRGB chunk, a gamma, a
 // profile — is recorded in [imaging.Provenance.ColorDeclaration] and not
 // applied (§SD5).
+//
+// # Stacks
+//
+// TIFF, FITS, NPY and NPZ files are read into an [imaging.Stack], not an
+// image (ADR-0398 §SD6–§SD8). [Sniff] tells them as it tells PNG and JPEG,
+// and [FormatE.IsStack] says which way a format goes. [DecodeStack] is the
+// one way in: it hands the file to the reader of its format — the packages
+// tiff, fits and npy beneath this one, which say what each reads, converts
+// and refuses — with the limits of [Options] as theirs. A refusal is the
+// reader's own error, which errors.Is matches to the reader's
+// ErrUnsupported, ErrLimit or ErrMalformed and whose message names what was
+// refused. The readers do not import this package.
 package decode
