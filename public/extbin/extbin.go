@@ -100,7 +100,9 @@ type Program struct {
 	// require so no external binary is resolved from an ambient PATH. The
 	// variable is declared through the env registry (ADR-0009) by the
 	// package that declares the program, so the registry documents it;
-	// resolution reads it by name, and a name no package declared panics.
+	// resolution reads it by name. A name no package declared is reported
+	// by DeclarationErrors at start and makes resolution fail with
+	// ErrUndeclaredVariable.
 	OverrideEnv string
 	// InstallHint is appended to the not-found error, telling an operator how
 	// to satisfy the dependency.
@@ -263,7 +265,11 @@ func (p *Program) capture(ctx context.Context, o Opts, combined bool, args []str
 // + go.sum rather than a file hash. A Local program needs a caller-supplied
 // path and reports ("", false).
 func (p *Program) Resolve() (path string, available bool) {
-	if bin, ok := p.override(); ok {
+	bin, ok, err := p.override()
+	if err != nil {
+		return "", false
+	}
+	if ok {
 		return bin, true
 	}
 	switch p.Kind {
@@ -303,7 +309,10 @@ func (p *Program) resolve(o Opts) (name string, pre []string, err error) {
 		name, err = p.lookHost()
 		pre = p.prefixArgs()
 	case GoToolchain:
-		if bin, ok := p.override(); ok {
+		var bin string
+		var ok bool
+		bin, ok, err = p.override()
+		if err != nil || ok {
 			name = bin
 			return
 		}
@@ -318,8 +327,9 @@ func (p *Program) resolve(o Opts) (name string, pre []string, err error) {
 }
 
 func (p *Program) lookHost() (name string, err error) {
-	if bin, ok := p.override(); ok {
-		name = bin
+	var ok bool
+	name, ok, err = p.override()
+	if err != nil || ok {
 		return
 	}
 	name, err = exec.LookPath(p.lookupName())
@@ -350,14 +360,17 @@ func (p *Program) prefixArgs() (pre []string) {
 
 // override reads the program's OverrideEnv through the env registry: the
 // Path or String var declared under that name, with its override and flag
-// tiers honoured; any other typed var by its raw value.
-func (p *Program) override() (path string, ok bool) {
+// tiers honoured; any other typed var by its raw value. An undeclared name
+// is an error (ErrUndeclaredVariable), which DeclarationErrors reports at
+// start for every program.
+func (p *Program) override() (path string, ok bool, err error) {
 	if p.OverrideEnv == "" {
 		return
 	}
 	v, declared := env.LookupVar(p.OverrideEnv)
 	if !declared {
-		panic("extbin: program " + p.Name + " names the override variable " + p.OverrideEnv + ", which no package declared through the env registry")
+		err = p.undeclared("OverrideEnv", p.OverrideEnv)
+		return
 	}
 	var raw string
 	switch t := v.(type) {
@@ -372,7 +385,7 @@ func (p *Program) override() (path string, ok bool) {
 	if raw == "" {
 		return
 	}
-	return raw, true
+	return raw, true, nil
 }
 
 func (p *Program) goToolFallback(ctx context.Context, o Opts, args []string) (cmd *exec.Cmd, ok bool) {

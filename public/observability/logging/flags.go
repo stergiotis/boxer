@@ -13,6 +13,7 @@ import (
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/mattn/go-isatty"
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/vcs"
@@ -514,13 +515,18 @@ var registrationOnce sync.Once
 // warnEnviron warns, once per process, about each set variable the env
 // registry retired — naming its replacement — and each set variable in a
 // boxer namespace that nothing declares (env.CheckEnviron), and reports
-// conflicting declarations of one variable (env.RegistrationErrors). Apply
+// conflicting declarations of one variable (env.RegistrationErrors) and
+// external programs that name a variable nothing declares
+// (extbin.DeclarationErrors). Apply
 // is the hook every binary's root command runs, after the writer is in
 // place, which is why the check lives here rather than in the registry.
 func warnEnviron() {
 	registrationOnce.Do(func() {
 		if regErr := env.RegistrationErrors(); regErr != nil {
 			log.Error().Err(regErr).Msg("environment variables declared twice with different specs; the first declaration of each is in effect")
+		}
+		if declErr := extbin.DeclarationErrors(); declErr != nil {
+			log.Error().Err(declErr).Msg("external programs name environment variables no package declares; resolving such a program fails")
 		}
 	})
 	for _, f := range env.CheckProcessEnvironOnce() {

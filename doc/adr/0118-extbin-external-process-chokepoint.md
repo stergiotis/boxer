@@ -237,6 +237,19 @@ the ClickHouse password. The registry knows only the variables of packages
 linked into the binary, so a secret no linked package declares is not
 recognised and still passes through.
 
+### 2026-11-21 — An undeclared variable name is reported at start, not at first use
+
+A `Program` whose `OverrideEnv` names a variable no package declared used to
+panic the first time it resolved, which may be a rarely taken path.
+`DeclarationErrors` checks every declared program after init: `OverrideEnv`
+must name a declared variable and each `InheritSensitive` entry a declared
+`Sensitive` one; it returns every offender, joined, under
+`ErrUndeclaredVariable`. `logging.Apply` reports them at start beside the
+env registry's conflicts, and `CheckDeclarations(t)` fails a module's unit
+test with the same list. Resolving such a program returns the error instead
+of panicking. The check sees only the packages linked into the binary or
+test, so a module's test links the packages that declare its programs.
+
 ## Deferred
 
 - `OverrideEnv` is populated for `clickhouse-local` (`BOXER_CLICKHOUSE_LOCAL`, a
