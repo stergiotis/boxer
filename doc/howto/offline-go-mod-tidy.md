@@ -121,6 +121,17 @@ Back on a connected host, `GOWORK=off go build ./...` works without changes.
   **Cause:** a used module that no workspace module requires at a version, so
   there is no version to pin.
   **Fix:** none needed. It builds from source through the workspace.
+- **Symptom:** `not required: <module> <version> is vendored, but no go.mod in
+  the workspace requires it`, often with a `drop` line for the same module.
+  **Cause:** `go work vendor` vendored the module without any workspace
+  `go.mod` requiring it: a member was not tidy, or a dependency's `go.mod`
+  predates module graph pruning (`go` older than 1.17, or none) and pulled it
+  in. Its `modules.txt` entry is not `## explicit`, and the vendor check
+  rejects every `go.mod` that names it, so it is left out.
+  **Fix:** the member builds in the workspace as it is. For a `go.mod` that
+  also builds with `GOWORK=off`, rebuild the vendor tree on a connected host
+  after tidying the workspace module that needs it, or upgrading the
+  dependency that brings it in.
 - **Symptom:** `replace <module> => … go.mod needs the same replace`.
   **Cause:** the workspace builds that module through a `replace`.
   **Fix:** add the same `replace` to the member's `go.mod`.

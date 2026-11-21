@@ -123,6 +123,13 @@ with `--check` reports the difference.
   provides fails the run with the importing package named. It has to be
   vendored on a connected host. A required module that is `use`d by the
   workspace but has no version in `modules.txt` is reported and not required.
+  So is a vendored module that `modules.txt` does not mark explicit at the
+  version it builds. No workspace `go.mod` requires it, which happens when a
+  member is untidy or a dependency's `go.mod` predates module graph pruning,
+  and Go's vendor check rejects a `go.mod` that names it. An existing
+  requirement on it is dropped. The member then builds in the workspace, and
+  builds with `GOWORK=off` only after the vendor tree is rebuilt with a
+  workspace module requiring it.
 
 ## Alternatives
 
