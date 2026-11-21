@@ -90,7 +90,7 @@ func (inst *Store) ListRunEvents(filter factsstore.RunEventFilter) (rows []facts
 	rows = []factsstore.RunEventRow{}
 	b := binds{}
 	err = inst.readRows(context.Background(), "run events",
-		composeRunEventsSql(inst.qualifiedTable(), filter, limit, b), b, 7, func(r row) {
+		composeRunEventsSql(inst.readTable(), filter, limit, b), b, 7, func(r row) {
 			rows = append(rows, factsstore.RunEventRow{
 				FactId:      r.str(0),
 				Ts:          time.UnixMilli(r.i64(1)).UTC(),

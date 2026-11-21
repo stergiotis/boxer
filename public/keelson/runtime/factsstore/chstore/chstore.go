@@ -34,6 +34,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // Config carries the connection coordinates + qualified target table.
@@ -58,6 +59,13 @@ type Config struct {
 	// value leases the facts rows' stream through the lease table in
 	// Database.
 	RowIds RowIds
+	// ReadTable is the relation every read of this store goes to (ADR-0402
+	// §SD3), database-qualified; empty reads Database.Table. It returns the
+	// facts columns under their names and types and may be a view: a view
+	// over a deployment's own table, or a Merge over storage tables. Writes,
+	// and the statements that change or empty stored rows, name
+	// Database.Table whatever it says.
+	ReadTable string
 }
 
 // Defaults targets the project's localhost CH at boxer.facts per the
@@ -85,7 +93,8 @@ func Defaults() (c Config) {
 // fixed location in the schema (factsschema.DatabaseName / TableName, which
 // ComposeSetupSQL rewrites against), not the session's default database, so
 // CLICKHOUSE_DATABASE does not move it. RunId is the process's, not the
-// environment's.
+// environment's. ReadTable is the environment's: BOXER_FACTS_READ_TABLE
+// (factsschema.ReadTableSetting, ADR-0402 §SD3), validated by New.
 //
 // Not a live re-read: the registry resolves each entry once and caches it, so
 // mutating the environment after the first resolution has no effect.
@@ -95,6 +104,7 @@ func ConfigFromEnv() (c Config) {
 	c.URL = cc.URL
 	c.User = cc.User
 	c.Password = cc.Password
+	c.ReadTable = factsschema.ReadTableSetting.Get()
 	return
 }
 
@@ -128,6 +138,11 @@ func ConfigWithEnvDefaults(cfg Config) (out Config) {
 	if out.Table == "" {
 		out.Table = e.Table
 	}
+	// The read table setting is about the facts table: a config pointed at a
+	// scratch table keeps reading the table it writes.
+	if out.ReadTable == "" && out.Database+"."+out.Table == factsschema.QualifiedTableName {
+		out.ReadTable = e.ReadTable
+	}
 	return
 }
 
@@ -154,6 +169,12 @@ func New(cfg Config) (s *Store, err error) {
 	if cfg.URL == "" || cfg.Database == "" || cfg.Table == "" {
 		err = eh.Errorf("chstore: cfg requires URL + Database + Table")
 		return
+	}
+	if cfg.ReadTable != "" {
+		if err = recordstore.CheckTableRef(cfg.ReadTable); err != nil {
+			err = eh.Errorf("chstore: ReadTable: %w", err)
+			return
+		}
 	}
 	s = &Store{
 		cfg: cfg,
@@ -360,8 +381,19 @@ func tableStatements(cfg Config, engineClause string) (stmts []string, err error
 	return
 }
 
-func (inst *Store) qualifiedTable() string {
+// writeTable is the table inserts and the statements that change or empty
+// stored rows name: Database.Table.
+func (inst *Store) writeTable() string {
 	return inst.cfg.Database + "." + inst.cfg.Table
+}
+
+// readTable is the relation every read goes to (ADR-0402 §SD3): ReadTable,
+// or the table written to.
+func (inst *Store) readTable() string {
+	if inst.cfg.ReadTable != "" {
+		return inst.cfg.ReadTable
+	}
+	return inst.writeTable()
 }
 
 // WriteGrant lands one boxer.facts row tagged KindGrant.
@@ -847,9 +879,9 @@ func quoteSqlString(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
-// Count is a test helper — total rows in the qualified table.
+// Count is a test helper — total rows in the read relation.
 func (inst *Store) Count(ctx context.Context) (n uint64, err error) {
-	body, err := inst.cli.Query(ctx, "SELECT count() FROM "+inst.qualifiedTable()+" FORMAT TabSeparated")
+	body, err := inst.cli.Query(ctx, "SELECT count() FROM "+inst.readTable()+" FORMAT TabSeparated")
 	if err != nil {
 		return
 	}
@@ -866,7 +898,7 @@ func (inst *Store) Count(ctx context.Context) (n uint64, err error) {
 
 // Truncate is a test helper — removes all rows.
 func (inst *Store) Truncate(ctx context.Context) (err error) {
-	err = inst.cli.Exec(ctx, "TRUNCATE TABLE IF EXISTS "+inst.qualifiedTable())
+	err = inst.cli.Exec(ctx, "TRUNCATE TABLE IF EXISTS "+inst.writeTable())
 	return
 }
 
@@ -876,7 +908,7 @@ func (inst *Store) Truncate(ctx context.Context) (err error) {
 // that span schema migrations need a real drop to pick up new
 // columns.
 func (inst *Store) DropTable(ctx context.Context) (err error) {
-	err = inst.cli.Exec(ctx, "DROP TABLE IF EXISTS "+inst.qualifiedTable())
+	err = inst.cli.Exec(ctx, "DROP TABLE IF EXISTS "+inst.writeTable())
 	return
 }
 
@@ -929,7 +961,7 @@ func (inst *Store) shipRecords(ctx context.Context, ent *dml.InEntityFacts) (err
 	// Through the executor, which applies a transform registered for the
 	// facts table (ADR-0402 §SD1): the generated stores' inserts take the
 	// same path.
-	err = inst.exec.InsertArrow(ctx, inst.qualifiedTable(), records)
+	err = inst.exec.InsertArrow(ctx, inst.writeTable(), records)
 	if err != nil {
 		err = eh.Errorf("chstore: insert arrow: %w", err)
 		return

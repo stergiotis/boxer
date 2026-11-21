@@ -188,7 +188,7 @@ func eachRow(rec arrow.RecordBatch, what string, cols int, fn func(r row)) (err 
 
 // readRows expands authored, runs it with b bound and calls fn for every row.
 func (inst *Store) readRows(ctx context.Context, what string, authored string, b binds, cols int, fn func(r row)) (err error) {
-	sql, err := prepare(authored, inst.qualifiedTable())
+	sql, err := prepare(authored, inst.readTable())
 	if err != nil {
 		return eb.Build().Str("read", what).Errorf("chstore: compose: %w", err)
 	}

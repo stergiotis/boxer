@@ -6,8 +6,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -16,9 +18,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/identity/identgen/leased/memalloc"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
@@ -117,4 +121,89 @@ func TestWrites_GoThroughTheRegisteredTransform(t *testing.T) {
 	got = srv.requests()
 	require.Len(t, got, 1)
 	assert.Equal(t, "INSERT INTO scratch_chstore_tr.facts FORMAT Arrow", got[0].query, "with nothing registered the facts table is written")
+}
+
+// storeMethodsThatDoNotRead are the exported methods of Store that are not
+// reads of facts: the writes, setup, and the statements that change or empty
+// stored rows. Every other exported method is a reader, and the guard below
+// calls it.
+var storeMethodsThatDoNotRead = map[string]bool{
+	"Ping": true, "SetupTable": true, "EnsureReadSurface": true,
+	"WriteGrant": true, "WriteLog": true, "WriteLogs": true, "WriteRuntimeStart": true,
+	"WriteRuntimeHeartbeat": true, "WriteAppLifecycle": true, "WriteLaunch": true,
+	"Truncate": true, "DropTable": true,
+}
+
+// With a read table set, every reader of the store composes against it and
+// none against the table written to (ADR-0402 §SD3). The readers are found
+// by reflection, so one added later is held to the same rule without being
+// listed here; a method that is not a read joins storeMethodsThatDoNotRead.
+func TestReaders_NameTheReadTableAndNeverTheWrittenOne(t *testing.T) {
+	const written, read = "wr_guard.facts", "rd_guard.facts_view"
+	st, srv := newFakeStore(t, Config{Database: "wr_guard", Table: "facts", ReadTable: read})
+	ctxType := reflect.TypeFor[context.Context]()
+	v := reflect.ValueOf(st)
+	readers := 0
+	for i := range v.NumMethod() {
+		m := v.Type().Method(i)
+		if storeMethodsThatDoNotRead[m.Name] {
+			continue
+		}
+		readers++
+		args := make([]reflect.Value, 0, m.Type.NumIn()-1)
+		for j := 1; j < m.Type.NumIn(); j++ {
+			in := m.Type.In(j)
+			if in == ctxType {
+				args = append(args, reflect.ValueOf(context.Background()))
+				continue
+			}
+			// A positive number for a numeric argument (a half-life, a
+			// limit) and a non-empty string field in a filter (a run id),
+			// which a reader may refuse empty before it sends.
+			arg := reflect.New(in).Elem()
+			switch {
+			case arg.CanInt():
+				arg.SetInt(int64(time.Hour))
+			case arg.CanUint():
+				arg.SetUint(10)
+			case arg.Kind() == reflect.Struct:
+				for f := range arg.NumField() {
+					if fv := arg.Field(f); fv.Kind() == reflect.String && fv.CanSet() {
+						fv.SetString("x")
+					}
+				}
+			}
+			args = append(args, arg)
+		}
+		v.Method(i).Call(args)
+		got := srv.requests()
+		require.NotEmpty(t, got, "%s sent nothing; if it is not a read of facts, list it in storeMethodsThatDoNotRead", m.Name)
+		for _, s := range got {
+			assert.Contains(t, s.query, read, "%s", m.Name)
+			assert.NotContains(t, s.query, written, "%s composes against the table written to", m.Name)
+		}
+	}
+	assert.GreaterOrEqual(t, readers, 7)
+
+	_, err := st.WriteGrant(context.Background(), factsstore.GrantRow{AppId: "example.app", Pattern: "a.>", Direction: app.CapDirectionPub})
+	require.NoError(t, err)
+	got := srv.requests()
+	require.Len(t, got, 1)
+	assert.Equal(t, "INSERT INTO "+written+" FORMAT Arrow", got[0].query, "writes still name the table written to")
+}
+
+// A malformed read table is refused when the store is built, not spliced
+// into a statement.
+func TestNew_RefusesAMalformedReadTable(t *testing.T) {
+	_, err := New(Config{URL: "http://127.0.0.1:1/", Database: "boxer", Table: "facts", ReadTable: "a.b; DROP TABLE c"})
+	require.Error(t, err)
+}
+
+// The read table setting reaches a config for the facts table and not one
+// pointed at a scratch table.
+func TestConfigWithEnvDefaults_TheReadTableFollowsTheFactsTableOnly(t *testing.T) {
+	envtest.Set(t, factsschema.ReadTableSetting, "carrier.facts_view")
+	assert.Equal(t, "carrier.facts_view", ConfigWithEnvDefaults(Config{}).ReadTable)
+	assert.Empty(t, ConfigWithEnvDefaults(Config{Database: "scratch", Table: "facts"}).ReadTable)
+	assert.Equal(t, "carrier.facts_view", ConfigFromEnv().ReadTable)
 }

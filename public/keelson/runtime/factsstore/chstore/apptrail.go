@@ -76,7 +76,7 @@ func appTrailLimit(limit uint32) uint32 {
 func (inst *Store) AppRuns(ctx context.Context, filter factsstore.AppTrailFilter) (rows []factsstore.AppRunRow, err error) {
 	rows = []factsstore.AppRunRow{}
 	b := binds{}
-	err = inst.readRows(ctx, "app runs", composeAppRunsSql(inst.qualifiedTable(), filter, b), b, 7, func(r row) {
+	err = inst.readRows(ctx, "app runs", composeAppRunsSql(inst.readTable(), filter, b), b, 7, func(r row) {
 		rows = append(rows, factsstore.AppRunRow{
 			RunId: r.str(0), AppId: app.AppIdT(r.str(1)), InstanceKey: r.u64(2),
 			StartedAt: r.unix(3), StoppedAt: r.unix(4), StopReason: r.str(5), RunSeenAt: r.unix(6),
@@ -149,7 +149,7 @@ func (inst *Store) AppLogTail(ctx context.Context, filter factsstore.AppTrailFil
 	}
 	rows = []factsstore.AppLogRow{}
 	b := binds{}
-	err = inst.readRows(ctx, "app log tail", composeAppLogTailSql(inst.qualifiedTable(), filter, perApp, b), b, 8, func(r row) {
+	err = inst.readRows(ctx, "app log tail", composeAppLogTailSql(inst.readTable(), filter, perApp, b), b, 8, func(r row) {
 		rows = append(rows, factsstore.AppLogRow{
 			Ts: time.Unix(r.i64(0), 0).UTC(), AppId: app.AppIdT(r.str(1)), InstanceKey: r.u64(2),
 			RunId: r.str(3), Level: r.str(4), Caller: r.str(5), Message: r.str(6), Error: r.str(7),
@@ -187,7 +187,7 @@ LIMIT %d`,
 func (inst *Store) AppAuditSummary(ctx context.Context, filter factsstore.AppTrailFilter) (rows []factsstore.AppAuditRow, err error) {
 	rows = []factsstore.AppAuditRow{}
 	b := binds{}
-	err = inst.readRows(ctx, "app audit summary", composeAppAuditSql(inst.qualifiedTable(), filter, b), b, 8, func(r row) {
+	err = inst.readRows(ctx, "app audit summary", composeAppAuditSql(inst.readTable(), filter, b), b, 8, func(r row) {
 		rows = append(rows, factsstore.AppAuditRow{
 			AppId: app.AppIdT(r.str(0)), Subject: r.str(1), Result: r.str(2),
 			Requests: r.u64(3), FirstAt: r.unix(4), LastAt: r.unix(5),
@@ -254,7 +254,7 @@ func (inst *Store) LogRows(ctx context.Context, filter factsstore.LogRowsFilter)
 	rows = []factsstore.LogRowRead{}
 	var ferr error
 	b := binds{}
-	err = inst.readRows(ctx, "log rows", composeLogRowsSql(inst.qualifiedTable(), filter, b), b, 12, func(r row) {
+	err = inst.readRows(ctx, "log rows", composeLogRowsSql(inst.readTable(), filter, b), b, 12, func(r row) {
 		out := factsstore.LogRowRead{RunId: r.str(2), Id: r.u64(11), Row: factsstore.LogRow{
 			Ts: time.Unix(0, r.i64(0)).UTC(), AppId: app.AppIdT(r.str(1)), InstanceKey: r.u64(3),
 			Level: r.str(4), Caller: r.str(5), Service: r.str(6),
