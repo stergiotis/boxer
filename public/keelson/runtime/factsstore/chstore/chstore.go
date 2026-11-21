@@ -154,7 +154,10 @@ type Store struct {
 	cli *chclient.Client
 	// exec is cli as the executor the reads and the inserts go through:
 	// statements out, Arrow record batches back.
-	exec      *storeexec.Executor
+	exec *storeexec.Executor
+	// ship is where the writes' batches go: exec, or a capture for the
+	// round-trip check, which encodes rows without a server.
+	ship      recordstore.ExecutorI
 	allocator memory.Allocator
 	// ids mints the row ids (ADR-0397 §SD2): leased from the id stream of
 	// boxer.facts rows, or process-local while no block can be leased.
@@ -188,6 +191,7 @@ func New(cfg Config) (s *Store, err error) {
 		err = eh.Errorf("chstore: %w", err)
 		return
 	}
+	s.ship = s.exec
 	err = s.ids.init(s.exec, s.leaseLayout(), cfg.RowIds)
 	if err != nil {
 		err = eh.Errorf("chstore: %w", err)
@@ -986,7 +990,7 @@ func (inst *Store) shipRecords(ctx context.Context, ent *dml.InEntityFacts) (err
 	// Through the executor, which applies a transform registered for the
 	// facts table (ADR-0402 §SD1): the generated stores' inserts take the
 	// same path.
-	err = inst.exec.InsertArrow(ctx, inst.writeTable(), records)
+	err = inst.ship.InsertArrow(ctx, inst.writeTable(), records)
 	if err != nil {
 		err = eh.Errorf("chstore: insert arrow: %w", err)
 		return
