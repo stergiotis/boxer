@@ -1,0 +1,5 @@
+arm	relation	table	rows	active_parts	partitions	bytes_on_disk	sorting_key	partition_key
+table	frv_facts.facts	frv_facts.facts	2000357	12	12	36143842	`ts:ts:z64:47::0:`	toYYYYMM(`ts:ts:z64:47::0:`)
+view-keyed	frv_carrier.keyed_view	frv_carrier.keyed	4000714	12	12	163898373	tenant, c2	toYYYYMM(c2)
+view-tenant-key-only	frv_carrier.tenantonly_view	frv_carrier.tenantonly	4000714	1	1	102887577	tenant	
+view-computed-ts	frv_carrier.computed_view	frv_carrier.computed	4000714	12	12	163923972	tenant, c2	toYYYYMM(fromUnixTimestamp64Nano(c2, \'UTC\'))

@@ -1,0 +1,248 @@
+## table — one-day
+
+Output: count()
+
+Aggregating
+│  Keys:
+│  Aggregates: count()
+│  Skip merging: 0
+└──Filter ((WHERE + Change column names to column identifiers))
+   │  Filter column: ts:ts:z64:47::0: >= \'2026-11-15 00:00:00.000000000\' AND ts:ts:z64:47::0: < \'2026-11-16 00:00:00.000000000\'
+   └──ReadFromMergeTree (frv_facts.facts)
+         Read type: Default
+         Parts: 1 | Granules: 2
+         Output: ts:ts:z64:47::0:
+         Indexes:
+           Min-Max
+             Keys:
+               ts:ts:z64:47::0:
+             Condition: and((ts:ts:z64:47::0: in (-Inf, \'1794787200\')), (ts:ts:z64:47::0: in [\'1794700800\', +Inf)))
+             Parts: 1/12
+             Granules: 24/291
+           Partition
+             Keys:
+               toYYYYMM(ts:ts:z64:47::0:)
+             Condition: and((toYYYYMM(ts:ts:z64:47::0:) in (-Inf, 202611]), (toYYYYMM(ts:ts:z64:47::0:) in [202611, +Inf)))
+             Parts: 1/1
+             Granules: 24/24
+           PrimaryKey
+             Keys:
+               ts:ts:z64:47::0:
+             Condition: and((ts:ts:z64:47::0: in (-Inf, \'1794787200\')), (ts:ts:z64:47::0: in [\'1794700800\', +Inf)))
+             Parts: 1/1
+             Granules: 2/24
+             Search Algorithm: binary search
+           Ranges: 1
+
+## table — point-by-id
+
+Output: count()
+
+Aggregating
+│  Keys:
+│  Aggregates: count()
+│  Skip merging: 0
+└──Filter ((WHERE + Change column names to column identifiers))
+   │  Filter column: id:id:u64:47::0: = 20890722840932
+   └──ReadFromMergeTree (frv_facts.facts)
+         Read type: Default
+         Parts: 12 | Granules: 291
+         Output: id:id:u64:47::0:
+         Indexes:
+           Min-Max
+             Condition: true
+             Parts: 12/12
+             Granules: 291/291
+           Partition
+             Condition: true
+             Parts: 12/12
+             Granules: 291/291
+           PrimaryKey
+             Condition: true
+             Parts: 12/12
+             Granules: 291/291
+           Ranges: 12
+
+## view-keyed — one-day
+
+Output: count()
+
+Aggregating
+│  Keys:
+│  Aggregates: count()
+│  Skip merging: 0
+└──ReadFromMergeTree (frv_carrier.keyed)
+      Read type: Default
+      Parts: 1 | Granules: 2
+      Output: Empty
+      Prewhere filter
+      Prewhere filter column:  tenant = \'boxer\' AND c2 < \'2026-11-16 00:00:00.000000000\' AND c2 >= \'2026-11-15 00:00:00.000000000\'
+      Indexes:
+        Min-Max
+          Keys:
+            c2
+          Condition: and((c2 in (-Inf, \'1794787200\')), (c2 in [\'1794700800\', +Inf)))
+          Parts: 1/12
+          Granules: 51/627
+        Partition
+          Keys:
+            toYYYYMM(c2)
+          Condition: and((toYYYYMM(c2) in (-Inf, 202611]), (toYYYYMM(c2) in [202611, +Inf)))
+          Parts: 1/1
+          Granules: 51/51
+        PrimaryKey
+          Keys:
+            tenant
+            c2
+          Condition: and(and((c2 in (-Inf, \'1794787200\')), (c2 in [\'1794700800\', +Inf))), (tenant in [\'boxer\', \'boxer\']))
+          Parts: 1/1
+          Granules: 2/51
+          Search Algorithm: binary search
+        Ranges: 1
+
+## view-keyed — point-by-id
+
+Output: count()
+
+Aggregating
+│  Keys:
+│  Aggregates: count()
+│  Skip merging: 0
+└──ReadFromMergeTree (frv_carrier.keyed)
+      Read type: Default
+      Parts: 12 | Granules: 327
+      Output: Empty
+      Prewhere filter
+      Prewhere filter column:  tenant = \'boxer\' AND c0 = 20890722840932
+      Indexes:
+        Min-Max
+          Condition: true
+          Parts: 12/12
+          Granules: 627/627
+        Partition
+          Condition: true
+          Parts: 12/12
+          Granules: 627/627
+        PrimaryKey
+          Keys:
+            tenant
+          Condition: (tenant in [\'boxer\', \'boxer\'])
+          Parts: 12/12
+          Granules: 327/627
+          Search Algorithm: binary search
+        Ranges: 12
+
+## view-tenant-key-only — one-day
+
+Output: count()
+
+Aggregating
+│  Keys:
+│  Aggregates: count()
+│  Skip merging: 0
+└──ReadFromMergeTree (frv_carrier.tenantonly)
+      Read type: Default
+      Parts: 1 | Granules: 339
+      Output: Empty
+      Prewhere filter
+      Prewhere filter column:  tenant = \'boxer\' AND c2 < \'2026-11-16 00:00:00.000000000\' AND c2 >= \'2026-11-15 00:00:00.000000000\'
+      Indexes:
+        PrimaryKey
+          Keys:
+            tenant
+          Condition: (tenant in [\'boxer\', \'boxer\'])
+          Parts: 1/1
+          Granules: 339/678
+          Search Algorithm: binary search
+        Ranges: 1
+
+## view-tenant-key-only — point-by-id
+
+Output: count()
+
+Aggregating
+│  Keys:
+│  Aggregates: count()
+│  Skip merging: 0
+└──ReadFromMergeTree (frv_carrier.tenantonly)
+      Read type: Default
+      Parts: 1 | Granules: 339
+      Output: Empty
+      Prewhere filter
+      Prewhere filter column:  tenant = \'boxer\' AND c0 = 20890722840932
+      Indexes:
+        PrimaryKey
+          Keys:
+            tenant
+          Condition: (tenant in [\'boxer\', \'boxer\'])
+          Parts: 1/1
+          Granules: 339/678
+          Search Algorithm: binary search
+        Ranges: 1
+
+## view-computed-ts — one-day
+
+Output: count()
+
+Aggregating
+│  Keys:
+│  Aggregates: count()
+│  Skip merging: 0
+└──ReadFromMergeTree (frv_carrier.computed)
+      Read type: Default
+      Parts: 1 | Granules: 28
+      Output: Empty
+      Prewhere filter
+      Prewhere filter column:  tenant = \'boxer\' AND fromUnixTimestamp64Nano(c2, \'UTC\') < \'2026-11-16 00:00:00.000000000\' AND fromUnixTimestamp64Nano(c2, \'UTC\') >= \'2026-11-15 00:00:00.000000000\'
+      Indexes:
+        Min-Max
+          Condition: true
+          Parts: 12/12
+          Granules: 644/644
+        Partition
+          Keys:
+            toYYYYMM(fromUnixTimestamp64Nano(c2, \'UTC\'))
+          Condition: and((toYYYYMM(fromUnixTimestamp64Nano(c2, \'UTC\')) in (-Inf, 202611]), (toYYYYMM(fromUnixTimestamp64Nano(c2, \'UTC\')) in [202611, +Inf)))
+          Parts: 1/12
+          Granules: 53/644
+        PrimaryKey
+          Keys:
+            tenant
+          Condition: (tenant in [\'boxer\', \'boxer\'])
+          Parts: 1/1
+          Granules: 28/53
+          Search Algorithm: binary search
+        Ranges: 1
+
+## view-computed-ts — point-by-id
+
+Output: count()
+
+Aggregating
+│  Keys:
+│  Aggregates: count()
+│  Skip merging: 0
+└──ReadFromMergeTree (frv_carrier.computed)
+      Read type: Default
+      Parts: 12 | Granules: 327
+      Output: Empty
+      Prewhere filter
+      Prewhere filter column:  tenant = \'boxer\' AND c0 = 20890722840932
+      Indexes:
+        Min-Max
+          Condition: true
+          Parts: 12/12
+          Granules: 644/644
+        Partition
+          Condition: true
+          Parts: 12/12
+          Granules: 644/644
+        PrimaryKey
+          Keys:
+            tenant
+          Condition: (tenant in [\'boxer\', \'boxer\'])
+          Parts: 12/12
+          Granules: 327/644
+          Search Algorithm: binary search
+        Ranges: 12
+
