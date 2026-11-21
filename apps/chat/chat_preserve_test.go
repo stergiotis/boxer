@@ -19,6 +19,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
+	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
@@ -45,6 +47,13 @@ import (
 var updatePreserved = flag.Bool("update-preserved", false, "rewrite testdata/preserve/*.golden from the current behaviour")
 
 const preservedDir = "testdata/preserve"
+
+// preservedClickHouseURL is the CLICKHOUSE_URL the recordings were made
+// under. The coordinator names the host's ClickHouse server to the model
+// (serverDestination), so the bytes depend on that variable; the harness
+// pins it, and a run under another address — a release run against a server
+// of its own — records the same bytes. Nothing in the harness connects to it.
+const preservedClickHouseURL = "http://localhost:8123/"
 
 // preserveHarness is one scenario's rig: the note host and the coordinator
 // of coordRig, the conversation the turns land in, and the recording.
@@ -382,6 +391,7 @@ func TestThePreservationRecordingIsDeterministic(t *testing.T) {
 
 func runPreserveScenario(t *testing.T, sc preserveScenario) (recording string) {
 	t.Helper()
+	envtest.Set(t, clickhouseenv.URL, preservedClickHouseURL)
 	bus := inprocbus.NewInst(zerolog.Nop())
 	model := &scriptedModel{}
 	host, coord, cli, _, ctx := coordRig(t, bus, model, sc.opTools)
