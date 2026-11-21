@@ -247,7 +247,7 @@ func categorialFlag(v *env.CategorialStringVar, spec env.Spec, fo flagOptions) (
 				if envSet && envRaw == parsed {
 					effective = spec.Default
 				} else {
-					return eh.Errorf("%q is not in allowed values for --%s: %v",
+					return eh.Errorf("%q is not in allowed values for --%s: %v", //boxer:lint disable=CS013 reason="a CLI flag error read as text: the value, the flag and the allowed set belong in the message"
 						parsed, fo.name, allowed)
 				}
 			}
