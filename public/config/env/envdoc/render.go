@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/stergiotis/boxer/public/config/env"
 )
@@ -94,7 +93,9 @@ func renderSpecs(specs []env.Spec, opts Options) (out string) {
 	if opts.GeneratorPath != "" {
 		fmt.Fprintf(&b, "generator: %s\n", opts.GeneratorPath)
 	}
-	fmt.Fprintf(&b, "generated-at: %s\n", time.Now().UTC().Format(time.RFC3339))
+	// No generation timestamp: the page is a pure function of the
+	// registry, so regenerating an unchanged registry leaves the file
+	// unchanged and the drift check can tell the two apart.
 	// Review metadata: only emitted for stable / accepted statuses (DL003
 	// requires both for non-draft statuses). Draft outputs leave them
 	// off so the snapshot stays self-consistent with the draft banner.
