@@ -133,15 +133,35 @@ untouched. The transform is a pure function of its input: the same batches
 give the same output, so a re-sent batch is the same block under the same
 token. It takes no context, since it does no I/O.
 
+A transform applies once per insert, however many executors on the way
+consult it: the one that applied it marks the context the insert goes on
+under (`recordstore.WithTransformApplied`), and a marked insert is sent as
+it is. A transform's target may therefore be any table, a registered one
+included. An observing executor above the transform reports the table the
+store named and, beside it, the table the rows went to
+(`recordstore.CallEvent.Target`).
+
 **SD2 — The transform is registered once per process, before any store is
 built.** Every process that writes facts to the server must carry it — a
 host, a daemon, a command-line ingestor — so it is registered by the
-binary (`recordstore.RegisterInsertTransform`, keyed by the table
-reference `boxer.facts`), not passed to one host, and the executors boxer
-constructs consult the registry on each insert. A binary without it sends
+binary (`recordstore.RegisterInsertTransform`), not passed to one host,
+and the executors that reach a server or a clickhouse-local directory
+consult the registry on each insert. A binary without it sends
 facts-shaped batches to `boxer.facts`. A second registration for one table
 panics: two transforms for one table would make which one ran depend on
 the order of init.
+
+A registration names the table with its database, and an insert matches it
+under any spelling of that reference — quoted or not
+(`recordstore.CanonicalTableRef`). An insert that names the table without a
+database is refused (`recordstore.ErrUnqualifiedTransformedTable`): which
+database a bare name resolves in is the server session's, so the registry
+can neither match it nor rule it out. A facts-shaped table under another
+name — a scratch database a command was pointed at — is another table and
+is not transformed.
+
+An insert handed to the ClickHouse client itself passes no executor and so
+no transform; codelint `CS021` reports one outside the HTTP executor.
 
 **SD3 — One read table per process, from one setting.** A registered
 variable, `BOXER_FACTS_READ_TABLE`, names the relation every read of facts
@@ -211,9 +231,10 @@ change to the facts columns.
   text can run against a deployment's storage.
 - Whether boxer takes the storage switch of ADR-0296 §SD9 for itself. SD3
   serves either outcome; nothing here decides it.
-- The clickhouse-local and IPC capture executors do not consult the
-  registry; a caller that wants the transform there wraps them with
-  `recordstore.RegisteredTransforms`.
+- The IPC capture executor writes the store's own shape to its stream,
+  whatever is registered: a stream has one schema, fixed when it is
+  opened. Loading such a capture into a deployment's storage needs a
+  loader that carries the transform, which is not built.
 - The round trip's synthetic rows carry the kind and generic memberships,
   not the memberships each generated store writes; a transform that
   routes by one of those is exercised by the hand-written kinds only.
@@ -224,8 +245,10 @@ change to the facts columns.
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| record-store executors | `InsertTransformI`, the wrapping `TransformingExecutor`, `ErrTransformedTable` | the HTTP executor applies the registered transform; the hand-written facts store inserts through it |
-| registration | `RegisterInsertTransform`, one call a binary makes before stores are built | the executors boxer constructs |
+| record-store executors | `InsertTransformI`, the wrapping `TransformingExecutor`, `ErrTransformedTable`, `ErrUnqualifiedTransformedTable`, `WithTransformApplied` | the HTTP and clickhouse-local executors apply the registered transform; the hand-written facts store inserts through the former |
+| registration | `RegisterInsertTransform`, one call a binary makes before stores are built; `CanonicalTableRef` | the executors boxer constructs |
+| call observation | `CallEvent.Target` | — |
+| codelint | `CS021`, an insert through the ClickHouse client outside the HTTP executor | `CODINGSTANDARDS.md` |
 | env registry | `BOXER_FACTS_READ_TABLE` | `doc/env-vars.md` |
 | facts store configuration, host boot | `chstore.Config.ReadTable`; the host refuses a malformed setting | the hand-written readers' composed SQL; the recorder and presence |
 | record-store generator | `gen.Input.ReadTableDefault`, set by the facts-bound generator | the stores over the facts table, regenerated; their schema checks and scans |
@@ -271,9 +294,10 @@ change to the facts columns.
   a hand-written `INSERT`, and the query-run view cannot; where
   `boxer.facts` is a view or absent their inserts fail at the server, and
   where a table of that name was left behind they land in it unseen.
-- The registry matches the table reference as written. A writer that names
-  the facts table another way — unqualified, or quoted — is not
-  transformed.
+- An `INSERT` composed as SQL text and sent as a statement — an
+  `INSERT … SELECT` among them — passes no insert seam. Neither the
+  registry nor `CS021` sees it; it reaches whatever the name is on the
+  server.
 - A reader that composes its own SQL over the facts table reads the read
   table only if it asks for it; one in a consumer's code that names
   `boxer.facts` as a literal is found by nothing here, and reads the
@@ -313,7 +337,8 @@ change to the facts columns.
 - **Lane.** Default `go test`: an insert into the facts table reaches the
   inner executor under the transform's table and schema, with its settings
   intact, through the wrapper, the HTTP executor and the hand-written
-  store; every reader of the hand-written store, found by reflection,
+  store, under every spelling of the table, and once; a bare name that
+  could be the table sends nothing; every reader of the hand-written store, found by reflection,
   composes against the read table and never the written one when one is
   set; the replay's and the trail views' SQL follow the read table; setup
   issues no facts DDL under a transform; the refusals of SD5; a contract
@@ -334,13 +359,23 @@ change to the facts columns.
 - The transform is registered per process, not per host.
 - Registering a transform is what tells boxer the storage is the
   deployment's; there is no second setting for it.
-- The registry lives in `recordstore`, keyed by table reference and
-  matched as written; boxer's writers spell the facts table `boxer.facts`.
+- The registry lives in `recordstore`, keyed by the database-qualified
+  table reference and matched under any quoting of it, case kept.
   `RegisterInsertTransform` returns an unregister function, which a binary
   does not call and a test does.
-- The HTTP executor consults the registry on each insert instead of `New`
-  returning a wrapper; the clickhouse-local and IPC capture executors do
-  not consult it.
+- An insert naming a registered table's bare name without a database is
+  refused, not resolved against a guessed session database.
+- A transform applies once per insert, marked on the insert's context; a
+  transform's output is never transformed again, so transforms do not
+  chain.
+- The HTTP and clickhouse-local executors consult the registry on each
+  insert instead of their constructors returning a wrapper; the IPC
+  capture executor does not, and holds the store's shape.
+- `CallEvent` keeps `Table` as the table the store named and gains
+  `Target` for where a transform sent the rows; an intent event carries no
+  target.
+- `CS021` covers the client's Arrow and stream inserts and is an error;
+  the copy of stored blocks between servers is exempted by a directive.
 - The transform takes no context and returns batches the caller releases.
 - The read relation must return every facts column with its type; extra
   columns are tolerated, since reads select by name.
