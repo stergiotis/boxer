@@ -1115,6 +1115,9 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	if inst.SharedRA != nil {
 		p("\t%q", inst.SharedRA.ImportPath)
 	}
+	if inst.ReadTableDefault != nil {
+		p("\t%q", inst.ReadTableDefault.ImportPath)
+	}
 	p("\traruntime %q", "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime")
 	p(")")
 	p("")
@@ -1292,7 +1295,17 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("\t// ReadTable, when set, is the table every SELECT and DESCRIBE goes to:")
 	p("\t// a storage table that materialized views fill from")
 	p("\t// the written one, or a Merge over several. Same shape rules as Table;")
-	p("\t// empty (the default) reads the table written to. The schema must be")
+	if inst.ReadTableDefault != nil {
+		// The default is ADR-0402 §SD3's, for a table whose read relation
+		// is a deployment's setting.
+		p("\t// empty (the default) asks %s.%s for the relation to read,", inst.ReadTableDefault.Package, inst.ReadTableDefault.Name)
+		p("\t// given the table written to, and reads the table written to when it")
+		p("\t// names none; a reference it cannot use panics in the constructor. Set")
+		p("\t// ReadTable to the table written to in order to read it whatever is")
+		p("\t// configured. The schema must be")
+	} else {
+		p("\t// empty (the default) reads the table written to. The schema must be")
+	}
 	p("\t// the same on both — VerifySchema checks the read side, which is the")
 	p("\t// one the positional decode runs against.")
 	p("\tReadTable string")
@@ -1466,6 +1479,19 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("\t\t\tpanic(\"%s: \" + terr.Error())", inst.storeType())
 	p("\t\t}")
 	p("\t}")
+	if inst.ReadTableDefault != nil {
+		p("\tif cfg.ReadTable == \"\" {")
+		p("\t\twritten := cfg.Table")
+		p("\t\tif written == \"\" {")
+		p("\t\t\twritten = %sTableName", inst.StoreName)
+		p("\t\t}")
+		p("\t\treadTable, rerr := %s.%s(written)", inst.ReadTableDefault.Package, inst.ReadTableDefault.Name)
+		p("\t\tif rerr != nil {")
+		p("\t\t\tpanic(\"%s: ReadTable: \" + rerr.Error())", inst.storeType())
+		p("\t\t}")
+		p("\t\tcfg.ReadTable = readTable")
+		p("\t}")
+	}
 	p("\tif cfg.ReadTable != \"\" {")
 	p("\t\tif terr := recordstore.CheckTableRef(cfg.ReadTable); terr != nil {")
 	p("\t\t\tpanic(\"%s: ReadTable: \" + terr.Error())", inst.storeType())

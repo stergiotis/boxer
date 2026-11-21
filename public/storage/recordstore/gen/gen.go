@@ -75,6 +75,32 @@ func (inst *Scaffold) valid() (err error) {
 	return
 }
 
+// FuncRef names an exported function of another package for the emitted
+// store to call.
+type FuncRef struct {
+	// ImportPath is the function's package.
+	ImportPath string
+	// Package is the qualifier the call carries — the package's own name,
+	// not an alias.
+	Package string
+	// Name is the function's name.
+	Name string
+}
+
+var goIdentRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func (inst *FuncRef) valid() (err error) {
+	switch {
+	case inst.ImportPath == "":
+		err = eh.Errorf("FuncRef.ImportPath is required")
+	case !goIdentRe.MatchString(inst.Package):
+		err = eh.Errorf("FuncRef.Package must be the package's name, a Go identifier")
+	case !goIdentRe.MatchString(inst.Name):
+		err = eh.Errorf("FuncRef.Name must be a Go identifier")
+	}
+	return
+}
+
 // Roles binds the ADR-0100 SD2 envelope roles by leeway column name (as
 // authored in the TableDesc), overriding the positional defaults — the
 // leading EntityId column as Key, the first EntityTimestamp as Order, the
@@ -185,6 +211,25 @@ type Input struct {
 	// [Input.privateControl]. RA has no control surface, so binding an
 	// existing package costs nothing but the reference.
 	SharedRA *Scaffold
+	// ReadTableDefault names a function the emitted constructor asks for
+	// the read table when the store's configuration names none. nil (the
+	// default) emits no call, and the store is byte-identical to one
+	// generated before the field existed.
+	//
+	// It is for a table whose read relation is a deployment's setting
+	// rather than a caller's knowledge — the facts table (ADR-0402 §SD3),
+	// for which storegen sets it. A store over any other table does not
+	// get it, which is why this is an input and not something the emitter
+	// decides from a table's name.
+	//
+	// The function has the signature
+	// func(table string) (readTable string, err error). It receives the
+	// table the store writes to — the configured override or the baked
+	// name — and returns the relation to read, or "" to read the written
+	// table. An error panics at construction, as a malformed table
+	// reference does. An explicit ReadTable in the store's configuration
+	// is never overridden.
+	ReadTableDefault *FuncRef
 	// FullCodecs emits the complete exported marshallgen codec per kind
 	// (SoA <Kind>Columns, BuildEntities, FillFromArrow) as keelson and
 	// the anchor demos consume it. The default (false) emits the trimmed
@@ -319,6 +364,13 @@ func (inst Input) Generate() (err error) {
 		err = inst.SharedRA.valid()
 		if err != nil {
 			err = eh.Errorf("SharedRA: %w", err)
+			return
+		}
+	}
+	if inst.ReadTableDefault != nil {
+		err = inst.ReadTableDefault.valid()
+		if err != nil {
+			err = eh.Errorf("ReadTableDefault: %w", err)
 			return
 		}
 	}

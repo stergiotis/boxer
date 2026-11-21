@@ -36,6 +36,9 @@ func TestReadTable_RefusesAReferenceItCannotSplice(t *testing.T) {
 	envtest.Set(t, ReadTableSetting, "carrier.facts_view; DROP TABLE x")
 	_, err := ReadTable()
 	require.Error(t, err)
+	// The message names the variable: a store's constructor panics with it,
+	// and the error's fields do not travel in a panic message.
+	require.Contains(t, err.Error(), ReadTableSetting.Spec().Name)
 	_, err = ReadTableFor(QualifiedTableName)
 	require.Error(t, err)
 	envtest.Set(t, ReadTableSetting, "facts_view")

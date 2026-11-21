@@ -41,7 +41,7 @@ func ReadTable() (ref string, err error) {
 	}
 	if !qualifiedRefRe.MatchString(ref) {
 		err = eb.Build().Str("setting", ReadTableSetting.Spec().Name).Str("value", ref).
-			Errorf("factsschema: the read table must be a database-qualified, unquoted identifier")
+			Errorf("factsschema: BOXER_FACTS_READ_TABLE must be a database-qualified, unquoted identifier")
 		ref = ""
 	}
 	return

@@ -215,6 +215,18 @@ var sharedRA = gen.Scaffold{
 	CanonWire: true,
 }
 
+// readTableDefault is what a store over the facts table asks for its read
+// table when its caller names none: the relation a deployment's setting
+// names when the store writes to the facts table itself, and nothing when
+// it was pointed at another table (ADR-0402 §SD3). It is set here, for
+// stores generated against the facts table, and not in the generator, whose
+// other stores own their tables and read what they write.
+var readTableDefault = gen.FuncRef{
+	ImportPath: "github.com/stergiotis/boxer/public/semistructured/leeway/factsschema",
+	Package:    "factsschema",
+	Name:       "ReadTableFor",
+}
+
 // externallyProvisioned is not an option.
 //
 // `boxer.facts` is provisioned by `factsstore/chstore`'s SetupTable, which is
@@ -277,11 +289,14 @@ func (inst Input) Generate() (err error) {
 		ImportPath:     inst.ImportPath,
 		Wrapper:        marshallgen.FixedIdsWrapper{Ids: inst.Ids},
 		SharedRA:       &sharedRA,
-		DDL:            factsLayout(inst.DDL),
-		CanonWire:      inst.CanonWire,
-		Evidence:       inst.Evidence,
-		Contributions:  inst.Contributions,
-		InsertSettings: inst.InsertSettings,
+		// A store over the facts table reads the relation a deployment
+		// names (ADR-0402 §SD3) unless its caller names one.
+		ReadTableDefault: &readTableDefault,
+		DDL:              factsLayout(inst.DDL),
+		CanonWire:        inst.CanonWire,
+		Evidence:         inst.Evidence,
+		Contributions:    inst.Contributions,
+		InsertSettings:   inst.InsertSettings,
 		// Not a parameter — see the externallyProvisioned doc.
 		ExternallyProvisioned: externallyProvisioned,
 	}.Generate()
