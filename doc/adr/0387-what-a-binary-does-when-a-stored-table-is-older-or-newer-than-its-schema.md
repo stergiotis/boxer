@@ -169,8 +169,10 @@ token is not sent.
 
 - `VerifySchema` passes tables it used to refuse (extra stored columns),
   which is the point of SD1.
-- The facts table and the snapshot store's tables are created by their
-  own composers and carry no stamp; they are judged by columns.
+- The snapshot store's tables are created by their own composer and carry
+  no stamp; they are judged by columns. The facts table's composer stamps
+  it with its columns and its layout
+  ([ADR-0397](./0397-the-facts-tables-partition-key-row-id-and-engine-clause.md)).
 
 ## Migration — Tier 1
 
@@ -202,8 +204,9 @@ the operator's choice.
   same verdict. Only the watchbill worker changed: it is no longer
   started over a table it cannot poll.
 - The deduplication window is 1000 blocks.
-- The facts table's `CREATE` is not stamped: its composer belongs to the
-  facts layout, which is decided elsewhere.
+- The facts table's `CREATE` was left to the facts layout;
+  [ADR-0397](./0397-the-facts-tables-partition-key-row-id-and-engine-clause.md)
+  stamps it and gives it the window.
 - Codec differences are not part of the verdict.
 
 ## Status

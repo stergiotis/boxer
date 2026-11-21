@@ -152,9 +152,13 @@ for reasons that are properties of the facts schema rather than of the
 generator:
 
 - **Keyed point lookup.** The store keys on the leading `EntityId`, which in
-  `boxer.facts` is `id` — a per-process counter. The access identity (the
-  blake3 `naturalKey`) is the *second* `EntityId`, and explicit role election
-  is an open [ADR-0100](../adr/0100-recordstore-generated-leeway-clickhouse-store.md)
+  `boxer.facts` is `id`. Each writer chooses it: `chstore` leases one per row
+  from a tagged stream ([ADR-0397](../adr/0397-the-facts-tables-partition-key-row-id-and-engine-clause.md)
+  §SD2), the trail hashes its key, and a row written while no block could be
+  leased carries an id unique only within its process. A key a store reads
+  by is therefore its own writers' convention, not the table's. The access
+  identity (the blake3 `naturalKey`) is the *second* `EntityId`, and explicit
+  role election is an open [ADR-0100](../adr/0100-recordstore-generated-leeway-clickhouse-store.md)
   deferral.
 - **Latest-wins reads.** The generated state view needs a `u8` lifecycle
   column; the facts table's lifecycle lane is `DateTime64`. This is why
@@ -171,7 +175,7 @@ The split that matters, because it decides what can be shared and what cannot:
 | Emitted artifact | Derived from | Consequence |
 | --- | --- | --- |
 | DML / read-access scaffolding | the `TableDesc` and row config **alone** | identical for every store over the table |
-| DDL | the `TableDesc` | identical; `chstore` owns applying it |
+| DDL | the `TableDesc`, and the facts layout's engine clause | identical; `chstore` owns applying it |
 | Per-kind codec (`<kind>_dto.out.go`) | one DTO plus its membership ids | your domain's content |
 | The store (`<store>_store.out.go`) | the whole component set | *is* the composition |
 

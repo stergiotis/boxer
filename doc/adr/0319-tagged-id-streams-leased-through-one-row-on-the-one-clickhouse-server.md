@@ -333,6 +333,17 @@ rather than taken.
   (ADR-0320) are the normal residue of such a batch, and the vault's join
   now tries each one instead of the last.
 
+### 2026-11-20 — the facts table's counter moves onto a stream
+
+SD8's deferral for `boxer.facts` is taken up by
+[ADR-0397](./0397-the-facts-tables-partition-key-row-id-and-engine-clause.md)
+§SD2 (proposed): `chstore` mints row ids from the `factsRow` stream, leased
+through `boxer.idlease` in the facts table's database, which the facts
+table's setup provisions. Where no block can be leased it mints under
+`factsRowLocal`, counted in process — SD6's pattern applied to a store that
+has a lease table but cannot reach it. The watchbill job ids stay as SD8
+left them.
+
 ## References
 
 - [ADR-0106](./0106-identity-fibonacci-tags-build-tag-retirement.md) — the tagged id scheme, the planning API, the pruning function.
