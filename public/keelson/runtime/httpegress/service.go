@@ -66,7 +66,7 @@ type resolved struct {
 	err error
 }
 
-// Service answers `net.http.fetch.<destination>` (ADR-0262 §SD3). It
+// Service answers `runtime.net.http.fetch.<destination>` (ADR-0262 §SD3). It
 // resolves the registry once, at construction; a destination that failed
 // to resolve stays listed and is refused with the reason.
 type Service struct {

@@ -158,7 +158,7 @@ func TestCounters_Snapshot_EveryRegisteredCap(t *testing.T) {
 		CapKeelsonQuery: "keelson.query.apps",
 		CapAdhoc:        "runtime.adhoc.publish",
 		CapLLM:          "runtime.llm.complete",
-		CapHTTP:         "net.http.fetch.example",
+		CapHTTP:         "runtime.net.http.fetch.example",
 		CapAgent:        "runtime.agent.list",
 	}
 	t0 := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)

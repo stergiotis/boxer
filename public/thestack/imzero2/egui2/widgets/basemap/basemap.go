@@ -184,7 +184,7 @@ func PortolanSource() (src portolan.TileSource) {
 
 // Destination is the basemap's name in the HTTP egress registry
 // (ADR-0262 §SD2): an app that shows a basemap declares [ClientCaps] and
-// fetches its tiles through `net.http.fetch.basemap`.
+// fetches its tiles through `runtime.net.http.fetch.basemap`.
 const Destination = "basemap"
 
 // userAgent identifies the basemap client to the tile server; the public

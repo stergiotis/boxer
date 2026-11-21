@@ -452,8 +452,8 @@ var Registry = map[CapId]CapSpec{
 	},
 	CapHTTP: {
 		Id:            CapHTTP,
-		Display:       "net.http.fetch.* HTTP egress",
-		SubjectFamily: "net.http.fetch.{destination} (request/reply)",
+		Display:       "runtime.net.http.fetch.* HTTP egress",
+		SubjectFamily: "runtime.net.http.fetch.{destination} (request/reply)",
 		Description: "Fetching a URL from an app (ADR-0262): a destination is a " +
 			"name the host registers for a set of URL prefixes and the " +
 			"transport policy that reaches them — trust, user agent, " +

@@ -1,5 +1,5 @@
 // Package httpegress is HTTP egress as a keelson capability (ADR-0262): the
-// `net.http.fetch.<destination>` request/reply family a hosted app fetches
+// `runtime.net.http.fetch.<destination>` request/reply family a hosted app fetches
 // a URL through, the host-wide registry of destinations those subjects
 // name, and the host-side service that holds the transports.
 //
@@ -25,9 +25,9 @@ const ServiceAppId app.AppIdT = "runtime.http"
 // The family (ADR-0262 §SD1): one fetch verb per destination.
 const (
 	// SubjectPrefix precedes the destination name.
-	SubjectPrefix = "net.http.fetch."
+	SubjectPrefix = "runtime.net.http.fetch."
 	// SubjectAll is the service's subscription pattern.
-	SubjectAll = "net.http.fetch.*"
+	SubjectAll = "runtime.net.http.fetch.*"
 )
 
 // TableCalls is the introspection table of fetches this process answered

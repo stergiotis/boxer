@@ -92,7 +92,7 @@ func TestFetchUnderTheDestination(t *testing.T) {
 
 	recs := sink.Records()
 	require.NotEmpty(t, recs)
-	assert.Equal(t, "net.http.fetch.tiles", recs[len(recs)-1].Subject)
+	assert.Equal(t, "runtime.net.http.fetch.tiles", recs[len(recs)-1].Subject)
 	assert.Equal(t, audit.AuditResultOk, recs[len(recs)-1].Result)
 }
 

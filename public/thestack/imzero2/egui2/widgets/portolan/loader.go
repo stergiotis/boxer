@@ -19,7 +19,7 @@ import (
 
 // TileFetcherI fetches one tile's bytes. The loader does no HTTP of its
 // own (ADR-0262 §SD6): a hosted app hands it a fetcher over the
-// `net.http.fetch.<destination>` family, whose destination holds the
+// `runtime.net.http.fetch.<destination>` family, whose destination holds the
 // transport policy — trust, user agent, timeout. A status other than 200
 // is the fetcher's error.
 type TileFetcherI interface {

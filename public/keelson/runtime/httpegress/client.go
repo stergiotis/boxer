@@ -102,7 +102,7 @@ func (inst *Client) Fetch(ctx context.Context, destination string, r Request) (r
 	}
 	raw, err := app.RequestWithin(ctx, inst.bus, inst.wait(ctx), Subject(destination), payload)
 	if err != nil {
-		return res, eb.Build().Str("destination", destination).Errorf("net.http.fetch request: %w", err)
+		return res, eb.Build().Str("destination", destination).Errorf("runtime.net.http.fetch request: %w", err)
 	}
 	w, err := decode[wireReply](raw)
 	if err != nil {

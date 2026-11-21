@@ -31,7 +31,7 @@ res, err := inst.web.Fetch(ctx, "basemap", httpegress.Request{URL: url, Purpose:
 
 ## What the schematic shows
 
-- **Subjects.** `net.http.fetch.<destination>`, request/reply, one per
+- **Subjects.** `runtime.net.http.fetch.<destination>`, request/reply, one per
   destination. The request carries a method (GET or HEAD) and an absolute
   URL; the reply carries the status, the content type and the body.
 - **Backends.** One service, under the id `runtime.http`, holding one

@@ -172,7 +172,7 @@ type Services struct {
 	// (ADR-0254). Without BOXER_LLM_ENDPOINT and BOXER_LLM_MODEL it still
 	// answers, saying no model is configured.
 	LLM bool
-	// HTTP is net.http.fetch.*: HTTP egress to the registered destinations
+	// HTTP is runtime.net.http.fetch.*: HTTP egress to the registered destinations
 	// (ADR-0262). A destination that failed to resolve is refused with the
 	// reason.
 	HTTP bool
@@ -801,7 +801,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	if svc.HTTP {
 		httpSvc, hErr := httpegress.NewService(rt.Bus, logger, httpegress.Config{Trail: rt.Trail, Cell: rt.Cell})
 		if hErr != nil {
-			logger.Warn().Err(hErr).Msg("httpegress: service start failed; net.http.fetch.* will be unbound")
+			logger.Warn().Err(hErr).Msg("httpegress: service start failed; runtime.net.http.fetch.* will be unbound")
 		} else {
 			rt.HTTP = httpSvc
 			rt.onClose(httpSvc.Close)

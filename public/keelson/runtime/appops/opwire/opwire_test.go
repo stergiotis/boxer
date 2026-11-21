@@ -14,7 +14,7 @@ func TestSubjectRoundTrip(t *testing.T) {
 	assert.Equal(t, "play", alias)
 	assert.EqualValues(t, 42, inst)
 	assert.Equal(t, "set_sql", op)
-	for _, bad := range []string{"app.play.x.op.a", "app.play.1.request.a", "app.play.1.op", "net.http.fetch.x"} {
+	for _, bad := range []string{"app.play.x.op.a", "app.play.1.request.a", "app.play.1.op", "runtime.net.http.fetch.x"} {
 		_, _, _, ok = ParseSubject(bad)
 		assert.False(t, ok, bad)
 	}

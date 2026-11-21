@@ -11,7 +11,7 @@ import (
 
 const wireVersion uint8 = 1
 
-// wireRequest is the envelope on net.http.fetch.<destination>.
+// wireRequest is the envelope on runtime.net.http.fetch.<destination>.
 type wireRequest struct {
 	V           uint8  `json:"v"`
 	Method      string `json:"method,omitempty"`
