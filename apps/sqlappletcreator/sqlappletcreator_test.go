@@ -23,7 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
-// fakeSaveBus captures the applet.store.save request the creator makes and
+// fakeSaveBus captures the runtime.applet.store.save request the creator makes and
 // answers with a canned reply or transport error.
 type fakeSaveBus struct {
 	mu         sync.Mutex

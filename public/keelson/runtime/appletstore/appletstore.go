@@ -21,7 +21,7 @@ import (
 // [SaveReply]. The store service validates the document exactly as the
 // committed-book corpus gate does — an invalid document is refused, never
 // half-saved.
-const SubjectSave = "applet.store.save"
+const SubjectSave = "runtime.applet.store.save"
 
 // wireVersion versions the CBOR envelopes below.
 const wireVersion uint8 = 1

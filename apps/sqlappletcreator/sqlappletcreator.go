@@ -3,7 +3,7 @@
 // inlined in the SQL Playground's toolbar; factored into its own app, the
 // playground opens it over `runtime.windowhost.open` with the current buffer, and it
 // composes the ADR-0132 §SD1 document. Two outputs (O4 "A+B"): Save publishes
-// it on `applet.store.save` — the store service (apps/sqlapplet) validates,
+// it on `runtime.applet.store.save` — the store service (apps/sqlapplet) validates,
 // persists, and mints a live manifest; Export writes it to a user-chosen file
 // through the fs Powerbox save dialog (a durable, user-owned artifact). This
 // app never imports the playground or the host, only the neutral contracts

@@ -43,7 +43,7 @@ spelling.
 ## Save: the store is the gate
 
 **Save applet** sends the document to the applet store service
-(`applet.store.save`, ADR-0132 O4 "A"). The store validates it exactly as
+(`runtime.applet.store.save`, ADR-0132 O4 "A"). The store validates it exactly as
 the committed-book corpus test does, classifies the SQL, persists the
 document and mints a live manifest, so the applet joins the Apps menu
 without a restart. The creator does none of that: it composes, sends, and
