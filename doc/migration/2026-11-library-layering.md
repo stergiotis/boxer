@@ -87,6 +87,14 @@ generated files change with the table above. DML and read-access output gains
 `const _ = runtime.GeneratedABI1`; a file that fails on that line was generated
 against another runtime and is regenerated, not edited.
 
+The header line of leeway output names the generator and, for DML and
+read-access, the runtime ABI generation (`Leeway DML (runtime ABI 1)`) instead
+of a module version, and the generator-location comments before each section
+no longer carry a line number. Output of one generator at one commit is then
+the same bytes whether boxer is a pinned dependency, the main module or reached
+through a workspace file. Regenerate once more after upgrading past this
+change; a drift check then stays quiet when only the pin moves.
+
 ## Contract changes this note acknowledges
 
 - `contract: cli/boxer datasource` — the empty placeholder command group is

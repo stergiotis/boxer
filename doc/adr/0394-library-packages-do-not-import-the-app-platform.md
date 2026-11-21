@@ -59,14 +59,15 @@ edges made that closure much larger than the package:
 5. **Examples and fixtures are not importable API.** Worked examples and
    generator fixtures move under an `internal` directory just high enough for
    their users, keeping their package names.
-6. **Generated code names its generator release and the runtime ABI it
-   targets.** A leeway generator stamps `github.com/stergiotis/boxer@<version>`
-   (`vcs.BoxerModuleVersion`; `(devel)` for an untagged build of this module)
-   instead of the driving binary's main package. The DML and read-access
-   generators emit `const _ = runtime.GeneratedABI1` after the imports; a
-   change to what generated code may call renames the constant with the
-   generator change, so a stale file fails to compile on a line whose comment
-   says to regenerate.
+6. **Generated code names its generator and the runtime ABI it targets, and
+   nothing that depends on the build.** A leeway generator's header names the
+   generator and, for DML and read-access, the ABI generation
+   (`Leeway DML (runtime ABI 1)`); the comment before each emitted section
+   names the generating function and file without a line number. The DML and
+   read-access generators emit `const _ = runtime.GeneratedABI1` after the
+   imports; a change to what generated code may call renames the constant
+   with the generator change, so a stale file fails to compile on a line whose
+   comment says to regenerate.
 
 ## Alternatives
 
@@ -86,6 +87,12 @@ edges made that closure much larger than the package:
 - **An `EnforceVersion`-style arithmetic constant instead of a renamed
   identifier.** Rejected: a renamed identifier fails with "undefined" on the
   guard line, whose comment carries the instruction, at no runtime cost.
+- **Stamping the module version (`vcs.BoxerModuleVersion`) into headers.**
+  Rejected: one generator at one commit reports a release tag when boxer is a
+  dependency and `(devel)` when it is the main module or reached through a
+  workspace, so the same output differed by build and a consumer's drift
+  check flipped when its pin or workspace changed. No version string is
+  agreed by every build at a commit; the ABI guard catches staleness.
 - **Panic on any duplicate declaration (the former rule).** Rejected: two
   copies of one declaration linked into one binary are harmless, and a panic
   in `init` gives the host no chance to report which package declared what.

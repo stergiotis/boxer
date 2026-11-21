@@ -71,10 +71,11 @@ const BoxerModulePath = "github.com/stergiotis/boxer"
 // built from, as "<module>@<version>": the version of the dependency (its
 // replacement's, when replaced) when another module is the main module; when
 // this module is the main module, its release tag, or "(devel)" for a build
-// of an untagged or modified tree (so a generator run from a test and one
-// run from the built command stamp the same text). A code generator stamps it into the files it
-// writes, so a file names the generator release rather than the binary that
-// happened to drive it. Without build info it is NoBuildInfo.
+// of an untagged or modified tree. Without build info it is NoBuildInfo.
+//
+// The result depends on how the binary was built, so a code generator does
+// not stamp it into the files it writes: one generator at one commit would
+// write different bytes as a dependency and as the main module.
 func BoxerModuleVersion() (s string) {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
