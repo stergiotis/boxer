@@ -13,7 +13,7 @@ import (
 )
 
 // topicFilterT is the set of topics the launcher restricts the view to, as a
-// bitmask over app.AllTopics *positions* (TopicT is a string, so position is
+// bitmask over app.Topics() *positions* (TopicT is a string, so position is
 // what a mask can address; it also means the mask never depends on the tokens
 // themselves).
 //
@@ -27,9 +27,9 @@ import (
 // the property that matters for an untouched host.
 type topicFilterT uint32
 
-// topicIndex resolves a topic to its position in app.AllTopics.
+// topicIndex resolves a topic to its position in app.Topics().
 func topicIndex(t app.TopicT) (idx int, ok bool) {
-	for i, x := range app.AllTopics {
+	for i, x := range app.Topics() {
 		if x == t {
 			idx = i
 			ok = true
@@ -182,21 +182,21 @@ type manifestGroup struct {
 	Manifests []app.Manifest
 }
 
-// groupByTopic sections manifests by topic in app.AllTopics order, skipping
+// groupByTopic sections manifests by topic in app.Topics() order, skipping
 // topics the filter drops and topics no visible manifest carries. One
 // manifest appears under every topic it declares (ADR-0158 §SD3).
 func groupByTopic(manifests []app.Manifest, only topicFilterT) (groups []manifestGroup) {
 	if len(manifests) == 0 {
 		return
 	}
-	byTopic := make(map[app.TopicT][]app.Manifest, len(app.AllTopics))
+	byTopic := make(map[app.TopicT][]app.Manifest, len(app.Topics()))
 	for _, m := range manifests {
 		for _, t := range m.Topics {
 			byTopic[t] = append(byTopic[t], m)
 		}
 	}
-	groups = make([]manifestGroup, 0, len(app.AllTopics))
-	for _, t := range app.AllTopics {
+	groups = make([]manifestGroup, 0, len(app.Topics()))
+	for _, t := range app.Topics() {
 		// The chips drop whole sections, not just manifests. Filtering only
 		// at the manifest level would leave a two-topic app visible under its
 		// *unselected* topic as well, since a manifest that passes the filter

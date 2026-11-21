@@ -289,8 +289,8 @@ func TestManifest_Validate_KeywordsUngoverned(t *testing.T) {
 }
 
 func TestTopicT_IsRegistered(t *testing.T) {
-	for _, tp := range AllTopics {
-		assert.True(t, tp.IsRegistered(), "%q is in AllTopics", tp)
+	for _, tp := range Topics() {
+		assert.True(t, tp.IsRegistered(), "%q is in Topics()", tp)
 	}
 	assert.False(t, TopicT("").IsRegistered(), "the empty topic is malformed, not uncategorised")
 	assert.False(t, TopicT("Runtime").IsRegistered(), "the vocabulary is lowercase")
@@ -322,4 +322,14 @@ func TestCapPatternsFollowTheSubjectGrammar(t *testing.T) {
 	m := Manifest{Id: "x/y", Display: "y", Surface: SurfaceWindowed, Topics: []TopicT{TopicRuntime}, Summary: "does y",
 		Caps: []SubjectFilter{{Pattern: "fs.dialog.read", Direction: CapDirectionPub}}}
 	assert.Error(t, m.Validate())
+}
+
+func TestAddTopicExtendsTheVocabulary(t *testing.T) {
+	assert.Error(t, AddTopic(""))
+	assert.Error(t, AddTopic("Bad"))
+	assert.Error(t, AddTopic(TopicCode), "a topic already in the vocabulary")
+	const extra TopicT = "test-extra-topic"
+	require.NoError(t, AddTopic(extra))
+	assert.True(t, extra.IsRegistered())
+	assert.Equal(t, extra, Topics()[len(Topics())-1])
 }

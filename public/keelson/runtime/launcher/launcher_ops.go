@@ -75,8 +75,8 @@ func maturityNameList() (s string) {
 }
 
 func topicNameList() (s string) {
-	names := make([]string, 0, len(app.AllTopics))
-	for _, t := range app.AllTopics {
+	names := make([]string, 0, len(app.Topics()))
+	for _, t := range app.Topics() {
 		names = append(names, t.String())
 	}
 	s = strings.Join(names, ", ")
@@ -168,7 +168,7 @@ func selectedMaturityNames(f maturityFilterT) (names []string) {
 }
 
 func selectedTopicNames(f topicFilterT) (names []string) {
-	for i, t := range app.AllTopics {
+	for i, t := range app.Topics() {
 		if f.selectedAt(i) {
 			names = append(names, t.String())
 		}

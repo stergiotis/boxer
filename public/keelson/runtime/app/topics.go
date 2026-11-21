@@ -1,20 +1,27 @@
 package app
 
-import "slices"
+import (
+	"slices"
+	"sync"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+)
 
 // TopicT is one registered subject topic (ADR-0158 §SD1). Topics classify an
 // app by *what it is about*, never by how it was built — provenance lives on
 // [KindE] instead, precisely so that a subject stops being split by
 // implementation technique.
 //
-// The vocabulary is closed: only the constants below are valid, and
+// The vocabulary is closed: the constants below, and the topics a module
+// adds with [RegisterTopic] at package initialisation (ADR-0396 §3).
 // [Manifest.Validate] refuses anything else. The type exists rather than a
 // bare string so an in-tree typo is a compile error instead of a
-// registration-time drop (§SD2, §SD9) — the same reason [SurfaceE] and
+// registration refusal (§SD2, §SD9) — the same reason [SurfaceE] and
 // [CapDirectionE] are named types. Topics arriving at runtime, from applet
 // frontmatter, go through [ParseTopic].
 //
-// Adding a member here is not an architecture decision (CODINGSTANDARDS
+// Adding a member is not an architecture decision (CODINGSTANDARDS
 // § What triggers an ADR); changing what the vocabulary *means* — its axis —
 // would be.
 type TopicT string
@@ -47,11 +54,11 @@ const (
 	TopicAbout TopicT = "about"
 )
 
-// AllTopics is the registered vocabulary in display order. The launcher
-// sections the no-filter browse view in this order (ADR-0158 §SD3), so it is
-// deliberately hand-ordered rather than alphabetical: the topics a reader
-// most often opens come first.
-var AllTopics = []TopicT{
+// builtinTopics is the vocabulary this module defines, in display order.
+// The launcher sections the no-filter browse view in this order (ADR-0158
+// §SD3), so it is deliberately hand-ordered rather than alphabetical: the
+// topics a reader most often opens come first.
+var builtinTopics = []TopicT{
 	TopicRuntime,
 	TopicCode,
 	TopicTopology,
@@ -64,17 +71,77 @@ var AllTopics = []TopicT{
 	TopicAbout,
 }
 
+// MaxTopics bounds the vocabulary: the launcher's topic filter is a
+// bitmask over vocabulary positions.
+const MaxTopics = 32
+
+var (
+	topicsMu sync.RWMutex
+	topics   = slices.Clone(builtinTopics)
+)
+
+// Topics is the vocabulary in display order: this module's topics, then
+// the ones registered with RegisterTopic in registration order. The slice
+// is shared and must not be modified; a registration after the call does
+// not reach it.
+func Topics() (ts []TopicT) {
+	topicsMu.RLock()
+	ts = topics
+	topicsMu.RUnlock()
+	return
+}
+
+// RegisterTopic adds t to the vocabulary, from the package initialisation
+// of the module that needs it. A malformed token, a topic already in the
+// vocabulary, or one past MaxTopics is recorded as a registration failure,
+// which stops a host from starting (ADR-0396 §2, §3). Register a topic
+// before the manifests that declare it — in the same package's init, or a
+// package they import.
+func RegisterTopic(t TopicT) {
+	registration.Fail("app.RegisterTopic", AddTopic(t))
+}
+
+// AddTopic is RegisterTopic returning the refusal instead of recording it.
+func AddTopic(t TopicT) (err error) {
+	s := string(t)
+	if s == "" || s[0] < 'a' || s[0] > 'z' {
+		err = eb.Build().Str("topic", s).Errorf("topic %q is not a lower-case token", s)
+		return
+	}
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if !((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-') {
+			err = eb.Build().Str("topic", s).Errorf("topic %q has a byte outside [a-z0-9-]", s)
+			return
+		}
+	}
+	topicsMu.Lock()
+	defer topicsMu.Unlock()
+	if slices.Contains(topics, t) {
+		err = eb.Build().Str("topic", s).Errorf("topic %q is already in the vocabulary", s)
+		return
+	}
+	if len(topics) >= MaxTopics {
+		err = eb.Build().Str("topic", s).Errorf("the topic vocabulary holds %d topics already", MaxTopics)
+		return
+	}
+	next := make([]TopicT, len(topics), len(topics)+1)
+	copy(next, topics)
+	topics = append(next, t)
+	return
+}
+
 // String renders the topic as its wire/display token.
 func (inst TopicT) String() (s string) {
 	s = string(inst)
 	return
 }
 
-// IsRegistered reports whether inst is a member of [AllTopics]. The empty
+// IsRegistered reports whether inst is a member of [Topics]. The empty
 // topic is not registered — a manifest declaring one is malformed, not
 // uncategorised, because ADR-0158 removes the uncategorised bucket.
 func (inst TopicT) IsRegistered() (ok bool) {
-	ok = slices.Contains(AllTopics, inst)
+	ok = slices.Contains(Topics(), inst)
 	return
 }
 

@@ -403,7 +403,7 @@ func coordRigWith(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opToo
 
 	reg := app.NewRegistry()
 	require.NoError(t, reg.RegisterFactory(app.Manifest{Id: notesId, Display: "Notes", Summary: "keep a note",
-		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}, Operations: ops.Catalog(),
+		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.Topics()[0]}, Operations: ops.Catalog(),
 		Help: fstest.MapFS{"overview.md": {Data: []byte("# Notes\n\nA note holds one text.\n\n## Tidying\n\nTidy a note by replacing its text with set_note.\n")}}},
 		func() (app.AppI, error) { return nil, nil }))
 	host = &noteHost{ops: ops, engines: map[uint64]*opengine.Engine{}, notes: map[uint64]*note{}}

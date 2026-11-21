@@ -156,7 +156,7 @@ func TestRegistryKeepsAValidCatalog(t *testing.T) {
 }
 
 func validManifestForOps(id AppIdT) Manifest {
-	return Manifest{Id: id, Display: "x", Surface: SurfaceWindowed, Topics: []TopicT{AllTopics[0]}, Summary: "does x"}
+	return Manifest{Id: id, Display: "x", Surface: SurfaceWindowed, Topics: []TopicT{Topics()[0]}, Summary: "does x"}
 }
 
 func TestRegistryRefusesACapabilityOnOperationSubjects(t *testing.T) {

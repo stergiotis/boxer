@@ -511,7 +511,7 @@ func (inst *Inst) renderMaturityChips(ids *c.WidgetIdStack) {
 // looking for a token.
 func (inst *Inst) renderTopicChips(ids *c.WidgetIdStack) {
 	manifests := inst.registry.LaunchableManifests()
-	present := make(map[app.TopicT]struct{}, len(app.AllTopics))
+	present := make(map[app.TopicT]struct{}, len(app.Topics()))
 	for _, m := range manifests {
 		for _, t := range m.Topics {
 			present[t] = struct{}{}
@@ -519,7 +519,7 @@ func (inst *Inst) renderTopicChips(ids *c.WidgetIdStack) {
 	}
 	for range c.HorizontalWrapped().KeepIter() {
 		c.Label("Topics:").Send()
-		for i, t := range app.AllTopics {
+		for i, t := range app.Topics() {
 			if _, has := present[t]; !has {
 				continue
 			}

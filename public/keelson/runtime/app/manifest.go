@@ -500,7 +500,7 @@ func (inst Manifest) Validate() (err error) {
 	for _, t := range inst.Topics {
 		if !t.IsRegistered() {
 			err = eb.Build().Str("id", string(inst.Id)).Str("topic", string(t)).
-				Errorf("manifest: unregistered topic")
+				Errorf("manifest: topic %q is not in the vocabulary; a module adds one with app.RegisterTopic before the manifests that declare it", t)
 			return
 		}
 	}

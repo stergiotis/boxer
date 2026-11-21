@@ -81,7 +81,6 @@ import (
 	"sync/atomic"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
@@ -92,7 +91,8 @@ import (
 //go:embed help/*.md
 var helpFS embed.FS
 
-// AppId is the app's manifest id; its last segment is the launch alias.
+// AppId is the app's manifest id; its last segment is the alias the app is
+// known by, unless Manifest.Alias names another.
 const AppId app.AppIdT = "example.com/hello/apps/greet"
 
 // GreetingsKey is the persist key the greeting count is kept under.
@@ -111,17 +111,15 @@ var manifest = app.Manifest{
 }
 
 func init() {
-	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = &App{name: "world"}
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("greet: failed to register factory")
-	}
 }
 
 // App is one window.
 type App struct {
+	ioCtx     context.Context
 	ids       *c.WidgetIdStack
 	log       zerolog.Logger
 	storage   app.StorageI
@@ -138,12 +136,13 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.log = ctx.Log()
 	inst.storage = ctx.Storage()
-	if raw, found, gErr := inst.storage.Get(GreetingsKey); gErr == nil && found {
+	inst.ioCtx = app.ContextOf(ctx)
+	if raw, found, gErr := inst.storage.Get(inst.ioCtx, GreetingsKey); gErr == nil && found {
 		if n, pErr := strconv.ParseUint(string(raw), 10, 64); pErr == nil {
 			inst.greetings.Store(n)
 		}
 	}
-	if inst.scope = app.LifetimeOf(ctx); inst.scope == nil {
+	if inst.scope = ctx.Lifetime(); inst.scope == nil {
 		inst.scope, inst.ownScope = lifetime.New(nil), true
 	}
 	return
@@ -176,7 +175,7 @@ func (inst *App) greet() {
 		inst.storeMu.Lock()
 		defer inst.storeMu.Unlock()
 		n := inst.greetings.Load()
-		if sErr := inst.storage.Set(GreetingsKey, []byte(strconv.FormatUint(n, 10))); sErr != nil {
+		if sErr := inst.storage.Set(inst.ioCtx, GreetingsKey, []byte(strconv.FormatUint(n, 10))); sErr != nil {
 			inst.log.Debug().Err(sErr).Msg("greet: count not stored")
 		}
 	})
@@ -186,13 +185,20 @@ func (inst *App) greet() {
 What each part does:
 
 - **The manifest** names the app (`AppId`; its last segment, `greet`, is the
-  alias you launch it by), says it has a window (`SurfaceWindowed`), declares
+  alias you launch it by and the key its stored state is kept under — set
+  `Alias` if that segment collides with another app's), says it has a
+  window (`SurfaceWindowed`), declares
   the one storage key it uses (`PersistedKeys`), and points at its help
   book. The host grants the app access to exactly the keys it declares.
-- **`init`** registers a factory: the host calls it once per window.
+- **`init`** registers a factory: the host calls it once per window. A
+  manifest the registry refuses — a missing summary, an alias another app
+  holds — stops the host at start with the reason, rather than leaving the
+  app out of the launcher.
 - **`Mount`** runs when a window opens. It may block, so it is where the
   stored count is read. Storage is a request to a service, not a local
-  variable.
+  variable, and runs under `app.ContextOf(ctx)`, which the window keeps.
+  Every capability the host offers is a method of the context —
+  `ctx.Lifetime()` here.
 - **`Frame`** runs every frame and must not block. It draws the widgets and
   reacts to the click. The name is bound to the text field through
   `SendRespVal(&inst.name)`; widget ids come from the window's id stack, so
@@ -219,7 +225,32 @@ A text field for a name, a **Greet** button, the greeting, and how often
 the button was pressed. The count is kept under the key `greetings`.
 ```
 
-## Step 4 — Write the host binary
+## Step 4 — Test it
+
+The conformance kit, `apptest`, runs the checks this repository runs over
+its own apps. Create **apps/greet/greet_test.go**:
+
+```go
+package greet
+
+import (
+	"testing"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/apptest"
+)
+
+func TestConforms(t *testing.T) {
+	apptest.ManifestOK(t, manifest)
+	apptest.HelpCorpus(t, AppId)
+	apptest.FrameHeadless(t, app.DefaultRegistry, AppId, apptest.FrameOpts{Strict: true})
+}
+```
+
+`FrameHeadless` mounts the window, draws two frames with no client behind
+them, and fails on an id used twice in a frame; `go test ./...` runs it.
+
+## Step 5 — Write the host binary
 
 The host binary is boxer's `hostmain` with your apps linked in. A blank
 import is what registers an app.
@@ -257,7 +288,7 @@ go build -tags binary_log -o hellohost ./cmd/hellohost
 The list shows every app linked into the binary — boxer's own and yours —
 with `greet` among the aliases. An app missing from it was not imported.
 
-## Step 5 — Build the client
+## Step 6 — Build the client
 
 Clone boxer at the commit you pinned and build the desktop client:
 
@@ -270,7 +301,7 @@ git -C ../boxer checkout <commit>
 The binary lands at `../boxer/rust/imzero2/target/dist/imzero2`. The first
 build downloads the crates and compiles for several minutes.
 
-## Step 6 — Open the window
+## Step 7 — Open the window
 
 ```sh
 ./hellohost imzero2 demo \

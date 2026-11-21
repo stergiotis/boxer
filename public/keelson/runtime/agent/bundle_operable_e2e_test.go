@@ -42,7 +42,7 @@ func TestAnAgentDrivesAnOperableBundleView(t *testing.T) {
 	t.Cleanup(func() { introspect.SetLocalQueryEndpoint(prevEndpoint) })
 
 	manifest := app.Manifest{Id: viewReceiverId, Display: "Receiver", Summary: "shows a bundle", Surface: app.SurfaceWindowed,
-		Topics: []app.TopicT{app.AllTopics[0]}, Operations: viewReceiverOps.Catalog(), Caps: sqlapplet.BundleViewCaps}
+		Topics: []app.TopicT{app.Topics()[0]}, Operations: viewReceiverOps.Catalog(), Caps: sqlapplet.BundleViewCaps}
 	r := newRigWith(t, func(cfg *Config) {
 		cfg.Coordinators = []string{"test.coordinator"}
 		require.NoError(t, cfg.Registry.RegisterFactory(manifest, func() (app.AppI, error) { return nil, nil }))

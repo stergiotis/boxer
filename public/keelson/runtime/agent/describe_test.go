@@ -41,21 +41,21 @@ func registry(t *testing.T) *app.Registry {
 	t.Helper()
 	r := app.NewRegistry()
 	m := app.Manifest{Id: "github.com/x/apps/notes", Display: "Notes", Summary: "keep a note",
-		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}, Operations: notesSet().Catalog()}
+		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.Topics()[0]}, Operations: notesSet().Catalog()}
 	require.NoError(t, r.RegisterFactory(m, func() (app.AppI, error) { return nil, nil }))
 	plain := app.Manifest{Id: "github.com/x/apps/plain", Display: "Plain", Summary: "no catalog",
-		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}}
+		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.Topics()[0]}}
 	require.NoError(t, r.RegisterFactory(plain, func() (app.AppI, error) { return nil, nil }))
 	applet := app.Manifest{Id: "github.com/x/apps/sqlapplet/slow-queries", Display: "Slow queries", Summary: "the slowest queries of the hour",
-		Kind: app.KindApplet, Keywords: []string{"latency"}, Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]},
+		Kind: app.KindApplet, Keywords: []string{"latency"}, Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.Topics()[0]},
 		// A minted applet serves a catalog of its own.
 		Operations: notesSet().Catalog()}
 	require.NoError(t, r.RegisterFactory(applet, func() (app.AppI, error) { return nil, nil }))
 	dashboardlet := app.Manifest{Id: "github.com/x/apps/dashboardlet/fleet", Display: "Fleet", Summary: "the fleet at a glance",
-		Kind: app.KindDashboardlet, Keywords: []string{"fleet"}, Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}}
+		Kind: app.KindDashboardlet, Keywords: []string{"fleet"}, Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.Topics()[0]}}
 	require.NoError(t, r.RegisterFactory(dashboardlet, func() (app.AppI, error) { return nil, nil }))
 	notebooklet := app.Manifest{Id: "github.com/x/apps/notebooklet/throughput", Display: "Throughput", Summary: "the throughput report, read live",
-		Kind: app.KindNotebooklet, Keywords: []string{"throughput"}, Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}}
+		Kind: app.KindNotebooklet, Keywords: []string{"throughput"}, Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.Topics()[0]}}
 	require.NoError(t, r.RegisterFactory(notebooklet, func() (app.AppI, error) { return nil, nil }))
 	return r
 }

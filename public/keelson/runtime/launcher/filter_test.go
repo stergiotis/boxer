@@ -29,7 +29,7 @@ func TestGroupByTopic_EmptyInputReturnsNil(t *testing.T) {
 }
 
 func TestGroupByTopic_SectionsFollowVocabularyOrder(t *testing.T) {
-	// Scrambled input; sections must come back in app.AllTopics order.
+	// Scrambled input; sections must come back in app.Topics() order.
 	// Ordering is the vocabulary's, not a launcher-local list — closing the
 	// vocabulary is what removed the need for one.
 	in := []app.Manifest{
@@ -289,7 +289,7 @@ func TestScoreManifest_EmptyBatteryQualifiesNothing(t *testing.T) {
 // it, so the test asserts both halves rather than the spelling of any one
 // label.
 func TestTopicLabel_RendersWithoutChangingTheVocabulary(t *testing.T) {
-	for _, tp := range app.AllTopics {
+	for _, tp := range app.Topics() {
 		label := topicLabel(tp)
 		assert.NotEmpty(t, label, "%s: every registered topic needs a label", tp)
 		assert.Equal(t, string(tp), tp.String(),
@@ -482,7 +482,7 @@ func TestTopicFilter_ZeroValueMeansNoRestriction(t *testing.T) {
 	// "show everything", not "show nothing".
 	var f topicFilterT
 	assert.True(t, f.isInert())
-	for _, tp := range app.AllTopics {
+	for _, tp := range app.Topics() {
 		assert.True(t, f.shows(tp), "an inert topic filter must show %s", tp)
 	}
 	assert.True(t, f.showsAny(nil), "even a manifest with no topics passes an inert filter")
@@ -525,10 +525,10 @@ func TestTopicFilter_UnregisteredTopicNeverPassesARestriction(t *testing.T) {
 }
 
 func TestTopicFilter_MaskWidthCoversTheVocabulary(t *testing.T) {
-	// topicFilterT is a uint32 mask over app.AllTopics positions. If the
+	// topicFilterT is a uint32 mask over app.Topics() positions. If the
 	// vocabulary ever outgrows it, selections past the boundary would be
 	// silently dropped rather than failing loudly.
-	assert.LessOrEqual(t, len(app.AllTopics), 32,
+	assert.LessOrEqual(t, len(app.Topics()), 32,
 		"topicFilterT must widen before the vocabulary passes 32 members")
 }
 

@@ -293,7 +293,7 @@ func (inst *Inst) CaptureWorkstatelet() (doc workstatelet.Doc, err error) {
 			topics[t] = true
 		}
 	}
-	for _, t := range app.AllTopics {
+	for _, t := range app.Topics() {
 		if topics[t] {
 			doc.Topics = append(doc.Topics, t)
 		}

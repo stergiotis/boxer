@@ -47,7 +47,7 @@ var _ app.AppI = (*effApp)(nil)
 func (inst *effApp) Manifest() (m app.Manifest) { return inst.manifest }
 func (inst *effApp) Mount(ctx app.MountContextI) (err error) {
 	inst.key = ctx.InstanceKey()
-	inst.unsub, err = ctx.Bus().Subscribe(fmt.Sprintf("t.%d", inst.key), func(*app.Msg) {})
+	inst.unsub, err = ctx.Bus().Subscribe(fmt.Sprintf("app.t.%d", inst.key), func(*app.Msg) {})
 	if err != nil {
 		return
 	}
@@ -112,7 +112,7 @@ func newEffWorld(t *testing.T) (w *effWorld) {
 	require.NoError(t, err)
 	w.svc = svc
 	appReg := app.NewRegistry()
-	caps := []app.SubjectFilter{{Pattern: "t.>", Direction: app.CapDirectionBoth}}
+	caps := []app.SubjectFilter{{Pattern: "app.t.>", Direction: app.CapDirectionBoth}}
 	fm := mkManifest(effFactoryId)
 	fm.Caps = caps
 	require.NoError(t, appReg.RegisterFactory(fm, func() (a app.AppI, err error) {
@@ -184,7 +184,7 @@ func (w *effWorld) summary(t *testing.T) (s effSummary) {
 		}
 	}
 	for _, r := range w.bus.Subscriptions() {
-		if strings.HasPrefix(r.Pattern, inprocbus.InboxPrefix) || !strings.HasPrefix(r.Pattern, "t.") {
+		if strings.HasPrefix(r.Pattern, inprocbus.InboxPrefix) || !strings.HasPrefix(r.Pattern, "app.t.") {
 			continue // service clients and inboxes are not the app's effects
 		}
 		switch r.AppId {
