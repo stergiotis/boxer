@@ -5,13 +5,17 @@ import (
 	"github.com/stergiotis/boxer/public/compiletimeflags"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
 
-var CodeGeneratorName = "ET7 DDL (" + vcs.BoxerModuleVersion() + ")"
+// CodeGeneratorName is stamped into the header of every file this generator
+// writes. It names the generator and no module version: the version a binary
+// reports depends on how it was built (a tagged dependency, the main module,
+// a workspace), so a stamped version would make one generator at one commit
+// write different bytes.
+var CodeGeneratorName = "ET7 DDL"
 
 func checkColumnsAllValid(columns []common.PhysicalColumnDesc) {
 	if compiletimeflags.ExtraChecks {
