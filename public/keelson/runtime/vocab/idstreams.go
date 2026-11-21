@@ -37,13 +37,15 @@ var (
 
 // MaxExpectedAgentRuns and MaxExpectedAgentRunEntries are what the journal's
 // streams tell the mint they will need, gaps included: width 28 holds 2^36
-// bodies, width 24 holds 2^40. MaxExpectedFactsRows is the facts store's,
-// in the entries' class: a log line is a row.
+// bodies, width 24 holds 2^40.
 const (
 	MaxExpectedAgentRuns       = 1 << 35
 	MaxExpectedAgentRunEntries = 1 << 39
-	MaxExpectedFactsRows       = 1 << 39
 )
+
+// MaxExpectedFactsRows is what the facts store's streams tell the mint, in
+// the journal entries' class: every log line is a row.
+const MaxExpectedFactsRows = 1 << 39
 
 // IdStreams lists the streams this package claims, for the golden.
 var IdStreams = []tagmint.ClaimedTagValue{IdStreamAgentRun, IdStreamAgentRunEntry, IdStreamAgentRunMem, IdStreamAgentRunEntryMem, IdStreamFactsRow, IdStreamFactsRowLocal}
