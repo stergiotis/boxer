@@ -26,6 +26,11 @@
 #
 # Only the tests that read CLICKHOUSE_URL follow; the ones that name
 # localhost:8123 themselves still reach whatever answers there.
+#
+# A started server carries an empty database named boxer_throwaway_server.
+# The tests that need the runtime's real names — boxer.facts as a view over a
+# deployment's table, a host booted against it — look for it and skip on any
+# server without it, so they cannot run against a server that holds data.
 set -euo pipefail
 
 CH_VERSION=26.8.37.168
@@ -40,6 +45,7 @@ dir="${2:-}"
 mkdir -p "$dir"
 dir=$(readlink -f "$dir")
 bin="$dir/clickhouse"
+marker_db=boxer_throwaway_server
 http_port="${CLICKHOUSE_SERVER_HTTP_PORT:-8123}"
 tcp_port="${CLICKHOUSE_SERVER_TCP_PORT:-9000}"
 case "$http_port$tcp_port" in
@@ -108,6 +114,11 @@ EOF
     for i in $(seq 1 60); do
         if curl -fsS "http://127.0.0.1:$http_port/ping" >/dev/null 2>&1; then
             echo "clickhouse server up on 127.0.0.1:$http_port: $(curl -fsS "http://127.0.0.1:$http_port/?query=SELECT%20version()")"
+            # The marker a test checks before it uses the runtime's own
+            # database and table names, which it must never do on a server
+            # that holds someone's data.
+            curl -fsS "http://127.0.0.1:$http_port/" --data-binary \
+                "CREATE DATABASE IF NOT EXISTS $marker_db COMMENT 'a throwaway server started by scripts/ci/clickhouse_server.sh: tests may drop and create any database here'" >/dev/null
             return
         fi
         sleep 1
