@@ -34,15 +34,15 @@ func TestRegistry_Register_Lookup(t *testing.T) {
 	err := reg.Register(a)
 	require.NoError(t, err)
 
-	got, ok := reg.Lookup("org.test.foo")
-	require.True(t, ok)
+	got, err := reg.Open("org.test.foo")
+	require.NoError(t, err)
 	assert.Equal(t, AppIdT("org.test.foo"), got.Manifest().Id)
 }
 
 func TestRegistry_Lookup_Missing(t *testing.T) {
 	reg := NewRegistry()
-	_, ok := reg.Lookup("org.test.absent")
-	assert.False(t, ok)
+	_, err := reg.Open("org.test.absent")
+	assert.Error(t, err)
 }
 
 func TestRegistry_Register_DuplicateId(t *testing.T) {
@@ -75,11 +75,11 @@ func TestRegistry_All_SortedById(t *testing.T) {
 		err := reg.Register(newTestApp(t, id))
 		require.NoError(t, err)
 	}
-	all := reg.All()
+	all := reg.AllManifests()
 	require.Len(t, all, 3)
-	assert.Equal(t, AppIdT("org.test.a"), all[0].Manifest().Id)
-	assert.Equal(t, AppIdT("org.test.b"), all[1].Manifest().Id)
-	assert.Equal(t, AppIdT("org.test.c"), all[2].Manifest().Id)
+	assert.Equal(t, AppIdT("org.test.a"), all[0].Id)
+	assert.Equal(t, AppIdT("org.test.b"), all[1].Id)
+	assert.Equal(t, AppIdT("org.test.c"), all[2].Id)
 }
 
 func TestRegistry_Len(t *testing.T) {
@@ -243,25 +243,6 @@ func TestRegistry_AllManifests_DoesNotInstantiate(t *testing.T) {
 	_ = reg.AllManifests()
 	_ = reg.AllManifests()
 	assert.Equal(t, 0, ctorCalls, "AllManifests must not invoke ctors")
-}
-
-func TestRegistry_All_BackwardCompat_FactoryAppsInstantiate(t *testing.T) {
-	// All() is the deprecated shim; documents that it does invoke ctors,
-	// once per call, for factory entries — wasteful but matches the
-	// historical AppI-returning shape until C3 strips remaining callers.
-	reg := NewRegistry()
-	var ctorCalls int
-	m := testManifest("org.test.eager")
-	err := reg.RegisterFactory(m, func() (a AppI, ctorErr error) {
-		ctorCalls++
-		a, ctorErr = NewLegacyFuncApp(m, func() (e error) { return })
-		return
-	})
-	require.NoError(t, err)
-
-	_ = reg.All()
-	_ = reg.All()
-	assert.Equal(t, 2, ctorCalls)
 }
 
 // TestRegistrations_RecordTheEntryPoint pins what the ctor closure cannot

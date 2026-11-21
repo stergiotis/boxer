@@ -53,9 +53,9 @@ import (
 // keelson('frame_times') and the app center. IMZERO2_RENDER_GOROUTINE_CHECK
 // turns an off-goroutine call into a panic that names the caller.
 //
-// All three methods may return an error; the host logs and propagates per
-// host policy (DockHost surfaces the error in the tile chrome; CliHost
-// returns it from main).
+// All three methods may return an error; the host logs it and shows it
+// where the app would have drawn (the window host labels a failed mount in
+// the window), and a headless host's start reports it.
 type AppI interface {
 	Manifest() (m Manifest)
 	Mount(ctx MountContextI) (err error)
@@ -207,10 +207,11 @@ func ContextOf(mc MountContextI) (ctx context.Context) {
 	return context.Background() //boxer:lint disable=CS020 reason="a mount context without a lifetime scope has no end; this is its root"
 }
 
-// BusI is the cap-broker / inter-app message bus described by ADR-0026 §SD3
-// and §SD5. M1 hosts hand back a NoopBus; M2 introduces the in-proc client
-// (package runtime/inprocbus); M4 swaps the in-proc transport for a NATS
-// connection. The interface is stable across the swap.
+// BusI is the inter-app message bus described by ADR-0026 §SD3 and §SD5.
+// A host hands each instance a client minted with the manifest's Caps over
+// its transport — the in-process router (package inprocbus) or a NATS
+// connection (package natsbus); a context without a transport hands back
+// a NoopBus. Apps program against this interface only.
 type BusI interface {
 	Publish(subject string, payload []byte) (err error)
 	Subscribe(subject string, handler MsgHandlerFunc) (unsubscribe func(), err error)
@@ -365,9 +366,11 @@ func (inst *Msg) WithContext(ctx context.Context) (out *Msg) {
 	return &cp
 }
 
-// StorageI is the forward declaration of the CH+leeway-backed cold-state
-// store described by ADR-0026 §SD6. The implementation lands in M2; M1
-// hosts hand back a NoopStorage.
+// StorageI is the app's key-value state store (ADR-0026 §SD6): a host hands
+// a persist client (package persist) over the app's runtime.persist.{alias}
+// subjects, backed by ClickHouse where one is reachable and by memory
+// otherwise; a context without a persist service hands back a
+// NoopStorage.
 //
 // Every call is a round trip and takes the ctx it runs under; an app with
 // none of its own passes ContextOf(mountCtx).

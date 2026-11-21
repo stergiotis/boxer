@@ -182,7 +182,6 @@ func appsTable(reg *app.Registry, rs []app.Registration) *introspect.Table {
 		String("surface", func(i int) string { return m(i).Surface.String() }).
 		Int32("preferred_width", func(i int) int32 { return int32(m(i).SurfaceHints.PreferredWidth) }).
 		Int32("preferred_height", func(i int) int32 { return int32(m(i).SurfaceHints.PreferredHeight) }).
-		Int32("background_tick_hz", func(i int) int32 { return int32(m(i).BackgroundTickHz) }).
 		Bool("has_help", func(i int) bool { return m(i).Help != nil }).
 		StringList("caps", caps).
 		StringList("persisted_keys", func(i int) []string { return m(i).PersistedKeys }).

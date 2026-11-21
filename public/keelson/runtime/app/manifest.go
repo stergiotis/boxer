@@ -11,12 +11,31 @@
 // window (docked tile, floating, fullscreen claim) is the host's
 // decision — the same app source runs unchanged across hosts.
 //
-// This is phase M1 of ADR-0026: the AppI/Manifest/Registry foundation, with
-// forward-declared BusI and StorageI interfaces filled in by no-op stubs.
-// The cap broker and CH+leeway state layer arrive in M2; the dock host
-// arrives in M3; NATS arrives in M4; CLI unification (SurfaceHeadless) lands
-// in M5. Apps that need to ship before their migrating host exists wrap
-// their existing func() error renderer in a LegacyFuncApp.
+// The contract a host promises an app (ADR-0026, ADR-0396):
+//
+//   - Identity. Manifest.Id names the app; Manifest.SubjectAlias, the
+//     explicit Alias or the one derived from the id, keys its bus subjects
+//     and stored state. Registration refuses a duplicate id or alias.
+//   - Registration. Apps register from init() with RegisterFactory or
+//     Register. A refusal is recorded with package registration, and a host
+//     refuses to start while any is recorded.
+//   - Context. Mount and Unmount receive a MountContextI, Frame a
+//     FrameContextI. Every capability a host offers is a method of these,
+//     with a documented result for a host that lacks it; ContextOf is the
+//     context an instance does its I/O under.
+//   - Subjects. Manifest.Caps declares the subject filters the app's bus
+//     client may use; a service package exports one helper per capability.
+//
+// What a host discovers by type assertion is what an app optionally
+// implements:
+//
+//	PausableAppI          stops background work while every window is paused
+//	OperationsAppI        serves the manifest's operations catalog
+//	OperationsAsyncI      settles a command that runs past its frame
+//	WorkingsetComposerI   hands back the record a workingset stores at close
+//
+// and, on a bus client the host minted, BusCloserI, BusInstanceI and
+// BusInboxI.
 package app
 
 import (
@@ -99,25 +118,21 @@ func lastIndexByte(s string, c byte) (i int) {
 // tile, floating, fullscreen claim) is the host's decision, not the
 // app's; the same app source runs unchanged across hosts.
 //
-// Sharpened 2026-05-12 (ADR-0026 amendment): the prior values
-// SurfaceDockTile / SurfaceFullCentral / SurfaceModal conflated placement
-// with the fact-of-having-a-window. They are removed in favour of
-// SurfaceWindowed; placement moves into the host (egui_dock tile in M3,
-// fullscreen claim in the M2 launcher, overlay panel for runtime modals
-// — which are runtime services, not registered apps).
+// Placement is never a surface value: a docked tile, a floating window and a
+// fullscreen claim are all SurfaceWindowed (ADR-0026, the 2026-05-12
+// amendment).
 type SurfaceE uint8
 
 const (
 	SurfaceUnspecified SurfaceE = 0
-	// SurfaceHeadless: no window. CLI / one-shot / background app.
-	// Reserved by M1, activated in M5 when cli.Command migrates to AppI.
+	// SurfaceHeadless: no window — a service the service host mounts at
+	// boot (ADR-0352).
 	SurfaceHeadless SurfaceE = 1
 	// SurfaceWindowed: the app body lives inside exactly one logical
 	// window. The runtime creates and owns the window chrome (title from
 	// Manifest.Title, optional Manifest.Icon prefix, drag/resize/close
 	// affordances). The app's Frame() draws into the window body — it
-	// must NOT call c.Window(...) or c.PanelCentral() itself once the
-	// host wires up M3.
+	// must NOT call c.Window(...) or c.PanelCentral() itself.
 	SurfaceWindowed SurfaceE = 2
 )
 
@@ -187,26 +202,15 @@ func ParseCapDirection(s string) (d CapDirectionE) {
 	return
 }
 
-// SubjectFilter is a NATS-style subject permission. Forward-declared in M1;
-// the cap broker that interprets these lands in M2. Pattern follows NATS
-// wildcards: '*' matches one token, '>' matches the rest.
+// SubjectFilter is a NATS-style subject permission. Pattern follows NATS
+// wildcards: '*' matches one token, '>' matches the rest. The in-process bus
+// enforces it; the capability broker grants further filters at runtime.
 type SubjectFilter struct {
 	Pattern   string
 	Reason    string
 	Direction CapDirectionE
 	Sticky    bool
 }
-
-// ScreenshotFlagsE mirrors ADR-0057's DemoFlagsE so the screenshot tour
-// registry folds into app.Registry without behavioural change.
-type ScreenshotFlagsE uint32
-
-const (
-	ScreenshotFlagNone           ScreenshotFlagsE = 0
-	ScreenshotFlagNeedsLargeArea ScreenshotFlagsE = 1 << iota
-	ScreenshotFlagSkipInTour
-	ScreenshotFlagNeedsNetwork
-)
 
 // SurfaceHints carries per-surface initial geometry and host-specific knobs.
 // Only the fields relevant to the matching Surface are consulted; other
@@ -218,12 +222,6 @@ type SurfaceHints struct {
 	// apps by the launcher/dock host when sizing the runtime-owned window.
 	PreferredWidth  uint16
 	PreferredHeight uint16
-	// ScreenshotStage: canonical capture size for the screenshot driver.
-	// Folded in from ADR-0057's Demo.Stage. Zero means "use driver default".
-	ScreenshotStage [2]float32
-	// ScreenshotFlags: per-app bitmask consumed by the screenshot host.
-	// Folded in from ADR-0057's Demo.Flags.
-	ScreenshotFlags ScreenshotFlagsE
 }
 
 // Manifest is the static description of an app. Returned by AppI.Manifest()
@@ -314,18 +312,17 @@ type Manifest struct {
 	Surface      SurfaceE
 	SurfaceHints SurfaceHints
 
-	// Caps is the set of NATS-style SubjectFilters the app declares it needs.
-	// Forward-declared in M1 (the broker arrives in M2); hosts may store
-	// declared caps for later audit but do not gate behaviour on them yet.
+	// Caps is the set of NATS-style SubjectFilters the app declares it
+	// needs. The host mints the app's bus client with them, and the
+	// in-process client refuses a publish or subscribe no filter covers
+	// (inprocbus, ErrPermissionViolation); a NATS client treats them as
+	// advisory, the server enforcing its own. A service package exports one
+	// helper per capability taking the reason (windowopen.OpenCap).
 	Caps []SubjectFilter
-	// BackgroundTickHz is read by no host: every open window's Frame runs on
-	// every render pass, focused or not, so there is no unfocused rate to set
-	// (ADR-0322). Kept because keelson('apps') and the carousel's app list
-	// carry it as a column, the latter addressed by position.
-	BackgroundTickHz uint8
 
-	// PersistedKeys is the set of cold-state keys the runtime will auto-manage
-	// via the M2 storage layer. Forward-declared in M1.
+	// PersistedKeys are the keys the app keeps in its storage
+	// (MountContextI.Storage). Declaring any makes the host add the
+	// capability on the app's persist subjects, runtime.persist.{alias}.>.
 	PersistedKeys []string
 
 	// LaunchKind names the launch-config vocabulary kind this app accepts

@@ -42,9 +42,8 @@ Three keystone decisions shape the contract you implement:
   subject patterns you intend to publish to or subscribe from; the cap
   broker arbitrates anything you didn't declare.
 - **One viewport.** The runtime supports many apps coexisting in one
-  process, but only one OS window — the M3 window host is the
-  long-term solution; in M1–M2 a launcher app switches focus among
-  registered apps.
+  process and one OS window: the window host draws each open app's
+  window inside it.
 
 ## How it works
 
@@ -67,16 +66,17 @@ Lifecycle: `Mount` once → `Frame` N times → `Unmount` once.
   declared caps, a `StorageI` for state (CH+leeway-backed in production),
   and a `Cancel()` channel that closes on host teardown.
 - **`Frame`** runs on every render pass, for every open window, focused
-  or not. The
-  `FrameContextI` adds an egui rendering scope (`EguiScope()` — typed as
-  `any` until the M3 window host wires real scopes; today's hosts pass nil
-  and apps fall back to the package-global `c.NewWidgetIdStack`). Headless
-  apps return immediately.
-- **`Unmount`** is your cleanup hook. The M1 launcher does not call it on
-  swap-out (will be fixed when M3 lands); long-lived hosts will call it
-  reliably.
+  or not. The `FrameContextI` adds what a host offers during a frame:
+  `WindowFocused()`, `CloseWindow(reason)` and `OperationGesture(op,
+  args)`. Headless apps return immediately.
+- **`Unmount`** is your cleanup hook; the host calls it at every closing
+  edge, after `Cancel()` has closed.
+- **Every capability is a method** of the two contexts, with a documented
+  result for a host that lacks it (ADR-0396 §4). A wrapper that changes
+  one capability embeds the interface it wraps and forwards the rest; a
+  fake embeds `*app.StaticMountContext` or `*app.StaticFrameContext`.
 - **Work that outlives a frame** counts itself into the instance's
-  lifetime scope (`app.LifetimeOf(ctx)`, package `lifetime`, ADR-0322):
+  lifetime scope (`ctx.Lifetime()`, package `lifetime`, ADR-0322):
   the scope's work context ends with `Cancel()`, its tail context
   survives it, and the window host waits for the scope after `Unmount`
   and before it closes the bus, up to a deadline. Tasks spawned through
@@ -97,13 +97,14 @@ type Manifest struct {
     Keywords []string    // free retrieval text; ungoverned by design
     Kind     KindE       // provenance: app / applet / demo
 
+    Alias   string       // optional subject token; empty derives it from Id
+
     Surface      SurfaceE      // see Surfaces below
-    SurfaceHints SurfaceHints  // initial size / screenshot stage
+    SurfaceHints SurfaceHints  // initial window size
 
-    Caps             []SubjectFilter // declared subject permissions
-    BackgroundTickHz uint8           // read by no host (ADR-0322)
+    Caps []SubjectFilter // declared subject permissions
 
-    PersistedKeys []string  // auto-managed state keys (M2.5+ via storage)
+    PersistedKeys []string  // state keys; the host adds the persist capability
 
     LaunchKind string  // config kind accepted over windowhost.open (ADR-0135)
     Workingset bool    // participates in workingsets (ADR-0148); needs LaunchKind
@@ -121,7 +122,7 @@ returned value.
 | Surface           | Meaning                                                                 |
 |-------------------|-------------------------------------------------------------------------|
 | `SurfaceWindowed` | Exactly one logical window. The runtime creates and owns the chrome.    |
-| `SurfaceHeadless` | No UI; one-shot side-effects. Activated in M5 when `cli.Command` lands. |
+| `SurfaceHeadless` | No UI; a service the service host mounts at boot (ADR-0352).           |
 
 **The relationship between an app and its window is 1:1.** A windowed
 app declares one window via `Title` (text) and optional `Icon` (Unicode
@@ -130,7 +131,7 @@ button — and invokes your `Frame()` inside that window's body scope.
 You **do not** call `c.Window(...)` or `c.PanelCentral()` from your
 `Frame()`; the host has already wrapped you. Where the window goes — a
 docked tile, a floating panel, a fullscreen claim — is the host's
-decision and changes between hosts (launcher today, window host in M3,
+decision and changes between hosts (the window host, a browser tab, a
 fullscreen variant for embedded contexts). Same source, different
 placement.
 
@@ -153,8 +154,7 @@ The runtime enforcement lives in
 when a `SurfaceWindowed` AppI is dispatched, its `Frame()` is invoked
 inside a `c.Window` whose title comes from `Manifest.WindowTitle()` and
 whose default size comes from `SurfaceHints.PreferredWidth/Height` (with
-sensible fallbacks). The M3 window host replaces this with a per-app
-child UI; the contract stays the same.
+sensible fallbacks).
 
 > **Migration history.** This contract was sharpened on 2026-05-12; the
 > prior `SurfaceDockTile`/`SurfaceFullCentral`/`SurfaceModal` values are
@@ -195,10 +195,14 @@ runtime.audit.{id}                                 | observe your own audit
 You'll need at minimum `runtime.persist.{ownAlias}.>` to keep state and
 `runtime.cap.request` if you ever ask for more permissions at runtime.
 
-Your AppId is mapped to a NATS-token-safe alias via
-`AppIdT.SubjectAlias()` — `github.com/.../play` → `play`,
-`runtime.broker` → `runtime_broker`. Use the alias when constructing
-your own subject patterns.
+Your app is known on the bus by its alias, `Manifest.SubjectAlias()`:
+`Manifest.Alias` when set, else the alias derived from the id
+(`AppIdT.DerivedAlias()` — `github.com/.../play` → `play`,
+`runtime.broker` → `runtime_broker`). The alias keys your stored state, so
+it must not change: set `Alias` when your derived alias collides with
+another app's (a module outside this one prefixes a token of its own,
+`acme_play`), or to your old alias when you rename your app's directory
+(ADR-0396 §1).
 
 ### Registration
 
@@ -208,38 +212,17 @@ of your app would share state or not.
 **Singleton — `app.Register(a)`** — the same AppI value is returned on
 every dispatch. Suitable for apps that use package-level state
 (`var ids = c.NewWidgetIdStack()`, `var clientCache map[K]V`) and can't
-sensibly coexist with a sibling instance. This is the M1–M2 default.
+sensibly coexist with a sibling instance.
 
 ```go
-package myapp
-
-import (
-    "github.com/rs/zerolog/log"
-    "github.com/stergiotis/boxer/public/keelson/runtime/app"
-)
-
 func init() {
-    a, err := app.NewLegacyFuncApp(app.Manifest{
-        Id:       "github.com/example/myapp",
-        Version:  "0.1.0",
-        Display:  "My app",
-        Title:    "My app",
-        Icon:     "🛠",
-        Category: "tools",
-        Surface:  app.SurfaceWindowed,
-    }, RenderLoopHandler)
-    if err != nil {
-        log.Warn().Err(err).Msg("myapp: register")
-        return
-    }
-    app.Register(a)
+    app.Register(newSingleton())
 }
 ```
 
 **Factory — `app.RegisterFactory(manifest, ctor)`** — the host invokes
 the ctor once per dispatch, yielding a fresh AppI instance with isolated
-per-instance state. The M3 WindowHost honours this so two windows for the
-same app run independently. To benefit, your AppI must keep state on
+per-instance state, so two windows of the same app run independently. To benefit, your AppI must keep state on
 the struct, not in package-level vars.
 
 ```go
@@ -255,15 +238,19 @@ func init() {
 Ctors are invoked at dispatch time, not registration; keep them
 lightweight (allocation only). Heavy I/O belongs in `Mount`.
 
+Registration does not drop a bad app with a warning: a manifest that does
+not validate, a duplicate id or alias, or an operations catalog that does
+not validate is recorded with package `registration`, and a host refuses
+to start while any is recorded, listing them all (ADR-0396 §2).
+
 The host imports your package for its side effect — the carousel pulls
-in every M1-era app via blank imports in
-`imzero2/egui2/demo/carousel/imzero2_demo_resolve.go`. New apps add an
-import there until M3 generalises discovery.
+in every app in this module via blank imports in
+`imzero2/egui2/demo/carousel/imzero2_demo_resolve.go`.
 
 ### Migration window — LegacyFuncApp
 
-If your existing entry point is `func() error` (the M1-era render-loop
-shape), `app.NewLegacyFuncApp(manifest, renderer)` wraps it in an
+If your entry point is a `func() error` renderer,
+`app.NewLegacyFuncApp(manifest, renderer)` wraps it in an
 `AppI`. `Mount`/`Unmount` are no-ops; `Frame` calls your renderer. The
 legacy adapter discards the `FrameContextI` — you can't reach the bus
 from a LegacyFuncApp.
@@ -274,7 +261,7 @@ from environment variables) implement `AppI` directly. See
 struct constructs the inner `PlayApp` in its `Mount` body, where env
 vars are guaranteed to be populated.
 
-### The window host (M3)
+### The window host
 
 In interactive mode (no `IMZERO2_SCREENSHOT_DIR`) the runtime's top-
 level renderer is `runtime/windowhost.Inst`. Each open app renders
@@ -304,7 +291,7 @@ the window host and uses the per-app tour driver path
 the existing tour screenshots without coupling them to the host
 layout.
 
-> **Design history.** M3 originally placed apps in `egui_dock` tabs
+> **Design history.** The window host originally placed apps in `egui_dock` tabs
 > (the `dockhost` package, snapshotted in commit `517fc46b`). The
 > dock model's "one active tab per leaf" semantics meant clicking an
 > app in the Apps menu produced a subtle UI signal (a new tab in the
@@ -455,11 +442,9 @@ a reason-aware precedence chain in `Mount`.
   ships to users, renaming is a deprecation event (a new Id + a
   redirect). The Id is what `--launch` accepts, what audit logs record,
   and what the cap broker keys grants on. Treat it as durably public.
-- **`Manifest.SubjectAlias()` is deterministic from `Id`.** Two distinct
-  Ids must produce distinct aliases — the host enforces this at runtime
-  by registering aliases as natural keys. If you pick an Id whose
-  basename collides with another registered app, registration fails
-  loudly.
+- **`Manifest.SubjectAlias()` is stable.** It is `Alias` when set, else
+  derived from `Id`; registration refuses an alias another app holds,
+  naming both ids. Changing it orphans the app's stored state.
 - **`Frame` runs on the main goroutine.** The host pre-prepares the
   `WidgetIdStack` and the FFFI register subrange around each call; your
   code does *not* call `Prepare()` itself, `ctx.request_repaint()` is
@@ -467,10 +452,10 @@ a reason-aware precedence chain in `Mount`.
   inside layout containers (its absolute coordinates silently break
   `Vertical`/`Horizontal` flow).
 - **The bus is the only sanctioned route to outside-world resources.**
-  Direct `os.Open`, `clickhouse.OpenDB`, `net.Dial` etc. work today but
-  will trip the capslock advisory in M2.7 and the eventual hard-fail in
-  M4. Authoring apps to publish to the right subject family from day
-  one is much cheaper than retrofitting.
+  Direct `os.Open`, `clickhouse.OpenDB`, `net.Dial` etc. compile, and the
+  capslock comparison of declared capabilities against real calls
+  reports them. Authoring apps to publish to the right subject family
+  from day one is much cheaper than retrofitting.
 - **One process, one OS viewport.** No spawning windows, no separate
   eframe instances. The remote-desktop direction (ADR-0024) needs the
   entire UI to render as one streamable surface — `egui::Window`s and
@@ -486,8 +471,7 @@ registration path:
 - **`Register(a)`** stores a singleton ctor that returns `a` on every
   `Open(id)`. Opening the app twice (two dock tiles, two `--launch`
   entries) yields the same AppI — state is shared, egui IDs collide,
-  behaviour is undefined when both tiles render simultaneously. This is
-  the default for migrated M1 apps.
+  behaviour is undefined when both tiles render simultaneously.
 - **`RegisterFactory(m, ctor)`** stores the ctor; each `Open(id)`
   invokes it for a fresh AppI. Two tiles run in isolation *iff* the AppI
   keeps state on the struct rather than in package-level vars. Apps
@@ -498,17 +482,15 @@ registration path:
 Practical consequence: factory-registered apps with proper instance
 state coexist as independent tiles. Singleton-registered apps still
 collapse to one logical instance no matter how many tiles open them.
-The WindowHost (M3) honours both shapes uniformly; per-app migration to
-factory-with-instance-state happens incrementally.
+The window host honours both shapes uniformly.
 
 ### State is the runtime's responsibility, not yours
 
 Your app does not own a filesystem path or a sqlite handle. Anything
 you need to persist across launches goes through `MountContextI.Storage()`
-— read/write `[]byte` blobs keyed by `(yourAlias, key)`. From M2.5
-onwards the backing store is `boxer.facts` (CH+leeway); from M4
-onwards the audit + state writes are reachable from other apps that
-hold the right `app.{id}.>` subject permission.
+— read/write `[]byte` blobs keyed by `(yourAlias, key)`. The backing
+store is `boxer.persiststate` where ClickHouse is reachable and memory
+otherwise; a host a scene launched always uses memory (ADR-0396 §7).
 
 That means: don't pickle to disk, don't open badger, don't shell out to
 `mv ~/.config/myapp/state.json.new ~/.config/myapp/state.json`. The
@@ -529,19 +511,6 @@ syscalls. The threat model accepts this — the boundaries exist to make
 resource access *visible* and *consistent*, not to defend against
 malicious code. ADR-0026 §SD10 documents the trade-off explicitly.
 
-### Migration debt during M1–M2
-
-The carousel still passes apps a `NoopBus` and `NoopStorage` in
-M1–M2.5. Your `Mount` will see those if you check, and any
-`Bus().Publish(...)` will fail. Real wiring lands when the window host
-(M3) constructs proper per-app contexts. For now, design your `Mount`
-to tolerate a noop bus — log the failure and degrade gracefully, or
-guard the bus call behind a feature flag.
-
-The legacy numeric codes (`--launch a005`) remain valid for one release
-after M1 closes; new external integrations should use manifest Ids
-directly.
-
 ## Further reading
 
 - [ADR-0026](../../../../doc/adr/0026-app-runtime-and-capability-subjects.md)
@@ -552,8 +521,8 @@ directly.
   the compose contract, the intent gate, the restore precedence.
 - [`registry.go`](./registry.go), [`manifest.go`](./manifest.go),
   [`app.go`](./app.go) — the contract surface and Go-doc reference.
-- `runtime/inprocbus` — bus implementation (M2.1).
-- `runtime/factsstore/chstore` — live-CH storage backend (M2.5c).
+- `runtime/inprocbus` — the in-process bus.
+- `runtime/persist` — the state service behind `StorageI`.
 - Existing apps as exemplars: widgets (the launcher itself; demo-folder
   iteration), play (custom `PlayLauncher` AppI; env-var late binding),
   imztop (env-driven mode selection, simple LegacyFuncApp).

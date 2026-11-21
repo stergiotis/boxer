@@ -172,7 +172,7 @@ func Analyse(ctx context.Context, opts Options) (findings []Finding, err error) 
 	if err != nil {
 		return
 	}
-	findings = evaluateAll(app.All(), capsByPkg)
+	findings = evaluateAll(app.AllManifests(), capsByPkg)
 	return
 }
 
@@ -464,15 +464,14 @@ func normaliseCapability(name string) (out string) {
 
 // evaluateAll cross-references every registered app's direct capabilities
 // against its Manifest.Caps subject filters.
-func evaluateAll(apps []app.AppI, capsByPkg map[string]map[string]struct{}) (findings []Finding) {
+func evaluateAll(manifests []app.Manifest, capsByPkg map[string]map[string]struct{}) (findings []Finding) {
 	type appEntry struct {
 		id       string
 		pkgPath  string
 		declared []app.SubjectFilter
 	}
-	entries := make([]appEntry, 0, len(apps))
-	for _, a := range apps {
-		m := a.Manifest()
+	entries := make([]appEntry, 0, len(manifests))
+	for _, m := range manifests {
 		entries = append(entries, appEntry{
 			id:       string(m.Id),
 			pkgPath:  packageForManifest(m.Id),

@@ -329,6 +329,15 @@ drain completes, so the other instances' unmounts and state saves still run
 Work entered with `Enter` runs on its caller's goroutine, under the caller's
 boundary.
 
+
+### 2026-11-20 — `BackgroundTickHz` is deleted; the scope is a context method
+
+§SD5 kept `Manifest.BackgroundTickHz` because the carousel's app list
+addressed its columns by position. [ADR-0396](./0396-the-app-contract-a-host-promises.md)
+(proposed) deletes the field and both columns, and makes the lifetime
+scope a method, `MountContextI.Lifetime()`, in place of the optional
+`LifetimeI` and `app.LifetimeOf`.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the app contract and `Manifest`

@@ -171,7 +171,7 @@ shows.
 - **No typed `Result` registry.** `Result []byte` is opaque;
   observers dispatch on `Kind`. A registry can be added later
   without wire change if a real consumer needs it.
-- **No `BackgroundTickHz` integration.** The frame-loop background
+- **No frame-loop integration.** A frame-loop background
   tick is for frame-shaped work; task is for arbitrary work. Apps
   that mix the two run both in parallel.
 

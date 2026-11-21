@@ -4,16 +4,10 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// LegacyFuncApp adapts an existing func() error renderer — the shape used
-// by the appCode → render-closure switch at
-// public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go
-// — as an AppI. The renderer is invoked from Frame; Mount and Unmount are
-// no-ops.
-//
-// Intended as a migration bridge during M1: lets the foundation package ship
-// without rewriting the seven graphical apps. Each migrated app deletes its
-// LegacyFuncApp wrapper once it implements AppI directly with a proper
-// Frame body that consumes the FrameContextI.
+// LegacyFuncApp adapts a func() error renderer as an AppI: the renderer is
+// invoked from Frame, and Mount and Unmount do nothing. It suits a demo or
+// a test fixture with no state of its own; an app with state implements
+// AppI.
 type LegacyFuncApp struct {
 	manifest Manifest
 	render   func() (err error)

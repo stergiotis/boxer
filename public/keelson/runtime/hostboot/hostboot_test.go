@@ -81,8 +81,8 @@ func minimalOptions(t *testing.T, reg *app.Registry) Options {
 func TestBoot_MinimalHostSeedsConfiguredWindow(t *testing.T) {
 	reg := newTestRegistry(t)
 	opts := minimalOptions(t, reg)
-	plain, ok := reg.Lookup("hostboot.test.plain")
-	require.True(t, ok)
+	plain, err := reg.Open("hostboot.test.plain")
+	require.NoError(t, err)
 	opts.LaunchApps = []app.AppI{plain}
 	opts.SeedWindows = []SeedWindow{{AppId: "hostboot.test.seeded", Kind: testCfgKind, Config: testCfgBytes}}
 	hookSeen := false
@@ -149,8 +149,8 @@ func TestBoot_ScreenshotModeBuildsTourRenderers(t *testing.T) {
 	reg := newTestRegistry(t)
 	opts := minimalOptions(t, reg)
 	opts.ScreenshotDir = t.TempDir()
-	plain, ok := reg.Lookup("hostboot.test.plain")
-	require.True(t, ok)
+	plain, openErr := reg.Open("hostboot.test.plain")
+	require.NoError(t, openErr)
 	opts.LaunchApps = []app.AppI{plain}
 
 	rt, err := Boot(context.Background(), opts)

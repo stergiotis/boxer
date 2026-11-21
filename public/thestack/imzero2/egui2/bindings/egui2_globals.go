@@ -23,7 +23,7 @@ func NewFetcher() (inst *Fetcher) {
 // capture frame. The runtime guard panics with a clear, debuggable
 // message when a caller breaks the "fetchers run only from
 // StateManager.Sync" rule (see
-// doc/skills/imzero2-fetchers/SKILLS.md). Negligible cost — one bool
+// doc/skills/imzero2-fetchers/SKILL.md). Negligible cost — one bool
 // check per fetch; fetches happen O(10) times per frame.
 func (inst *Fetcher) invoke(f FuncProcIdE) {
 	if cap_ := typed.GetCurrentFffiCapture(); cap_ != nil && cap_.IsCapturing() {
@@ -31,7 +31,7 @@ func (inst *Fetcher) invoke(f FuncProcIdE) {
 			"fffi2: fetcher opcode %d invoked inside a deferred-block capture; "+
 				"this deadlocks (request buffered, response read blocks on empty pipe). "+
 				"Fetchers must run only from StateManager.Sync — see "+
-				"doc/skills/imzero2-fetchers/SKILLS.md.", f))
+				"doc/skills/imzero2-fetchers/SKILL.md.", f))
 	}
 	b := typed.NewRetainedFffiBuilder()
 	b.WriteUint32(uint32(f))

@@ -132,9 +132,6 @@ func ManifestOf(doc Doc) (m app.Manifest) {
 		Keywords: doc.Keywords,
 		Kind:     app.KindWorkstatelet,
 		Surface:  app.SurfaceWindowed,
-		SurfaceHints: app.SurfaceHints{
-			ScreenshotFlags: app.ScreenshotFlagSkipInTour,
-		},
 	}
 	return
 }

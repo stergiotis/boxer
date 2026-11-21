@@ -288,9 +288,8 @@ func TestHumanAge(t *testing.T) {
 // in a refactor) would silently make the widget unreachable from the
 // launcher; the test guards that drift.
 func TestManifestRegistered(t *testing.T) {
-	a, ok := runtimeapp.Lookup("github.com/stergiotis/boxer/public/keelson/runtime/logviewer")
+	m, ok := runtimeapp.LookupManifest("github.com/stergiotis/boxer/public/keelson/runtime/logviewer")
 	require.True(t, ok, "logviewer AppI must be registered via init()")
-	m := a.Manifest()
 	assert.Equal(t, "Log viewer", m.Display)
 	assert.Equal(t, runtimeapp.SurfaceWindowed, m.Surface)
 }

@@ -38,7 +38,6 @@ var listSchema = arrow.NewSchema([]arrow.Field{
 	{Name: "surface", Type: arrow.BinaryTypes.String},
 	{Name: "pref_w", Type: arrow.PrimitiveTypes.Uint16},
 	{Name: "pref_h", Type: arrow.PrimitiveTypes.Uint16},
-	{Name: "bg_tick_hz", Type: arrow.PrimitiveTypes.Uint8},
 	{Name: "caps", Type: arrow.PrimitiveTypes.Uint32},
 	{Name: "persisted_keys", Type: arrow.PrimitiveTypes.Uint32},
 	{Name: "version", Type: arrow.BinaryTypes.String},
@@ -91,11 +90,10 @@ func manifestsToArrowIPC(manifests []runtimeapp.Manifest) (buf []byte, err error
 	surface := bldr.Field(7).(*array.StringBuilder)
 	prefW := bldr.Field(8).(*array.Uint16Builder)
 	prefH := bldr.Field(9).(*array.Uint16Builder)
-	bgTick := bldr.Field(10).(*array.Uint8Builder)
-	caps := bldr.Field(11).(*array.Uint32Builder)
-	persisted := bldr.Field(12).(*array.Uint32Builder)
-	version := bldr.Field(13).(*array.StringBuilder)
-	summary := bldr.Field(14).(*array.StringBuilder)
+	caps := bldr.Field(10).(*array.Uint32Builder)
+	persisted := bldr.Field(11).(*array.Uint32Builder)
+	version := bldr.Field(12).(*array.StringBuilder)
+	summary := bldr.Field(13).(*array.StringBuilder)
 
 	for _, m := range sorted {
 		id.Append(string(m.Id))
@@ -115,7 +113,6 @@ func manifestsToArrowIPC(manifests []runtimeapp.Manifest) (buf []byte, err error
 		surface.Append(m.Surface.String())
 		prefW.Append(m.SurfaceHints.PreferredWidth)
 		prefH.Append(m.SurfaceHints.PreferredHeight)
-		bgTick.Append(m.BackgroundTickHz)
 		caps.Append(uint32(len(m.Caps)))
 		persisted.Append(uint32(len(m.PersistedKeys)))
 		version.Append(m.Version)

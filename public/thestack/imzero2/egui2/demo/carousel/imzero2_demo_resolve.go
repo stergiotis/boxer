@@ -125,10 +125,10 @@ func resolveLaunchSql(whereExpr string) (apps []app.AppI, err error) {
 			if m.SubjectAlias() != trimmed {
 				continue
 			}
-			a, lookupOk := app.Lookup(m.Id)
-			if !lookupOk {
+			a, openErr := app.Open(m.Id)
+			if openErr != nil {
 				err = eb.Build().Str("id", string(m.Id)).Str("alias", trimmed).
-					Errorf("launch alias: registry inconsistency: manifest present but app not registered")
+					Errorf("launch alias: %w", openErr)
 				return
 			}
 			apps = append(apps, a)
@@ -162,13 +162,13 @@ func resolveLaunchSql(whereExpr string) (apps []app.AppI, err error) {
 			continue
 		}
 		id := app.AppIdT(line)
-		a, lookupOk := app.Lookup(id)
-		if !lookupOk {
+		a, openErr := app.Open(id)
+		if openErr != nil {
 			// CH selected from the live registry table, so a miss here
 			// would be a registry inconsistency mid-flight. Surface
 			// loudly rather than silently dropping the result.
 			err = eb.Build().Str("id", line).Str("query", query).
-				Errorf("launch sql: registry inconsistency: returned id not registered")
+				Errorf("launch sql: %w", openErr)
 			return
 		}
 		apps = append(apps, a)

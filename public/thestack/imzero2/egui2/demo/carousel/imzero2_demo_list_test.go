@@ -54,7 +54,10 @@ func TestManifestsToArrowIPC_SchemaAndRowCount(t *testing.T) {
 	// 15 since ADR-0214 §SD4 added `summary`. That one went on the END
 	// rather than beside display/title, so every position above still holds
 	// — the asserted field indices below are the check that it did.
-	assert.Equal(t, 15, int(rec.NumCols()))
+	//
+	// 14 since ADR-0396 §5 removed `bg_tick_hz`, a value no host read;
+	// `caps` and the columns after it moved up by one.
+	assert.Equal(t, 14, int(rec.NumCols()))
 
 	// Sorted by Id — "github.com/example/bar" sorts before "...foo".
 	idCol := rec.Column(0).(arrowStringView)
@@ -82,7 +85,7 @@ func TestManifestsToArrowIPC_SchemaAndRowCount(t *testing.T) {
 	// Field 14 = summary, appended last (ADR-0214 §SD4). Empty for the
 	// fixture manifests, which is what a headless app carries — the field is
 	// required for windowed apps only.
-	summaryCol := rec.Column(14).(arrowStringView)
+	summaryCol := rec.Column(13).(arrowStringView)
 	assert.Equal(t, "", summaryCol.Value(0))
 	assert.Equal(t, "windowed", surfaceCol.Value(1))
 }

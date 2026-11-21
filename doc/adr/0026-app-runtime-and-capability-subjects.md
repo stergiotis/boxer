@@ -1213,6 +1213,16 @@ one `AuditRecord` per `Request` and none per `Publish`, and an
 kind is retired: `FactsStoreI` has no `WriteAudit`, rows of the kind are
 no longer read, and its vocabulary ordinals stay.
 
+
+### 2026-11-20 — the manifest and the contexts as ADR-0396 states them
+
+[ADR-0396](./0396-the-app-contract-a-host-promises.md) (proposed) removes
+`BackgroundTickHz`, `SurfaceHints.ScreenshotStage` / `ScreenshotFlags` and
+`FrameContextI.EguiScope`, none of which a host read; adds an optional
+`Manifest.Alias` whose default is the alias this ADR derives; makes the
+optional context capabilities methods of `MountContextI` and
+`FrameContextI`; and puts every runtime service subject under `runtime.`.
+
 ## References
 
 - [ADR-0057](0057-demo-registry-and-drivers.md) — Demo registry pattern that `app.Registry` generalises.

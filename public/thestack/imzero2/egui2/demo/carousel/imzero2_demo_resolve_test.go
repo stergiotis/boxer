@@ -224,7 +224,7 @@ func TestRegistry_CoreAppsRegistered(t *testing.T) {
 		idImztop,
 	}
 	for _, id := range wantIds {
-		_, ok := app.Lookup(id)
+		_, ok := app.LookupManifest(id)
 		assert.True(t, ok, "expected %s registered", id)
 	}
 }

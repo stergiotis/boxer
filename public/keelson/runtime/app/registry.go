@@ -428,53 +428,6 @@ func (inst *Registry) Origin(id AppIdT) (o Origin, ok bool) {
 	return
 }
 
-// Lookup returns an AppI for the given Id from DefaultRegistry by
-// invoking the ctor. Backward-compat shim — new code should call
-// LookupManifest for metadata or Open for dispatch.
-func Lookup(id AppIdT) (a AppI, ok bool) {
-	a, ok = DefaultRegistry.Lookup(id)
-	return
-}
-
-// Lookup invokes the ctor for id. For singleton-registered apps this is
-// the singleton; for factory-registered apps each Lookup allocates fresh.
-// Prefer LookupManifest or Open in new code.
-func (inst *Registry) Lookup(id AppIdT) (a AppI, ok bool) {
-	a, err := inst.Open(id)
-	if err != nil {
-		return
-	}
-	ok = true
-	return
-}
-
-// All returns AppI instances for every registered Id by invoking each
-// ctor. Backward-compat shim — prefer AllManifests for metadata
-// enumeration (avoids spurious ctor calls for factory-registered apps).
-func All() (apps []AppI) {
-	apps = DefaultRegistry.All()
-	return
-}
-
-// All invokes the ctor for every registered Id in sorted-Id order.
-func (inst *Registry) All() (apps []AppI) {
-	inst.mu.RLock()
-	ctors := make([]AppCtor, len(inst.entries))
-	for i, e := range inst.entries {
-		ctors[i] = e.ctor
-	}
-	inst.mu.RUnlock()
-	apps = make([]AppI, 0, len(ctors))
-	for _, ctor := range ctors {
-		a, err := ctor()
-		if err != nil || a == nil {
-			continue
-		}
-		apps = append(apps, a)
-	}
-	return
-}
-
 // Len returns the registered app count.
 func (inst *Registry) Len() (n int) {
 	inst.mu.RLock()
