@@ -27,6 +27,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/internal/lowlevel"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/ra"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
@@ -504,7 +505,11 @@ type TrailStoreConfig struct {
 	// ReadTable, when set, is the table every SELECT and DESCRIBE goes to:
 	// a storage table that materialized views fill from
 	// the written one, or a Merge over several. Same shape rules as Table;
-	// empty (the default) reads the table written to. The schema must be
+	// empty (the default) asks factsschema.ReadTableFor for the relation to read,
+	// given the table written to, and reads the table written to when it
+	// names none; a reference it cannot use panics in the constructor. Set
+	// ReadTable to the table written to in order to read it whatever is
+	// configured. The schema must be
 	// the same on both — VerifySchema checks the read side, which is the
 	// one the positional decode runs against.
 	ReadTable string
@@ -593,6 +598,17 @@ func NewTrailStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg Trail
 		if terr := recordstore.CheckTableRef(cfg.Table); terr != nil {
 			panic("TrailStore: " + terr.Error())
 		}
+	}
+	if cfg.ReadTable == "" {
+		written := cfg.Table
+		if written == "" {
+			written = TrailTableName
+		}
+		readTable, rerr := factsschema.ReadTableFor(written)
+		if rerr != nil {
+			panic("TrailStore: ReadTable: " + rerr.Error())
+		}
+		cfg.ReadTable = readTable
 	}
 	if cfg.ReadTable != "" {
 		if terr := recordstore.CheckTableRef(cfg.ReadTable); terr != nil {
