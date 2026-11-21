@@ -101,3 +101,19 @@ func (inst *StringVar) ValueSource() (src ValueSourceE) {
 	_, src = inst.res.get(inst.resolveEnv)
 	return
 }
+
+// Resolve returns Get's value and the tier it came from in one read, so a
+// program that keeps a rule of its own about where a secret may come from
+// (ValueSourceFile, ValueSourceEnv) judges the value it uses.
+func (inst *StringVar) Resolve() (out string, src ValueSourceE) {
+	return inst.res.get(inst.resolveEnv)
+}
+
+// FileVar returns the NAME_FILE companion of a Sensitive variable
+// (SecretFileSuffix); nil for a variable that is not Sensitive.
+func (inst *StringVar) FileVar() (p *PathVar) {
+	if inst.file == nil {
+		return
+	}
+	return inst.file.path
+}

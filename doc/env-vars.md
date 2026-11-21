@@ -17,6 +17,8 @@ generator: public/app env gen-docs
 
 314 variables across 27 categories, declared per ADR-0009. Re-run `go generate ./public/config/env/...` after adding or modifying specs. `env gen-envfile` renders the same variables as a commented environment file to fill in.
 
+Every Sensitive variable `NAME` has a companion `NAME_FILE`, listed as a path: it names a file whose contents are `NAME`'s value, read when `NAME` is unset, so the secret stays out of the environment child processes inherit. A package may declare `NAME_FILE` itself with `env.NewPath` (no default, not Sensitive) and gets the same variable; `FileVar()` on the Sensitive variable returns it.
+
 ## anchor (2)
 
 | Name | Type | Default | CLI flag | Sensitive | Description |

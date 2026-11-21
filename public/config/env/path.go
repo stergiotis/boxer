@@ -12,6 +12,9 @@ import (
 type PathVar struct {
 	spec Spec
 	res  resolved[string]
+	// companionOf names the Sensitive variable this is the NAME_FILE
+	// companion of; empty for a variable that is not one.
+	companionOf string
 }
 
 var _ VarI = (*PathVar)(nil)
@@ -27,6 +30,14 @@ func NewPath(spec Spec) (v *PathVar) {
 
 func (inst *PathVar) Spec() (out Spec) {
 	return inst.spec
+}
+
+// CompanionOf names the Sensitive variable whose NAME_FILE companion this
+// is (SecretFileSuffix); empty when it is not one.
+func (inst *PathVar) CompanionOf() (name string) {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	return inst.companionOf
 }
 
 func (inst *PathVar) Get() (out string) {

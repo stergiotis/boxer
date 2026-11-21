@@ -53,3 +53,62 @@ func TestUnreadableSecretFileResolvesAsUnset(t *testing.T) {
 	assert.Equal(t, "", secret.Get())
 	assert.Equal(t, ValueSourceDefault, secret.ValueSource())
 }
+
+func TestFileVarExposesTheCompanion(t *testing.T) {
+	secret, companion := newSecretFixture(t)
+	assert.Same(t, companion, secret.FileVar())
+	assert.Equal(t, "ENV_TEST_SECRETFILE_SECRET", companion.CompanionOf())
+	plain, _ := LookupVar("ENV_TEST_SECRETFILE_PLAIN")
+	assert.Nil(t, plain.(*StringVar).FileVar())
+}
+
+func TestResolveReportsTheFileAsTheSource(t *testing.T) {
+	secret, companion := newSecretFixture(t)
+	path := filepath.Join(t.TempDir(), "secret")
+	require.NoError(t, os.WriteFile(path, []byte("s3cret"), 0o600))
+	setForTest(t, companion, path)
+	setForTest(t, secret, "")
+	value, src := secret.Resolve()
+	assert.Equal(t, "s3cret", value)
+	assert.Equal(t, ValueSourceFile, src)
+	_, set := secret.Lookup()
+	assert.False(t, set, "Lookup sees the environment only, so a program can tell a file from a direct value")
+}
+
+// A package that declares NAME_FILE itself, before or after the Sensitive
+// NAME, gets the companion rather than a conflict.
+func TestExplicitCompanionDeclarationJoinsTheCompanion(t *testing.T) {
+	explicit := Spec{Name: "ENV_TEST_JOIN_SECRET_FILE", Description: "the program's own description", CliFlagName: "secretFile"}
+	for _, explicitFirst := range []bool{false, true} {
+		resetRegistryForTest()
+		var declared *PathVar
+		if explicitFirst {
+			declared = NewPath(explicit)
+		}
+		secret := NewString(Spec{Name: "ENV_TEST_JOIN_SECRET", Description: "a sensitive fixture", Sensitive: true})
+		if !explicitFirst {
+			declared = NewPath(explicit)
+		}
+		require.NoError(t, RegistrationErrors(), "explicitFirst=%v", explicitFirst)
+		assert.Same(t, secret.FileVar(), declared, "explicitFirst=%v", explicitFirst)
+		assert.Equal(t, "ENV_TEST_JOIN_SECRET", declared.CompanionOf())
+		assert.Equal(t, "the program's own description", declared.Spec().Description, "the explicit declaration's metadata stands")
+		assert.Equal(t, "secretFile", declared.Spec().CliFlagName)
+
+		path := filepath.Join(t.TempDir(), "secret")
+		require.NoError(t, os.WriteFile(path, []byte("s3cret"), 0o600))
+		setForTest(t, declared, path)
+		setForTest(t, secret, "")
+		assert.Equal(t, "s3cret", secret.Get())
+	}
+}
+
+func TestIncompatibleCompanionDeclarationNamesTheMechanism(t *testing.T) {
+	resetRegistryForTest()
+	NewString(Spec{Name: "ENV_TEST_CLASH_SECRET", Description: "a sensitive fixture", Sensitive: true})
+	NewPath(Spec{Name: "ENV_TEST_CLASH_SECRET_FILE", Description: "with a default", Default: "/etc/secret"})
+	err := RegistrationErrors()
+	require.ErrorIs(t, err, ErrConflictingDeclaration)
+	assert.Contains(t, err.Error(), "companion of Sensitive ENV_TEST_CLASH_SECRET")
+	assert.Contains(t, err.Error(), "FileVar()")
+}

@@ -139,13 +139,16 @@ func register(v VarI) (held VarI) {
 		registry[s.Name] = v
 		return v
 	}
+	if joined, ok := joinCompanion(existing, v); ok {
+		return joined
+	}
 	first := existing.Spec()
 	if sameDeclaration(first, s) {
 		return existing
 	}
 	conflicts = append(conflicts, fmt.Errorf( //boxer:lint disable=CS001 reason="eh imports config/env; eh.Errorf would close an import cycle"
-		"env: conflicting declarations of %q (first at %s, again at %s): %w",
-		s.Name, first.Origin.Package, s.Origin.Package, ErrConflictingDeclaration))
+		"env: conflicting declarations of %q (first at %s, again at %s)%s: %w",
+		s.Name, first.Origin.Package, s.Origin.Package, companionNote(existing, v), ErrConflictingDeclaration))
 	return v
 }
 

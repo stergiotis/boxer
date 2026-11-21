@@ -14,6 +14,7 @@ package envdoc
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -134,6 +135,10 @@ func renderSpecs(specs []env.Spec, opts Options) (out string) {
 		intro += " `" + opts.EnvFileCommand + "` renders the same variables as a commented environment file to fill in."
 	}
 	b.WriteString(intro + "\n\n")
+	if slices.ContainsFunc(specs, func(s env.Spec) bool { return s.Sensitive }) {
+		b.WriteString("Every Sensitive variable `NAME` has a companion `NAME" + env.SecretFileSuffix + "`, listed as a path: it names a file whose contents are `NAME`'s value, read when `NAME` is unset, so the secret stays out of the environment child processes inherit. ")
+		b.WriteString("A package may declare `NAME" + env.SecretFileSuffix + "` itself with `env.NewPath` (no default, not Sensitive) and gets the same variable; `FileVar()` on the Sensitive variable returns it.\n\n")
+	}
 
 	for _, c := range cats {
 		list := byCat[c]
