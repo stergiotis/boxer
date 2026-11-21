@@ -13,11 +13,11 @@ func TestDecodeSingle(t *testing.T) {
 		t.Skip("skipping exhaustive search test in short mode")
 	}
 
-	for o, e := range Encoding {
+	for o, e := range encoding {
 		assert.Equal(t, uint16(o), DecodeSingle(e))
 		assert.Equal(t, uint8(0), NumberOfBitErrors(e))
 	}
-	for o, g24 := range Encoding {
+	for o, g24 := range encoding {
 		assert.Equal(t, uint16(o), DecodeSingle(g24))
 		assert.Equal(t, uint8(0), NumberOfBitErrors(g24))
 		GenerateBitErrors(g24, 1, 3, func(code uint32, nErrors uint8) {
@@ -38,7 +38,7 @@ func BenchmarkDecodeSingle(b *testing.B) {
 	for range n {
 		p := rand.Uint32() & m
 		randomDecoded = append(randomDecoded, uint16(p))
-		randomEncoded = append(randomEncoded, Encoding[p])
+		randomEncoded = append(randomEncoded, encoding[p])
 	}
 	b.SetBytes(int64(len(randomEncoded) * 4))
 	b.StartTimer()

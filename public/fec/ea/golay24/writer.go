@@ -39,27 +39,25 @@ func NewWriter(w io.Writer, nAnchorBytes uint8) *Writer {
 }
 
 func (inst *Writer) WriteByte(c byte) (err error) {
-	var t uint16
+	var word uint16
 	switch inst.state {
 	case stateFirst:
 		inst.buffered = c
 		inst.state = stateSecond
 		return nil
 	case stateSecond:
-		t = 3 * ((uint16(inst.buffered) << 4) | uint16(c>>4))
+		word = (uint16(inst.buffered) << 4) | uint16(c>>4)
 		inst.state = stateThird
 		inst.buffered = c & 0x0f
 	case stateThird:
-		t = 3 * ((uint16(inst.buffered) << 8) | uint16(c))
+		word = (uint16(inst.buffered) << 8) | uint16(c)
 		inst.state = stateFirst
 	default:
 		err = eh.Errorf("wrong state, call BeginMessage befor writing")
 		return
 	}
 	buf := []byte{0, 0, 0}
-	buf[0] = golay24.EncodingUint8Triples[t]
-	buf[1] = golay24.EncodingUint8Triples[t+1]
-	buf[2] = golay24.EncodingUint8Triples[t+2]
+	golay24.PutEncoded(buf, word)
 	var n int
 	n, err = inst.w.Write(buf)
 	inst.totalBytesWritten += n
@@ -117,14 +115,8 @@ func (inst *Writer) Write(p []byte) (n int, err error) {
 		b0 := p[i]
 		b1 := p[i+1]
 		b2 := p[i+2]
-		t0 := 3 * ((uint16(b0) << 4) | uint16(b1>>4))
-		t1 := 3 * ((uint16(b1&0x0f) << 8) | uint16(b2))
-		buf[0] = golay24.EncodingUint8Triples[t0]
-		buf[1] = golay24.EncodingUint8Triples[t0+1]
-		buf[2] = golay24.EncodingUint8Triples[t0+2]
-		buf[3] = golay24.EncodingUint8Triples[t1]
-		buf[4] = golay24.EncodingUint8Triples[t1+1]
-		buf[5] = golay24.EncodingUint8Triples[t1+2]
+		golay24.PutEncoded(buf[0:3], (uint16(b0)<<4)|uint16(b1>>4))
+		golay24.PutEncoded(buf[3:6], (uint16(b1&0x0f)<<8)|uint16(b2))
 		u, err = w.Write(buf)
 		n += u
 		if err != nil {

@@ -29,7 +29,7 @@ func TestPebbleWriter24Padding4(t *testing.T) {
 	require.EqualValues(t, 3, buf.Len())
 	require.EqualValues(t, 3, w.totalBytesWritten)
 	require.EqualValues(t, 4, paddingBits)
-	require.EqualValues(t, golay24.EncodingUint8Triples[3*0xe30:3*0xe30+3], buf.Bytes())
+	require.EqualValues(t, encodedWords(0xe30), buf.Bytes())
 }
 
 func TestPebbleWriter24Padding8(t *testing.T) {
@@ -50,8 +50,8 @@ func TestPebbleWriter24Padding8(t *testing.T) {
 	require.EqualValues(t, 6, buf.Len())
 	require.EqualValues(t, 6, w.totalBytesWritten)
 	require.EqualValues(t, 8, paddingBits)
-	require.EqualValues(t, golay24.EncodingUint8Triples[3*0x7f3:3*0x7f3+3], buf.Bytes()[:3])
-	require.EqualValues(t, golay24.EncodingUint8Triples[3*0xe00:3*0xe00+3], buf.Bytes()[3:6])
+	require.EqualValues(t, encodedWords(0x7f3), buf.Bytes()[:3])
+	require.EqualValues(t, encodedWords(0xe00), buf.Bytes()[3:6])
 }
 
 func TestPebbleWriter24Regular(t *testing.T) {
@@ -101,7 +101,7 @@ func TestPebbleWriter24Regular(t *testing.T) {
 		assert.EqualValues(t, (12-len(nibbles)*4%12)%12, paddingBits)
 		require.NoError(t, err)
 		if m > 0 {
-			require.EqualValues(t, golay24.EncodingUint8Triples[:3*m], buf.Bytes()[:3*m])
+			require.EqualValues(t, encodedWords(wordRange(int(m))...), buf.Bytes()[:3*m])
 		}
 	}
 	driver := func(split bool) {
@@ -121,4 +121,21 @@ func TestPebbleWriter24Regular(t *testing.T) {
 	for range 10 {
 		driver(true)
 	}
+}
+
+// encodedWords is the codewords of words, three bytes each.
+func encodedWords(words ...uint16) (out []byte) {
+	out = make([]byte, 3*len(words))
+	for i, w := range words {
+		golay24.PutEncoded(out[3*i:3*i+3], w)
+	}
+	return
+}
+
+func wordRange(m int) (words []uint16) {
+	words = make([]uint16, m)
+	for i := range m {
+		words[i] = uint16(i)
+	}
+	return
 }
