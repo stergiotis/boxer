@@ -129,7 +129,7 @@ func TestDeleteAnUnknownKindByItsStoreKey(t *testing.T) {
 	raw := persiststore.NewPersistStore(exec, nil, persiststore.PersistStoreConfig{})
 	defer raw.Close()
 	const id = "zz/future-kind/1"
-	require.NoError(t, raw.Begin(id, time.Now().UTC().Add(-time.Minute)).AddOwner(persiststore.Owner{ID: id, AppId: string(playId)}).Commit())
+	require.NoError(t, raw.Begin(t.Context(), id, time.Now().UTC().Add(-time.Minute)).AddOwner(persiststore.Owner{ID: id, AppId: string(playId)}).Commit())
 	_, err = raw.Flush(context.Background())
 	require.NoError(t, err)
 	_, client, _ := serve(t, b)

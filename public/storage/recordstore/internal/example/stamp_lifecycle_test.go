@@ -35,11 +35,11 @@ func TestStampDiscardPendingClearsAmbient(t *testing.T) {
 	})
 
 	// Abandon a stamped Begin (no Commit, no Rollback), then recover.
-	_ = dev.Begin(1, recordstore.SeqTs(1))
+	_ = dev.Begin(t.Context(), 1, recordstore.SeqTs(1))
 	dev.DiscardPending()
 
 	// A clean write afterwards must carry exactly its own stamp.
-	require.NoError(t, dev.Begin(2, recordstore.SeqTs(2)).
+	require.NoError(t, dev.Begin(t.Context(), 2, recordstore.SeqTs(2)).
 		AddIdentity(Identity{ID: 2, Status: "live"}).Commit())
 
 	recs, err := lowlevel.InEntityDeviceTableTransferRecords(dev.dml, nil)
@@ -98,7 +98,7 @@ func TestStampFlushRunsWithNothingBuffered(t *testing.T) {
 	require.Equal(t, 1, stamper.flushes, "the ordered stamp flush must run even with no rows to insert")
 
 	// A stamped frame that never becomes a row: same obligation.
-	require.NoError(t, dev.Begin(1, recordstore.SeqTs(1)).Rollback())
+	require.NoError(t, dev.Begin(ctx, 1, recordstore.SeqTs(1)).Rollback())
 	n, err = dev.Flush(ctx)
 	require.NoError(t, err)
 	require.Zero(t, n)

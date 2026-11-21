@@ -86,7 +86,7 @@ func startTee(t *testing.T, opts sysmtee.Options) (*sysmtee.Tee, *recordingExec,
 	if opts.Host == "" {
 		opts.Host = "box1"
 	}
-	tee, err := sysmtee.Start(opts)
+	tee, err := sysmtee.Start(t.Context(), opts)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tee.Stop(); store.Close() })
 
@@ -355,13 +355,13 @@ func TestStart_RequiresBusStoreAndHost(t *testing.T) {
 	store := sysmfacts.NewSysmetricsStore(&recordingExec{}, nil, sysmfacts.SysmetricsStoreConfig{})
 	t.Cleanup(store.Close)
 
-	_, err := sysmtee.Start(sysmtee.Options{Store: store, Host: "box1"})
+	_, err := sysmtee.Start(t.Context(), sysmtee.Options{Store: store, Host: "box1"})
 	require.Error(t, err)
-	_, err = sysmtee.Start(sysmtee.Options{Bus: client, Host: "box1"})
+	_, err = sysmtee.Start(t.Context(), sysmtee.Options{Bus: client, Host: "box1"})
 	require.Error(t, err)
 	// The host cannot be recovered from the message, so an unset one is a
 	// configuration error rather than a silent empty token on every row.
-	_, err = sysmtee.Start(sysmtee.Options{Bus: client, Store: store})
+	_, err = sysmtee.Start(t.Context(), sysmtee.Options{Bus: client, Store: store})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Host")
 }

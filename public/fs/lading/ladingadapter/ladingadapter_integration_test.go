@@ -186,7 +186,7 @@ func TestExpiredSnapshotsAreNotListed(t *testing.T) {
 	// Write a root row directly, expired an hour ago. It is a complete
 	// snapshot by every structural test; only the cutoff hides it.
 	past := time.Now().UTC().Add(-48 * time.Hour)
-	require.NoError(t, h.stores.Meta.Begin(testMount.Value(), past, ladingmeta.MetaEnvelope{
+	require.NoError(t, h.stores.Meta.Begin(ctx, testMount.Value(), past, ladingmeta.MetaEnvelope{
 		NaturalKey: []byte("."), ExpiresAt: time.Now().UTC().Add(-time.Hour),
 	}).AddLadingEntry(ladingmeta.LadingEntry{
 		Kind: "entry", NodeKind: "dir", Content: "none", Mode: uint32(fs.ModeDir | 0o755),

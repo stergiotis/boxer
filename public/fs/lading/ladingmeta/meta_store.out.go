@@ -296,7 +296,7 @@ func (inst *MetaStore) readTable() string {
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *MetaStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -475,7 +475,7 @@ type MetaEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -504,16 +504,10 @@ func (inst *MetaEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and the pass-through envelope, under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *MetaStore) Begin(id uint64, ts time.Time, env MetaEnvelope) *MetaEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ts, env)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *MetaStore) BeginCtx(ctx context.Context, id uint64, ts time.Time, env MetaEnvelope) *MetaEntityBuilder {
+// (Key, Order) and the pass-through envelope, under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *MetaStore) Begin(ctx context.Context, id uint64, ts time.Time, env MetaEnvelope) *MetaEntityBuilder {
 	lowlevel.InEntityFsmetaTableBeginEntity(inst.dml)
 	lowlevel.InEntityFsmetaTableSetId(inst.dml, id, env.NaturalKey)
 	lowlevel.InEntityFsmetaTableSetTimestamp(inst.dml, ts)
@@ -660,13 +654,8 @@ func (inst *MetaEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *MetaStore) IngestLadingEntry(ts time.Time, rows []LadingEntry) (err error) {
-	return inst.IngestLadingEntryCtx(context.Background(), ts, rows)
-}
-
-// IngestLadingEntryCtx is IngestLadingEntry with the context BeginCtx hands the
-// configured stampers.
-func (inst *MetaStore) IngestLadingEntryCtx(ctx context.Context, ts time.Time, rows []LadingEntry) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *MetaStore) IngestLadingEntry(ctx context.Context, ts time.Time, rows []LadingEntry) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -674,7 +663,7 @@ func (inst *MetaStore) IngestLadingEntryCtx(ctx context.Context, ts time.Time, r
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, MetaEnvelope{NaturalKey: rows[i].NaturalKey}).AddLadingEntry(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, MetaEnvelope{NaturalKey: rows[i].NaturalKey}).AddLadingEntry(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest ladingEntry row %d: %w", i, err)
 			return
@@ -692,13 +681,8 @@ func (inst *MetaStore) IngestLadingEntryCtx(ctx context.Context, ts time.Time, r
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *MetaStore) IngestLadingSnapshot(ts time.Time, rows []LadingSnapshot) (err error) {
-	return inst.IngestLadingSnapshotCtx(context.Background(), ts, rows)
-}
-
-// IngestLadingSnapshotCtx is IngestLadingSnapshot with the context BeginCtx hands the
-// configured stampers.
-func (inst *MetaStore) IngestLadingSnapshotCtx(ctx context.Context, ts time.Time, rows []LadingSnapshot) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *MetaStore) IngestLadingSnapshot(ctx context.Context, ts time.Time, rows []LadingSnapshot) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -706,7 +690,7 @@ func (inst *MetaStore) IngestLadingSnapshotCtx(ctx context.Context, ts time.Time
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, MetaEnvelope{NaturalKey: rows[i].NaturalKey}).AddLadingSnapshot(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, MetaEnvelope{NaturalKey: rows[i].NaturalKey}).AddLadingSnapshot(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest ladingSnapshot row %d: %w", i, err)
 			return

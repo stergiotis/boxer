@@ -34,15 +34,15 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 	// Entity 1: all four components (Identity carries the optional Nick);
 	// entity 2: identity only, Nick absent; entity 3: battery + tags via
 	// the per-kind ingest verbs.
-	require.NoError(t, st.Begin(1, t0).
+	require.NoError(t, st.Begin(ctx, 1, t0).
 		AddIdentity(Identity{ID: 1, Status: "IDLE", Nick: option.Some("alpha")}).
 		AddBattery(Battery{ID: 1, Charge: 9000}).
 		AddTagged(Tagged{ID: 1, Tags: []string{"survey", "urgent"}}).
 		AddLocated(Located{ID: 1, Lat: 47.5, Lng: 8.5, Cell: 12345}).
 		Commit())
-	require.NoError(t, st.IngestIdentity(t0, []Identity{{ID: 2, Status: "CHARGING"}}))
-	require.NoError(t, st.IngestBattery(t0, []Battery{{ID: 3, Charge: 150}}))
-	require.NoError(t, st.IngestTagged(t0, []Tagged{{ID: 3, Tags: []string{"idle"}}}))
+	require.NoError(t, st.IngestIdentity(ctx, t0, []Identity{{ID: 2, Status: "CHARGING"}}))
+	require.NoError(t, st.IngestBattery(ctx, t0, []Battery{{ID: 3, Charge: 150}}))
+	require.NoError(t, st.IngestTagged(ctx, t0, []Tagged{{ID: 3, Tags: []string{"idle"}}}))
 	require.Equal(t, 4, st.Buffered())
 	n, err := st.Flush(ctx)
 	require.NoError(t, err)
@@ -95,7 +95,7 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 	}
 
 	// State view: a new version for entity 1 carrying only Battery.
-	require.NoError(t, st.Begin(1, t1).AddBattery(Battery{ID: 1, Charge: 8500}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t1).AddBattery(Battery{ID: 1, Charge: 8500}).Commit())
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 
@@ -112,7 +112,7 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 	require.Equal(t, latest.Ts, got.Ts)
 
 	// Delete = tombstone: GetLive reads absent, Latest still sees the row.
-	require.NoError(t, st.Delete(1, t2))
+	require.NoError(t, st.Delete(ctx, 1, t2))
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 

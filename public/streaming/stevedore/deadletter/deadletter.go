@@ -38,14 +38,14 @@ type Store struct {
 var _ StoreI = (*Store)(nil)
 
 // Add buffers one row; Flush makes it durable.
-func (inst *Store) Add(_ context.Context, row stevedorefacts.DeadLetter) (err error) {
+func (inst *Store) Add(ctx context.Context, row stevedorefacts.DeadLetter) (err error) {
 	run := inst.Run
 	if run == "" {
 		if ri, riErr := runinfo.Get(); riErr == nil {
 			run = ri.RunId
 		}
 	}
-	err = inst.Store.Begin(row.Id, row.Ts, stevedorefacts.StevedoreEnvelope{NaturalKey: row.NaturalKey}).
+	err = inst.Store.Begin(ctx, row.Id, row.Ts, stevedorefacts.StevedoreEnvelope{NaturalKey: row.NaturalKey}).
 		AddOrigin(stevedorefacts.Origin{Id: row.Id, Run: run}).
 		AddDeadLetter(row).Commit()
 	if err != nil {

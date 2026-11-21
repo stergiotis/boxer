@@ -32,7 +32,7 @@ import (
 )
 
 // ReferenceStamper is the ADR-0112 M1 seam. A generated store consults its
-// configured stampers once per Begin, with BeginCtx's context (ADR-0295
+// configured stampers once per Begin, with Begin's context (ADR-0295
 // §SD7); each yields the surrogate ids to stamp as
 // additive HighCardRef memberships onto every attribute the entity writes (via
 // the DML ambient-membership primitive). Current captures whatever context it

@@ -53,7 +53,7 @@ func TestMintedStoreKeysAreUniqueAcrossStores(t *testing.T) {
 			id := identifier.TaggedId(key)
 			assert.Equal(t, mintedTestStream.Value(), id.GetTag().GetValue())
 			assert.NotZero(t, id.RemoveTag().Value(), "body 0 is invalid in every stream")
-			require.NoError(t, st.Begin(key, now).AddMintedLabel(MintedLabel{Text: "x"}).Commit())
+			require.NoError(t, st.Begin(ctx, key, now).AddMintedLabel(MintedLabel{Text: "x"}).Commit())
 		}
 	}
 	_, err = a.Flush(ctx)

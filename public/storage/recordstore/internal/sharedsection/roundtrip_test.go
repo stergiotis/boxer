@@ -45,7 +45,7 @@ func TestAssetSharedSectionRoundTrip(t *testing.T) {
 	// frame once per entity (ADR-0146 D6; asserted below) — so the row is
 	// composed through Raw()'s section surface, the escape hatch ADR-0100
 	// SD6 sanctions for attribute-level manipulation of the open frame.
-	b := st.Begin(1, t0)
+	b := st.Begin(ctx, 1, t0)
 	sec := b.Raw().GetSectionSymbol()
 	nameAttr := sec.BeginAttribute("gizmo")
 	nameAttr.AddMembershipLowCardRefP(kindAssetName)
@@ -58,8 +58,8 @@ func TestAssetSharedSectionRoundTrip(t *testing.T) {
 
 	// Two more entities carrying one kind each through the typed verbs —
 	// sharing the section ACROSS rows needs no escape hatch.
-	require.NoError(t, st.Begin(2, t0).AddLabel(Label{ID: 2, Name: "widget"}).Commit())
-	require.NoError(t, st.Begin(3, t0).AddState(State{ID: 3, Phase: "retired"}).Commit())
+	require.NoError(t, st.Begin(ctx, 2, t0).AddLabel(Label{ID: 2, Name: "widget"}).Commit())
+	require.NoError(t, st.Begin(ctx, 3, t0).AddState(State{ID: 3, Phase: "retired"}).Commit())
 	n, err := st.Flush(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 3, n)
@@ -95,7 +95,7 @@ func TestAssetSharedSectionRoundTrip(t *testing.T) {
 	// Commit reported a state-transition error; the entity above had to be
 	// composed through Raw() for that reason. The contributions are buffered
 	// now and the frame closes once, at Commit.
-	require.NoError(t, st.Begin(9, t0).
+	require.NoError(t, st.Begin(ctx, 9, t0).
 		AddLabel(Label{ID: 9, Name: "gadget"}).
 		AddState(State{ID: 9, Phase: "spare"}).
 		Commit())
@@ -129,7 +129,7 @@ func TestAssetBuilderRefusesDoubleAddAndRawMixing(t *testing.T) {
 	t0 := time.Unix(1_600_000_000, 0).UTC()
 
 	buffered := st.Buffered()
-	err = st.Begin(11, t0).
+	err = st.Begin(ctx, 11, t0).
 		AddLabel(Label{ID: 11, Name: "first"}).
 		AddLabel(Label{ID: 11, Name: "second"}).
 		Commit()
@@ -137,7 +137,7 @@ func TestAssetBuilderRefusesDoubleAddAndRawMixing(t *testing.T) {
 	require.Contains(t, ebtest.Text(t, err), "Label")
 	require.Equal(t, buffered, st.Buffered(), "a failed Commit must not leave a partial row buffered")
 
-	b := st.Begin(12, t0).AddLabel(Label{ID: 12, Name: "typed"})
+	b := st.Begin(ctx, 12, t0).AddLabel(Label{ID: 12, Name: "typed"})
 	b.Raw() // the escape hatch, on an entity that already carries a component
 	err = b.Commit()
 	require.Error(t, err, "typed Adds and Raw are exclusive per entity")

@@ -41,7 +41,7 @@ func TestDeviceStoreOpenAndFlushIfDue(t *testing.T) {
 
 	for i := range 5 {
 		id := uint64(i + 1)
-		require.NoError(t, st.Begin(id, t0).AddBattery(Battery{ID: id, Charge: 42}).Commit())
+		require.NoError(t, st.Begin(ctx, id, t0).AddBattery(Battery{ID: id, Charge: 42}).Commit())
 		_, err = st.FlushIfDue(ctx)
 		require.NoError(t, err)
 	}
@@ -72,7 +72,7 @@ func TestDeviceStoreFlushIfDueZeroIsNoOp(t *testing.T) {
 
 	for i := range 4 {
 		id := uint64(i + 1)
-		require.NoError(t, st.Begin(id, t0).AddBattery(Battery{ID: id, Charge: 1}).Commit())
+		require.NoError(t, st.Begin(ctx, id, t0).AddBattery(Battery{ID: id, Charge: 1}).Commit())
 		n, ferr := st.FlushIfDue(ctx)
 		require.NoError(t, ferr)
 		require.Zero(t, n)

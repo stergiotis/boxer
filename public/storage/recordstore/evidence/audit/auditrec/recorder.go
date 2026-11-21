@@ -488,7 +488,7 @@ func (inst *Recorder[B]) swapLocked() {
 func (inst *Recorder[B]) drain(ctx context.Context) (err error) {
 	for len(inst.backlog) > 0 {
 		b := &inst.backlog[0]
-		if err = inst.seal(b); err != nil {
+		if err = inst.seal(ctx, b); err != nil {
 			return
 		}
 		if ferr := b.batch.Flush(ctx); ferr != nil {
@@ -508,7 +508,7 @@ func (inst *Recorder[B]) drain(ctx context.Context) (err error) {
 // seal puts b's seal into its batch, chained to the last durable seal,
 // once: a batch retried after a failed flush keeps the seal it has, since
 // nothing lands ahead of it. The caller holds flushMu.
-func (inst *Recorder[B]) seal(b *heldBatch[B]) (err error) {
+func (inst *Recorder[B]) seal(ctx context.Context, b *heldBatch[B]) (err error) {
 	if b.sealId != 0 {
 		return nil
 	}
@@ -516,7 +516,7 @@ func (inst *Recorder[B]) seal(b *heldBatch[B]) (err error) {
 	key := "seal|" + inst.unique(at)
 	id := xxh3.HashString(key)
 	spec := SealSpec{Scheme: inst.scheme, Stream: inst.run, Prev: inst.lastSeal.Id, PrevDigest: inst.lastSeal.Digest, Rows: b.sealed}
-	digest, err := b.batch.Seal(id, at, key, audit.Origin{Id: id, Run: inst.run}, spec)
+	digest, err := b.batch.Seal(ctx, id, at, key, audit.Origin{Id: id, Run: inst.run}, spec)
 	if err != nil {
 		return eh.Errorf("auditrec: seal: %w", err)
 	}

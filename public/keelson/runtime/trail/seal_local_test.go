@@ -53,14 +53,14 @@ func TestSealsHoldOverTheRowsAsTheyReadBack(t *testing.T) {
 	// an origin-only row, a metrics row and a query run.
 	st := trail.NewTrailStore(exec, nil, trail.TrailStoreConfig{})
 	t.Cleanup(st.Close)
-	b := st.Begin(97, time.Now().UTC(), trail.TrailEnvelope{NaturalKey: []byte("origin-only")})
+	b := st.Begin(ctx, 97, time.Now().UTC(), trail.TrailEnvelope{NaturalKey: []byte("origin-only")})
 	b.AddOrigin(trail.Origin{Id: 97, Run: "run-seal"})
 	require.NoError(t, b.Commit())
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 	sysm := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{})
 	t.Cleanup(sysm.Close)
-	require.NoError(t, sysm.Begin(98, time.Now().UTC(), sysmfacts.SysmetricsEnvelope{NaturalKey: []byte("host-a")}).
+	require.NoError(t, sysm.Begin(ctx, 98, time.Now().UTC(), sysmfacts.SysmetricsEnvelope{NaturalKey: []byte("host-a")}).
 		AddOrigin(sysmfacts.Origin{Id: 98, Run: "run-seal"}).
 		AddSysMem(sysmfacts.SysMem{Id: 98, NaturalKey: []byte("host-a"), Kind: "sysMem", Host: "host-a"}).Commit())
 	_, err = sysm.Flush(ctx)
@@ -94,7 +94,7 @@ func TestSealsHoldOverTheRowsAsTheyReadBack(t *testing.T) {
 
 	// A row of the trail's kinds written past the recorder, in the run, is
 	// a gap.
-	b = st.Begin(99, time.Now().UTC(), trail.TrailEnvelope{NaturalKey: []byte("stray")})
+	b = st.Begin(ctx, 99, time.Now().UTC(), trail.TrailEnvelope{NaturalKey: []byte("stray")})
 	b.AddOrigin(trail.Origin{Id: 99, Run: "run-seal"}).AddAuditEvent(e)
 	require.NoError(t, b.Commit())
 	_, err = st.Flush(ctx)

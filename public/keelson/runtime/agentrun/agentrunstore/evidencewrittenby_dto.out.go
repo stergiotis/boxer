@@ -9,7 +9,7 @@ const EvidenceWrittenByKind = "evidenceWrittenBy"
 
 // EvidenceWrittenBy is the evidence profile's written-by component
 // (law L35): the identity the row was committed
-// under, as evidence.IdentityFrom reads it off BeginCtx's context. The
+// under, as evidence.IdentityFrom reads it off Begin's context. The
 // store fills it; a caller's value is replaced.
 type EvidenceWrittenBy struct {
 	_ struct{} `kind:"evidenceWrittenBy"`

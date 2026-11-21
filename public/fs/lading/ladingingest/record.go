@@ -44,7 +44,7 @@ func RecordPolicy(ctx context.Context, st *ladingpolicy.PolicyStore, mount ident
 		return eh.Errorf("mount id is not a valid tagged id")
 	}
 	origin.Id = mount.Value()
-	err = st.Begin(mount.Value(), time.Now().UTC(), ladingpolicy.PolicyEnvelope{
+	err = st.Begin(ctx, mount.Value(), time.Now().UTC(), ladingpolicy.PolicyEnvelope{
 		NaturalKey: []byte(name),
 	}).AddOrigin(origin).AddLadingMount(ladingpolicy.LadingMount{
 		Kind:      "mount",

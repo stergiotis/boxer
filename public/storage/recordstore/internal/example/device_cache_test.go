@@ -78,7 +78,7 @@ func TestDeviceStoreCacheBatchesFetches(t *testing.T) {
 
 	t0 := time.Unix(1_600_000_000, 0).UTC()
 	for id := uint64(1); id <= 4; id++ {
-		require.NoError(t, st.Begin(id, t0).AddIdentity(Identity{ID: id, Status: "IDLE"}).Commit())
+		require.NoError(t, st.Begin(ctx, id, t0).AddIdentity(Identity{ID: id, Status: "IDLE"}).Commit())
 	}
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
@@ -171,7 +171,7 @@ func TestDeviceStoreLocalWritesWriteThrough(t *testing.T) {
 	t1 := t0.Add(time.Hour)
 	t2 := t0.Add(2 * time.Hour)
 
-	require.NoError(t, st.Begin(1, t0).AddBattery(Battery{ID: 1, Charge: 9000}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t0).AddBattery(Battery{ID: 1, Charge: 9000}).Commit())
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 
@@ -185,7 +185,7 @@ func TestDeviceStoreLocalWritesWriteThrough(t *testing.T) {
 	}
 
 	// A new version writes through: visible immediately, before the flush.
-	require.NoError(t, st.Begin(1, t1).AddBattery(Battery{ID: 1, Charge: 100}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t1).AddBattery(Battery{ID: 1, Charge: 100}).Commit())
 	ent, has := c.Get(1)
 	require.True(t, has, "write-through: the local write must be visible immediately")
 	require.Equal(t, uint64(100), ent.Battery.Val.Charge)
@@ -199,7 +199,7 @@ func TestDeviceStoreLocalWritesWriteThrough(t *testing.T) {
 	// A tombstone writes through the same way — a versioned deletion (Get
 	// is row-level and tombstone-blind by design; GetLive is the
 	// state-view read).
-	require.NoError(t, st.Delete(1, t2))
+	require.NoError(t, st.Delete(ctx, 1, t2))
 	ent, has = c.Get(1)
 	require.True(t, has, "the tombstone is visible immediately")
 	require.Equal(t, recordstore.LifecycleTombstone, ent.Lifecycle)
@@ -234,7 +234,7 @@ func TestDeviceCacheLatestAndStaleness(t *testing.T) {
 	t1 := t0.Add(time.Hour)
 	t2 := t0.Add(2 * time.Hour)
 
-	require.NoError(t, st.Begin(1, t0).AddBattery(Battery{ID: 1, Charge: 9000}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t0).AddBattery(Battery{ID: 1, Charge: 9000}).Commit())
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 
@@ -252,7 +252,7 @@ func TestDeviceCacheLatestAndStaleness(t *testing.T) {
 	// moment Commit returns — no refetch, no invalidation miss — and it
 	// stays across the flush. GetLive is exact without any staleness
 	// signal.
-	require.NoError(t, st.Begin(1, t1).AddBattery(Battery{ID: 1, Charge: 100}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t1).AddBattery(Battery{ID: 1, Charge: 100}).Commit())
 	ent, found = c.GetLive(1)
 	require.True(t, found, "write-through: visible before the flush")
 	require.Equal(t, uint64(100), ent.Battery.Val.Charge)
@@ -280,7 +280,7 @@ func TestDeviceCacheLatestAndStaleness(t *testing.T) {
 
 	// Tombstone: the cached state view reads it as absent while the
 	// row-level Get still surfaces the tombstone row.
-	require.NoError(t, st.Delete(1, t2))
+	require.NoError(t, st.Delete(ctx, 1, t2))
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 	for range c.WorkItem("reload") {
@@ -330,7 +330,7 @@ func TestDeviceCacheGetFetch(t *testing.T) {
 	require.NoError(t, st.EnsureTable(ctx))
 
 	t0 := time.Unix(1_600_000_000, 0).UTC()
-	require.NoError(t, st.Begin(1, t0).AddBattery(Battery{ID: 1, Charge: 7}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t0).AddBattery(Battery{ID: 1, Charge: 7}).Commit())
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 
@@ -353,7 +353,7 @@ func TestDeviceCacheGetFetch(t *testing.T) {
 	// serve (read-your-writes); DiscardPending withdraws it — the cached
 	// entity never became durable, so the views invalidate — and reads
 	// fall back to the flushed row.
-	require.NoError(t, st.Begin(1, t0.Add(time.Hour)).AddBattery(Battery{ID: 1, Charge: 8}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t0.Add(time.Hour)).AddBattery(Battery{ID: 1, Charge: 8}).Commit())
 	ent, found, err = c.GetFetch(ctx, 1)
 	require.NoError(t, err)
 	require.True(t, found)
@@ -388,7 +388,7 @@ func TestDeviceCacheGetFetchDirtyRawWindow(t *testing.T) {
 	require.NoError(t, st.EnsureTable(ctx))
 
 	t0 := time.Unix(1_600_000_000, 0).UTC()
-	require.NoError(t, st.Begin(1, t0).AddBattery(Battery{ID: 1, Charge: 7}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t0).AddBattery(Battery{ID: 1, Charge: 7}).Commit())
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 
@@ -401,7 +401,7 @@ func TestDeviceCacheGetFetchDirtyRawWindow(t *testing.T) {
 	// A Raw() commit: dirty, and the cache entry invalidated (not replaced).
 	// Taking the raw handle is the whole signal — it marks the commit
 	// unmaterializable whether or not anything is written through it.
-	b := st.Begin(1, t0.Add(time.Hour))
+	b := st.Begin(ctx, 1, t0.Add(time.Hour))
 	_ = b.Raw()
 	require.NoError(t, b.Commit())
 	_, hit := c.Get(1)

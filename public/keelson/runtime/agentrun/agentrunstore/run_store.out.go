@@ -355,7 +355,7 @@ func (inst *RunStore) isTombstone(e *RunEntity) bool {
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *RunStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -538,7 +538,7 @@ type RunEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -604,16 +604,10 @@ func (inst *RunEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and a live lifecycle, under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *RunStore) Begin(id uint64, ts time.Time) *RunEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ts)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *RunStore) BeginCtx(ctx context.Context, id uint64, ts time.Time) *RunEntityBuilder {
+// (Key, Order) and a live lifecycle, under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *RunStore) Begin(ctx context.Context, id uint64, ts time.Time) *RunEntityBuilder {
 	lowlevel.InEntityAgentrunTableBeginEntity(inst.dml)
 	lowlevel.InEntityAgentrunTableSetId(inst.dml, id)
 	lowlevel.InEntityAgentrunTableSetTimestamp(inst.dml, ts)
@@ -783,13 +777,8 @@ func (inst *RunEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *RunStore) IngestRun(ts time.Time, rows []Run) (err error) {
-	return inst.IngestRunCtx(context.Background(), ts, rows)
-}
-
-// IngestRunCtx is IngestRun with the context BeginCtx hands the
-// configured stampers.
-func (inst *RunStore) IngestRunCtx(ctx context.Context, ts time.Time, rows []Run) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *RunStore) IngestRun(ctx context.Context, ts time.Time, rows []Run) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -797,7 +786,7 @@ func (inst *RunStore) IngestRunCtx(ctx context.Context, ts time.Time, rows []Run
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddRun(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddRun(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest run row %d: %w", i, err)
 			return
@@ -983,7 +972,7 @@ func (inst *RunStore) CanonicalItem(ent *RunEntity) (item []byte, err error) {
 	if inst.scratch == nil {
 		inst.scratch = NewRunStore(nil, nil, RunStoreConfig{TombstoneDetect: inst.cfg.TombstoneDetect, TombstoneWrite: inst.cfg.TombstoneWrite})
 	}
-	b := inst.scratch.Begin(ent.ID, ent.Ts)
+	b := inst.scratch.Begin(context.Background(), ent.ID, ent.Ts) //boxer:lint disable=CS020 reason="an in-memory re-encode on a scratch store without stampers: no I/O, no call identity"
 	if ent.Run.Has {
 		b.AddRun(ent.Run.Val)
 	}
@@ -1430,15 +1419,10 @@ func (inst *RunStore) Replay(ctx context.Context, key uint64, fromOrder time.Tim
 // pair is the marker). Either way the deletion writes through to
 // attached cache views like any commit — versioned, so GetLive reads
 // the key as absent immediately.
-func (inst *RunStore) Delete(id uint64, ts time.Time) (err error) {
-	return inst.DeleteCtx(context.Background(), id, ts)
-}
-
-// DeleteCtx is Delete with the context BeginCtx hands the configured
-// stampers.
-func (inst *RunStore) DeleteCtx(ctx context.Context, id uint64, ts time.Time) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *RunStore) Delete(ctx context.Context, id uint64, ts time.Time) (err error) {
 	if inst.cfg.TombstoneWrite != nil {
-		b := inst.BeginCtx(ctx, id, ts)
+		b := inst.Begin(ctx, id, ts)
 		b.tombstone = true
 		inst.cfg.TombstoneWrite(b)
 		return b.Commit()

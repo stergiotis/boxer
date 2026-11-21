@@ -323,7 +323,7 @@ func (inst *ExampleStore) readTable() string {
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *ExampleStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -502,7 +502,7 @@ type ExampleEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -523,16 +523,10 @@ func (inst *ExampleEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and the pass-through envelope, under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *ExampleStore) Begin(id uint64, ts time.Time, env ExampleEnvelope) *ExampleEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ts, env)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *ExampleStore) BeginCtx(ctx context.Context, id uint64, ts time.Time, env ExampleEnvelope) *ExampleEntityBuilder {
+// (Key, Order) and the pass-through envelope, under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *ExampleStore) Begin(ctx context.Context, id uint64, ts time.Time, env ExampleEnvelope) *ExampleEntityBuilder {
 	lowlevel.InEntityAuditexampleTableBeginEntity(inst.dml)
 	lowlevel.InEntityAuditexampleTableSetId(inst.dml, id, env.NaturalKey)
 	lowlevel.InEntityAuditexampleTableSetTimestamp(inst.dml, ts)
@@ -695,13 +689,8 @@ func (inst *ExampleEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *ExampleStore) IngestOrigin(ts time.Time, rows []Origin) (err error) {
-	return inst.IngestOriginCtx(context.Background(), ts, rows)
-}
-
-// IngestOriginCtx is IngestOrigin with the context BeginCtx hands the
-// configured stampers.
-func (inst *ExampleStore) IngestOriginCtx(ctx context.Context, ts time.Time, rows []Origin) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *ExampleStore) IngestOrigin(ctx context.Context, ts time.Time, rows []Origin) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -709,7 +698,7 @@ func (inst *ExampleStore) IngestOriginCtx(ctx context.Context, ts time.Time, row
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, ExampleEnvelope{}).AddOrigin(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, ExampleEnvelope{}).AddOrigin(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest origin row %d: %w", i, err)
 			return
@@ -727,13 +716,8 @@ func (inst *ExampleStore) IngestOriginCtx(ctx context.Context, ts time.Time, row
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *ExampleStore) IngestAuditEvent(ts time.Time, rows []AuditEvent) (err error) {
-	return inst.IngestAuditEventCtx(context.Background(), ts, rows)
-}
-
-// IngestAuditEventCtx is IngestAuditEvent with the context BeginCtx hands the
-// configured stampers.
-func (inst *ExampleStore) IngestAuditEventCtx(ctx context.Context, ts time.Time, rows []AuditEvent) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *ExampleStore) IngestAuditEvent(ctx context.Context, ts time.Time, rows []AuditEvent) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -741,7 +725,7 @@ func (inst *ExampleStore) IngestAuditEventCtx(ctx context.Context, ts time.Time,
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, ExampleEnvelope{}).AddAuditEvent(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, ExampleEnvelope{}).AddAuditEvent(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest auditEvent row %d: %w", i, err)
 			return
@@ -759,13 +743,8 @@ func (inst *ExampleStore) IngestAuditEventCtx(ctx context.Context, ts time.Time,
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *ExampleStore) IngestEvidenceSeal(ts time.Time, rows []EvidenceSeal) (err error) {
-	return inst.IngestEvidenceSealCtx(context.Background(), ts, rows)
-}
-
-// IngestEvidenceSealCtx is IngestEvidenceSeal with the context BeginCtx hands the
-// configured stampers.
-func (inst *ExampleStore) IngestEvidenceSealCtx(ctx context.Context, ts time.Time, rows []EvidenceSeal) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *ExampleStore) IngestEvidenceSeal(ctx context.Context, ts time.Time, rows []EvidenceSeal) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -773,7 +752,7 @@ func (inst *ExampleStore) IngestEvidenceSealCtx(ctx context.Context, ts time.Tim
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, ExampleEnvelope{}).AddEvidenceSeal(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, ExampleEnvelope{}).AddEvidenceSeal(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest evidenceSeal row %d: %w", i, err)
 			return
@@ -955,7 +934,7 @@ func (inst *ExampleStore) CanonicalItem(ent *ExampleEntity) (item []byte, err er
 	if inst.scratch == nil {
 		inst.scratch = NewExampleStore(nil, nil, ExampleStoreConfig{})
 	}
-	b := inst.scratch.Begin(ent.ID, ent.Ts, ent.ExampleEnvelope)
+	b := inst.scratch.Begin(context.Background(), ent.ID, ent.Ts, ent.ExampleEnvelope) //boxer:lint disable=CS020 reason="an in-memory re-encode on a scratch store without stampers: no I/O, no call identity"
 	if ent.Origin.Has {
 		b.AddOrigin(ent.Origin.Val)
 	}

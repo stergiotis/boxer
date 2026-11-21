@@ -28,7 +28,7 @@ func TestRevStoreSupersedesInPlace(t *testing.T) {
 	require.NoError(t, st.VerifySchema(ctx), "fresh table must match the generated schema")
 
 	write := func(id string, ord uint64, rev uint32, text *string) {
-		b := st.Begin(id, ord, RevEnvelope{Rev: rev})
+		b := st.Begin(ctx, id, ord, RevEnvelope{Rev: rev})
 		if text != nil {
 			b.AddRevNote(RevNote{Text: *text})
 		}

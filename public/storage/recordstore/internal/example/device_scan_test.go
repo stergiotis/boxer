@@ -27,13 +27,13 @@ func TestDeviceStoreScan(t *testing.T) {
 
 	t0 := time.Unix(1_600_000_000, 0).UTC()
 	t1 := t0.Add(time.Hour)
-	require.NoError(t, st.Begin(1, t0).
+	require.NoError(t, st.Begin(ctx, 1, t0).
 		AddIdentity(Identity{ID: 1, Status: "IDLE"}).
 		AddBattery(Battery{ID: 1, Charge: 9000}).
 		Commit())
-	require.NoError(t, st.IngestIdentity(t0, []Identity{{ID: 2, Status: "CHARGING"}}))
-	require.NoError(t, st.IngestBattery(t0, []Battery{{ID: 3, Charge: 150}}))
-	require.NoError(t, st.Begin(1, t1).AddBattery(Battery{ID: 1, Charge: 800}).Commit())
+	require.NoError(t, st.IngestIdentity(ctx, t0, []Identity{{ID: 2, Status: "CHARGING"}}))
+	require.NoError(t, st.IngestBattery(ctx, t0, []Battery{{ID: 3, Charge: 150}}))
+	require.NoError(t, st.Begin(ctx, 1, t1).AddBattery(Battery{ID: 1, Charge: 800}).Commit())
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 

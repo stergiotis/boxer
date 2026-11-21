@@ -47,7 +47,7 @@ func teeBundles(t *testing.T, host string, bundles []*sysmsnap.BundleSnapshot) {
 	require.NoError(t, store.VerifySchema(context.Background()))
 
 	bus := inprocbus.NewInst(zerolog.Nop())
-	tee, err := sysmtee.Start(sysmtee.Options{
+	tee, err := sysmtee.Start(t.Context(), sysmtee.Options{
 		Bus:           bus.NewClient("tee", []app.SubjectFilter{{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionSub}}),
 		Store:         store,
 		Host:          host,

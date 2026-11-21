@@ -27,7 +27,7 @@ func TestScanOrderAndBound(t *testing.T) {
 		ord uint64
 		rev uint32
 	}{{"a", 1, 2}, {"b", 2, 0}, {"c", 3, 1}} {
-		require.NoError(t, st.Begin(w.id, w.ord, RevEnvelope{Rev: w.rev}).AddRevNote(RevNote{Text: w.id}).Commit())
+		require.NoError(t, st.Begin(ctx, w.id, w.ord, RevEnvelope{Rev: w.rev}).AddRevNote(RevNote{Text: w.id}).Commit())
 	}
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)

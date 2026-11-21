@@ -40,7 +40,7 @@ var _ recordstore.ExecutorI = printingExecutor{}
 func ExampleExecutorI() {
 	ctx := context.Background()
 	store := example.NewDeviceStore(printingExecutor{}, nil, example.DeviceStoreConfig{})
-	err := store.IngestBattery(recordstore.SeqTs(1), []example.Battery{{ID: 1, Charge: 80}, {ID: 2, Charge: 55}})
+	err := store.IngestBattery(ctx, recordstore.SeqTs(1), []example.Battery{{ID: 1, Charge: 80}, {ID: 2, Charge: 55}})
 	if err != nil {
 		panic(err)
 	}

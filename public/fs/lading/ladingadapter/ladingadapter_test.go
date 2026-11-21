@@ -609,7 +609,7 @@ func TestAPartialWalkIsNotAView(t *testing.T) {
 	h := seed(t)
 	ctx := context.Background()
 	partial := h.res.Snap.Add(time.Minute)
-	require.NoError(t, h.stores.Meta.Begin(testMount.Value(), partial, ladingmeta.MetaEnvelope{
+	require.NoError(t, h.stores.Meta.Begin(ctx, testMount.Value(), partial, ladingmeta.MetaEnvelope{
 		NaturalKey: []byte("orphan.txt"), ExpiresAt: h.res.ExpiresAt,
 	}).AddLadingEntry(ladingmeta.LadingEntry{
 		Kind: "entry", NodeKind: "file", Content: "none", Mode: 0o644,

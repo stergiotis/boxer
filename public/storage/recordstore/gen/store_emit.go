@@ -1516,7 +1516,7 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	// Ambient stamping is ADR-0112 M1; the call identity on ctx is ADR-0295 §SD7.
 	p("// ids as ambient HighCardRef memberships onto the open entity,")
 	p("// returning the count so Commit/Rollback pop exactly that many. ctx is")
-	p("// BeginCtx's — the call identity a stamper interns rides on it. No")
+	p("// Begin's — the call identity a stamper interns rides on it. No")
 	p("// stampers means no pushes: inert.")
 	p("func (inst *%s) applyStampers(ctx context.Context) (pushed int) {", inst.storeType())
 	p("\tfor _, s := range inst.stampers {")
@@ -1770,7 +1770,7 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	p("\t// pushed counts the ambient memberships Begin pushed via the stampers;")
 	p("\t// Commit/Rollback pop exactly that many.")
 	p("\tpushed int")
-	p("\t// ident is BeginCtx's call identity: who committed the row, which the")
+	p("\t// ident is Begin's call identity: who committed the row, which the")
 	p("\t// write observer is told — the flush that ships it may run for someone")
 	p("\t// else.")
 	p("\tident callident.CallIdentity")
@@ -1798,32 +1798,26 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	case 2:
 		beginSuffix = ", " + extras[0] + " and " + extras[1]
 	}
-	p("// (Key, Order)%s, under context.Background(): a configured stamper", beginSuffix)
-	p("// that reads a call identity off the context finds none. See BeginCtx.")
+	p("// (Key, Order)%s, under ctx: the context the configured stampers", beginSuffix)
+	p("// consult — where a call identity reaches an actor stamper. The store")
+	p("// stays single-goroutine; ctx is read during this call only.")
 	params := fmt.Sprintf("id %s, %s %s", inst.keyGoType, inst.orderArg(), inst.orderGoType)
 	args := "id, " + inst.orderArg()
 	if hasPT {
 		params += fmt.Sprintf(", env %sEnvelope", inst.StoreName)
 		args += ", env"
 	}
-	p("func (inst *%s) Begin(%s) *%s {", inst.storeType(), params, inst.builderType())
-	p("\treturn inst.BeginCtx(context.Background(), %s)", args)
-	p("}")
-	p("")
-	p("// BeginCtx is Begin with the context the configured stampers consult")
-	p("// — where a call identity reaches an actor stamper. The")
-	p("// store stays single-goroutine; ctx is read during this call only.")
 	if inst.evidenceWrittenBy() {
-		p("func (inst *%s) BeginCtx(ctx context.Context, %s) *%s {", inst.storeType(), params, inst.builderType())
+		p("func (inst *%s) Begin(ctx context.Context, %s) *%s {", inst.storeType(), params, inst.builderType())
 		p("\treturn inst.beginCtx(ctx, %s, true)", args)
 		p("}")
 		p("")
-		p("// beginCtx is BeginCtx; attest false leaves the written-by component to the")
+		p("// beginCtx is Begin; attest false leaves the written-by component to the")
 		p("// caller, for an entity re-entered with its own (CanonicalItem,")
 		p("// AppendChained).")
 		p("func (inst *%s) beginCtx(ctx context.Context, %s, attest bool) *%s {", inst.storeType(), params, inst.builderType())
 	} else {
-		p("func (inst *%s) BeginCtx(ctx context.Context, %s) *%s {", inst.storeType(), params, inst.builderType())
+		p("func (inst *%s) Begin(ctx context.Context, %s) *%s {", inst.storeType(), params, inst.builderType())
 	}
 	lit := fmt.Sprintf("%s{ID: id, %s: %s", inst.entityType(), inst.orderEntityField(), inst.orderArg())
 	if inst.model.stateView {
@@ -1991,13 +1985,8 @@ func (inst emitter) emitIngest(sb *strings.Builder, comps []storeComponent) (err
 		p("// recordstore.ErrDuplicateIngestKey. On any error the rows buffered")
 		p("// so far remain buffered — Flush ships them, DiscardPending drops")
 		p("// them.")
-		p("func (inst *%s) Ingest%s(%s %s, rows []%s) (err error) {", inst.storeType(), c.Kind, ord, inst.orderGoType, c.Kind)
-		p("\treturn inst.Ingest%sCtx(context.Background(), %s, rows)", c.Kind, ord)
-		p("}")
-		p("")
-		p("// Ingest%sCtx is Ingest%s with the context BeginCtx hands the", c.Kind, c.Kind)
-		p("// configured stampers.")
-		p("func (inst *%s) Ingest%sCtx(ctx context.Context, %s %s, rows []%s) (err error) {", inst.storeType(), c.Kind, ord, inst.orderGoType, c.Kind)
+		p("// ctx is what Begin hands the configured stampers.")
+		p("func (inst *%s) Ingest%s(ctx context.Context, %s %s, rows []%s) (err error) {", inst.storeType(), c.Kind, ord, inst.orderGoType, c.Kind)
 		p("\tseen := make(map[%s]struct{}, len(rows))", inst.keyGoType)
 		p("\tfor i := range rows {")
 		p("\t\tif _, dup := seen[rows[i].%s]; dup {", idCol.GoField)
@@ -2018,7 +2007,7 @@ func (inst emitter) emitIngest(sb *strings.Builder, comps []storeComponent) (err
 			}
 			beginArgs += fmt.Sprintf(", %sEnvelope{%s}", inst.StoreName, strings.Join(fields, ", "))
 		}
-		p("\t\terr = inst.BeginCtx(ctx, %s).Add%s(rows[i]).Commit()", beginArgs, c.Kind)
+		p("\t\terr = inst.Begin(ctx, %s).Add%s(rows[i]).Commit()", beginArgs, c.Kind)
 		p("\t\tif err != nil {")
 		p("\t\t\terr = eh.Errorf(\"ingest %s row %%d: %%w\", i, err)", lowerFirst(c.Kind))
 		p("\t\t\treturn")
@@ -2674,10 +2663,10 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 		p("// pair is the marker). Either way the deletion writes through to")
 		p("// attached cache views like any commit — versioned, so GetLive reads")
 		p("// the key as absent immediately.")
-		inst.emitDeleteWrapper(p)
-		p("func (inst *%s) DeleteCtx(ctx context.Context, id %s, %s %s) (err error) {", inst.storeType(), inst.keyGoType, inst.orderArg(), inst.orderGoType)
+		inst.emitDeleteDoc(p)
+		p("func (inst *%s) Delete(ctx context.Context, id %s, %s %s) (err error) {", inst.storeType(), inst.keyGoType, inst.orderArg(), inst.orderGoType)
 		p("\tif inst.cfg.TombstoneWrite != nil {")
-		p("\t\tb := inst.BeginCtx(ctx, %s)", beginArgs)
+		p("\t\tb := inst.Begin(ctx, %s)", beginArgs)
 		p("\t\tb.tombstone = true")
 		p("\t\tinst.cfg.TombstoneWrite(b)")
 		p("\t\treturn b.Commit()")
@@ -2710,9 +2699,9 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 		p("// Lifecycle role; the pair is the whole marker). The deletion writes")
 		p("// through to attached cache views like any commit — versioned, so")
 		p("// GetLive reads the key as absent immediately.")
-		inst.emitDeleteWrapper(p)
-		p("func (inst *%s) DeleteCtx(ctx context.Context, id %s, %s %s) (err error) {", inst.storeType(), inst.keyGoType, inst.orderArg(), inst.orderGoType)
-		p("\tb := inst.BeginCtx(ctx, %s)", beginArgs)
+		inst.emitDeleteDoc(p)
+		p("func (inst *%s) Delete(ctx context.Context, id %s, %s %s) (err error) {", inst.storeType(), inst.keyGoType, inst.orderArg(), inst.orderGoType)
+		p("\tb := inst.Begin(ctx, %s)", beginArgs)
 		p("\tb.tombstone = true")
 		p("\tinst.cfg.TombstoneWrite(b)")
 		p("\treturn b.Commit()")
@@ -2740,15 +2729,10 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	}
 }
 
-// emitDeleteWrapper renders the context-free Delete over DeleteCtx; the
-// caller follows it with DeleteCtx's own doc line and signature.
-func (inst emitter) emitDeleteWrapper(p func(string, ...any)) {
-	p("func (inst *%s) Delete(id %s, %s %s) (err error) {", inst.storeType(), inst.keyGoType, inst.orderArg(), inst.orderGoType)
-	p("\treturn inst.DeleteCtx(context.Background(), id, %s)", inst.orderArg())
-	p("}")
-	p("")
-	p("// DeleteCtx is Delete with the context BeginCtx hands the configured")
-	p("// stampers.")
+// emitDeleteDoc renders the line of Delete's doc that names its ctx; the
+// caller follows it with Delete's signature.
+func (inst emitter) emitDeleteDoc(p func(string, ...any)) {
+	p("// ctx is what Begin hands the configured stampers.")
 }
 
 // emitRefuseKeyPrefix opens a scan verb on a non-string-keyed store with
@@ -3226,9 +3210,9 @@ func (inst emitter) emitCanonicalItem(p func(string, ...any)) {
 		args += ", ent." + inst.StoreName + "Envelope"
 	}
 	if inst.evidenceWrittenBy() {
-		p("\tb := inst.scratch.beginCtx(context.Background(), %s, false)", args)
+		p("\tb := inst.scratch.beginCtx(context.Background(), %s, false) //boxer:lint disable=CS020 reason=\"an in-memory re-encode on a scratch store without stampers: no I/O, no call identity\"", args)
 	} else {
-		p("\tb := inst.scratch.Begin(%s)", args)
+		p("\tb := inst.scratch.Begin(context.Background(), %s) //boxer:lint disable=CS020 reason=\"an in-memory re-encode on a scratch store without stampers: no I/O, no call identity\"", args)
 	}
 	for _, c := range inst.comps {
 		p("\tif ent.%s.Has {", c.Kind)

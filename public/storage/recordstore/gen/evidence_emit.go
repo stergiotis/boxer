@@ -34,7 +34,7 @@ type Evidence struct {
 	// item (ADR-0325 §SD2).
 	Chain bool
 	// WrittenBy puts the written-by component on every row: the identity
-	// the row was committed under, read off BeginCtx's context
+	// the row was committed under, read off Begin's context
 	// (evidence.IdentityFrom), so who wrote a row is in the row and, on a
 	// chained store, inside the digest (law L35).
 	WrittenBy bool
@@ -428,7 +428,7 @@ const EvidenceWrittenByKind = "evidenceWrittenBy"
 
 // EvidenceWrittenBy is the evidence profile's written-by component
 // (law L35): the identity the row was committed
-// under, as evidence.IdentityFrom reads it off BeginCtx's context. The
+// under, as evidence.IdentityFrom reads it off Begin's context. The
 // store fills it; a caller's value is replaced.
 type EvidenceWrittenBy struct {
 	_ struct{} ` + "`kind:\"evidenceWrittenBy\"`" + `
@@ -720,7 +720,7 @@ func (inst emitter) emitVaulted(p func(string, ...any)) {
 	p("// Both stores buffer; Flush makes the rows durable, vault first.")
 	p("func (inst *%s) Write(ctx context.Context, ent *%s, content []*%s) (err error) {", wrapped, ent, vent)
 	p("\tfor _, v := range content {")
-	p("\t\tb := inst.vault.BeginCtx(ctx, v.ID, v.%s, v.%s)", ord, venv)
+	p("\t\tb := inst.vault.Begin(ctx, v.ID, v.%s, v.%s)", ord, venv)
 	for _, vp := range inst.vaultPlans {
 		p("\t\tif v.%s.Has {", vp.KindType)
 		p("\t\t\tb.Add%s(v.%s.Val)", vp.KindType, vp.KindType)
@@ -1013,7 +1013,7 @@ func (inst emitter) emitEvidenceVerbs(p func(string, ...any)) {
 	if inst.evidenceWrittenBy() {
 		p("\tb := inst.beginCtx(ctx, %s, false)", beginArgs)
 	} else {
-		p("\tb := inst.BeginCtx(ctx, %s)", beginArgs)
+		p("\tb := inst.Begin(ctx, %s)", beginArgs)
 	}
 	for _, c := range inst.comps {
 		p("\tif ent.%s.Has {", c.Kind)

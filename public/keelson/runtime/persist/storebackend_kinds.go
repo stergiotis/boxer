@@ -61,7 +61,7 @@ func (inst *StoreBackend) WriteWorkingset(ctx context.Context, row statestore.Wo
 	}
 	defer release()
 	id := persiststore.WorkingsetKey(string(row.AppId), row.Name)
-	err = inst.landLocked(ctx, inst.st.Begin(id, orderOf(row.Ts)).
+	err = inst.landLocked(ctx, inst.st.Begin(ctx, id, orderOf(row.Ts)).
 		AddOwner(inst.owner(id, row.AppId, row.RunId, row.TileKey)).
 		// Cloned: the builder's write-through mirror holds this slice, so
 		// the caller recycling its buffer would change what a later
@@ -149,7 +149,7 @@ func (inst *StoreBackend) DeleteWorkingset(ctx context.Context, appId app.AppIdT
 		return
 	}
 	defer release()
-	err = inst.landLocked(ctx, inst.st.Delete(persiststore.WorkingsetKey(string(appId), name), time.Now().UTC()))
+	err = inst.landLocked(ctx, inst.st.Delete(ctx, persiststore.WorkingsetKey(string(appId), name), time.Now().UTC()))
 	if err != nil {
 		err = eb.Build().Str("appId", string(appId)).Str("name", name).Errorf("persist: delete workingset: %w", err)
 	}
@@ -166,7 +166,7 @@ func (inst *StoreBackend) WriteColumnWidth(ctx context.Context, row statestore.C
 	}
 	defer release()
 	id := persiststore.ColumnWidthKey(string(row.AppId), row.Tier, row.Scope, row.ColumnKey)
-	err = inst.landLocked(ctx, inst.st.Begin(id, orderOf(row.Ts)).
+	err = inst.landLocked(ctx, inst.st.Begin(ctx, id, orderOf(row.Ts)).
 		AddOwner(inst.owner(id, row.AppId, "", row.InstanceKey)).
 		AddColumnWidth(persiststore.ColumnWidth{
 			ID: id, Tier: row.Tier, Scope: row.Scope, ColumnKey: row.ColumnKey,
@@ -226,7 +226,7 @@ func (inst *StoreBackend) DeleteColumnWidth(ctx context.Context, appId app.AppId
 		return
 	}
 	defer release()
-	err = inst.landLocked(ctx, inst.st.Delete(persiststore.ColumnWidthKey(string(appId), tier, scope, columnKey), time.Now().UTC()))
+	err = inst.landLocked(ctx, inst.st.Delete(ctx, persiststore.ColumnWidthKey(string(appId), tier, scope, columnKey), time.Now().UTC()))
 	if err != nil {
 		err = eb.Build().Str("appId", string(appId)).Str("tier", tier).Str("columnKey", columnKey).Errorf("persist: delete column width: %w", err)
 	}

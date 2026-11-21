@@ -42,9 +42,9 @@ func TestSeqStoreU64OrderRoundTrip(t *testing.T) {
 	require.NoError(t, st.EnsureTable(ctx))
 	require.NoError(t, st.VerifySchema(ctx), "fresh table must match the generated schema")
 
-	require.NoError(t, st.Begin(1, 100).AddSeqReading(SeqReading{ID: 1, Value: 10}).Commit())
-	require.NoError(t, st.Begin(1, 200).AddSeqReading(SeqReading{ID: 1, Value: 20}).Commit())
-	require.NoError(t, st.Begin(2, 150).AddSeqReading(SeqReading{ID: 2, Value: 15}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, 100).AddSeqReading(SeqReading{ID: 1, Value: 10}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, 200).AddSeqReading(SeqReading{ID: 1, Value: 20}).Commit())
+	require.NoError(t, st.Begin(ctx, 2, 150).AddSeqReading(SeqReading{ID: 2, Value: 15}).Commit())
 	n, err := st.Flush(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 3, n)
@@ -80,7 +80,7 @@ func TestSeqStoreU64OrderRoundTrip(t *testing.T) {
 
 	// State view: Delete appends the marker row the pair recognises, at the
 	// same integer Order lane.
-	require.NoError(t, st.Delete(1, 300))
+	require.NoError(t, st.Delete(ctx, 1, 300))
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 	_, live, err := st.GetLive(ctx, 1)

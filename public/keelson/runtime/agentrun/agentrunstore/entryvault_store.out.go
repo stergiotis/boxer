@@ -381,7 +381,7 @@ func (inst *EntryVaultStore) readTable() string {
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *EntryVaultStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -560,7 +560,7 @@ type EntryVaultEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -601,16 +601,10 @@ func (inst *EntryVaultEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and the pass-through envelope, under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *EntryVaultStore) Begin(id uint64, ord uint64, env EntryVaultEnvelope) *EntryVaultEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ord, env)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *EntryVaultStore) BeginCtx(ctx context.Context, id uint64, ord uint64, env EntryVaultEnvelope) *EntryVaultEntityBuilder {
+// (Key, Order) and the pass-through envelope, under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *EntryVaultStore) Begin(ctx context.Context, id uint64, ord uint64, env EntryVaultEnvelope) *EntryVaultEntityBuilder {
 	lowlevel.InEntityAgentrunentryvaultTableBeginEntity(inst.dml)
 	lowlevel.InEntityAgentrunentryvaultTableSetId(inst.dml, id, ord, env.Component)
 	lowlevel.InEntityAgentrunentryvaultTableSetLifecycle(inst.dml, env.Revision)
@@ -968,13 +962,8 @@ func (inst *EntryVaultEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *EntryVaultStore) IngestBodyRow(ord uint64, rows []BodyRow) (err error) {
-	return inst.IngestBodyRowCtx(context.Background(), ord, rows)
-}
-
-// IngestBodyRowCtx is IngestBodyRow with the context BeginCtx hands the
-// configured stampers.
-func (inst *EntryVaultStore) IngestBodyRowCtx(ctx context.Context, ord uint64, rows []BodyRow) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *EntryVaultStore) IngestBodyRow(ctx context.Context, ord uint64, rows []BodyRow) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -982,7 +971,7 @@ func (inst *EntryVaultStore) IngestBodyRowCtx(ctx context.Context, ord uint64, r
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ord, EntryVaultEnvelope{}).AddBodyRow(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ord, EntryVaultEnvelope{}).AddBodyRow(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest bodyRow row %d: %w", i, err)
 			return
@@ -1000,13 +989,8 @@ func (inst *EntryVaultStore) IngestBodyRowCtx(ctx context.Context, ord uint64, r
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *EntryVaultStore) IngestEndorsement(ord uint64, rows []Endorsement) (err error) {
-	return inst.IngestEndorsementCtx(context.Background(), ord, rows)
-}
-
-// IngestEndorsementCtx is IngestEndorsement with the context BeginCtx hands the
-// configured stampers.
-func (inst *EntryVaultStore) IngestEndorsementCtx(ctx context.Context, ord uint64, rows []Endorsement) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *EntryVaultStore) IngestEndorsement(ctx context.Context, ord uint64, rows []Endorsement) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -1014,7 +998,7 @@ func (inst *EntryVaultStore) IngestEndorsementCtx(ctx context.Context, ord uint6
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ord, EntryVaultEnvelope{}).AddEndorsement(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ord, EntryVaultEnvelope{}).AddEndorsement(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest endorsement row %d: %w", i, err)
 			return
@@ -1032,13 +1016,8 @@ func (inst *EntryVaultStore) IngestEndorsementCtx(ctx context.Context, ord uint6
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *EntryVaultStore) IngestGrantRecord(ord uint64, rows []GrantRecord) (err error) {
-	return inst.IngestGrantRecordCtx(context.Background(), ord, rows)
-}
-
-// IngestGrantRecordCtx is IngestGrantRecord with the context BeginCtx hands the
-// configured stampers.
-func (inst *EntryVaultStore) IngestGrantRecordCtx(ctx context.Context, ord uint64, rows []GrantRecord) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *EntryVaultStore) IngestGrantRecord(ctx context.Context, ord uint64, rows []GrantRecord) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -1046,7 +1025,7 @@ func (inst *EntryVaultStore) IngestGrantRecordCtx(ctx context.Context, ord uint6
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ord, EntryVaultEnvelope{}).AddGrantRecord(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ord, EntryVaultEnvelope{}).AddGrantRecord(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest grantRecord row %d: %w", i, err)
 			return
@@ -1064,13 +1043,8 @@ func (inst *EntryVaultStore) IngestGrantRecordCtx(ctx context.Context, ord uint6
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *EntryVaultStore) IngestExitQuestion(ord uint64, rows []ExitQuestion) (err error) {
-	return inst.IngestExitQuestionCtx(context.Background(), ord, rows)
-}
-
-// IngestExitQuestionCtx is IngestExitQuestion with the context BeginCtx hands the
-// configured stampers.
-func (inst *EntryVaultStore) IngestExitQuestionCtx(ctx context.Context, ord uint64, rows []ExitQuestion) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *EntryVaultStore) IngestExitQuestion(ctx context.Context, ord uint64, rows []ExitQuestion) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -1078,7 +1052,7 @@ func (inst *EntryVaultStore) IngestExitQuestionCtx(ctx context.Context, ord uint
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ord, EntryVaultEnvelope{}).AddExitQuestion(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ord, EntryVaultEnvelope{}).AddExitQuestion(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest exitQuestion row %d: %w", i, err)
 			return
@@ -1096,13 +1070,8 @@ func (inst *EntryVaultStore) IngestExitQuestionCtx(ctx context.Context, ord uint
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *EntryVaultStore) IngestExitAnswer(ord uint64, rows []ExitAnswer) (err error) {
-	return inst.IngestExitAnswerCtx(context.Background(), ord, rows)
-}
-
-// IngestExitAnswerCtx is IngestExitAnswer with the context BeginCtx hands the
-// configured stampers.
-func (inst *EntryVaultStore) IngestExitAnswerCtx(ctx context.Context, ord uint64, rows []ExitAnswer) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *EntryVaultStore) IngestExitAnswer(ctx context.Context, ord uint64, rows []ExitAnswer) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -1110,7 +1079,7 @@ func (inst *EntryVaultStore) IngestExitAnswerCtx(ctx context.Context, ord uint64
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ord, EntryVaultEnvelope{}).AddExitAnswer(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ord, EntryVaultEnvelope{}).AddExitAnswer(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest exitAnswer row %d: %w", i, err)
 			return
@@ -1128,13 +1097,8 @@ func (inst *EntryVaultStore) IngestExitAnswerCtx(ctx context.Context, ord uint64
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *EntryVaultStore) IngestApprovalContent(ord uint64, rows []ApprovalContent) (err error) {
-	return inst.IngestApprovalContentCtx(context.Background(), ord, rows)
-}
-
-// IngestApprovalContentCtx is IngestApprovalContent with the context BeginCtx hands the
-// configured stampers.
-func (inst *EntryVaultStore) IngestApprovalContentCtx(ctx context.Context, ord uint64, rows []ApprovalContent) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *EntryVaultStore) IngestApprovalContent(ctx context.Context, ord uint64, rows []ApprovalContent) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -1142,7 +1106,7 @@ func (inst *EntryVaultStore) IngestApprovalContentCtx(ctx context.Context, ord u
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ord, EntryVaultEnvelope{}).AddApprovalContent(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ord, EntryVaultEnvelope{}).AddApprovalContent(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest approvalContent row %d: %w", i, err)
 			return
@@ -1160,13 +1124,8 @@ func (inst *EntryVaultStore) IngestApprovalContentCtx(ctx context.Context, ord u
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *EntryVaultStore) IngestCopyRecord(ord uint64, rows []CopyRecord) (err error) {
-	return inst.IngestCopyRecordCtx(context.Background(), ord, rows)
-}
-
-// IngestCopyRecordCtx is IngestCopyRecord with the context BeginCtx hands the
-// configured stampers.
-func (inst *EntryVaultStore) IngestCopyRecordCtx(ctx context.Context, ord uint64, rows []CopyRecord) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *EntryVaultStore) IngestCopyRecord(ctx context.Context, ord uint64, rows []CopyRecord) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -1174,7 +1133,7 @@ func (inst *EntryVaultStore) IngestCopyRecordCtx(ctx context.Context, ord uint64
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ord, EntryVaultEnvelope{}).AddCopyRecord(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ord, EntryVaultEnvelope{}).AddCopyRecord(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest copyRecord row %d: %w", i, err)
 			return
@@ -1192,13 +1151,8 @@ func (inst *EntryVaultStore) IngestCopyRecordCtx(ctx context.Context, ord uint64
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *EntryVaultStore) IngestEvidenceShredded(ord uint64, rows []EvidenceShredded) (err error) {
-	return inst.IngestEvidenceShreddedCtx(context.Background(), ord, rows)
-}
-
-// IngestEvidenceShreddedCtx is IngestEvidenceShredded with the context BeginCtx hands the
-// configured stampers.
-func (inst *EntryVaultStore) IngestEvidenceShreddedCtx(ctx context.Context, ord uint64, rows []EvidenceShredded) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *EntryVaultStore) IngestEvidenceShredded(ctx context.Context, ord uint64, rows []EvidenceShredded) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1206,7 +1160,7 @@ func (inst *EntryVaultStore) IngestEvidenceShreddedCtx(ctx context.Context, ord 
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ord, EntryVaultEnvelope{}).AddEvidenceShredded(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ord, EntryVaultEnvelope{}).AddEvidenceShredded(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest evidenceShredded row %d: %w", i, err)
 			return
@@ -1224,13 +1178,8 @@ func (inst *EntryVaultStore) IngestEvidenceShreddedCtx(ctx context.Context, ord 
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *EntryVaultStore) IngestEvidenceOpening(ord uint64, rows []EvidenceOpening) (err error) {
-	return inst.IngestEvidenceOpeningCtx(context.Background(), ord, rows)
-}
-
-// IngestEvidenceOpeningCtx is IngestEvidenceOpening with the context BeginCtx hands the
-// configured stampers.
-func (inst *EntryVaultStore) IngestEvidenceOpeningCtx(ctx context.Context, ord uint64, rows []EvidenceOpening) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *EntryVaultStore) IngestEvidenceOpening(ctx context.Context, ord uint64, rows []EvidenceOpening) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1238,7 +1187,7 @@ func (inst *EntryVaultStore) IngestEvidenceOpeningCtx(ctx context.Context, ord u
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ord, EntryVaultEnvelope{}).AddEvidenceOpening(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ord, EntryVaultEnvelope{}).AddEvidenceOpening(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest evidenceOpening row %d: %w", i, err)
 			return
@@ -1420,7 +1369,7 @@ func (inst *EntryVaultStore) CanonicalItem(ent *EntryVaultEntity) (item []byte, 
 	if inst.scratch == nil {
 		inst.scratch = NewEntryVaultStore(nil, nil, EntryVaultStoreConfig{})
 	}
-	b := inst.scratch.Begin(ent.ID, ent.Ord, ent.EntryVaultEnvelope)
+	b := inst.scratch.Begin(context.Background(), ent.ID, ent.Ord, ent.EntryVaultEnvelope) //boxer:lint disable=CS020 reason="an in-memory re-encode on a scratch store without stampers: no I/O, no call identity"
 	if ent.BodyRow.Has {
 		b.AddBodyRow(ent.BodyRow.Val)
 	}

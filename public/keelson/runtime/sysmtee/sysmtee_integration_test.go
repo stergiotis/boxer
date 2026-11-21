@@ -70,7 +70,7 @@ func TestTee_RoundTripsThroughTheLiveTable(t *testing.T) {
 	subCap := []app.SubjectFilter{{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionSub}}
 	pubCap := []app.SubjectFilter{{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionPub}}
 
-	tee, err := sysmtee.Start(sysmtee.Options{
+	tee, err := sysmtee.Start(ctx, sysmtee.Options{
 		Bus:           bus.NewClient("tee", subCap),
 		Store:         store,
 		Host:          host,

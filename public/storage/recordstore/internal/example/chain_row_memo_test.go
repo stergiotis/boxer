@@ -22,7 +22,7 @@ func TestDrainCanonicalKeepsItsReadAccess(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, first, again)
 
-	require.NoError(t, st.Begin("r2", 1, RevEnvelope{}).AddRevNote(RevNote{Text: "b"}).Commit())
+	require.NoError(t, st.Begin(t.Context(), "r2", 1, RevEnvelope{}).AddRevNote(RevNote{Text: "b"}).Commit())
 	var drained bytes.Buffer
 	n, err := st.DrainCanonical(&drained)
 	require.NoError(t, err)

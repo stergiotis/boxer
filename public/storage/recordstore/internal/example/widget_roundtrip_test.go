@@ -27,7 +27,7 @@ func TestWidgetStoreEnvelopeRoundTrip(t *testing.T) {
 
 	t0 := time.Unix(1_700_000_000, 0).UTC()
 	env := WidgetEnvelope{Alt: 7, Region: 100, Tags: []string{"alpha", "beta"}}
-	require.NoError(t, st.Begin(1, t0, env).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t0, env).Commit())
 	n, err := st.Flush(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
@@ -45,7 +45,7 @@ func TestWidgetStoreEnvelopeRoundTrip(t *testing.T) {
 
 	// State view: Delete appends a tombstone (zero envelope), GetLive absent.
 	t1 := t0.Add(time.Hour)
-	require.NoError(t, st.Delete(1, t1))
+	require.NoError(t, st.Delete(ctx, 1, t1))
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 

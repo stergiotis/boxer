@@ -87,9 +87,9 @@ func (inst *ctxStamper) Current(ctx context.Context) iter.Seq2[identifier.Tagged
 }
 func (inst *ctxStamper) Flush(context.Context) (int, error) { return 0, nil }
 
-// BeginCtx, and the verbs that open frames through it, hand the stampers the
-// caller's context (ADR-0295 §SD7); Begin hands them a bare one.
-func TestBeginCtxReachesStamper(t *testing.T) {
+// Begin, and the verbs that open frames through it, hand the stampers the
+// caller's context (ADR-0295 §SD7); a bare context carries no identity.
+func TestBeginReachesStamper(t *testing.T) {
 	stamper := &ctxStamper{}
 	st := NewDeviceStore(&insertRecorder{}, nil, DeviceStoreConfig{
 		Stampers:        []recordstore.ReferenceStamper{stamper},
@@ -101,10 +101,10 @@ func TestBeginCtxReachesStamper(t *testing.T) {
 	ctx := callident.WithCallIdentity(context.Background(), ci)
 	t0 := recordstore.SeqTs(1)
 
-	require.NoError(t, st.BeginCtx(ctx, 1, t0).AddBattery(Battery{ID: 1, Charge: 5}).Commit())
-	require.NoError(t, st.IngestIdentityCtx(ctx, t0, []Identity{{ID: 2, Status: "live"}}))
-	require.NoError(t, st.DeleteCtx(ctx, 3, t0))
-	require.NoError(t, st.Begin(4, t0).AddBattery(Battery{ID: 4}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t0).AddBattery(Battery{ID: 1, Charge: 5}).Commit())
+	require.NoError(t, st.IngestIdentity(ctx, t0, []Identity{{ID: 2, Status: "live"}}))
+	require.NoError(t, st.Delete(ctx, 3, t0))
+	require.NoError(t, st.Begin(context.Background(), 4, t0).AddBattery(Battery{ID: 4}).Commit())
 	assert.Equal(t, []callident.CallIdentity{ci, ci, ci, {}}, stamper.seen)
 }
 
@@ -116,10 +116,10 @@ func TestWriteObserverOneFlushOneBatch(t *testing.T) {
 	st := NewDeviceStore(exec, nil, DeviceStoreConfig{WriteObserver: log})
 	defer st.Close()
 	t1, t2 := recordstore.SeqTs(1), recordstore.SeqTs(2)
-	require.NoError(t, st.Begin(1, t1).AddBattery(Battery{ID: 1, Charge: 9}).Commit())
-	require.NoError(t, st.Begin(2, t1).AddIdentity(Identity{ID: 2, Status: "live"}).Commit())
-	require.NoError(t, st.Delete(1, t2))
-	require.Error(t, st.Begin(5, t1).AddBattery(Battery{ID: 5}).AddBattery(Battery{ID: 5}).Commit(), "a refused commit is not reported")
+	require.NoError(t, st.Begin(t.Context(), 1, t1).AddBattery(Battery{ID: 1, Charge: 9}).Commit())
+	require.NoError(t, st.Begin(t.Context(), 2, t1).AddIdentity(Identity{ID: 2, Status: "live"}).Commit())
+	require.NoError(t, st.Delete(t.Context(), 1, t2))
+	require.Error(t, st.Begin(t.Context(), 5, t1).AddBattery(Battery{ID: 5}).AddBattery(Battery{ID: 5}).Commit(), "a refused commit is not reported")
 
 	want := []recordstore.WrittenKey[uint64, time.Time]{
 		{Key: 1, Order: t1, Lifecycle: recordstore.LifecycleLive},
@@ -153,13 +153,13 @@ func TestWriteObserverFailedFlushRetryReportsOnce(t *testing.T) {
 	st := NewDeviceStore(exec, nil, DeviceStoreConfig{WriteObserver: log})
 	defer st.Close()
 	t1 := recordstore.SeqTs(1)
-	require.NoError(t, st.Begin(1, t1).AddBattery(Battery{ID: 1}).Commit())
-	require.NoError(t, st.Begin(2, t1).AddBattery(Battery{ID: 2}).Commit())
+	require.NoError(t, st.Begin(t.Context(), 1, t1).AddBattery(Battery{ID: 1}).Commit())
+	require.NoError(t, st.Begin(t.Context(), 2, t1).AddBattery(Battery{ID: 2}).Commit())
 	_, err := st.Flush(context.Background())
 	require.Error(t, err)
 	assert.Empty(t, log.durable)
 
-	require.NoError(t, st.Begin(3, t1).AddBattery(Battery{ID: 3}).Commit())
+	require.NoError(t, st.Begin(t.Context(), 3, t1).AddBattery(Battery{ID: 3}).Commit())
 	n, err := st.Flush(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, 3, n)
@@ -188,14 +188,14 @@ func TestWriteObserverDiscard(t *testing.T) {
 	log := &writeLog{}
 	st := NewDeviceStore(exec, nil, DeviceStoreConfig{WriteObserver: log})
 	defer st.Close()
-	require.NoError(t, st.Begin(1, recordstore.SeqTs(1)).AddBattery(Battery{ID: 1}).Commit())
+	require.NoError(t, st.Begin(t.Context(), 1, recordstore.SeqTs(1)).AddBattery(Battery{ID: 1}).Commit())
 	_, err := st.Flush(context.Background())
 	require.Error(t, err)
 	st.DiscardPending()
 	require.Len(t, log.discarded, 1)
 	assert.Equal(t, uint64(1), log.discarded[0][0].Key)
 
-	require.NoError(t, st.Begin(2, recordstore.SeqTs(1)).AddBattery(Battery{ID: 2}).Commit())
+	require.NoError(t, st.Begin(t.Context(), 2, recordstore.SeqTs(1)).AddBattery(Battery{ID: 2}).Commit())
 	_, err = st.Flush(context.Background())
 	require.NoError(t, err)
 	require.Len(t, log.durable, 1)
@@ -213,7 +213,7 @@ func TestWriteObserverTombstonePair(t *testing.T) {
 		TombstoneWrite:  func(b *DeviceEntityBuilder) { b.AddIdentity(Identity{ID: b.key, Status: "deleted"}) },
 	})
 	defer st.Close()
-	require.NoError(t, st.Delete(9, recordstore.SeqTs(3)))
+	require.NoError(t, st.Delete(t.Context(), 9, recordstore.SeqTs(3)))
 	require.Len(t, log.committed, 1)
 	assert.Equal(t, recordstore.WrittenKey[uint64, time.Time]{Key: 9, Order: recordstore.SeqTs(3), Lifecycle: recordstore.LifecycleLive, Tombstone: true}, log.committed[0])
 }
@@ -232,13 +232,13 @@ func TestDefaultDeleteHonoursStampers(t *testing.T) {
 	})
 	defer st.Close()
 
-	require.ErrorIs(t, st.Delete(1, recordstore.SeqTs(1)), actor.ErrNoPrincipal)
-	require.ErrorIs(t, st.DeleteCtx(context.Background(), 1, recordstore.SeqTs(1)), actor.ErrNoPrincipal)
+	require.ErrorIs(t, st.Delete(t.Context(), 1, recordstore.SeqTs(1)), actor.ErrNoPrincipal)
+	require.ErrorIs(t, st.Delete(context.Background(), 1, recordstore.SeqTs(1)), actor.ErrNoPrincipal)
 	assert.Zero(t, st.Buffered())
 	assert.Empty(t, log.committed)
 
 	ci := callident.CallIdentity{Claims: callident.Claims{Principal: "p:del", Purpose: "erasure"}}
-	require.NoError(t, st.DeleteCtx(callident.WithCallIdentity(context.Background(), ci), 1, recordstore.SeqTs(1)))
+	require.NoError(t, st.Delete(callident.WithCallIdentity(context.Background(), ci), 1, recordstore.SeqTs(1)))
 	assert.Equal(t, 1, st.Buffered())
 	require.Len(t, log.committed, 1)
 	assert.Equal(t, ci, log.committed[0].Identity)
@@ -253,9 +253,9 @@ func TestWriteObserverIdentityIsTheCommitters(t *testing.T) {
 	who := func(p string) context.Context {
 		return callident.WithCallIdentity(context.Background(), callident.CallIdentity{Claims: callident.Claims{Principal: p}})
 	}
-	require.NoError(t, st.BeginCtx(who("p:a"), 1, recordstore.SeqTs(1)).AddBattery(Battery{ID: 1}).Commit())
-	require.NoError(t, st.IngestBatteryCtx(who("p:b"), recordstore.SeqTs(1), []Battery{{ID: 2}}))
-	require.NoError(t, st.Begin(3, recordstore.SeqTs(1)).AddBattery(Battery{ID: 3}).Commit())
+	require.NoError(t, st.Begin(who("p:a"), 1, recordstore.SeqTs(1)).AddBattery(Battery{ID: 1}).Commit())
+	require.NoError(t, st.IngestBattery(who("p:b"), recordstore.SeqTs(1), []Battery{{ID: 2}}))
+	require.NoError(t, st.Begin(t.Context(), 3, recordstore.SeqTs(1)).AddBattery(Battery{ID: 3}).Commit())
 	_, err := st.Flush(who("p:flusher"))
 	require.NoError(t, err)
 	require.Len(t, log.durable, 1)
@@ -277,7 +277,7 @@ func (inst *reentrantLog) Durable(ctx context.Context, batch recordstore.BatchId
 	inst.writeLog.Durable(ctx, batch, keys)
 	if !inst.done {
 		inst.done = true
-		_ = inst.st.Begin(999, recordstore.SeqTs(9)).AddBattery(Battery{ID: 999}).Commit()
+		_ = inst.st.Begin(ctx, 999, recordstore.SeqTs(9)).AddBattery(Battery{ID: 999}).Commit()
 	}
 }
 
@@ -288,7 +288,7 @@ func TestWriteObserverReentrantCommit(t *testing.T) {
 	st := NewDeviceStore(&insertRecorder{}, nil, DeviceStoreConfig{WriteObserver: log})
 	log.st = st
 	defer st.Close()
-	require.NoError(t, st.Begin(1, recordstore.SeqTs(1)).AddBattery(Battery{ID: 1}).Commit())
+	require.NoError(t, st.Begin(t.Context(), 1, recordstore.SeqTs(1)).AddBattery(Battery{ID: 1}).Commit())
 	_, err := st.Flush(context.Background())
 	require.NoError(t, err)
 	_, err = st.Flush(context.Background())
@@ -318,9 +318,9 @@ func TestWriteObserverPanicDoesNotRepeat(t *testing.T) {
 	log := &panickingLog{armed: true}
 	st := NewDeviceStore(&insertRecorder{}, nil, DeviceStoreConfig{WriteObserver: log})
 	defer st.Close()
-	require.NoError(t, st.Begin(1, recordstore.SeqTs(1)).AddBattery(Battery{ID: 1}).Commit())
+	require.NoError(t, st.Begin(t.Context(), 1, recordstore.SeqTs(1)).AddBattery(Battery{ID: 1}).Commit())
 	require.Panics(t, func() { _, _ = st.Flush(context.Background()) })
-	require.NoError(t, st.Begin(2, recordstore.SeqTs(1)).AddBattery(Battery{ID: 2}).Commit())
+	require.NoError(t, st.Begin(t.Context(), 2, recordstore.SeqTs(1)).AddBattery(Battery{ID: 2}).Commit())
 	_, err := st.Flush(context.Background())
 	require.NoError(t, err)
 	require.Len(t, log.durable, 1)

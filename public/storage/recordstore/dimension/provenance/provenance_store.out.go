@@ -264,7 +264,7 @@ func (inst *ProvenanceStore) readTable() string {
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *ProvenanceStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -443,7 +443,7 @@ type ProvenanceEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -462,16 +462,10 @@ func (inst *ProvenanceEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order), under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *ProvenanceStore) Begin(id uint64, ts time.Time) *ProvenanceEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ts)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *ProvenanceStore) BeginCtx(ctx context.Context, id uint64, ts time.Time) *ProvenanceEntityBuilder {
+// (Key, Order), under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *ProvenanceStore) Begin(ctx context.Context, id uint64, ts time.Time) *ProvenanceEntityBuilder {
 	lowlevel.InEntityProvenanceTableBeginEntity(inst.dml)
 	lowlevel.InEntityProvenanceTableSetId(inst.dml, id)
 	lowlevel.InEntityProvenanceTableSetTimestamp(inst.dml, ts)
@@ -574,13 +568,8 @@ func (inst *ProvenanceEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *ProvenanceStore) IngestProvenance(ts time.Time, rows []Provenance) (err error) {
-	return inst.IngestProvenanceCtx(context.Background(), ts, rows)
-}
-
-// IngestProvenanceCtx is IngestProvenance with the context BeginCtx hands the
-// configured stampers.
-func (inst *ProvenanceStore) IngestProvenanceCtx(ctx context.Context, ts time.Time, rows []Provenance) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *ProvenanceStore) IngestProvenance(ctx context.Context, ts time.Time, rows []Provenance) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -588,7 +577,7 @@ func (inst *ProvenanceStore) IngestProvenanceCtx(ctx context.Context, ts time.Ti
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddProvenance(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddProvenance(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest provenance row %d: %w", i, err)
 			return

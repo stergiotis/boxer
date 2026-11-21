@@ -44,7 +44,7 @@ func TestVerifySchemaReadsPastColumnsTheStoreDoesNotKnow(t *testing.T) {
 	// A stored column placed first is read past, not into: the round trip
 	// still decodes.
 	t0 := time.Unix(1_600_000_000, 0).UTC()
-	require.NoError(t, st.Begin(7, t0).AddBattery(Battery{ID: 7, Charge: 42}).Commit())
+	require.NoError(t, st.Begin(ctx, 7, t0).AddBattery(Battery{ID: 7, Charge: 42}).Commit())
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 	ent, found, err := st.Latest(ctx, 7)

@@ -23,7 +23,7 @@ func TestTrailDigestsArePinned(t *testing.T) {
 	defer st.Close()
 	var sealed []evidence.SealedRow
 	digest := func(name string, id uint64, f func(b *trail.TrailEntityBuilder)) string {
-		b := st.Begin(id, at, trail.TrailEnvelope{NaturalKey: []byte(name)})
+		b := st.Begin(t.Context(), id, at, trail.TrailEnvelope{NaturalKey: []byte(name)})
 		b.AddOrigin(trail.Origin{Id: id, Run: "run-1", App: "app-x", Instance: 7})
 		f(b)
 		ent, _ := b.Entity()

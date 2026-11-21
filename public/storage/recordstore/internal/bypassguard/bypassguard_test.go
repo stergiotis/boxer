@@ -26,7 +26,7 @@ import (
 func TestRawControlIsWalled(t *testing.T) {
 	st := example.NewDeviceStore(nil, nil, example.DeviceStoreConfig{})
 	defer st.Close()
-	raw := st.Begin(1, time.Unix(0, 1)).Raw()
+	raw := st.Begin(t.Context(), 1, time.Unix(0, 1)).Raw()
 
 	// Raw() hands back the concrete builder (an un-nameable *lowlevel type).
 	// The cast attack boxes it and asserts to a locally-declared interface;

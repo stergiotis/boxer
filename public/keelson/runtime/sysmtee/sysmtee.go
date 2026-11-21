@@ -152,7 +152,10 @@ type Tee struct {
 }
 
 // Start subscribes and begins writing. The returned Tee runs until Stop.
-func Start(opts Options) (inst *Tee, err error) {
+// ctx is its lifetime: rows are begun under it, and its flushes keep its
+// values past its cancellation, bounded by flushTimeout, so the final
+// flush at Stop still lands.
+func Start(ctx context.Context, opts Options) (inst *Tee, err error) {
 	if opts.Bus == nil {
 		err = eh.Errorf("sysmtee: needs a Bus")
 		return
@@ -208,7 +211,7 @@ func Start(opts Options) (inst *Tee, err error) {
 		inst = nil
 		return
 	}
-	go inst.run()
+	go inst.run(ctx)
 	return
 }
 
@@ -233,7 +236,7 @@ func (inst *Tee) enqueue(snap *sysmsnap.BundleSnapshot) {
 }
 
 // run owns the store. Every store call in the package happens here.
-func (inst *Tee) run() {
+func (inst *Tee) run(ctx context.Context) {
 	defer close(inst.done)
 	ticker := time.NewTicker(inst.opts.FlushInterval)
 	defer ticker.Stop()
@@ -241,15 +244,15 @@ func (inst *Tee) run() {
 		select {
 		case snap, ok := <-inst.queue:
 			if !ok {
-				inst.flush()
+				inst.flush(ctx)
 				return
 			}
-			inst.ingest(snap)
+			inst.ingest(ctx, snap)
 			if inst.opts.Store.Buffered() >= inst.opts.FlushRows {
-				inst.flush()
+				inst.flush(ctx)
 			}
 		case <-ticker.C:
-			inst.flush()
+			inst.flush(ctx)
 		}
 	}
 }
@@ -263,7 +266,7 @@ func (inst *Tee) run() {
 // One domain failing does not stop the others: a bundle is a union of
 // independent collectors, and dropping the whole tick because one of them
 // produced an unencodable row would lose data the rest of the plane got right.
-func (inst *Tee) ingest(snap *sysmsnap.BundleSnapshot) {
+func (inst *Tee) ingest(ctx context.Context, snap *sysmsnap.BundleSnapshot) {
 	ts := sampleTime(snap)
 	host := inst.opts.Host
 
@@ -276,7 +279,7 @@ func (inst *Tee) ingest(snap *sysmsnap.BundleSnapshot) {
 		if ingestKind(inst, "topology",
 			func() (sysmfacts.SysTopology, error) { return topologyRow(host, snap.Topology, ts) },
 			func(r sysmfacts.SysTopology) error {
-				return inst.begin(r.Id, ts, r.NaturalKey).AddSysTopology(r).Commit()
+				return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysTopology(r).Commit()
 			}) {
 			inst.seenTopology = true
 		}
@@ -287,29 +290,29 @@ func (inst *Tee) ingest(snap *sysmsnap.BundleSnapshot) {
 			if ingestKind(inst, "cpuInfo",
 				func() (sysmfacts.SysCpuInfo, error) { return cpuInfoRow(host, snap.CPU, ts) },
 				func(r sysmfacts.SysCpuInfo) error {
-					return inst.begin(r.Id, ts, r.NaturalKey).AddSysCpuInfo(r).Commit()
+					return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysCpuInfo(r).Commit()
 				}) {
 				inst.seenHosts[host] = struct{}{}
 			}
 		}
 		ingestKind(inst, "cpu",
 			func() (sysmfacts.SysCpu, error) { return cpuRow(host, snap.CPU, ts) },
-			func(r sysmfacts.SysCpu) error { return inst.begin(r.Id, ts, r.NaturalKey).AddSysCpu(r).Commit() })
+			func(r sysmfacts.SysCpu) error { return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysCpu(r).Commit() })
 	}
 	if snap.Mem != nil {
 		ingestKind(inst, "mem",
 			func() (sysmfacts.SysMem, error) { return memRow(host, snap.Mem, ts) },
-			func(r sysmfacts.SysMem) error { return inst.begin(r.Id, ts, r.NaturalKey).AddSysMem(r).Commit() })
+			func(r sysmfacts.SysMem) error { return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysMem(r).Commit() })
 	}
 	if snap.PSI != nil {
 		ingestKind(inst, "psi",
 			func() (sysmfacts.SysPsi, error) { return psiRow(host, snap.PSI, ts) },
-			func(r sysmfacts.SysPsi) error { return inst.begin(r.Id, ts, r.NaturalKey).AddSysPsi(r).Commit() })
+			func(r sysmfacts.SysPsi) error { return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysPsi(r).Commit() })
 	}
 	if snap.Net != nil {
 		ingestKind(inst, "net",
 			func() (sysmfacts.SysNet, error) { return netRow(host, snap.Net, ts) },
-			func(r sysmfacts.SysNet) error { return inst.begin(r.Id, ts, r.NaturalKey).AddSysNet(r).Commit() })
+			func(r sysmfacts.SysNet) error { return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysNet(r).Commit() })
 	}
 	if snap.Disk != nil {
 		// Two kinds from one snapshot: the mount table and the device list have
@@ -317,28 +320,30 @@ func (inst *Tee) ingest(snap *sysmsnap.BundleSnapshot) {
 		ingestKind(inst, "diskMount",
 			func() (sysmfacts.SysDiskMount, error) { return diskMountRow(host, snap.Disk, ts) },
 			func(r sysmfacts.SysDiskMount) error {
-				return inst.begin(r.Id, ts, r.NaturalKey).AddSysDiskMount(r).Commit()
+				return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysDiskMount(r).Commit()
 			})
 		ingestKind(inst, "diskIo",
 			func() (sysmfacts.SysDiskIo, error) { return diskIoRow(host, snap.Disk, ts) },
-			func(r sysmfacts.SysDiskIo) error { return inst.begin(r.Id, ts, r.NaturalKey).AddSysDiskIo(r).Commit() })
+			func(r sysmfacts.SysDiskIo) error {
+				return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysDiskIo(r).Commit()
+			})
 	}
 	if snap.Battery != nil {
 		ingestKind(inst, "battery",
 			func() (sysmfacts.SysBattery, error) { return batteryRow(host, snap.Battery, ts) },
 			func(r sysmfacts.SysBattery) error {
-				return inst.begin(r.Id, ts, r.NaturalKey).AddSysBattery(r).Commit()
+				return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysBattery(r).Commit()
 			})
 	}
 	if snap.GPU != nil {
 		ingestKind(inst, "gpu",
 			func() (sysmfacts.SysGpu, error) { return gpuRow(host, snap.GPU, ts) },
-			func(r sysmfacts.SysGpu) error { return inst.begin(r.Id, ts, r.NaturalKey).AddSysGpu(r).Commit() })
+			func(r sysmfacts.SysGpu) error { return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysGpu(r).Commit() })
 	}
 	if len(snap.Procs) > 0 {
 		ingestKind(inst, "proc",
 			func() (sysmfacts.SysProc, error) { return procRow(host, snap.Procs, ts) },
-			func(r sysmfacts.SysProc) error { return inst.begin(r.Id, ts, r.NaturalKey).AddSysProc(r).Commit() })
+			func(r sysmfacts.SysProc) error { return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysProc(r).Commit() })
 		// Command lines, user names and ids only when a deployment asked for
 		// them (ADR-0090 §SD8; see SysProcCmd for why this is a kind and not a
 		// tag).
@@ -346,7 +351,7 @@ func (inst *Tee) ingest(snap *sysmsnap.BundleSnapshot) {
 			ingestKind(inst, "procCmd",
 				func() (sysmfacts.SysProcCmd, error) { return procCmdRow(host, snap.Procs, ts) },
 				func(r sysmfacts.SysProcCmd) error {
-					return inst.begin(r.Id, ts, r.NaturalKey).AddSysProcCmd(r).Commit()
+					return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysProcCmd(r).Commit()
 				})
 		}
 	}
@@ -357,7 +362,9 @@ func (inst *Tee) ingest(snap *sysmsnap.BundleSnapshot) {
 	if snap.Sockets != nil && snap.Sockets.CollectedAtUnixMs != inst.lastSocketsStamp {
 		if ingestKind(inst, "sockets",
 			func() (sysmfacts.SysSocket, error) { return socketRow(host, snap.Sockets) },
-			func(r sysmfacts.SysSocket) error { return inst.begin(r.Id, ts, r.NaturalKey).AddSysSocket(r).Commit() }) {
+			func(r sysmfacts.SysSocket) error {
+				return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysSocket(r).Commit()
+			}) {
 			inst.lastSocketsStamp = snap.Sockets.CollectedAtUnixMs
 		}
 	}
@@ -366,8 +373,8 @@ func (inst *Tee) ingest(snap *sysmsnap.BundleSnapshot) {
 // begin opens one row at ts carrying the origin (ADR-0330 §SD3): the
 // writing process's run, and no window — the tee is the host's own work, so
 // app and instance are unattributed (ADR-0191 §SD3).
-func (inst *Tee) begin(id uint64, ts time.Time, naturalKey []byte) *sysmfacts.SysmetricsEntityBuilder {
-	return inst.opts.Store.Begin(id, ts, sysmfacts.SysmetricsEnvelope{NaturalKey: naturalKey}).
+func (inst *Tee) begin(ctx context.Context, id uint64, ts time.Time, naturalKey []byte) *sysmfacts.SysmetricsEntityBuilder {
+	return inst.opts.Store.Begin(ctx, id, ts, sysmfacts.SysmetricsEnvelope{NaturalKey: naturalKey}).
 		AddOrigin(sysmfacts.Origin{Id: id, Run: inst.opts.Run})
 }
 
@@ -397,12 +404,12 @@ func ingestKind[T any](
 
 // flush makes buffered rows durable. A failure leaves the batch pending in the
 // store, so the next flush reships it — no row is dropped here, only delayed.
-func (inst *Tee) flush() {
+func (inst *Tee) flush(ctx context.Context) {
 	if inst.opts.Store.Buffered() == 0 {
 		return
 	}
 	// Bounded so a hung server cannot wedge the writer goroutine past Stop.
-	ctx, cancel := context.WithTimeout(context.Background(), flushTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), flushTimeout)
 	defer cancel()
 	n, err := inst.opts.Store.Flush(ctx)
 	if err != nil {

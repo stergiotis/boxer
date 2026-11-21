@@ -97,7 +97,7 @@ func TestPurgeEmptiesAMount(t *testing.T) {
 	expires := snap.Add(48 * time.Hour)
 	for _, m := range []uint64{testMount, other} {
 		for _, p := range []string{"a.txt", "."} {
-			b := meta.Begin(m, snap, ladingmeta.MetaEnvelope{NaturalKey: []byte(p), ExpiresAt: expires}).
+			b := meta.Begin(ctx, m, snap, ladingmeta.MetaEnvelope{NaturalKey: []byte(p), ExpiresAt: expires}).
 				AddLadingEntry(ladingmeta.LadingEntry{Kind: "entry", NodeKind: "file", Content: "none", Mode: 0o644})
 			if p == "." {
 				b = b.AddLadingSnapshot(ladingmeta.LadingSnapshot{Kind: "snapshot", Entries: 2})
@@ -213,7 +213,7 @@ func TestManyRowsPerSnapshotRoundTrip(t *testing.T) {
 			Size: n.size, Mtime: snap, ContentHash: []byte("0123456789abcdef0123456789abcdef"),
 			Text: n.kind == "file",
 		}
-		require.NoError(t, meta.Begin(testMount, snap, ladingmeta.MetaEnvelope{
+		require.NoError(t, meta.Begin(ctx, testMount, snap, ladingmeta.MetaEnvelope{
 			NaturalKey: []byte(n.path), ExpiresAt: expiresAt,
 		}).AddLadingEntry(row).Commit())
 	}
@@ -229,7 +229,7 @@ func TestManyRowsPerSnapshotRoundTrip(t *testing.T) {
 		"a walk with no root row must be invisible — that is the commit rule")
 
 	// The root row: an entry like any other, plus the commit record.
-	require.NoError(t, meta.Begin(testMount, snap, ladingmeta.MetaEnvelope{
+	require.NoError(t, meta.Begin(ctx, testMount, snap, ladingmeta.MetaEnvelope{
 		NaturalKey: []byte("."), ExpiresAt: expiresAt,
 	}).AddLadingEntry(ladingmeta.LadingEntry{
 		Kind: "entry", NodeKind: "dir", Content: "none", Mode: 0o755, Mtime: snap,
@@ -312,7 +312,7 @@ func TestBlockOrdinalIsAContiguousRange(t *testing.T) {
 	for seq := range blocks {
 		key := append([]byte("a/c/d.bin"), 0)
 		key = append(key, byte(seq>>24), byte(seq>>16), byte(seq>>8), byte(seq))
-		require.NoError(t, data.Begin(testMount, snap, ladingdata.DataEnvelope{
+		require.NoError(t, data.Begin(ctx, testMount, snap, ladingdata.DataEnvelope{
 			NaturalKey: key, ExpiresAt: expiresAt,
 		}).AddLadingBlock(ladingdata.LadingBlock{
 			Kind: "block",
@@ -328,7 +328,7 @@ func TestBlockOrdinalIsAContiguousRange(t *testing.T) {
 	// A different file's blocks must not fall inside the range: 0x00 sorts
 	// below every byte an io/fs path may carry, so "a/c/d.bin\0…" cannot
 	// collide with "a/c/d.bin.bak\0…".
-	require.NoError(t, data.Begin(testMount, snap, ladingdata.DataEnvelope{
+	require.NoError(t, data.Begin(ctx, testMount, snap, ladingdata.DataEnvelope{
 		NaturalKey: append([]byte("a/c/d.bin.bak"), 0, 0, 0, 0, 0), ExpiresAt: expiresAt,
 	}).AddLadingBlock(ladingdata.LadingBlock{Kind: "block", Data: []byte("other")}).Commit())
 	_, err = data.Flush(ctx)

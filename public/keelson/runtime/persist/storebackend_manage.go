@@ -84,7 +84,7 @@ func (inst *StoreBackend) DeleteEntity(ctx context.Context, entityId string) (er
 		return
 	}
 	defer release()
-	err = inst.landLocked(ctx, inst.st.Delete(entityId, time.Now().UTC()))
+	err = inst.landLocked(ctx, inst.st.Delete(ctx, entityId, time.Now().UTC()))
 	if err != nil {
 		err = eb.Build().Str("entityId", entityId).Errorf("persist: delete entity: %w", err)
 	}
@@ -108,7 +108,7 @@ func (inst *StoreBackend) DeleteEntities(ctx context.Context, entityIds []string
 	defer release()
 	now := time.Now().UTC()
 	for _, id := range entityIds {
-		err = inst.st.Delete(id, now)
+		err = inst.st.Delete(ctx, id, now)
 		if err != nil {
 			inst.st.DiscardPending()
 			err = eb.Build().Str("entityId", id).Int("entities", len(entityIds)).Errorf("persist: delete entities: %w", err)

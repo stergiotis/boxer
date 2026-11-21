@@ -216,7 +216,7 @@ func (inst *StoreBackend) Set(ctx context.Context, ref StorageRef, key string, v
 	}
 	defer release()
 	id := stateKey(ref, key)
-	err = inst.st.Begin(id, time.Now().UTC()).
+	err = inst.st.Begin(ctx, id, time.Now().UTC()).
 		AddOwner(inst.owner(id, ref.StateAppId(), "", ref.InstanceKey)).
 		AddState(persiststore.State{ID: id, Key: key, Value: value}).
 		Commit()
@@ -254,7 +254,7 @@ func (inst *StoreBackend) Delete(ctx context.Context, ref StorageRef, key string
 		return
 	}
 	defer release()
-	err = inst.st.Delete(stateKey(ref, key), time.Now().UTC())
+	err = inst.st.Delete(ctx, stateKey(ref, key), time.Now().UTC())
 	if err != nil {
 		inst.st.DiscardPending()
 		err = eb.Build().Str("alias", ref.Alias).Str("key", key).Errorf("persist: store delete failed: %w", err)

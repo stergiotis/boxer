@@ -266,7 +266,7 @@ func (inst *MintedStore) readTable() string {
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *MintedStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -445,7 +445,7 @@ type MintedEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -462,16 +462,10 @@ func (inst *MintedEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order), under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *MintedStore) Begin(id uint64, ts time.Time) *MintedEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ts)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *MintedStore) BeginCtx(ctx context.Context, id uint64, ts time.Time) *MintedEntityBuilder {
+// (Key, Order), under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *MintedStore) Begin(ctx context.Context, id uint64, ts time.Time) *MintedEntityBuilder {
 	lowlevel.InEntityMintedTableBeginEntity(inst.dml)
 	lowlevel.InEntityMintedTableSetId(inst.dml, id)
 	lowlevel.InEntityMintedTableSetTimestamp(inst.dml, ts)
@@ -571,13 +565,8 @@ func (inst *MintedEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *MintedStore) IngestMintedLabel(ts time.Time, rows []MintedLabel) (err error) {
-	return inst.IngestMintedLabelCtx(context.Background(), ts, rows)
-}
-
-// IngestMintedLabelCtx is IngestMintedLabel with the context BeginCtx hands the
-// configured stampers.
-func (inst *MintedStore) IngestMintedLabelCtx(ctx context.Context, ts time.Time, rows []MintedLabel) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *MintedStore) IngestMintedLabel(ctx context.Context, ts time.Time, rows []MintedLabel) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -585,7 +574,7 @@ func (inst *MintedStore) IngestMintedLabelCtx(ctx context.Context, ts time.Time,
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddMintedLabel(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddMintedLabel(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mintedLabel row %d: %w", i, err)
 			return

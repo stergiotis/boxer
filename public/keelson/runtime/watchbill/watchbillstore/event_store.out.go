@@ -270,7 +270,7 @@ func (inst *EventStore) readTable() string {
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *EventStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -449,7 +449,7 @@ type EventEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -474,16 +474,10 @@ func (inst *EventEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order), under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *EventStore) Begin(id string, ts time.Time) *EventEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ts)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *EventStore) BeginCtx(ctx context.Context, id string, ts time.Time) *EventEntityBuilder {
+// (Key, Order), under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *EventStore) Begin(ctx context.Context, id string, ts time.Time) *EventEntityBuilder {
 	lowlevel.InEntityWatchbilleventTableBeginEntity(inst.dml)
 	lowlevel.InEntityWatchbilleventTableSetId(inst.dml, id)
 	lowlevel.InEntityWatchbilleventTableSetTimestamp(inst.dml, ts)
@@ -595,13 +589,8 @@ func (inst *EventEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *EventStore) IngestEvent(ts time.Time, rows []Event) (err error) {
-	return inst.IngestEventCtx(context.Background(), ts, rows)
-}
-
-// IngestEventCtx is IngestEvent with the context BeginCtx hands the
-// configured stampers.
-func (inst *EventStore) IngestEventCtx(ctx context.Context, ts time.Time, rows []Event) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *EventStore) IngestEvent(ctx context.Context, ts time.Time, rows []Event) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -609,7 +598,7 @@ func (inst *EventStore) IngestEventCtx(ctx context.Context, ts time.Time, rows [
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddEvent(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddEvent(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest event row %d: %w", i, err)
 			return

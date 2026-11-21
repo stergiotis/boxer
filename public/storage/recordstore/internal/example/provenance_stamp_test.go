@@ -45,7 +45,7 @@ func TestProvenanceStampingEndToEnd(t *testing.T) {
 	require.NoError(t, dev.EnsureTable(ctx))
 
 	// Write one entity; Begin consults the stamper and stamps its attributes.
-	require.NoError(t, dev.Begin(1, recordstore.SeqTs(1)).
+	require.NoError(t, dev.Begin(ctx, 1, recordstore.SeqTs(1)).
 		AddIdentity(Identity{ID: 1, Status: "live"}).Commit())
 	n, err := dev.Flush(ctx)
 	require.NoError(t, err)

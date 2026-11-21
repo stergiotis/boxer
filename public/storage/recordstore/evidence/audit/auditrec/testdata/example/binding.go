@@ -108,7 +108,7 @@ type Batch struct {
 // Event buffers one row of o and e under ctx and returns its canonical
 // item; on error nothing is buffered.
 func (inst *Batch) Event(ctx context.Context, id uint64, at time.Time, key string, o audit.Origin, e audit.AuditEvent) (item []byte, err error) {
-	b := inst.st.BeginCtx(ctx, id, at, ExampleEnvelope{NaturalKey: []byte(key)})
+	b := inst.st.Begin(ctx, id, at, ExampleEnvelope{NaturalKey: []byte(key)})
 	b.AddOrigin(o)
 	b.AddAuditEvent(e)
 	ent, _ := b.Entity()
@@ -123,10 +123,10 @@ func (inst *Batch) Event(ctx context.Context, id uint64, at time.Time, key strin
 }
 
 // Seal buffers the batch's seal row and returns the seal's digest.
-func (inst *Batch) Seal(id uint64, at time.Time, key string, o audit.Origin, s auditrec.SealSpec) (digest string, err error) {
+func (inst *Batch) Seal(ctx context.Context, id uint64, at time.Time, key string, o audit.Origin, s auditrec.SealSpec) (digest string, err error) {
 	row := SealOf(s.Scheme, s.Stream, s.Prev, s.PrevDigest, s.Rows)
 	row.Id = id
-	b := inst.st.Begin(id, at, ExampleEnvelope{NaturalKey: []byte(key)})
+	b := inst.st.Begin(ctx, id, at, ExampleEnvelope{NaturalKey: []byte(key)})
 	b.AddOrigin(o)
 	b.AddEvidenceSeal(row)
 	if err = b.Commit(); err != nil {

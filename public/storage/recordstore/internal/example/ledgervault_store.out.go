@@ -302,7 +302,7 @@ func (inst *LedgerVaultStore) readTable() string {
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *LedgerVaultStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -481,7 +481,7 @@ type LedgerVaultEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -512,16 +512,10 @@ func (inst *LedgerVaultEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and the pass-through envelope, under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *LedgerVaultStore) Begin(id uint64, ord uint64, env LedgerVaultEnvelope) *LedgerVaultEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ord, env)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *LedgerVaultStore) BeginCtx(ctx context.Context, id uint64, ord uint64, env LedgerVaultEnvelope) *LedgerVaultEntityBuilder {
+// (Key, Order) and the pass-through envelope, under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *LedgerVaultStore) Begin(ctx context.Context, id uint64, ord uint64, env LedgerVaultEnvelope) *LedgerVaultEntityBuilder {
 	lowlevel.InEntityLedgervaultTableBeginEntity(inst.dml)
 	lowlevel.InEntityLedgervaultTableSetId(inst.dml, id, ord, env.Component)
 	b := &LedgerVaultEntityBuilder{store: inst, key: id, ent: LedgerVaultEntity{ID: id, Ord: ord, LedgerVaultEnvelope: env}}
@@ -692,13 +686,8 @@ func (inst *LedgerVaultEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *LedgerVaultStore) IngestLedgerNote(ord uint64, rows []LedgerNote) (err error) {
-	return inst.IngestLedgerNoteCtx(context.Background(), ord, rows)
-}
-
-// IngestLedgerNoteCtx is IngestLedgerNote with the context BeginCtx hands the
-// configured stampers.
-func (inst *LedgerVaultStore) IngestLedgerNoteCtx(ctx context.Context, ord uint64, rows []LedgerNote) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *LedgerVaultStore) IngestLedgerNote(ctx context.Context, ord uint64, rows []LedgerNote) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -706,7 +695,7 @@ func (inst *LedgerVaultStore) IngestLedgerNoteCtx(ctx context.Context, ord uint6
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ord, LedgerVaultEnvelope{}).AddLedgerNote(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ord, LedgerVaultEnvelope{}).AddLedgerNote(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest ledgerNote row %d: %w", i, err)
 			return
@@ -724,13 +713,8 @@ func (inst *LedgerVaultStore) IngestLedgerNoteCtx(ctx context.Context, ord uint6
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *LedgerVaultStore) IngestEvidenceShredded(ord uint64, rows []EvidenceShredded) (err error) {
-	return inst.IngestEvidenceShreddedCtx(context.Background(), ord, rows)
-}
-
-// IngestEvidenceShreddedCtx is IngestEvidenceShredded with the context BeginCtx hands the
-// configured stampers.
-func (inst *LedgerVaultStore) IngestEvidenceShreddedCtx(ctx context.Context, ord uint64, rows []EvidenceShredded) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *LedgerVaultStore) IngestEvidenceShredded(ctx context.Context, ord uint64, rows []EvidenceShredded) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -738,7 +722,7 @@ func (inst *LedgerVaultStore) IngestEvidenceShreddedCtx(ctx context.Context, ord
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ord, LedgerVaultEnvelope{}).AddEvidenceShredded(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ord, LedgerVaultEnvelope{}).AddEvidenceShredded(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest evidenceShredded row %d: %w", i, err)
 			return
@@ -756,13 +740,8 @@ func (inst *LedgerVaultStore) IngestEvidenceShreddedCtx(ctx context.Context, ord
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *LedgerVaultStore) IngestEvidenceOpening(ord uint64, rows []EvidenceOpening) (err error) {
-	return inst.IngestEvidenceOpeningCtx(context.Background(), ord, rows)
-}
-
-// IngestEvidenceOpeningCtx is IngestEvidenceOpening with the context BeginCtx hands the
-// configured stampers.
-func (inst *LedgerVaultStore) IngestEvidenceOpeningCtx(ctx context.Context, ord uint64, rows []EvidenceOpening) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *LedgerVaultStore) IngestEvidenceOpening(ctx context.Context, ord uint64, rows []EvidenceOpening) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -770,7 +749,7 @@ func (inst *LedgerVaultStore) IngestEvidenceOpeningCtx(ctx context.Context, ord 
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ord, LedgerVaultEnvelope{}).AddEvidenceOpening(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ord, LedgerVaultEnvelope{}).AddEvidenceOpening(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest evidenceOpening row %d: %w", i, err)
 			return
@@ -952,7 +931,7 @@ func (inst *LedgerVaultStore) CanonicalItem(ent *LedgerVaultEntity) (item []byte
 	if inst.scratch == nil {
 		inst.scratch = NewLedgerVaultStore(nil, nil, LedgerVaultStoreConfig{})
 	}
-	b := inst.scratch.Begin(ent.ID, ent.Ord, ent.LedgerVaultEnvelope)
+	b := inst.scratch.Begin(context.Background(), ent.ID, ent.Ord, ent.LedgerVaultEnvelope) //boxer:lint disable=CS020 reason="an in-memory re-encode on a scratch store without stampers: no I/O, no call identity"
 	if ent.LedgerNote.Has {
 		b.AddLedgerNote(ent.LedgerNote.Val)
 	}

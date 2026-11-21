@@ -36,7 +36,7 @@ func TestActorStampingEndToEnd(t *testing.T) {
 	})
 	require.NoError(t, dev.EnsureTable(ctx))
 
-	err = dev.Begin(1, recordstore.SeqTs(1)).AddIdentity(Identity{ID: 1, Status: "live"}).Commit()
+	err = dev.Begin(ctx, 1, recordstore.SeqTs(1)).AddIdentity(Identity{ID: 1, Status: "live"}).Commit()
 	require.ErrorIs(t, err, actor.ErrNoPrincipal, "no identity, no write")
 	assert.Zero(t, dev.Buffered())
 
@@ -44,7 +44,7 @@ func TestActorStampingEndToEnd(t *testing.T) {
 		Origin: callident.Origin{Run: "r", App: "example.ledger"},
 		Claims: callident.Claims{Principal: "p:9", Purpose: "rectification"},
 	})
-	require.NoError(t, dev.BeginCtx(who, 1, recordstore.SeqTs(1)).AddIdentity(Identity{ID: 1, Status: "live"}).Commit())
+	require.NoError(t, dev.Begin(who, 1, recordstore.SeqTs(1)).AddIdentity(Identity{ID: 1, Status: "live"}).Commit())
 	_, err = dev.Flush(ctx)
 	require.NoError(t, err)
 

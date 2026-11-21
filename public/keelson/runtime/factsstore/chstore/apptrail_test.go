@@ -132,7 +132,7 @@ func writeTrailEvents(t *testing.T, rows []evaudit.Event) {
 	defer st.Close()
 	for i, r := range rows {
 		id := uint64(i + 1)
-		b := st.Begin(id, r.At, trail.TrailEnvelope{NaturalKey: []byte("event-" + strconv.Itoa(i))})
+		b := st.Begin(t.Context(), id, r.At, trail.TrailEnvelope{NaturalKey: []byte("event-" + strconv.Itoa(i))})
 		o := r.Origin
 		o.Id = id
 		b.AddOrigin(o)

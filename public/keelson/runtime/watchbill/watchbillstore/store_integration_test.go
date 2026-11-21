@@ -39,7 +39,7 @@ func TestStoreRoundTripUnderClickhouseLocal(t *testing.T) {
 		Backoff: BackoffNone, OwnerAppId: "app", RequesterRun: "req-run",
 		State: StateQueued, RunAfter: now, Attempt: 0,
 	}
-	require.NoError(t, st.Job.Begin(job.ID, now).AddJob(job).Commit())
+	require.NoError(t, st.Job.Begin(ctx, job.ID, now).AddJob(job).Commit())
 	_, err = st.Job.Flush(ctx)
 	require.NoError(t, err)
 
@@ -72,7 +72,7 @@ func TestStoreRoundTripUnderClickhouseLocal(t *testing.T) {
 
 	// Events append and read back in order.
 	for i, s := range []string{StateRunning, StateSucceeded} {
-		require.NoError(t, st.Event.Begin("j1", now.Add(time.Duration(i)*time.Second)).AddEvent(Event{ID: "j1", State: s, Attempt: 1, WorkerRun: "run-a"}).Commit())
+		require.NoError(t, st.Event.Begin(ctx, "j1", now.Add(time.Duration(i)*time.Second)).AddEvent(Event{ID: "j1", State: s, Attempt: 1, WorkerRun: "run-a"}).Commit())
 	}
 	_, err = st.Event.Flush(ctx)
 	require.NoError(t, err)

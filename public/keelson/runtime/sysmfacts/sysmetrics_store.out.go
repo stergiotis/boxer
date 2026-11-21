@@ -496,7 +496,7 @@ func (inst *SysmetricsStore) readTable() string {
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *SysmetricsStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -645,7 +645,7 @@ type SysmetricsEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -682,16 +682,10 @@ func (inst *SysmetricsEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and the pass-through envelope, under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *SysmetricsStore) Begin(id uint64, ts time.Time, env SysmetricsEnvelope) *SysmetricsEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ts, env)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *SysmetricsStore) BeginCtx(ctx context.Context, id uint64, ts time.Time, env SysmetricsEnvelope) *SysmetricsEntityBuilder {
+// (Key, Order) and the pass-through envelope, under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *SysmetricsStore) Begin(ctx context.Context, id uint64, ts time.Time, env SysmetricsEnvelope) *SysmetricsEntityBuilder {
 	lowlevel.InEntityFactsTableBeginEntity(inst.dml)
 	lowlevel.InEntityFactsTableSetId(inst.dml, id, env.NaturalKey)
 	lowlevel.InEntityFactsTableSetTimestamp(inst.dml, ts)
@@ -1243,13 +1237,8 @@ func (inst *SysmetricsEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *SysmetricsStore) IngestOrigin(ts time.Time, rows []Origin) (err error) {
-	return inst.IngestOriginCtx(context.Background(), ts, rows)
-}
-
-// IngestOriginCtx is IngestOrigin with the context BeginCtx hands the
-// configured stampers.
-func (inst *SysmetricsStore) IngestOriginCtx(ctx context.Context, ts time.Time, rows []Origin) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *SysmetricsStore) IngestOrigin(ctx context.Context, ts time.Time, rows []Origin) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1257,7 +1246,7 @@ func (inst *SysmetricsStore) IngestOriginCtx(ctx context.Context, ts time.Time, 
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, SysmetricsEnvelope{}).AddOrigin(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, SysmetricsEnvelope{}).AddOrigin(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest origin row %d: %w", i, err)
 			return
@@ -1275,13 +1264,8 @@ func (inst *SysmetricsStore) IngestOriginCtx(ctx context.Context, ts time.Time, 
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *SysmetricsStore) IngestSysCpu(ts time.Time, rows []SysCpu) (err error) {
-	return inst.IngestSysCpuCtx(context.Background(), ts, rows)
-}
-
-// IngestSysCpuCtx is IngestSysCpu with the context BeginCtx hands the
-// configured stampers.
-func (inst *SysmetricsStore) IngestSysCpuCtx(ctx context.Context, ts time.Time, rows []SysCpu) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *SysmetricsStore) IngestSysCpu(ctx context.Context, ts time.Time, rows []SysCpu) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1289,7 +1273,7 @@ func (inst *SysmetricsStore) IngestSysCpuCtx(ctx context.Context, ts time.Time, 
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysCpu(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysCpu(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysCpu row %d: %w", i, err)
 			return
@@ -1307,13 +1291,8 @@ func (inst *SysmetricsStore) IngestSysCpuCtx(ctx context.Context, ts time.Time, 
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *SysmetricsStore) IngestSysCpuInfo(ts time.Time, rows []SysCpuInfo) (err error) {
-	return inst.IngestSysCpuInfoCtx(context.Background(), ts, rows)
-}
-
-// IngestSysCpuInfoCtx is IngestSysCpuInfo with the context BeginCtx hands the
-// configured stampers.
-func (inst *SysmetricsStore) IngestSysCpuInfoCtx(ctx context.Context, ts time.Time, rows []SysCpuInfo) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *SysmetricsStore) IngestSysCpuInfo(ctx context.Context, ts time.Time, rows []SysCpuInfo) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1321,7 +1300,7 @@ func (inst *SysmetricsStore) IngestSysCpuInfoCtx(ctx context.Context, ts time.Ti
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysCpuInfo(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysCpuInfo(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysCpuInfo row %d: %w", i, err)
 			return
@@ -1339,13 +1318,8 @@ func (inst *SysmetricsStore) IngestSysCpuInfoCtx(ctx context.Context, ts time.Ti
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *SysmetricsStore) IngestSysMem(ts time.Time, rows []SysMem) (err error) {
-	return inst.IngestSysMemCtx(context.Background(), ts, rows)
-}
-
-// IngestSysMemCtx is IngestSysMem with the context BeginCtx hands the
-// configured stampers.
-func (inst *SysmetricsStore) IngestSysMemCtx(ctx context.Context, ts time.Time, rows []SysMem) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *SysmetricsStore) IngestSysMem(ctx context.Context, ts time.Time, rows []SysMem) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1353,7 +1327,7 @@ func (inst *SysmetricsStore) IngestSysMemCtx(ctx context.Context, ts time.Time, 
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysMem(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysMem(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysMem row %d: %w", i, err)
 			return
@@ -1371,13 +1345,8 @@ func (inst *SysmetricsStore) IngestSysMemCtx(ctx context.Context, ts time.Time, 
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *SysmetricsStore) IngestSysPsi(ts time.Time, rows []SysPsi) (err error) {
-	return inst.IngestSysPsiCtx(context.Background(), ts, rows)
-}
-
-// IngestSysPsiCtx is IngestSysPsi with the context BeginCtx hands the
-// configured stampers.
-func (inst *SysmetricsStore) IngestSysPsiCtx(ctx context.Context, ts time.Time, rows []SysPsi) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *SysmetricsStore) IngestSysPsi(ctx context.Context, ts time.Time, rows []SysPsi) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1385,7 +1354,7 @@ func (inst *SysmetricsStore) IngestSysPsiCtx(ctx context.Context, ts time.Time, 
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysPsi(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysPsi(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysPsi row %d: %w", i, err)
 			return
@@ -1403,13 +1372,8 @@ func (inst *SysmetricsStore) IngestSysPsiCtx(ctx context.Context, ts time.Time, 
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *SysmetricsStore) IngestSysNet(ts time.Time, rows []SysNet) (err error) {
-	return inst.IngestSysNetCtx(context.Background(), ts, rows)
-}
-
-// IngestSysNetCtx is IngestSysNet with the context BeginCtx hands the
-// configured stampers.
-func (inst *SysmetricsStore) IngestSysNetCtx(ctx context.Context, ts time.Time, rows []SysNet) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *SysmetricsStore) IngestSysNet(ctx context.Context, ts time.Time, rows []SysNet) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1417,7 +1381,7 @@ func (inst *SysmetricsStore) IngestSysNetCtx(ctx context.Context, ts time.Time, 
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysNet(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysNet(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysNet row %d: %w", i, err)
 			return
@@ -1435,13 +1399,8 @@ func (inst *SysmetricsStore) IngestSysNetCtx(ctx context.Context, ts time.Time, 
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *SysmetricsStore) IngestSysDiskMount(ts time.Time, rows []SysDiskMount) (err error) {
-	return inst.IngestSysDiskMountCtx(context.Background(), ts, rows)
-}
-
-// IngestSysDiskMountCtx is IngestSysDiskMount with the context BeginCtx hands the
-// configured stampers.
-func (inst *SysmetricsStore) IngestSysDiskMountCtx(ctx context.Context, ts time.Time, rows []SysDiskMount) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *SysmetricsStore) IngestSysDiskMount(ctx context.Context, ts time.Time, rows []SysDiskMount) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1449,7 +1408,7 @@ func (inst *SysmetricsStore) IngestSysDiskMountCtx(ctx context.Context, ts time.
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysDiskMount(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysDiskMount(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysDiskMount row %d: %w", i, err)
 			return
@@ -1467,13 +1426,8 @@ func (inst *SysmetricsStore) IngestSysDiskMountCtx(ctx context.Context, ts time.
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *SysmetricsStore) IngestSysDiskIo(ts time.Time, rows []SysDiskIo) (err error) {
-	return inst.IngestSysDiskIoCtx(context.Background(), ts, rows)
-}
-
-// IngestSysDiskIoCtx is IngestSysDiskIo with the context BeginCtx hands the
-// configured stampers.
-func (inst *SysmetricsStore) IngestSysDiskIoCtx(ctx context.Context, ts time.Time, rows []SysDiskIo) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *SysmetricsStore) IngestSysDiskIo(ctx context.Context, ts time.Time, rows []SysDiskIo) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1481,7 +1435,7 @@ func (inst *SysmetricsStore) IngestSysDiskIoCtx(ctx context.Context, ts time.Tim
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysDiskIo(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysDiskIo(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysDiskIo row %d: %w", i, err)
 			return
@@ -1499,13 +1453,8 @@ func (inst *SysmetricsStore) IngestSysDiskIoCtx(ctx context.Context, ts time.Tim
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *SysmetricsStore) IngestSysBattery(ts time.Time, rows []SysBattery) (err error) {
-	return inst.IngestSysBatteryCtx(context.Background(), ts, rows)
-}
-
-// IngestSysBatteryCtx is IngestSysBattery with the context BeginCtx hands the
-// configured stampers.
-func (inst *SysmetricsStore) IngestSysBatteryCtx(ctx context.Context, ts time.Time, rows []SysBattery) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *SysmetricsStore) IngestSysBattery(ctx context.Context, ts time.Time, rows []SysBattery) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1513,7 +1462,7 @@ func (inst *SysmetricsStore) IngestSysBatteryCtx(ctx context.Context, ts time.Ti
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysBattery(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysBattery(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysBattery row %d: %w", i, err)
 			return
@@ -1531,13 +1480,8 @@ func (inst *SysmetricsStore) IngestSysBatteryCtx(ctx context.Context, ts time.Ti
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *SysmetricsStore) IngestSysGpu(ts time.Time, rows []SysGpu) (err error) {
-	return inst.IngestSysGpuCtx(context.Background(), ts, rows)
-}
-
-// IngestSysGpuCtx is IngestSysGpu with the context BeginCtx hands the
-// configured stampers.
-func (inst *SysmetricsStore) IngestSysGpuCtx(ctx context.Context, ts time.Time, rows []SysGpu) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *SysmetricsStore) IngestSysGpu(ctx context.Context, ts time.Time, rows []SysGpu) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1545,7 +1489,7 @@ func (inst *SysmetricsStore) IngestSysGpuCtx(ctx context.Context, ts time.Time, 
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysGpu(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysGpu(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysGpu row %d: %w", i, err)
 			return
@@ -1563,13 +1507,8 @@ func (inst *SysmetricsStore) IngestSysGpuCtx(ctx context.Context, ts time.Time, 
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *SysmetricsStore) IngestSysProc(ts time.Time, rows []SysProc) (err error) {
-	return inst.IngestSysProcCtx(context.Background(), ts, rows)
-}
-
-// IngestSysProcCtx is IngestSysProc with the context BeginCtx hands the
-// configured stampers.
-func (inst *SysmetricsStore) IngestSysProcCtx(ctx context.Context, ts time.Time, rows []SysProc) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *SysmetricsStore) IngestSysProc(ctx context.Context, ts time.Time, rows []SysProc) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1577,7 +1516,7 @@ func (inst *SysmetricsStore) IngestSysProcCtx(ctx context.Context, ts time.Time,
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysProc(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysProc(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysProc row %d: %w", i, err)
 			return
@@ -1595,13 +1534,8 @@ func (inst *SysmetricsStore) IngestSysProcCtx(ctx context.Context, ts time.Time,
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *SysmetricsStore) IngestSysProcCmd(ts time.Time, rows []SysProcCmd) (err error) {
-	return inst.IngestSysProcCmdCtx(context.Background(), ts, rows)
-}
-
-// IngestSysProcCmdCtx is IngestSysProcCmd with the context BeginCtx hands the
-// configured stampers.
-func (inst *SysmetricsStore) IngestSysProcCmdCtx(ctx context.Context, ts time.Time, rows []SysProcCmd) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *SysmetricsStore) IngestSysProcCmd(ctx context.Context, ts time.Time, rows []SysProcCmd) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1609,7 +1543,7 @@ func (inst *SysmetricsStore) IngestSysProcCmdCtx(ctx context.Context, ts time.Ti
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysProcCmd(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysProcCmd(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysProcCmd row %d: %w", i, err)
 			return
@@ -1627,13 +1561,8 @@ func (inst *SysmetricsStore) IngestSysProcCmdCtx(ctx context.Context, ts time.Ti
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *SysmetricsStore) IngestSysSocket(ts time.Time, rows []SysSocket) (err error) {
-	return inst.IngestSysSocketCtx(context.Background(), ts, rows)
-}
-
-// IngestSysSocketCtx is IngestSysSocket with the context BeginCtx hands the
-// configured stampers.
-func (inst *SysmetricsStore) IngestSysSocketCtx(ctx context.Context, ts time.Time, rows []SysSocket) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *SysmetricsStore) IngestSysSocket(ctx context.Context, ts time.Time, rows []SysSocket) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1641,7 +1570,7 @@ func (inst *SysmetricsStore) IngestSysSocketCtx(ctx context.Context, ts time.Tim
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysSocket(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysSocket(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysSocket row %d: %w", i, err)
 			return
@@ -1659,13 +1588,8 @@ func (inst *SysmetricsStore) IngestSysSocketCtx(ctx context.Context, ts time.Tim
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *SysmetricsStore) IngestSysTopology(ts time.Time, rows []SysTopology) (err error) {
-	return inst.IngestSysTopologyCtx(context.Background(), ts, rows)
-}
-
-// IngestSysTopologyCtx is IngestSysTopology with the context BeginCtx hands the
-// configured stampers.
-func (inst *SysmetricsStore) IngestSysTopologyCtx(ctx context.Context, ts time.Time, rows []SysTopology) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *SysmetricsStore) IngestSysTopology(ctx context.Context, ts time.Time, rows []SysTopology) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1673,7 +1597,7 @@ func (inst *SysmetricsStore) IngestSysTopologyCtx(ctx context.Context, ts time.T
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysTopology(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysTopology(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysTopology row %d: %w", i, err)
 			return

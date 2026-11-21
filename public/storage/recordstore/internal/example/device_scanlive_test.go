@@ -30,20 +30,20 @@ func TestDeviceStoreScanLive(t *testing.T) {
 	t1 := t0.Add(time.Hour)
 	t2 := t1.Add(time.Hour)
 	ident := func(id uint64, ts time.Time, status string) {
-		require.NoError(t, st.Begin(id, ts).AddIdentity(Identity{ID: id, Status: status}).Commit())
+		require.NoError(t, st.Begin(ctx, id, ts).AddIdentity(Identity{ID: id, Status: status}).Commit())
 	}
 	// 1: written, then deleted — the tombstone carries no component.
 	ident(1, t0, "IDLE")
-	require.NoError(t, st.Delete(1, t1))
+	require.NoError(t, st.Delete(ctx, 1, t1))
 	// 2: its newest row carries only Battery — the component switched.
 	ident(2, t0, "IDLE")
-	require.NoError(t, st.Begin(2, t1).AddBattery(Battery{ID: 2, Charge: 500}).Commit())
+	require.NoError(t, st.Begin(ctx, 2, t1).AddBattery(Battery{ID: 2, Charge: 500}).Commit())
 	// 3: two versions; only the newer is live.
 	ident(3, t0, "IDLE")
 	ident(3, t1, "CHARGING")
 	// 4: deleted, then written again — live once more.
 	ident(4, t0, "IDLE")
-	require.NoError(t, st.Delete(4, t1))
+	require.NoError(t, st.Delete(ctx, 4, t1))
 	ident(4, t2, "RETURNED")
 	// 5: never touched after its one write.
 	ident(5, t0, "IDLE")

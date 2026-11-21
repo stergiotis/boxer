@@ -15,7 +15,7 @@ import (
 func TestCanonicalItemIsTheDrainedRow(t *testing.T) {
 	st := NewRevStore(nil, nil, RevStoreConfig{})
 	defer st.Close()
-	require.NoError(t, st.Begin("r1", 7, RevEnvelope{}).AddRevNote(RevNote{Text: "a"}).Commit())
+	require.NoError(t, st.Begin(t.Context(), "r1", 7, RevEnvelope{}).AddRevNote(RevNote{Text: "a"}).Commit())
 	var drained bytes.Buffer
 	n, err := st.DrainCanonical(&drained)
 	require.NoError(t, err)

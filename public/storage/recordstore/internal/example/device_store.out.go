@@ -327,7 +327,7 @@ func (inst *DeviceStore) isTombstone(e *DeviceEntity) bool {
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *DeviceStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -506,7 +506,7 @@ type DeviceEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -532,16 +532,10 @@ func (inst *DeviceEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and a live lifecycle, under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *DeviceStore) Begin(id uint64, ts time.Time) *DeviceEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ts)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *DeviceStore) BeginCtx(ctx context.Context, id uint64, ts time.Time) *DeviceEntityBuilder {
+// (Key, Order) and a live lifecycle, under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *DeviceStore) Begin(ctx context.Context, id uint64, ts time.Time) *DeviceEntityBuilder {
 	lowlevel.InEntityDeviceTableBeginEntity(inst.dml)
 	lowlevel.InEntityDeviceTableSetId(inst.dml, id)
 	lowlevel.InEntityDeviceTableSetTimestamp(inst.dml, ts)
@@ -711,13 +705,8 @@ func (inst *DeviceEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *DeviceStore) IngestIdentity(ts time.Time, rows []Identity) (err error) {
-	return inst.IngestIdentityCtx(context.Background(), ts, rows)
-}
-
-// IngestIdentityCtx is IngestIdentity with the context BeginCtx hands the
-// configured stampers.
-func (inst *DeviceStore) IngestIdentityCtx(ctx context.Context, ts time.Time, rows []Identity) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *DeviceStore) IngestIdentity(ctx context.Context, ts time.Time, rows []Identity) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -725,7 +714,7 @@ func (inst *DeviceStore) IngestIdentityCtx(ctx context.Context, ts time.Time, ro
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddIdentity(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddIdentity(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest identity row %d: %w", i, err)
 			return
@@ -741,13 +730,8 @@ func (inst *DeviceStore) IngestIdentityCtx(ctx context.Context, ts time.Time, ro
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *DeviceStore) IngestBattery(ts time.Time, rows []Battery) (err error) {
-	return inst.IngestBatteryCtx(context.Background(), ts, rows)
-}
-
-// IngestBatteryCtx is IngestBattery with the context BeginCtx hands the
-// configured stampers.
-func (inst *DeviceStore) IngestBatteryCtx(ctx context.Context, ts time.Time, rows []Battery) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *DeviceStore) IngestBattery(ctx context.Context, ts time.Time, rows []Battery) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -755,7 +739,7 @@ func (inst *DeviceStore) IngestBatteryCtx(ctx context.Context, ts time.Time, row
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddBattery(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddBattery(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest battery row %d: %w", i, err)
 			return
@@ -771,13 +755,8 @@ func (inst *DeviceStore) IngestBatteryCtx(ctx context.Context, ts time.Time, row
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *DeviceStore) IngestTagged(ts time.Time, rows []Tagged) (err error) {
-	return inst.IngestTaggedCtx(context.Background(), ts, rows)
-}
-
-// IngestTaggedCtx is IngestTagged with the context BeginCtx hands the
-// configured stampers.
-func (inst *DeviceStore) IngestTaggedCtx(ctx context.Context, ts time.Time, rows []Tagged) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *DeviceStore) IngestTagged(ctx context.Context, ts time.Time, rows []Tagged) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -785,7 +764,7 @@ func (inst *DeviceStore) IngestTaggedCtx(ctx context.Context, ts time.Time, rows
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddTagged(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddTagged(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest tagged row %d: %w", i, err)
 			return
@@ -801,13 +780,8 @@ func (inst *DeviceStore) IngestTaggedCtx(ctx context.Context, ts time.Time, rows
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *DeviceStore) IngestLocated(ts time.Time, rows []Located) (err error) {
-	return inst.IngestLocatedCtx(context.Background(), ts, rows)
-}
-
-// IngestLocatedCtx is IngestLocated with the context BeginCtx hands the
-// configured stampers.
-func (inst *DeviceStore) IngestLocatedCtx(ctx context.Context, ts time.Time, rows []Located) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *DeviceStore) IngestLocated(ctx context.Context, ts time.Time, rows []Located) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -815,7 +789,7 @@ func (inst *DeviceStore) IngestLocatedCtx(ctx context.Context, ts time.Time, row
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddLocated(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddLocated(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest located row %d: %w", i, err)
 			return
@@ -1452,15 +1426,10 @@ func (inst *DeviceStore) Replay(ctx context.Context, key uint64, fromOrder time.
 // pair is the marker). Either way the deletion writes through to
 // attached cache views like any commit — versioned, so GetLive reads
 // the key as absent immediately.
-func (inst *DeviceStore) Delete(id uint64, ts time.Time) (err error) {
-	return inst.DeleteCtx(context.Background(), id, ts)
-}
-
-// DeleteCtx is Delete with the context BeginCtx hands the configured
-// stampers.
-func (inst *DeviceStore) DeleteCtx(ctx context.Context, id uint64, ts time.Time) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *DeviceStore) Delete(ctx context.Context, id uint64, ts time.Time) (err error) {
 	if inst.cfg.TombstoneWrite != nil {
-		b := inst.BeginCtx(ctx, id, ts)
+		b := inst.Begin(ctx, id, ts)
 		b.tombstone = true
 		inst.cfg.TombstoneWrite(b)
 		return b.Commit()

@@ -167,13 +167,13 @@ func NewStoreSink(st *ProvenanceStore) dimension.DescriptorSink[Provenance] {
 	return storeSink{st: st, cache: NewProvenanceCache[struct{}](st, ProvenanceCacheConfig{})}
 }
 
-func (inst storeSink) Emit(_ context.Context, id uint64, d Provenance) error {
+func (inst storeSink) Emit(ctx context.Context, id uint64, d Provenance) error {
 	// Begin(id, ts): the descriptor schema has no pass-through envelope and no
 	// lifecycle. The id is the key; it is mirrored into d.ID so the cache's
 	// write-through twin matches the decoded read (which fills ID from the
 	// plain column).
 	d.ID = id
-	return inst.st.Begin(id, descriptorOrder).AddProvenance(d).Commit()
+	return inst.st.Begin(ctx, id, descriptorOrder).AddProvenance(d).Commit()
 }
 
 func (inst storeSink) Resolve(ctx context.Context, id uint64) (d Provenance, found bool, err error) {

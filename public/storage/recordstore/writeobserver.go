@@ -20,7 +20,7 @@ type WrittenKey[K any, O any] struct {
 	// is the flag to read.
 	Tombstone bool
 	// Identity is the call identity on the context the row was committed
-	// under (BeginCtx, DeleteCtx, Ingest<Kind>Ctx) — who wrote it. The Flush
+	// under (Begin, Delete, Ingest<Kind>Ctx) — who wrote it. The Flush
 	// that ships the row stamps its insert with its own context's identity,
 	// which may be someone else's; this field is the per-row attribution.
 	Identity callident.CallIdentity

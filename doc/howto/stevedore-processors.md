@@ -149,7 +149,7 @@ type mySink struct{ store *myfacts.MyStore }
 
 func (inst *mySink) Land(ctx context.Context, item stevedore.Item) error {
     row := myfacts.MyRow{Ref: item.Ref.Value(), Ordinal: item.Ordinal, /* your fields from item.Payload */}
-    return inst.store.Begin(rowId(item), time.Now(), myfacts.MyEnvelope{NaturalKey: rowKey(item)}).AddMyRow(row).Commit()
+    return inst.store.Begin(ctx, rowId(item), time.Now(), myfacts.MyEnvelope{NaturalKey: rowKey(item)}).AddMyRow(row).Commit()
 }
 func (inst *mySink) Flush(ctx context.Context) error { _, err := inst.store.Flush(ctx); return err }
 ```

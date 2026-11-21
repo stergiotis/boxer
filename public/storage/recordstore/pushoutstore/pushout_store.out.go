@@ -338,7 +338,7 @@ func (inst *PushoutStore) isTombstone(e *PushoutEntity) bool {
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *PushoutStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -517,7 +517,7 @@ type PushoutEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -551,16 +551,10 @@ func (inst *PushoutEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and a live lifecycle, under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *PushoutStore) Begin(id string, ts time.Time) *PushoutEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ts)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *PushoutStore) BeginCtx(ctx context.Context, id string, ts time.Time) *PushoutEntityBuilder {
+// (Key, Order) and a live lifecycle, under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *PushoutStore) Begin(ctx context.Context, id string, ts time.Time) *PushoutEntityBuilder {
 	lowlevel.InEntityPushoutTableBeginEntity(inst.dml)
 	lowlevel.InEntityPushoutTableSetId(inst.dml, id)
 	lowlevel.InEntityPushoutTableSetTimestamp(inst.dml, ts)
@@ -742,13 +736,8 @@ func (inst *PushoutEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *PushoutStore) IngestEnvelope(ts time.Time, rows []Envelope) (err error) {
-	return inst.IngestEnvelopeCtx(context.Background(), ts, rows)
-}
-
-// IngestEnvelopeCtx is IngestEnvelope with the context BeginCtx hands the
-// configured stampers.
-func (inst *PushoutStore) IngestEnvelopeCtx(ctx context.Context, ts time.Time, rows []Envelope) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *PushoutStore) IngestEnvelope(ctx context.Context, ts time.Time, rows []Envelope) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -756,7 +745,7 @@ func (inst *PushoutStore) IngestEnvelopeCtx(ctx context.Context, ts time.Time, r
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddEnvelope(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddEnvelope(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest envelope row %d: %w", i, err)
 			return
@@ -772,13 +761,8 @@ func (inst *PushoutStore) IngestEnvelopeCtx(ctx context.Context, ts time.Time, r
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *PushoutStore) IngestLogEntry(ts time.Time, rows []LogEntry) (err error) {
-	return inst.IngestLogEntryCtx(context.Background(), ts, rows)
-}
-
-// IngestLogEntryCtx is IngestLogEntry with the context BeginCtx hands the
-// configured stampers.
-func (inst *PushoutStore) IngestLogEntryCtx(ctx context.Context, ts time.Time, rows []LogEntry) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *PushoutStore) IngestLogEntry(ctx context.Context, ts time.Time, rows []LogEntry) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -786,7 +770,7 @@ func (inst *PushoutStore) IngestLogEntryCtx(ctx context.Context, ts time.Time, r
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddLogEntry(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddLogEntry(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest logEntry row %d: %w", i, err)
 			return
@@ -802,13 +786,8 @@ func (inst *PushoutStore) IngestLogEntryCtx(ctx context.Context, ts time.Time, r
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *PushoutStore) IngestSnapshot(ts time.Time, rows []Snapshot) (err error) {
-	return inst.IngestSnapshotCtx(context.Background(), ts, rows)
-}
-
-// IngestSnapshotCtx is IngestSnapshot with the context BeginCtx hands the
-// configured stampers.
-func (inst *PushoutStore) IngestSnapshotCtx(ctx context.Context, ts time.Time, rows []Snapshot) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *PushoutStore) IngestSnapshot(ctx context.Context, ts time.Time, rows []Snapshot) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -816,7 +795,7 @@ func (inst *PushoutStore) IngestSnapshotCtx(ctx context.Context, ts time.Time, r
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddSnapshot(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddSnapshot(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest snapshot row %d: %w", i, err)
 			return
@@ -832,13 +811,8 @@ func (inst *PushoutStore) IngestSnapshotCtx(ctx context.Context, ts time.Time, r
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *PushoutStore) IngestRetention(ts time.Time, rows []Retention) (err error) {
-	return inst.IngestRetentionCtx(context.Background(), ts, rows)
-}
-
-// IngestRetentionCtx is IngestRetention with the context BeginCtx hands the
-// configured stampers.
-func (inst *PushoutStore) IngestRetentionCtx(ctx context.Context, ts time.Time, rows []Retention) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *PushoutStore) IngestRetention(ctx context.Context, ts time.Time, rows []Retention) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -846,7 +820,7 @@ func (inst *PushoutStore) IngestRetentionCtx(ctx context.Context, ts time.Time, 
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddRetention(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddRetention(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest retention row %d: %w", i, err)
 			return
@@ -1483,15 +1457,10 @@ func (inst *PushoutStore) Replay(ctx context.Context, key string, fromOrder time
 // pair is the marker). Either way the deletion writes through to
 // attached cache views like any commit — versioned, so GetLive reads
 // the key as absent immediately.
-func (inst *PushoutStore) Delete(id string, ts time.Time) (err error) {
-	return inst.DeleteCtx(context.Background(), id, ts)
-}
-
-// DeleteCtx is Delete with the context BeginCtx hands the configured
-// stampers.
-func (inst *PushoutStore) DeleteCtx(ctx context.Context, id string, ts time.Time) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *PushoutStore) Delete(ctx context.Context, id string, ts time.Time) (err error) {
 	if inst.cfg.TombstoneWrite != nil {
-		b := inst.BeginCtx(ctx, id, ts)
+		b := inst.Begin(ctx, id, ts)
 		b.tombstone = true
 		inst.cfg.TombstoneWrite(b)
 		return b.Commit()

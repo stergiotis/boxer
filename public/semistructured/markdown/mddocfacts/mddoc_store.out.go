@@ -353,7 +353,7 @@ func (inst *MddocStore) readTable() string {
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *MddocStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -502,7 +502,7 @@ type MddocEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -533,16 +533,10 @@ func (inst *MddocEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and the pass-through envelope, under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *MddocStore) Begin(id uint64, ts time.Time, env MddocEnvelope) *MddocEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ts, env)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *MddocStore) BeginCtx(ctx context.Context, id uint64, ts time.Time, env MddocEnvelope) *MddocEntityBuilder {
+// (Key, Order) and the pass-through envelope, under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *MddocStore) Begin(ctx context.Context, id uint64, ts time.Time, env MddocEnvelope) *MddocEntityBuilder {
 	lowlevel.InEntityFactsTableBeginEntity(inst.dml)
 	lowlevel.InEntityFactsTableSetId(inst.dml, id, env.NaturalKey)
 	lowlevel.InEntityFactsTableSetTimestamp(inst.dml, ts)
@@ -861,13 +855,8 @@ func (inst *MddocEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *MddocStore) IngestOrigin(ts time.Time, rows []Origin) (err error) {
-	return inst.IngestOriginCtx(context.Background(), ts, rows)
-}
-
-// IngestOriginCtx is IngestOrigin with the context BeginCtx hands the
-// configured stampers.
-func (inst *MddocStore) IngestOriginCtx(ctx context.Context, ts time.Time, rows []Origin) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *MddocStore) IngestOrigin(ctx context.Context, ts time.Time, rows []Origin) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -875,7 +864,7 @@ func (inst *MddocStore) IngestOriginCtx(ctx context.Context, ts time.Time, rows 
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, MddocEnvelope{}).AddOrigin(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, MddocEnvelope{}).AddOrigin(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest origin row %d: %w", i, err)
 			return
@@ -893,13 +882,8 @@ func (inst *MddocStore) IngestOriginCtx(ctx context.Context, ts time.Time, rows 
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *MddocStore) IngestMdDoc(ts time.Time, rows []MdDoc) (err error) {
-	return inst.IngestMdDocCtx(context.Background(), ts, rows)
-}
-
-// IngestMdDocCtx is IngestMdDoc with the context BeginCtx hands the
-// configured stampers.
-func (inst *MddocStore) IngestMdDocCtx(ctx context.Context, ts time.Time, rows []MdDoc) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *MddocStore) IngestMdDoc(ctx context.Context, ts time.Time, rows []MdDoc) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -907,7 +891,7 @@ func (inst *MddocStore) IngestMdDocCtx(ctx context.Context, ts time.Time, rows [
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdDoc(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdDoc(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdDoc row %d: %w", i, err)
 			return
@@ -925,13 +909,8 @@ func (inst *MddocStore) IngestMdDocCtx(ctx context.Context, ts time.Time, rows [
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *MddocStore) IngestMdHeading(ts time.Time, rows []MdHeading) (err error) {
-	return inst.IngestMdHeadingCtx(context.Background(), ts, rows)
-}
-
-// IngestMdHeadingCtx is IngestMdHeading with the context BeginCtx hands the
-// configured stampers.
-func (inst *MddocStore) IngestMdHeadingCtx(ctx context.Context, ts time.Time, rows []MdHeading) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *MddocStore) IngestMdHeading(ctx context.Context, ts time.Time, rows []MdHeading) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -939,7 +918,7 @@ func (inst *MddocStore) IngestMdHeadingCtx(ctx context.Context, ts time.Time, ro
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdHeading(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdHeading(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdHeading row %d: %w", i, err)
 			return
@@ -957,13 +936,8 @@ func (inst *MddocStore) IngestMdHeadingCtx(ctx context.Context, ts time.Time, ro
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *MddocStore) IngestMdCodeBlock(ts time.Time, rows []MdCodeBlock) (err error) {
-	return inst.IngestMdCodeBlockCtx(context.Background(), ts, rows)
-}
-
-// IngestMdCodeBlockCtx is IngestMdCodeBlock with the context BeginCtx hands the
-// configured stampers.
-func (inst *MddocStore) IngestMdCodeBlockCtx(ctx context.Context, ts time.Time, rows []MdCodeBlock) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *MddocStore) IngestMdCodeBlock(ctx context.Context, ts time.Time, rows []MdCodeBlock) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -971,7 +945,7 @@ func (inst *MddocStore) IngestMdCodeBlockCtx(ctx context.Context, ts time.Time, 
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdCodeBlock(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdCodeBlock(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdCodeBlock row %d: %w", i, err)
 			return
@@ -989,13 +963,8 @@ func (inst *MddocStore) IngestMdCodeBlockCtx(ctx context.Context, ts time.Time, 
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *MddocStore) IngestMdLink(ts time.Time, rows []MdLink) (err error) {
-	return inst.IngestMdLinkCtx(context.Background(), ts, rows)
-}
-
-// IngestMdLinkCtx is IngestMdLink with the context BeginCtx hands the
-// configured stampers.
-func (inst *MddocStore) IngestMdLinkCtx(ctx context.Context, ts time.Time, rows []MdLink) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *MddocStore) IngestMdLink(ctx context.Context, ts time.Time, rows []MdLink) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1003,7 +972,7 @@ func (inst *MddocStore) IngestMdLinkCtx(ctx context.Context, ts time.Time, rows 
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdLink(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdLink(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdLink row %d: %w", i, err)
 			return
@@ -1021,13 +990,8 @@ func (inst *MddocStore) IngestMdLinkCtx(ctx context.Context, ts time.Time, rows 
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *MddocStore) IngestMdEmphasis(ts time.Time, rows []MdEmphasis) (err error) {
-	return inst.IngestMdEmphasisCtx(context.Background(), ts, rows)
-}
-
-// IngestMdEmphasisCtx is IngestMdEmphasis with the context BeginCtx hands the
-// configured stampers.
-func (inst *MddocStore) IngestMdEmphasisCtx(ctx context.Context, ts time.Time, rows []MdEmphasis) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *MddocStore) IngestMdEmphasis(ctx context.Context, ts time.Time, rows []MdEmphasis) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1035,7 +999,7 @@ func (inst *MddocStore) IngestMdEmphasisCtx(ctx context.Context, ts time.Time, r
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdEmphasis(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdEmphasis(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdEmphasis row %d: %w", i, err)
 			return
@@ -1053,13 +1017,8 @@ func (inst *MddocStore) IngestMdEmphasisCtx(ctx context.Context, ts time.Time, r
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *MddocStore) IngestMdTag(ts time.Time, rows []MdTag) (err error) {
-	return inst.IngestMdTagCtx(context.Background(), ts, rows)
-}
-
-// IngestMdTagCtx is IngestMdTag with the context BeginCtx hands the
-// configured stampers.
-func (inst *MddocStore) IngestMdTagCtx(ctx context.Context, ts time.Time, rows []MdTag) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *MddocStore) IngestMdTag(ctx context.Context, ts time.Time, rows []MdTag) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1067,7 +1026,7 @@ func (inst *MddocStore) IngestMdTagCtx(ctx context.Context, ts time.Time, rows [
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdTag(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdTag(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdTag row %d: %w", i, err)
 			return

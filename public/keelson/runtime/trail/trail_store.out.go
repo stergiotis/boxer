@@ -627,7 +627,7 @@ func (inst *TrailStore) readTable() string {
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *TrailStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -776,7 +776,7 @@ type TrailEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -811,16 +811,10 @@ func (inst *TrailEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and the pass-through envelope, under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *TrailStore) Begin(id uint64, ts time.Time, env TrailEnvelope) *TrailEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ts, env)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *TrailStore) BeginCtx(ctx context.Context, id uint64, ts time.Time, env TrailEnvelope) *TrailEntityBuilder {
+// (Key, Order) and the pass-through envelope, under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *TrailStore) Begin(ctx context.Context, id uint64, ts time.Time, env TrailEnvelope) *TrailEntityBuilder {
 	lowlevel.InEntityFactsTableBeginEntity(inst.dml)
 	lowlevel.InEntityFactsTableSetId(inst.dml, id, env.NaturalKey)
 	lowlevel.InEntityFactsTableSetTimestamp(inst.dml, ts)
@@ -1516,13 +1510,8 @@ func (inst *TrailEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestOrigin(ts time.Time, rows []Origin) (err error) {
-	return inst.IngestOriginCtx(context.Background(), ts, rows)
-}
-
-// IngestOriginCtx is IngestOrigin with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestOriginCtx(ctx context.Context, ts time.Time, rows []Origin) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestOrigin(ctx context.Context, ts time.Time, rows []Origin) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1530,7 +1519,7 @@ func (inst *TrailStore) IngestOriginCtx(ctx context.Context, ts time.Time, rows 
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddOrigin(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddOrigin(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest origin row %d: %w", i, err)
 			return
@@ -1548,13 +1537,8 @@ func (inst *TrailStore) IngestOriginCtx(ctx context.Context, ts time.Time, rows 
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestConversation(ts time.Time, rows []Conversation) (err error) {
-	return inst.IngestConversationCtx(context.Background(), ts, rows)
-}
-
-// IngestConversationCtx is IngestConversation with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestConversationCtx(ctx context.Context, ts time.Time, rows []Conversation) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestConversation(ctx context.Context, ts time.Time, rows []Conversation) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1562,7 +1546,7 @@ func (inst *TrailStore) IngestConversationCtx(ctx context.Context, ts time.Time,
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddConversation(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddConversation(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest conversation row %d: %w", i, err)
 			return
@@ -1580,13 +1564,8 @@ func (inst *TrailStore) IngestConversationCtx(ctx context.Context, ts time.Time,
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestDelegation(ts time.Time, rows []Delegation) (err error) {
-	return inst.IngestDelegationCtx(context.Background(), ts, rows)
-}
-
-// IngestDelegationCtx is IngestDelegation with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestDelegationCtx(ctx context.Context, ts time.Time, rows []Delegation) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestDelegation(ctx context.Context, ts time.Time, rows []Delegation) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1594,7 +1573,7 @@ func (inst *TrailStore) IngestDelegationCtx(ctx context.Context, ts time.Time, r
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddDelegation(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddDelegation(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest delegation row %d: %w", i, err)
 			return
@@ -1612,13 +1591,8 @@ func (inst *TrailStore) IngestDelegationCtx(ctx context.Context, ts time.Time, r
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestCause(ts time.Time, rows []Cause) (err error) {
-	return inst.IngestCauseCtx(context.Background(), ts, rows)
-}
-
-// IngestCauseCtx is IngestCause with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestCauseCtx(ctx context.Context, ts time.Time, rows []Cause) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestCause(ctx context.Context, ts time.Time, rows []Cause) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1626,7 +1600,7 @@ func (inst *TrailStore) IngestCauseCtx(ctx context.Context, ts time.Time, rows [
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddCause(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddCause(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest cause row %d: %w", i, err)
 			return
@@ -1644,13 +1618,8 @@ func (inst *TrailStore) IngestCauseCtx(ctx context.Context, ts time.Time, rows [
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestLlmCall(ts time.Time, rows []LlmCall) (err error) {
-	return inst.IngestLlmCallCtx(context.Background(), ts, rows)
-}
-
-// IngestLlmCallCtx is IngestLlmCall with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestLlmCallCtx(ctx context.Context, ts time.Time, rows []LlmCall) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestLlmCall(ctx context.Context, ts time.Time, rows []LlmCall) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1658,7 +1627,7 @@ func (inst *TrailStore) IngestLlmCallCtx(ctx context.Context, ts time.Time, rows
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddLlmCall(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddLlmCall(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest llmCall row %d: %w", i, err)
 			return
@@ -1676,13 +1645,8 @@ func (inst *TrailStore) IngestLlmCallCtx(ctx context.Context, ts time.Time, rows
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestLlmMessage(ts time.Time, rows []LlmMessage) (err error) {
-	return inst.IngestLlmMessageCtx(context.Background(), ts, rows)
-}
-
-// IngestLlmMessageCtx is IngestLlmMessage with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestLlmMessageCtx(ctx context.Context, ts time.Time, rows []LlmMessage) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestLlmMessage(ctx context.Context, ts time.Time, rows []LlmMessage) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1690,7 +1654,7 @@ func (inst *TrailStore) IngestLlmMessageCtx(ctx context.Context, ts time.Time, r
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddLlmMessage(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddLlmMessage(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest llmMessage row %d: %w", i, err)
 			return
@@ -1708,13 +1672,8 @@ func (inst *TrailStore) IngestLlmMessageCtx(ctx context.Context, ts time.Time, r
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestLlmMessageBody(ts time.Time, rows []LlmMessageBody) (err error) {
-	return inst.IngestLlmMessageBodyCtx(context.Background(), ts, rows)
-}
-
-// IngestLlmMessageBodyCtx is IngestLlmMessageBody with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestLlmMessageBodyCtx(ctx context.Context, ts time.Time, rows []LlmMessageBody) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestLlmMessageBody(ctx context.Context, ts time.Time, rows []LlmMessageBody) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1722,7 +1681,7 @@ func (inst *TrailStore) IngestLlmMessageBodyCtx(ctx context.Context, ts time.Tim
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddLlmMessageBody(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddLlmMessageBody(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest llmMessageBody row %d: %w", i, err)
 			return
@@ -1740,13 +1699,8 @@ func (inst *TrailStore) IngestLlmMessageBodyCtx(ctx context.Context, ts time.Tim
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestAgentAction(ts time.Time, rows []AgentAction) (err error) {
-	return inst.IngestAgentActionCtx(context.Background(), ts, rows)
-}
-
-// IngestAgentActionCtx is IngestAgentAction with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestAgentActionCtx(ctx context.Context, ts time.Time, rows []AgentAction) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestAgentAction(ctx context.Context, ts time.Time, rows []AgentAction) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1754,7 +1708,7 @@ func (inst *TrailStore) IngestAgentActionCtx(ctx context.Context, ts time.Time, 
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddAgentAction(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddAgentAction(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest agentAction row %d: %w", i, err)
 			return
@@ -1772,13 +1726,8 @@ func (inst *TrailStore) IngestAgentActionCtx(ctx context.Context, ts time.Time, 
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestAgentGrant(ts time.Time, rows []AgentGrant) (err error) {
-	return inst.IngestAgentGrantCtx(context.Background(), ts, rows)
-}
-
-// IngestAgentGrantCtx is IngestAgentGrant with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestAgentGrantCtx(ctx context.Context, ts time.Time, rows []AgentGrant) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestAgentGrant(ctx context.Context, ts time.Time, rows []AgentGrant) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1786,7 +1735,7 @@ func (inst *TrailStore) IngestAgentGrantCtx(ctx context.Context, ts time.Time, r
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddAgentGrant(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddAgentGrant(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest agentGrant row %d: %w", i, err)
 			return
@@ -1804,13 +1753,8 @@ func (inst *TrailStore) IngestAgentGrantCtx(ctx context.Context, ts time.Time, r
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestHttpFetch(ts time.Time, rows []HttpFetch) (err error) {
-	return inst.IngestHttpFetchCtx(context.Background(), ts, rows)
-}
-
-// IngestHttpFetchCtx is IngestHttpFetch with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestHttpFetchCtx(ctx context.Context, ts time.Time, rows []HttpFetch) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestHttpFetch(ctx context.Context, ts time.Time, rows []HttpFetch) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1818,7 +1762,7 @@ func (inst *TrailStore) IngestHttpFetchCtx(ctx context.Context, ts time.Time, ro
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddHttpFetch(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddHttpFetch(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest httpFetch row %d: %w", i, err)
 			return
@@ -1836,13 +1780,8 @@ func (inst *TrailStore) IngestHttpFetchCtx(ctx context.Context, ts time.Time, ro
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestAgentCapture(ts time.Time, rows []AgentCapture) (err error) {
-	return inst.IngestAgentCaptureCtx(context.Background(), ts, rows)
-}
-
-// IngestAgentCaptureCtx is IngestAgentCapture with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestAgentCaptureCtx(ctx context.Context, ts time.Time, rows []AgentCapture) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestAgentCapture(ctx context.Context, ts time.Time, rows []AgentCapture) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1850,7 +1789,7 @@ func (inst *TrailStore) IngestAgentCaptureCtx(ctx context.Context, ts time.Time,
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddAgentCapture(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddAgentCapture(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest agentCapture row %d: %w", i, err)
 			return
@@ -1868,13 +1807,8 @@ func (inst *TrailStore) IngestAgentCaptureCtx(ctx context.Context, ts time.Time,
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestAgentDisclosure(ts time.Time, rows []AgentDisclosure) (err error) {
-	return inst.IngestAgentDisclosureCtx(context.Background(), ts, rows)
-}
-
-// IngestAgentDisclosureCtx is IngestAgentDisclosure with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestAgentDisclosureCtx(ctx context.Context, ts time.Time, rows []AgentDisclosure) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestAgentDisclosure(ctx context.Context, ts time.Time, rows []AgentDisclosure) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1882,7 +1816,7 @@ func (inst *TrailStore) IngestAgentDisclosureCtx(ctx context.Context, ts time.Ti
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddAgentDisclosure(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddAgentDisclosure(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest agentDisclosure row %d: %w", i, err)
 			return
@@ -1900,13 +1834,8 @@ func (inst *TrailStore) IngestAgentDisclosureCtx(ctx context.Context, ts time.Ti
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestAdhocDataset(ts time.Time, rows []AdhocDataset) (err error) {
-	return inst.IngestAdhocDatasetCtx(context.Background(), ts, rows)
-}
-
-// IngestAdhocDatasetCtx is IngestAdhocDataset with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestAdhocDatasetCtx(ctx context.Context, ts time.Time, rows []AdhocDataset) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestAdhocDataset(ctx context.Context, ts time.Time, rows []AdhocDataset) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1914,7 +1843,7 @@ func (inst *TrailStore) IngestAdhocDatasetCtx(ctx context.Context, ts time.Time,
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddAdhocDataset(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddAdhocDataset(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest adhocDataset row %d: %w", i, err)
 			return
@@ -1932,13 +1861,8 @@ func (inst *TrailStore) IngestAdhocDatasetCtx(ctx context.Context, ts time.Time,
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestLadingPublish(ts time.Time, rows []LadingPublish) (err error) {
-	return inst.IngestLadingPublishCtx(context.Background(), ts, rows)
-}
-
-// IngestLadingPublishCtx is IngestLadingPublish with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestLadingPublishCtx(ctx context.Context, ts time.Time, rows []LadingPublish) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestLadingPublish(ctx context.Context, ts time.Time, rows []LadingPublish) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1946,7 +1870,7 @@ func (inst *TrailStore) IngestLadingPublishCtx(ctx context.Context, ts time.Time
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddLadingPublish(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddLadingPublish(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest ladingPublish row %d: %w", i, err)
 			return
@@ -1964,13 +1888,8 @@ func (inst *TrailStore) IngestLadingPublishCtx(ctx context.Context, ts time.Time
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestCoverageBuild(ts time.Time, rows []CoverageBuild) (err error) {
-	return inst.IngestCoverageBuildCtx(context.Background(), ts, rows)
-}
-
-// IngestCoverageBuildCtx is IngestCoverageBuild with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestCoverageBuildCtx(ctx context.Context, ts time.Time, rows []CoverageBuild) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestCoverageBuild(ctx context.Context, ts time.Time, rows []CoverageBuild) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -1978,7 +1897,7 @@ func (inst *TrailStore) IngestCoverageBuildCtx(ctx context.Context, ts time.Time
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddCoverageBuild(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddCoverageBuild(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest coverageBuild row %d: %w", i, err)
 			return
@@ -1996,13 +1915,8 @@ func (inst *TrailStore) IngestCoverageBuildCtx(ctx context.Context, ts time.Time
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestCoverageFunc(ts time.Time, rows []CoverageFunc) (err error) {
-	return inst.IngestCoverageFuncCtx(context.Background(), ts, rows)
-}
-
-// IngestCoverageFuncCtx is IngestCoverageFunc with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestCoverageFuncCtx(ctx context.Context, ts time.Time, rows []CoverageFunc) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestCoverageFunc(ctx context.Context, ts time.Time, rows []CoverageFunc) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -2010,7 +1924,7 @@ func (inst *TrailStore) IngestCoverageFuncCtx(ctx context.Context, ts time.Time,
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddCoverageFunc(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddCoverageFunc(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest coverageFunc row %d: %w", i, err)
 			return
@@ -2028,13 +1942,8 @@ func (inst *TrailStore) IngestCoverageFuncCtx(ctx context.Context, ts time.Time,
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestCoverageSample(ts time.Time, rows []CoverageSample) (err error) {
-	return inst.IngestCoverageSampleCtx(context.Background(), ts, rows)
-}
-
-// IngestCoverageSampleCtx is IngestCoverageSample with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestCoverageSampleCtx(ctx context.Context, ts time.Time, rows []CoverageSample) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestCoverageSample(ctx context.Context, ts time.Time, rows []CoverageSample) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -2042,7 +1951,7 @@ func (inst *TrailStore) IngestCoverageSampleCtx(ctx context.Context, ts time.Tim
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddCoverageSample(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddCoverageSample(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest coverageSample row %d: %w", i, err)
 			return
@@ -2060,13 +1969,8 @@ func (inst *TrailStore) IngestCoverageSampleCtx(ctx context.Context, ts time.Tim
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestCoverageAgentApply(ts time.Time, rows []CoverageAgentApply) (err error) {
-	return inst.IngestCoverageAgentApplyCtx(context.Background(), ts, rows)
-}
-
-// IngestCoverageAgentApplyCtx is IngestCoverageAgentApply with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestCoverageAgentApplyCtx(ctx context.Context, ts time.Time, rows []CoverageAgentApply) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestCoverageAgentApply(ctx context.Context, ts time.Time, rows []CoverageAgentApply) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -2074,7 +1978,7 @@ func (inst *TrailStore) IngestCoverageAgentApplyCtx(ctx context.Context, ts time
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddCoverageAgentApply(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddCoverageAgentApply(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest coverageAgentApply row %d: %w", i, err)
 			return
@@ -2092,13 +1996,8 @@ func (inst *TrailStore) IngestCoverageAgentApplyCtx(ctx context.Context, ts time
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestAuditEvent(ts time.Time, rows []AuditEvent) (err error) {
-	return inst.IngestAuditEventCtx(context.Background(), ts, rows)
-}
-
-// IngestAuditEventCtx is IngestAuditEvent with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestAuditEventCtx(ctx context.Context, ts time.Time, rows []AuditEvent) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestAuditEvent(ctx context.Context, ts time.Time, rows []AuditEvent) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -2106,7 +2005,7 @@ func (inst *TrailStore) IngestAuditEventCtx(ctx context.Context, ts time.Time, r
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddAuditEvent(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddAuditEvent(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest auditEvent row %d: %w", i, err)
 			return
@@ -2124,13 +2023,8 @@ func (inst *TrailStore) IngestAuditEventCtx(ctx context.Context, ts time.Time, r
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *TrailStore) IngestEvidenceSeal(ts time.Time, rows []EvidenceSeal) (err error) {
-	return inst.IngestEvidenceSealCtx(context.Background(), ts, rows)
-}
-
-// IngestEvidenceSealCtx is IngestEvidenceSeal with the context BeginCtx hands the
-// configured stampers.
-func (inst *TrailStore) IngestEvidenceSealCtx(ctx context.Context, ts time.Time, rows []EvidenceSeal) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *TrailStore) IngestEvidenceSeal(ctx context.Context, ts time.Time, rows []EvidenceSeal) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -2138,7 +2032,7 @@ func (inst *TrailStore) IngestEvidenceSealCtx(ctx context.Context, ts time.Time,
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddEvidenceSeal(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].Id, ts, TrailEnvelope{}).AddEvidenceSeal(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest evidenceSeal row %d: %w", i, err)
 			return
@@ -2320,7 +2214,7 @@ func (inst *TrailStore) CanonicalItem(ent *TrailEntity) (item []byte, err error)
 	if inst.scratch == nil {
 		inst.scratch = NewTrailStore(nil, nil, TrailStoreConfig{})
 	}
-	b := inst.scratch.Begin(ent.ID, ent.Ts, ent.TrailEnvelope)
+	b := inst.scratch.Begin(context.Background(), ent.ID, ent.Ts, ent.TrailEnvelope) //boxer:lint disable=CS020 reason="an in-memory re-encode on a scratch store without stampers: no I/O, no call identity"
 	if ent.Origin.Has {
 		b.AddOrigin(ent.Origin.Val)
 	}

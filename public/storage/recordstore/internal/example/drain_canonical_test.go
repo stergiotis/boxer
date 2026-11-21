@@ -19,7 +19,7 @@ func TestDrainCanonicalItemsAreTheRows(t *testing.T) {
 	defer st.Close()
 	drain := func(rows ...RevNote) []byte {
 		for i, r := range rows {
-			require.NoError(t, st.Begin("r1", uint64(i+1), RevEnvelope{}).AddRevNote(r).Commit())
+			require.NoError(t, st.Begin(t.Context(), "r1", uint64(i+1), RevEnvelope{}).AddRevNote(r).Commit())
 		}
 		var buf bytes.Buffer
 		n, err := st.DrainCanonical(&buf)
@@ -43,7 +43,7 @@ func BenchmarkDrainCanonicalOneRow(b *testing.B) {
 	var buf bytes.Buffer
 	for b.Loop() {
 		buf.Reset()
-		_ = st.Begin("r1", 1, RevEnvelope{}).AddRevNote(RevNote{Text: "a"}).Commit()
+		_ = st.Begin(b.Context(), "r1", 1, RevEnvelope{}).AddRevNote(RevNote{Text: "a"}).Commit()
 		_, _ = st.DrainCanonical(&buf)
 	}
 }

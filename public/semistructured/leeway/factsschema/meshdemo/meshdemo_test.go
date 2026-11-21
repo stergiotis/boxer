@@ -126,7 +126,7 @@ func TestLateComponentFindsTheAgentsRowsBySql(t *testing.T) {
 	// --- domain A: the agent ingests through its generated store. ---
 	store := meshdemo.NewFleetStore(exec, nil, meshdemo.FleetStoreConfig{})
 	defer store.Close()
-	require.NoError(t, store.IngestFleetSample(time.Unix(1_700_000_000, 0).UTC(), agentRows))
+	require.NoError(t, store.IngestFleetSample(ctx, time.Unix(1_700_000_000, 0).UTC(), agentRows))
 	n, err := store.Flush(ctx)
 	require.NoError(t, err)
 	require.Equal(t, len(agentRows), n)
@@ -325,7 +325,7 @@ func TestIngestCarriesTheRowsNaturalKey(t *testing.T) {
 	}
 	store := meshdemo.NewFleetStore(exec, nil, meshdemo.FleetStoreConfig{})
 	defer store.Close()
-	require.NoError(t, store.IngestFleetSample(time.Unix(1_700_000_000, 0).UTC(), agentRows))
+	require.NoError(t, store.IngestFleetSample(ctx, time.Unix(1_700_000_000, 0).UTC(), agentRows))
 	_, err = store.Flush(ctx)
 	require.NoError(t, err)
 

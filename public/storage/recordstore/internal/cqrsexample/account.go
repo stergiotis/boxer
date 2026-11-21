@@ -120,7 +120,7 @@ func (inst *Service) append(ctx context.Context, acct *Account, add func(b *Ledg
 			inst.st.DiscardPending()
 		}
 	}()
-	b := inst.st.Begin(acct.ID, recordstore.SeqTs(acct.nextSeq))
+	b := inst.st.Begin(ctx, acct.ID, recordstore.SeqTs(acct.nextSeq))
 	add(b)
 	err = b.Commit()
 	if err != nil {
@@ -223,7 +223,7 @@ func (inst *Service) Snapshot(ctx context.Context, id string) (err error) {
 		return
 	}
 	asOf := acct.nextSeq - 1
-	b := inst.st.Begin(snapKey(id), recordstore.SeqTs(asOf))
+	b := inst.st.Begin(ctx, snapKey(id), recordstore.SeqTs(asOf))
 	b.AddAccountState(AccountState{
 		ID:      snapKey(id),
 		Owner:   acct.Owner,

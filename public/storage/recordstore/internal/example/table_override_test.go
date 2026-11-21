@@ -30,7 +30,7 @@ func TestDeviceStoreTableOverride(t *testing.T) {
 			defer over.Close()
 			require.NoError(t, over.EnsureTable(ctx))
 			require.NoError(t, over.VerifySchema(ctx), "the override table must carry the generated schema")
-			require.NoError(t, over.Begin(7, t0).AddBattery(Battery{ID: 7, Charge: 42}).Commit())
+			require.NoError(t, over.Begin(ctx, 7, t0).AddBattery(Battery{ID: 7, Charge: 42}).Commit())
 			_, err = over.Flush(ctx)
 			require.NoError(t, err)
 

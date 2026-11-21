@@ -198,7 +198,7 @@ func (inst *Storage) PutEnvelope(ctx context.Context, h types.PatchHash, framed 
 	// sequence 1 (the Latest check above just said the key is empty), so
 	// no per-key sequence derivation — and no second query — is needed.
 	ts := recordstore.SeqTs(1)
-	b := inst.st.Begin(key, ts)
+	b := inst.st.Begin(ctx, key, ts)
 	b.AddEnvelope(Envelope{ID: key, Framed: framed})
 	err = b.Commit()
 	if err != nil {
@@ -261,7 +261,7 @@ func (inst *Storage) PutEnvelopes(ctx context.Context, envs []repo.Envelope) (er
 			continue
 		}
 		key := envKey(e.Hash)
-		b := inst.st.Begin(key, recordstore.SeqTs(1))
+		b := inst.st.Begin(ctx, key, recordstore.SeqTs(1))
 		b.AddEnvelope(Envelope{ID: key, Framed: e.Framed})
 		err = b.Commit()
 		if err != nil {
@@ -387,7 +387,7 @@ func (inst *Storage) AppendApplied(ctx context.Context, h types.PatchHash) (err 
 	if err != nil {
 		return
 	}
-	b := inst.st.Begin(logKey, ts)
+	b := inst.st.Begin(ctx, logKey, ts)
 	b.AddLogEntry(LogEntry{ID: logKey, Hash: hexOfHash(h)})
 	err = b.Commit()
 	if err != nil {
@@ -422,7 +422,7 @@ func (inst *Storage) AppendAppliedBatch(ctx context.Context, hs []types.PatchHas
 		if err != nil {
 			return
 		}
-		b := inst.st.Begin(logKey, ts)
+		b := inst.st.Begin(ctx, logKey, ts)
 		b.AddLogEntry(LogEntry{ID: logKey, Hash: hexOfHash(h)})
 		err = b.Commit()
 		if err != nil {
@@ -465,7 +465,7 @@ func (inst *Storage) ReplaceApplied(ctx context.Context, hs []types.PatchHash) (
 	// the old or the new log. Applied-log replacements are far below that
 	// size in practice; a caller that could approach it needs the
 	// replacement staged elsewhere and swapped, not this method.
-	err = inst.st.Delete(logKey, ts)
+	err = inst.st.Delete(ctx, logKey, ts)
 	if err != nil {
 		err = eh.Errorf("replace applied tombstone: %w", err)
 		return
@@ -475,7 +475,7 @@ func (inst *Storage) ReplaceApplied(ctx context.Context, hs []types.PatchHash) (
 		if err != nil {
 			return
 		}
-		b := inst.st.Begin(logKey, ts)
+		b := inst.st.Begin(ctx, logKey, ts)
 		b.AddLogEntry(LogEntry{ID: logKey, Hash: hexOfHash(h)})
 		err = b.Commit()
 		if err != nil {
@@ -533,7 +533,7 @@ func (inst *Storage) SaveSnapshot(ctx context.Context, snap repo.Snapshot) (err 
 	for _, h := range snap.Applied {
 		applied = append(applied, hexOfHash(h))
 	}
-	b := inst.st.Begin(snapshotKey, ts)
+	b := inst.st.Begin(ctx, snapshotKey, ts)
 	b.AddSnapshot(Snapshot{ID: snapshotKey, Applied: applied, PushoutGraph: snap.PushoutGraph})
 	err = b.Commit()
 	if err != nil {
@@ -614,7 +614,7 @@ func (inst *Storage) UpdateRetention(ctx context.Context, delta repo.RetentionDe
 		if err != nil {
 			return
 		}
-		if err = inst.st.Delete(retentionKey, ts); err != nil {
+		if err = inst.st.Delete(ctx, retentionKey, ts); err != nil {
 			err = eh.Errorf("compact retention tombstone: %w", err)
 			return
 		}
@@ -626,7 +626,7 @@ func (inst *Storage) UpdateRetention(ctx context.Context, delta repo.RetentionDe
 	if err != nil {
 		return
 	}
-	b := inst.st.Begin(retentionKey, ts)
+	b := inst.st.Begin(ctx, retentionKey, ts)
 	b.AddRetention(row)
 	if err = b.Commit(); err != nil {
 		err = eh.Errorf("update retention commit: %w", err)

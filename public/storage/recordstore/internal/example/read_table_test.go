@@ -36,7 +36,7 @@ func TestDeviceStoreReadTable(t *testing.T) {
 	split := NewDeviceStore(exec, nil, DeviceStoreConfig{Table: "device_w", ReadTable: "device_r"})
 	defer split.Close()
 	require.NoError(t, split.VerifySchema(ctx), "VerifySchema describes the read table")
-	require.NoError(t, split.Begin(7, t0).AddBattery(Battery{ID: 7, Charge: 42}).Commit())
+	require.NoError(t, split.Begin(ctx, 7, t0).AddBattery(Battery{ID: 7, Charge: 42}).Commit())
 	_, err = split.Flush(ctx)
 	require.NoError(t, err)
 

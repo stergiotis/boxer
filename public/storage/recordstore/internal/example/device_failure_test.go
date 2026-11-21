@@ -65,7 +65,7 @@ func newFlakyStore(t *testing.T, failFirst int) (st *DeviceStore, ctx context.Co
 func TestDeviceStoreFlushRetryShipsPending(t *testing.T) {
 	st, ctx := newFlakyStore(t, 1)
 	t0 := time.Unix(1_600_000_000, 0).UTC()
-	require.NoError(t, st.Begin(1, t0).AddBattery(Battery{ID: 1, Charge: 42}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t0).AddBattery(Battery{ID: 1, Charge: 42}).Commit())
 
 	_, err := st.Flush(ctx)
 	require.Error(t, err, "first flush fails (synthetic)")
@@ -87,7 +87,7 @@ func TestDeviceStoreFlushRetryShipsPending(t *testing.T) {
 func TestDeviceStoreDiscardPending(t *testing.T) {
 	st, ctx := newFlakyStore(t, 1)
 	t0 := time.Unix(1_600_000_000, 0).UTC()
-	require.NoError(t, st.Begin(1, t0).AddBattery(Battery{ID: 1, Charge: 42}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t0).AddBattery(Battery{ID: 1, Charge: 42}).Commit())
 
 	_, err := st.Flush(ctx)
 	require.Error(t, err)
@@ -102,7 +102,7 @@ func TestDeviceStoreDiscardPending(t *testing.T) {
 	require.False(t, found)
 
 	// The store remains fully usable.
-	require.NoError(t, st.Begin(2, t0).AddBattery(Battery{ID: 2, Charge: 7}).Commit())
+	require.NoError(t, st.Begin(ctx, 2, t0).AddBattery(Battery{ID: 2, Charge: 7}).Commit())
 	n, err = st.Flush(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
@@ -115,14 +115,14 @@ func TestDeviceStoreCommitErrorRecovers(t *testing.T) {
 	st, ctx := newFlakyStore(t, 0)
 	t0 := time.Unix(1_600_000_000, 0).UTC()
 
-	st.Begin(1, t0) // never committed — a caller bug
+	st.Begin(ctx, 1, t0) // never committed — a caller bug
 
 	// The second Begin lands in the still-open frame; its Commit surfaces
 	// the accumulated state error and rolls the poisoned frame back.
-	require.Error(t, st.Begin(2, t0).AddBattery(Battery{ID: 2, Charge: 1}).Commit())
+	require.Error(t, st.Begin(ctx, 2, t0).AddBattery(Battery{ID: 2, Charge: 1}).Commit())
 
 	// From here on the store is healthy again.
-	require.NoError(t, st.Begin(3, t0).AddBattery(Battery{ID: 3, Charge: 2}).Commit())
+	require.NoError(t, st.Begin(ctx, 3, t0).AddBattery(Battery{ID: 3, Charge: 2}).Commit())
 	n, err := st.Flush(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
@@ -131,9 +131,9 @@ func TestDeviceStoreCommitErrorRecovers(t *testing.T) {
 	require.True(t, found)
 
 	// Same recovery through the state-view Delete.
-	st.Begin(4, t0)
-	require.Error(t, st.Delete(9, t0), "Delete inside an open frame must error")
-	require.NoError(t, st.Delete(9, t0), "…and must work right after the rollback")
+	st.Begin(ctx, 4, t0)
+	require.Error(t, st.Delete(ctx, 9, t0), "Delete inside an open frame must error")
+	require.NoError(t, st.Delete(ctx, 9, t0), "…and must work right after the rollback")
 }
 
 // TestDeviceStoreBuilderRollback pins the explicit abandon verb.
@@ -141,10 +141,10 @@ func TestDeviceStoreBuilderRollback(t *testing.T) {
 	st, ctx := newFlakyStore(t, 0)
 	t0 := time.Unix(1_600_000_000, 0).UTC()
 
-	require.NoError(t, st.Begin(1, t0).AddBattery(Battery{ID: 1, Charge: 42}).Rollback())
+	require.NoError(t, st.Begin(ctx, 1, t0).AddBattery(Battery{ID: 1, Charge: 42}).Rollback())
 	require.Equal(t, 0, st.Buffered())
 
-	require.NoError(t, st.Begin(2, t0).AddBattery(Battery{ID: 2, Charge: 7}).Commit())
+	require.NoError(t, st.Begin(ctx, 2, t0).AddBattery(Battery{ID: 2, Charge: 7}).Commit())
 	n, err := st.Flush(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
@@ -158,11 +158,11 @@ func TestDeviceStoreBuilderRollback(t *testing.T) {
 func TestDeviceStoreFlushOpenFrameKeepsPending(t *testing.T) {
 	st, ctx := newFlakyStore(t, 1)
 	t0 := time.Unix(1_600_000_000, 0).UTC()
-	require.NoError(t, st.Begin(1, t0).AddBattery(Battery{ID: 1, Charge: 42}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t0).AddBattery(Battery{ID: 1, Charge: 42}).Commit())
 	_, err := st.Flush(ctx)
 	require.Error(t, err, "synthetic insert failure retains the records")
 
-	b := st.Begin(2, t0) // open frame blocks the next Flush
+	b := st.Begin(ctx, 2, t0) // open frame blocks the next Flush
 	_, err = st.Flush(ctx)
 	require.Error(t, err, "flush with an open frame must refuse")
 
@@ -187,7 +187,7 @@ func TestDeviceStoreDirtyWindowRacedFetchRejected(t *testing.T) {
 	t0 := time.Unix(1_600_000_000, 0).UTC()
 	t1 := t0.Add(time.Hour)
 
-	require.NoError(t, st.Begin(1, t0).AddBattery(Battery{ID: 1, Charge: 1}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t0).AddBattery(Battery{ID: 1, Charge: 1}).Commit())
 	_, err := st.Flush(ctx)
 	require.NoError(t, err)
 
@@ -200,7 +200,7 @@ func TestDeviceStoreDirtyWindowRacedFetchRejected(t *testing.T) {
 
 	// The write lands while the fetch is still queued: write-through makes
 	// it visible immediately, pinned until the flush.
-	require.NoError(t, st.Begin(1, t1).AddBattery(Battery{ID: 1, Charge: 2}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t1).AddBattery(Battery{ID: 1, Charge: 2}).Commit())
 	ent, has := c.Get(1)
 	require.True(t, has, "write-through: visible immediately")
 	require.Equal(t, uint64(2), ent.Battery.Val.Charge)
@@ -229,7 +229,7 @@ func TestDeviceStoreDirtyWindowRacedFetchRejected(t *testing.T) {
 func TestDeviceStoreIngestRejectsDuplicateKeys(t *testing.T) {
 	st, _ := newFlakyStore(t, 0)
 	defer st.Close()
-	err := st.IngestBattery(time.Unix(1_600_000_000, 0).UTC(), []Battery{
+	err := st.IngestBattery(t.Context(), time.Unix(1_600_000_000, 0).UTC(), []Battery{
 		{ID: 1, Charge: 1}, {ID: 2, Charge: 2}, {ID: 1, Charge: 3},
 	})
 	require.ErrorIs(t, err, recordstore.ErrDuplicateIngestKey)
@@ -274,7 +274,7 @@ func TestDeviceStoreCloseReleases(t *testing.T) {
 	// touched, retaining the transferred records for Close to release.
 	st := NewDeviceStore(&flakyExecutor{failFirst: 1}, alloc, DeviceStoreConfig{})
 	t0 := time.Unix(1_600_000_000, 0).UTC()
-	require.NoError(t, st.Begin(1, t0).AddBattery(Battery{ID: 1, Charge: 1}).Commit())
+	require.NoError(t, st.Begin(t.Context(), 1, t0).AddBattery(Battery{ID: 1, Charge: 1}).Commit())
 	_, err := st.Flush(context.Background())
 	require.Error(t, err, "synthetic insert failure retains the records")
 	st.Close()

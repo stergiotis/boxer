@@ -128,7 +128,7 @@ func (inst *SqlStore) Enqueue(ctx context.Context, job watchbillstore.Job) (err 
 	if dup {
 		return eb.Build().Str("id", job.ID).Errorf("duplicate job id")
 	}
-	if err = inst.st.Job.Begin(job.ID, time.Now().UTC()).AddJob(job).Commit(); err != nil {
+	if err = inst.st.Job.Begin(ctx, job.ID, time.Now().UTC()).AddJob(job).Commit(); err != nil {
 		return eb.Build().Str("id", job.ID).Errorf("buffer job: %w", err)
 	}
 	if _, err = inst.st.Job.Flush(ctx); err != nil {
@@ -231,7 +231,7 @@ func (inst *SqlStore) Held(ctx context.Context, workerRun string) (jobs []watchb
 func (inst *SqlStore) WriteEvent(ctx context.Context, at time.Time, ev watchbillstore.Event) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	if err = inst.st.Event.Begin(ev.ID, at.UTC()).AddEvent(ev).Commit(); err != nil {
+	if err = inst.st.Event.Begin(ctx, ev.ID, at.UTC()).AddEvent(ev).Commit(); err != nil {
 		return eb.Build().Str("id", ev.ID).Errorf("buffer event: %w", err)
 	}
 	if _, err = inst.st.Event.Flush(ctx); err != nil {

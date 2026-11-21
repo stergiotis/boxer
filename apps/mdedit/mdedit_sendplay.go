@@ -162,7 +162,7 @@ func uploadDoc(ctx context.Context, src, fileName string, origin mddocfacts.Orig
 		return
 	}
 
-	rows, err := store.IngestDocument([]byte(src), fileName, time.Now().UTC(), origin)
+	rows, err := store.IngestDocument(ctx, []byte(src), fileName, time.Now().UTC(), origin)
 	if err != nil {
 		return
 	}

@@ -360,7 +360,7 @@ func (inst *walk) content(path string, row *ladingmeta.LadingEntry) (err error) 
 			h := blake3.Sum256(b.data)
 			br.Hash = h[:]
 		}
-		err = inst.st.Data.Begin(inst.mount, inst.res.Snap, ladingdata.DataEnvelope{
+		err = inst.st.Data.Begin(inst.ctx, inst.mount, inst.res.Snap, ladingdata.DataEnvelope{
 			NaturalKey: blockKey(path, uint32(seq)),
 			ExpiresAt:  inst.res.ExpiresAt,
 		}).AddLadingBlock(br).Commit()
@@ -424,7 +424,7 @@ func (inst *walk) hashOnly(path string) (sum []byte, err error) {
 
 // writeEntry buffers one entry row.
 func (inst *walk) writeEntry(path string, row ladingmeta.LadingEntry) (err error) {
-	err = inst.st.Meta.Begin(inst.mount, inst.res.Snap, ladingmeta.MetaEnvelope{
+	err = inst.st.Meta.Begin(inst.ctx, inst.mount, inst.res.Snap, ladingmeta.MetaEnvelope{
 		NaturalKey: []byte(path),
 		ExpiresAt:  inst.res.ExpiresAt,
 	}).AddLadingEntry(row).Commit()
@@ -494,7 +494,7 @@ func (inst *walk) commit() (err error) {
 		Mtime:    inst.root.ModTime().UTC(),
 	}
 	inst.res.Entries++
-	err = inst.st.Meta.Begin(inst.mount, inst.res.Snap, ladingmeta.MetaEnvelope{
+	err = inst.st.Meta.Begin(inst.ctx, inst.mount, inst.res.Snap, ladingmeta.MetaEnvelope{
 		NaturalKey: []byte("."),
 		ExpiresAt:  inst.res.ExpiresAt,
 	}).AddLadingEntry(entry).AddLadingSnapshot(ladingmeta.LadingSnapshot{

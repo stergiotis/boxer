@@ -99,7 +99,7 @@ func startTee(ctx context.Context, bus app.BusI, host string, flushInterval time
 		err = eh.Errorf("sysmetricsd: run info: %w", err)
 		return
 	}
-	tee, err := sysmtee.Start(sysmtee.Options{
+	tee, err := sysmtee.Start(ctx, sysmtee.Options{
 		Bus:            bus,
 		Store:          store,
 		Host:           host,

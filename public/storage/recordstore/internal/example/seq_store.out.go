@@ -292,7 +292,7 @@ func (inst *SeqStore) isTombstone(e *SeqEntity) bool { return inst.cfg.Tombstone
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *SeqStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -471,7 +471,7 @@ type SeqEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -491,16 +491,10 @@ func (inst *SeqEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order), under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *SeqStore) Begin(id uint64, ord uint64) *SeqEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ord)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *SeqStore) BeginCtx(ctx context.Context, id uint64, ord uint64) *SeqEntityBuilder {
+// (Key, Order), under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *SeqStore) Begin(ctx context.Context, id uint64, ord uint64) *SeqEntityBuilder {
 	lowlevel.InEntitySeqTableBeginEntity(inst.dml)
 	lowlevel.InEntitySeqTableSetId(inst.dml, id, ord)
 	b := &SeqEntityBuilder{store: inst, key: id, ent: SeqEntity{ID: id, Ord: ord}}
@@ -599,13 +593,8 @@ func (inst *SeqEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *SeqStore) IngestSeqReading(ord uint64, rows []SeqReading) (err error) {
-	return inst.IngestSeqReadingCtx(context.Background(), ord, rows)
-}
-
-// IngestSeqReadingCtx is IngestSeqReading with the context BeginCtx hands the
-// configured stampers.
-func (inst *SeqStore) IngestSeqReadingCtx(ctx context.Context, ord uint64, rows []SeqReading) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *SeqStore) IngestSeqReading(ctx context.Context, ord uint64, rows []SeqReading) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -613,7 +602,7 @@ func (inst *SeqStore) IngestSeqReadingCtx(ctx context.Context, ord uint64, rows 
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ord).AddSeqReading(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ord).AddSeqReading(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest seqReading row %d: %w", i, err)
 			return
@@ -1134,14 +1123,9 @@ func (inst *SeqStore) Replay(ctx context.Context, key uint64, fromOrder uint64, 
 // Lifecycle role; the pair is the whole marker). The deletion writes
 // through to attached cache views like any commit — versioned, so
 // GetLive reads the key as absent immediately.
-func (inst *SeqStore) Delete(id uint64, ord uint64) (err error) {
-	return inst.DeleteCtx(context.Background(), id, ord)
-}
-
-// DeleteCtx is Delete with the context BeginCtx hands the configured
-// stampers.
-func (inst *SeqStore) DeleteCtx(ctx context.Context, id uint64, ord uint64) (err error) {
-	b := inst.BeginCtx(ctx, id, ord)
+// ctx is what Begin hands the configured stampers.
+func (inst *SeqStore) Delete(ctx context.Context, id uint64, ord uint64) (err error) {
+	b := inst.Begin(ctx, id, ord)
 	b.tombstone = true
 	inst.cfg.TombstoneWrite(b)
 	return b.Commit()

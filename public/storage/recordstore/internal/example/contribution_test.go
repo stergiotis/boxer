@@ -26,7 +26,7 @@ func TestAContributionSharesASectionWithAComponent(t *testing.T) {
 	st := NewRevStore(exec, nil, RevStoreConfig{})
 	defer st.Close()
 	require.NoError(t, st.EnsureTable(ctx))
-	b := st.Begin("r1", 1, RevEnvelope{}).AddRevNote(RevNote{Text: "typed"})
+	b := st.Begin(ctx, "r1", 1, RevEnvelope{}).AddRevNote(RevNote{Text: "typed"})
 	b.StartContribution("extra").ContributeNote("extra", func(sec *lowlevel.InEntityRevTableSectionNote) error {
 		sec.BeginAttribute("hand").AddMembershipLowCardVerbatim([]byte("extra")).EndAttribute()
 		return nil
@@ -48,6 +48,6 @@ func TestAContributionSharesASectionWithAComponent(t *testing.T) {
 		rec.Release()
 	}
 
-	twice := st.Begin("r1", 2, RevEnvelope{}).StartContribution("extra").StartContribution("extra")
+	twice := st.Begin(ctx, "r1", 2, RevEnvelope{}).StartContribution("extra").StartContribution("extra")
 	assert.Error(t, twice.Commit(), "one contribution per kind")
 }

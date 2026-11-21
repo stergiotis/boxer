@@ -1,6 +1,7 @@
 package mddocfacts
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"time"
@@ -228,60 +229,60 @@ func BuildRows(src []byte, fileName string, ts time.Time, ex *mdextract.Document
 // origin. Rows ship on the store's next Flush, like every write. The
 // returned Rows are what was buffered — the document Id is the key a reader
 // filters on.
-func (inst *MddocStore) IngestDocument(src []byte, fileName string, ts time.Time, origin Origin) (rows Rows, err error) {
+func (inst *MddocStore) IngestDocument(ctx context.Context, src []byte, fileName string, ts time.Time, origin Origin) (rows Rows, err error) {
 	rows = BuildRows(src, fileName, ts, mdextract.Extract(src))
 	rows.Origin = origin
-	err = inst.IngestRows(rows)
+	err = inst.IngestRows(ctx, rows)
 	return
 }
 
 // begin opens one row carrying the ingest's origin under the row's id.
-func (inst *MddocStore) begin(id uint64, ts time.Time, naturalKey []byte, origin Origin) *MddocEntityBuilder {
+func (inst *MddocStore) begin(ctx context.Context, id uint64, ts time.Time, naturalKey []byte, origin Origin) *MddocEntityBuilder {
 	origin.Id = id
-	return inst.Begin(id, ts, MddocEnvelope{NaturalKey: naturalKey}).AddOrigin(origin)
+	return inst.Begin(ctx, id, ts, MddocEnvelope{NaturalKey: naturalKey}).AddOrigin(origin)
 }
 
 // IngestRows buffers one document's rows: the document, its items, and the
 // frontmatter row. Each row is its own entity; every one carries its natural
 // key in the envelope, which the generated Ingest<Kind> verbs do not set, and
 // rows.Origin.
-func (inst *MddocStore) IngestRows(rows Rows) (err error) {
+func (inst *MddocStore) IngestRows(ctx context.Context, rows Rows) (err error) {
 	ts := rows.Doc.Ts
-	if err = inst.begin(rows.Doc.Id, ts, rows.Doc.NaturalKey, rows.Origin).AddMdDoc(rows.Doc).Commit(); err != nil {
+	if err = inst.begin(ctx, rows.Doc.Id, ts, rows.Doc.NaturalKey, rows.Origin).AddMdDoc(rows.Doc).Commit(); err != nil {
 		return eh.Errorf("ingest document row: %w", err)
 	}
 	for i := range rows.Headings {
 		r := &rows.Headings[i]
-		if err = inst.begin(r.Id, ts, r.NaturalKey, rows.Origin).AddMdHeading(*r).Commit(); err != nil {
+		if err = inst.begin(ctx, r.Id, ts, r.NaturalKey, rows.Origin).AddMdHeading(*r).Commit(); err != nil {
 			return eb.Build().Uint64("ordinal", r.Ordinal).Errorf("ingest heading: %w", err)
 		}
 	}
 	for i := range rows.CodeBlocks {
 		r := &rows.CodeBlocks[i]
-		if err = inst.begin(r.Id, ts, r.NaturalKey, rows.Origin).AddMdCodeBlock(*r).Commit(); err != nil {
+		if err = inst.begin(ctx, r.Id, ts, r.NaturalKey, rows.Origin).AddMdCodeBlock(*r).Commit(); err != nil {
 			return eb.Build().Uint64("ordinal", r.Ordinal).Errorf("ingest code block: %w", err)
 		}
 	}
 	for i := range rows.Links {
 		r := &rows.Links[i]
-		if err = inst.begin(r.Id, ts, r.NaturalKey, rows.Origin).AddMdLink(*r).Commit(); err != nil {
+		if err = inst.begin(ctx, r.Id, ts, r.NaturalKey, rows.Origin).AddMdLink(*r).Commit(); err != nil {
 			return eb.Build().Uint64("ordinal", r.Ordinal).Errorf("ingest link: %w", err)
 		}
 	}
 	for i := range rows.Emphases {
 		r := &rows.Emphases[i]
-		if err = inst.begin(r.Id, ts, r.NaturalKey, rows.Origin).AddMdEmphasis(*r).Commit(); err != nil {
+		if err = inst.begin(ctx, r.Id, ts, r.NaturalKey, rows.Origin).AddMdEmphasis(*r).Commit(); err != nil {
 			return eb.Build().Uint64("ordinal", r.Ordinal).Errorf("ingest emphasis: %w", err)
 		}
 	}
 	for i := range rows.Tags {
 		r := &rows.Tags[i]
-		if err = inst.begin(r.Id, ts, r.NaturalKey, rows.Origin).AddMdTag(*r).Commit(); err != nil {
+		if err = inst.begin(ctx, r.Id, ts, r.NaturalKey, rows.Origin).AddMdTag(*r).Commit(); err != nil {
 			return eb.Build().Uint64("ordinal", r.Ordinal).Errorf("ingest tag: %w", err)
 		}
 	}
 	if rows.Frontmatter != nil {
-		if err = inst.ingestFrontmatter(rows.Doc, rows.Frontmatter, rows.Origin); err != nil {
+		if err = inst.ingestFrontmatter(ctx, rows.Doc, rows.Frontmatter, rows.Origin); err != nil {
 			return eh.Errorf("ingest frontmatter: %w", err)
 		}
 	}
@@ -299,9 +300,9 @@ func (inst *MddocStore) IngestRows(rows Rows) (err error) {
 // ride the mixed channel on the typed sections — stringArray, i64Array,
 // f64Array, bool, timeArray — and on symbolArray for the value-less markers.
 // Nothing here mixes channels within a section.
-func (inst *MddocStore) ingestFrontmatter(doc MdDoc, fm *mdextract.Frontmatter, origin Origin) (err error) {
+func (inst *MddocStore) ingestFrontmatter(ctx context.Context, doc MdDoc, fm *mdextract.Frontmatter, origin Origin) (err error) {
 	id := itemId(doc.Id, KindMdFrontmatter, 0)
-	b := inst.Begin(id, doc.Ts, MddocEnvelope{NaturalKey: itemNaturalKey(doc.NaturalKey, KindMdFrontmatter, 0)})
+	b := inst.Begin(ctx, id, doc.Ts, MddocEnvelope{NaturalKey: itemNaturalKey(doc.NaturalKey, KindMdFrontmatter, 0)})
 	raw := b.Raw()
 	origin.Id = id
 

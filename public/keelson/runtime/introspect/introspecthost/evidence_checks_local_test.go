@@ -47,7 +47,7 @@ func TestEvidenceChecksL34HoldsBesideOtherWritersOfTheRun(t *testing.T) {
 
 	sysm := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{})
 	t.Cleanup(sysm.Close)
-	require.NoError(t, sysm.Begin(77, time.Now().UTC(), sysmfacts.SysmetricsEnvelope{NaturalKey: []byte("host-a")}).
+	require.NoError(t, sysm.Begin(ctx, 77, time.Now().UTC(), sysmfacts.SysmetricsEnvelope{NaturalKey: []byte("host-a")}).
 		AddOrigin(sysmfacts.Origin{Id: 77, Run: run}).
 		AddSysMem(sysmfacts.SysMem{Id: 77, NaturalKey: []byte("host-a"), Kind: "sysMem", Host: "host-a"}).Commit())
 	_, err = sysm.Flush(ctx)

@@ -297,7 +297,7 @@ func (inst *LedgerStore) readTable() string {
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *LedgerStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -476,7 +476,7 @@ type LedgerEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -507,16 +507,10 @@ func (inst *LedgerEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order), under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *LedgerStore) Begin(id string, ts time.Time) *LedgerEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ts)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *LedgerStore) BeginCtx(ctx context.Context, id string, ts time.Time) *LedgerEntityBuilder {
+// (Key, Order), under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *LedgerStore) Begin(ctx context.Context, id string, ts time.Time) *LedgerEntityBuilder {
 	lowlevel.InEntityLedgerTableBeginEntity(inst.dml)
 	lowlevel.InEntityLedgerTableSetId(inst.dml, id)
 	lowlevel.InEntityLedgerTableSetTimestamp(inst.dml, ts)
@@ -717,13 +711,8 @@ func (inst *LedgerEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *LedgerStore) IngestOpened(ts time.Time, rows []Opened) (err error) {
-	return inst.IngestOpenedCtx(context.Background(), ts, rows)
-}
-
-// IngestOpenedCtx is IngestOpened with the context BeginCtx hands the
-// configured stampers.
-func (inst *LedgerStore) IngestOpenedCtx(ctx context.Context, ts time.Time, rows []Opened) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *LedgerStore) IngestOpened(ctx context.Context, ts time.Time, rows []Opened) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -731,7 +720,7 @@ func (inst *LedgerStore) IngestOpenedCtx(ctx context.Context, ts time.Time, rows
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddOpened(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddOpened(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest opened row %d: %w", i, err)
 			return
@@ -747,13 +736,8 @@ func (inst *LedgerStore) IngestOpenedCtx(ctx context.Context, ts time.Time, rows
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *LedgerStore) IngestDeposited(ts time.Time, rows []Deposited) (err error) {
-	return inst.IngestDepositedCtx(context.Background(), ts, rows)
-}
-
-// IngestDepositedCtx is IngestDeposited with the context BeginCtx hands the
-// configured stampers.
-func (inst *LedgerStore) IngestDepositedCtx(ctx context.Context, ts time.Time, rows []Deposited) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *LedgerStore) IngestDeposited(ctx context.Context, ts time.Time, rows []Deposited) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -761,7 +745,7 @@ func (inst *LedgerStore) IngestDepositedCtx(ctx context.Context, ts time.Time, r
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddDeposited(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddDeposited(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest deposited row %d: %w", i, err)
 			return
@@ -777,13 +761,8 @@ func (inst *LedgerStore) IngestDepositedCtx(ctx context.Context, ts time.Time, r
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *LedgerStore) IngestWithdrawn(ts time.Time, rows []Withdrawn) (err error) {
-	return inst.IngestWithdrawnCtx(context.Background(), ts, rows)
-}
-
-// IngestWithdrawnCtx is IngestWithdrawn with the context BeginCtx hands the
-// configured stampers.
-func (inst *LedgerStore) IngestWithdrawnCtx(ctx context.Context, ts time.Time, rows []Withdrawn) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *LedgerStore) IngestWithdrawn(ctx context.Context, ts time.Time, rows []Withdrawn) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -791,7 +770,7 @@ func (inst *LedgerStore) IngestWithdrawnCtx(ctx context.Context, ts time.Time, r
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddWithdrawn(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddWithdrawn(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest withdrawn row %d: %w", i, err)
 			return
@@ -807,13 +786,8 @@ func (inst *LedgerStore) IngestWithdrawnCtx(ctx context.Context, ts time.Time, r
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *LedgerStore) IngestClosed(ts time.Time, rows []Closed) (err error) {
-	return inst.IngestClosedCtx(context.Background(), ts, rows)
-}
-
-// IngestClosedCtx is IngestClosed with the context BeginCtx hands the
-// configured stampers.
-func (inst *LedgerStore) IngestClosedCtx(ctx context.Context, ts time.Time, rows []Closed) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *LedgerStore) IngestClosed(ctx context.Context, ts time.Time, rows []Closed) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -821,7 +795,7 @@ func (inst *LedgerStore) IngestClosedCtx(ctx context.Context, ts time.Time, rows
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddClosed(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddClosed(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest closed row %d: %w", i, err)
 			return
@@ -837,13 +811,8 @@ func (inst *LedgerStore) IngestClosedCtx(ctx context.Context, ts time.Time, rows
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *LedgerStore) IngestAccountState(ts time.Time, rows []AccountState) (err error) {
-	return inst.IngestAccountStateCtx(context.Background(), ts, rows)
-}
-
-// IngestAccountStateCtx is IngestAccountState with the context BeginCtx hands the
-// configured stampers.
-func (inst *LedgerStore) IngestAccountStateCtx(ctx context.Context, ts time.Time, rows []AccountState) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *LedgerStore) IngestAccountState(ctx context.Context, ts time.Time, rows []AccountState) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -851,7 +820,7 @@ func (inst *LedgerStore) IngestAccountStateCtx(ctx context.Context, ts time.Time
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddAccountState(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddAccountState(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest accountState row %d: %w", i, err)
 			return

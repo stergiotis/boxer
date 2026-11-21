@@ -50,7 +50,7 @@ func TestScanLive_LiveCH(t *testing.T) {
 	ctx := context.Background()
 	t0 := time.Unix(1_700_000_000, 0).UTC()
 	put := func(key string, ts time.Time, v string) {
-		require.NoError(t, st.Begin(key, ts).
+		require.NoError(t, st.Begin(ctx, key, ts).
 			AddOwner(Owner{ID: key, AppId: "a"}).
 			AddState(State{ID: key, Key: key, Value: []byte(v)}).
 			Commit())
@@ -59,7 +59,7 @@ func TestScanLive_LiveCH(t *testing.T) {
 	put("a/k1", t0.Add(time.Second), "two")
 	put("a/k2", t0, "gone")
 	put("b/k1", t0, "other")
-	require.NoError(t, st.Delete("a/k2", t0.Add(time.Second)))
+	require.NoError(t, st.Delete(ctx, "a/k2", t0.Add(time.Second)))
 	_, err := st.Flush(ctx)
 	require.NoError(t, err)
 

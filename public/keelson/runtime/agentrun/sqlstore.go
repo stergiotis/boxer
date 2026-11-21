@@ -158,7 +158,7 @@ func (inst *SqlStore) UpdateRun(ctx context.Context, r Run) (err error) {
 
 // insertRunLocked writes a new run row, the one row the run has.
 func (inst *SqlStore) insertRunLocked(ctx context.Context, r Run) (err error) {
-	if err = inst.st.Run.Begin(r.Id, versionTs(r)).AddRun(runRow(r)).Commit(); err != nil {
+	if err = inst.st.Run.Begin(ctx, r.Id, versionTs(r)).AddRun(runRow(r)).Commit(); err != nil {
 		inst.st.Run.DiscardPending()
 		return eb.Build().Uint64("run", r.Id).Errorf("buffer run: %w", err)
 	}

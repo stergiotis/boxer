@@ -34,11 +34,11 @@ func TestDeviceStoreCustomTombstonePair(t *testing.T) {
 	require.NoError(t, st.EnsureTable(ctx))
 
 	t0 := time.Unix(1_700_000_000, 0).UTC()
-	require.NoError(t, st.Begin(9, t0).AddIdentity(Identity{ID: 9, Status: "live"}).Commit())
+	require.NoError(t, st.Begin(ctx, 9, t0).AddIdentity(Identity{ID: 9, Status: "live"}).Commit())
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 
-	require.NoError(t, st.Delete(9, t0.Add(time.Hour)))
+	require.NoError(t, st.Delete(ctx, 9, t0.Add(time.Hour)))
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 

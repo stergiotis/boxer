@@ -300,7 +300,7 @@ func (inst *RevStore) readTable() string {
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *RevStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -479,7 +479,7 @@ type RevEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -496,16 +496,10 @@ func (inst *RevEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and the pass-through envelope, under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *RevStore) Begin(id string, ord uint64, env RevEnvelope) *RevEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ord, env)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *RevStore) BeginCtx(ctx context.Context, id string, ord uint64, env RevEnvelope) *RevEntityBuilder {
+// (Key, Order) and the pass-through envelope, under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *RevStore) Begin(ctx context.Context, id string, ord uint64, env RevEnvelope) *RevEntityBuilder {
 	lowlevel.InEntityRevTableBeginEntity(inst.dml)
 	lowlevel.InEntityRevTableSetId(inst.dml, id, ord)
 	lowlevel.InEntityRevTableSetLifecycle(inst.dml, env.Rev)
@@ -624,13 +618,8 @@ func (inst *RevEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *RevStore) IngestRevNote(ord uint64, rows []RevNote) (err error) {
-	return inst.IngestRevNoteCtx(context.Background(), ord, rows)
-}
-
-// IngestRevNoteCtx is IngestRevNote with the context BeginCtx hands the
-// configured stampers.
-func (inst *RevStore) IngestRevNoteCtx(ctx context.Context, ord uint64, rows []RevNote) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *RevStore) IngestRevNote(ctx context.Context, ord uint64, rows []RevNote) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -638,7 +627,7 @@ func (inst *RevStore) IngestRevNoteCtx(ctx context.Context, ord uint64, rows []R
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ord, RevEnvelope{}).AddRevNote(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ord, RevEnvelope{}).AddRevNote(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest revNote row %d: %w", i, err)
 			return
@@ -820,7 +809,7 @@ func (inst *RevStore) CanonicalItem(ent *RevEntity) (item []byte, err error) {
 	if inst.scratch == nil {
 		inst.scratch = NewRevStore(nil, nil, RevStoreConfig{})
 	}
-	b := inst.scratch.Begin(ent.ID, ent.Ord, ent.RevEnvelope)
+	b := inst.scratch.Begin(context.Background(), ent.ID, ent.Ord, ent.RevEnvelope) //boxer:lint disable=CS020 reason="an in-memory re-encode on a scratch store without stampers: no I/O, no call identity"
 	if ent.RevNote.Has {
 		b.AddRevNote(ent.RevNote.Val)
 	}

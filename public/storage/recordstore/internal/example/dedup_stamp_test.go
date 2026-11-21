@@ -52,8 +52,8 @@ func TestRetryOfALandedInsertIsDeduplicated(t *testing.T) {
 	require.Empty(t, v.Notes)
 
 	t0 := time.Unix(1_600_000_000, 0).UTC()
-	require.NoError(t, st.Begin(1, t0).AddBattery(Battery{ID: 1, Charge: 1}).Commit())
-	require.NoError(t, st.Begin(2, t0).AddBattery(Battery{ID: 2, Charge: 2}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t0).AddBattery(Battery{ID: 1, Charge: 1}).Commit())
+	require.NoError(t, st.Begin(ctx, 2, t0).AddBattery(Battery{ID: 2, Charge: 2}).Commit())
 	_, err = st.Flush(ctx)
 	require.Error(t, err)
 	require.Equal(t, 2, countRows(t, ctx, local, DeviceTableName), "the first attempt landed")
@@ -64,8 +64,8 @@ func TestRetryOfALandedInsertIsDeduplicated(t *testing.T) {
 	require.Equal(t, 2, countRows(t, ctx, local, DeviceTableName), "the retry carried the same token and was dropped")
 
 	// A later insert of the same content under its own token is kept.
-	require.NoError(t, st.Begin(1, t0).AddBattery(Battery{ID: 1, Charge: 1}).Commit())
-	require.NoError(t, st.Begin(2, t0).AddBattery(Battery{ID: 2, Charge: 2}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, t0).AddBattery(Battery{ID: 1, Charge: 1}).Commit())
+	require.NoError(t, st.Begin(ctx, 2, t0).AddBattery(Battery{ID: 2, Charge: 2}).Commit())
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 4, countRows(t, ctx, local, DeviceTableName))

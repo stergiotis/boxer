@@ -28,12 +28,12 @@ func TestScanKeyPrefix(t *testing.T) {
 	t0 := time.Unix(1_600_000_000, 0).UTC()
 	t1 := t0.Add(time.Hour)
 	snap := func(key string, ts time.Time) {
-		require.NoError(t, st.Begin(key, ts).AddSnapshot(Snapshot{ID: key, Applied: []string{key}, PushoutGraph: []byte(key)}).Commit())
+		require.NoError(t, st.Begin(ctx, key, ts).AddSnapshot(Snapshot{ID: key, Applied: []string{key}, PushoutGraph: []byte(key)}).Commit())
 	}
 	for _, k := range []string{"a/1", "a/2", "a/3", "b/1", "b%z", "a'x"} {
 		snap(k, t0)
 	}
-	require.NoError(t, st.Delete("a/3", t1))
+	require.NoError(t, st.Delete(ctx, "a/3", t1))
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 

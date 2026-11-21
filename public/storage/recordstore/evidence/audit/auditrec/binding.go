@@ -17,7 +17,7 @@ import (
 // the recorder reaches it. The recorder uses a batch from one goroutine at
 // a time.
 type BatchI interface {
-	// Event buffers one row holding o and e, begun under ctx (BeginCtx, so
+	// Event buffers one row holding o and e, begun under ctx (Begin, so
 	// a store generated with WrittenBy carries the identity on ctx), with
 	// id, at and key; key goes where the store's envelope keeps a key, if
 	// anywhere. item is the row's canonical item. On error the row is not
@@ -25,7 +25,7 @@ type BatchI interface {
 	Event(ctx context.Context, id uint64, at time.Time, key string, o audit.Origin, e audit.AuditEvent) (item []byte, err error)
 	// Seal buffers the batch's seal row with o, built by the store's
 	// generated SealOf from s, and returns the seal's digest.
-	Seal(id uint64, at time.Time, key string, o audit.Origin, s SealSpec) (digest string, err error)
+	Seal(ctx context.Context, id uint64, at time.Time, key string, o audit.Origin, s SealSpec) (digest string, err error)
 	// Buffered is the rows buffered and not yet flushed.
 	Buffered() int
 	// Flush inserts what is buffered; on failure the rows stay for the

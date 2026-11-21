@@ -60,8 +60,8 @@ func (inst *Recorder) Reference(ctx context.Context, ci callident.CallIdentity) 
 }
 
 // Stamper adapts the Recorder to recordstore.ReferenceStamper: register it on
-// a payload store via <Store>StoreConfig.Stampers and write through BeginCtx
-// (or DeleteCtx, Ingest<Kind>Ctx) with a call identity on the context. Do not
+// a payload store via <Store>StoreConfig.Stampers and write through Begin
+// (or Delete, Ingest<Kind>Ctx) with a call identity on the context. Do not
 // register it on the actor store itself.
 func (inst *Recorder) Stamper() recordstore.ReferenceStamper { return stamper{inst} }
 
@@ -114,9 +114,9 @@ func NewStoreSink(st *ActorStore) dimension.DescriptorSink[Actor] {
 	return storeSink{st: st, cache: NewActorCache[struct{}](st, ActorCacheConfig{})}
 }
 
-func (inst storeSink) Emit(_ context.Context, id uint64, d Actor) error {
+func (inst storeSink) Emit(ctx context.Context, id uint64, d Actor) error {
 	d.ID = id
-	return inst.st.Begin(id, descriptorOrder).AddActor(d).Commit()
+	return inst.st.Begin(ctx, id, descriptorOrder).AddActor(d).Commit()
 }
 
 func (inst storeSink) Resolve(ctx context.Context, id uint64) (d Actor, found bool, err error) {

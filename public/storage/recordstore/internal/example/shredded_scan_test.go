@@ -28,8 +28,8 @@ func TestScanSelectsTheShreddedComponent(t *testing.T) {
 	require.NoError(t, err)
 	shredded, err := EvidenceShreddedOf(attrs)
 	require.NoError(t, err)
-	require.NoError(t, st.Begin(1, 1, LedgerVaultEnvelope{Component: EvidenceShreddedKind}).AddEvidenceShredded(shredded).Commit())
-	require.NoError(t, st.Begin(2, 1, LedgerVaultEnvelope{Component: "ledgerNote"}).AddLedgerNote(LedgerNote{Text: "a note"}).Commit())
+	require.NoError(t, st.Begin(ctx, 1, 1, LedgerVaultEnvelope{Component: EvidenceShreddedKind}).AddEvidenceShredded(shredded).Commit())
+	require.NoError(t, st.Begin(ctx, 2, 1, LedgerVaultEnvelope{Component: "ledgerNote"}).AddLedgerNote(LedgerNote{Text: "a note"}).Commit())
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 

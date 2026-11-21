@@ -205,7 +205,7 @@ type auditBatch struct {
 // delegation, add contributing the row's own component, and returns its
 // canonical item; a row whose item cannot be computed is not buffered.
 func (inst *auditBatch) row(ctx context.Context, id uint64, at time.Time, key string, o Origin, c Context, add func(b *TrailEntityBuilder)) (item []byte, err error) {
-	b := inst.st.BeginCtx(ctx, id, at.UTC(), TrailEnvelope{NaturalKey: []byte(key)})
+	b := inst.st.Begin(ctx, id, at.UTC(), TrailEnvelope{NaturalKey: []byte(key)})
 	o.Id = id
 	b.AddOrigin(o)
 	if c.Conversation.Has {
@@ -243,10 +243,10 @@ func (inst *auditBatch) Event(ctx context.Context, id uint64, at time.Time, key 
 
 // Seal buffers the batch's seal row, built by the store's SealOf, and
 // returns the seal's digest.
-func (inst *auditBatch) Seal(id uint64, at time.Time, key string, o audit.Origin, s auditrec.SealSpec) (digest string, err error) {
+func (inst *auditBatch) Seal(ctx context.Context, id uint64, at time.Time, key string, o audit.Origin, s auditrec.SealSpec) (digest string, err error) {
 	row := SealOf(s.Scheme, s.Stream, s.Prev, s.PrevDigest, s.Rows)
 	row.Id = id
-	b := inst.st.Begin(id, at, TrailEnvelope{NaturalKey: []byte(key)})
+	b := inst.st.Begin(ctx, id, at, TrailEnvelope{NaturalKey: []byte(key)})
 	b.AddOrigin(o)
 	b.AddEvidenceSeal(row)
 	if err = b.Commit(); err != nil {

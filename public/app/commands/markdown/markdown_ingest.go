@@ -98,7 +98,7 @@ func runIngest(cliCtx context.Context, cmd *cli.Command) (err error) {
 		if store == nil {
 			r = mddocfacts.BuildRows(src, s.name, ts, mdextract.Extract(src))
 		} else {
-			r, err = store.IngestDocument(src, s.name, ts, origin)
+			r, err = store.IngestDocument(ctx, src, s.name, ts, origin)
 			if err != nil {
 				return eb.Build().Str("path", s.path).Errorf("ingest: %w", err)
 			}

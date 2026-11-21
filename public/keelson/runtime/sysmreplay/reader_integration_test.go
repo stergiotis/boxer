@@ -53,7 +53,7 @@ func publishBundles(t *testing.T, store *sysmfacts.SysmetricsStore, host string,
 	subCap := []app.SubjectFilter{{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionSub}}
 	pubCap := []app.SubjectFilter{{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionPub}}
 
-	tee, err := sysmtee.Start(sysmtee.Options{
+	tee, err := sysmtee.Start(t.Context(), sysmtee.Options{
 		Bus:            bus.NewClient("tee", subCap),
 		Store:          store,
 		Host:           host,

@@ -292,7 +292,7 @@ func (inst *JobStore) readTable() string {
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity,
 // returning the count so Commit/Rollback pop exactly that many. ctx is
-// BeginCtx's — the call identity a stamper interns rides on it. No
+// Begin's — the call identity a stamper interns rides on it. No
 // stampers means no pushes: inert.
 func (inst *JobStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
@@ -475,7 +475,7 @@ type JobEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many.
 	pushed int
-	// ident is BeginCtx's call identity: who committed the row, which the
+	// ident is Begin's call identity: who committed the row, which the
 	// write observer is told — the flush that ships it may run for someone
 	// else.
 	ident callident.CallIdentity
@@ -532,16 +532,10 @@ func (inst *JobEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order), under context.Background(): a configured stamper
-// that reads a call identity off the context finds none. See BeginCtx.
-func (inst *JobStore) Begin(id string, ts time.Time) *JobEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ts)
-}
-
-// BeginCtx is Begin with the context the configured stampers consult
-// — where a call identity reaches an actor stamper. The
-// store stays single-goroutine; ctx is read during this call only.
-func (inst *JobStore) BeginCtx(ctx context.Context, id string, ts time.Time) *JobEntityBuilder {
+// (Key, Order), under ctx: the context the configured stampers
+// consult — where a call identity reaches an actor stamper. The store
+// stays single-goroutine; ctx is read during this call only.
+func (inst *JobStore) Begin(ctx context.Context, id string, ts time.Time) *JobEntityBuilder {
 	lowlevel.InEntityWatchbillTableBeginEntity(inst.dml)
 	lowlevel.InEntityWatchbillTableSetId(inst.dml, id)
 	lowlevel.InEntityWatchbillTableSetTimestamp(inst.dml, ts)
@@ -701,13 +695,8 @@ func (inst *JobEntityBuilder) Rollback() (err error) {
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *JobStore) IngestJob(ts time.Time, rows []Job) (err error) {
-	return inst.IngestJobCtx(context.Background(), ts, rows)
-}
-
-// IngestJobCtx is IngestJob with the context BeginCtx hands the
-// configured stampers.
-func (inst *JobStore) IngestJobCtx(ctx context.Context, ts time.Time, rows []Job) (err error) {
+// ctx is what Begin hands the configured stampers.
+func (inst *JobStore) IngestJob(ctx context.Context, ts time.Time, rows []Job) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -715,7 +704,7 @@ func (inst *JobStore) IngestJobCtx(ctx context.Context, ts time.Time, rows []Job
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddJob(rows[i]).Commit()
+		err = inst.Begin(ctx, rows[i].ID, ts).AddJob(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest job row %d: %w", i, err)
 			return

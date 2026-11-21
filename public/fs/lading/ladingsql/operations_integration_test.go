@@ -346,7 +346,7 @@ func TestTheCutoffHidesAnExpiredSnapshot(t *testing.T) {
 
 	// A complete snapshot by every structural test, expired an hour ago.
 	past := time.Now().UTC().Add(-72 * time.Hour)
-	require.NoError(t, s.stores.Meta.Begin(m(), past, ladingmeta.MetaEnvelope{
+	require.NoError(t, s.stores.Meta.Begin(ctx, m(), past, ladingmeta.MetaEnvelope{
 		NaturalKey: []byte("."), ExpiresAt: time.Now().UTC().Add(-time.Hour),
 	}).AddLadingEntry(ladingmeta.LadingEntry{
 		Kind: "entry", NodeKind: "dir", Content: "none", Mode: uint32(fs.ModeDir | 0o755),
@@ -387,7 +387,7 @@ func TestAPinnedPartialWalkIsInvisible(t *testing.T) {
 	ctx := context.Background()
 
 	partial := time.Now().UTC().Add(-time.Minute).Truncate(time.Microsecond)
-	require.NoError(t, s.stores.Meta.Begin(m(), partial, ladingmeta.MetaEnvelope{
+	require.NoError(t, s.stores.Meta.Begin(ctx, m(), partial, ladingmeta.MetaEnvelope{
 		NaturalKey: []byte("docs/half.md"), ExpiresAt: time.Now().UTC().Add(time.Hour),
 	}).AddLadingEntry(ladingmeta.LadingEntry{
 		Kind: "entry", NodeKind: "file", Content: "none", Mode: 0o644,
