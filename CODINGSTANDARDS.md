@@ -21,7 +21,7 @@ Development is **trunk-based**: `main` is the single long-lived branch and work 
 
 This carries a few obligations:
 
-*   **Keep `main` buildable.** CI runs on every push (see [§1 of ENGINEERING_PRACTICES.md](./doc/ENGINEERING_PRACTICES.md#1-ci-surface)), so each commit should compile and pass the default test and lint gates under the active build tags. A change that spans several files lands as one self-contained commit rather than a sequence that leaves intermediate `HEAD`s broken.
+*   **Keep `main` buildable.** No hosted CI runs on a push: the workflows run on a release tag, a few weekly schedules and manual dispatch, and the working gates are the local scripts — the gate before a push and the nightly run of `main` (see [§1 of ENGINEERING_PRACTICES.md](./doc/ENGINEERING_PRACTICES.md#1-ci-surface)). Each commit should still compile and pass the default test and lint gates under the active build tags, since nothing else stops a broken one. A change that spans several files lands as one self-contained commit rather than a sequence that leaves intermediate `HEAD`s broken.
 *   **State lives in front-matter, not branches.** Draft and stable documents — and `proposed` vs. `accepted` ADRs — coexist on `main`, distinguished by their front-matter `status` (and a draft banner), never by branch. See [doc/DOCUMENTATION_STANDARD.md](./doc/DOCUMENTATION_STANDARD.md).
 *   **Small, focused commits.** Review is continuous rather than gated at a merge boundary, so each commit stays scoped to one concern and carries its rationale in the message.
 *   **Subjects carry a type.** A commit subject reads `type(scope): summary`, for example `feat(recordtable): group the rows`.

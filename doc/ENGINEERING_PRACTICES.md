@@ -383,9 +383,12 @@ Sources under [github.com/stergiotis/boxer/public/gov/doclint](../public/gov/doc
 Implements numbered rules over Markdown front-matter, draft banners, ADR
 section completeness and sub-item declarations, link resolution, banned
 filenames, Go doc-comment hygiene, stale review stamps, and proposed ADRs
-that accepted ones link to. The numbering has gaps: an id is reserved when a check is planned and assigned when it is
-implemented, so `DL013` and `DL014` name checks that do not exist yet while
-`DL015` through `DL018` ship (the register is DOCUMENTATION_STANDARD §8's table). Findings carry one of three severities:
+that accepted ones link to, and package-qualified identifiers in Go code
+fences that must resolve in the tree (`DL013`, at error level). The numbering
+has gaps: an id is reserved when a check is planned and assigned when it is
+implemented, so `DL014` names a check that does not exist yet while `DL013`
+and `DL015` through `DL018` ship (the register is DOCUMENTATION_STANDARD §8's
+table). Findings carry one of three severities:
 
 - `error` — sets the script's exit code to 1.
 - `warn` — visible in output but non-blocking.
@@ -560,7 +563,9 @@ conventions, including:
 - struct-of-arrays preferred over array-of-structs,
 - `iter.Seq2` iterators preferred over slice returns,
 - zero-value usability when feasible, otherwise an exported `New` constructor
-  with unexported fields.
+  with unexported fields,
+- network listeners bound through the loopback gate rather than `net.Listen`
+  (`CS018`).
 
 The subset with a `CS`-numbered rule is checked by `boxer gov codelint`
 ([ADR-0011](adr/0011-codelint.md)), with per-line disables that carry a

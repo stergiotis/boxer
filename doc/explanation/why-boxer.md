@@ -299,8 +299,10 @@ them:
   where idiomatic Go would reach for object graphs.
 - Novel vocabulary (backbone/payload, sections, memberships, cards, passes)
   documented in-repo but existing nowhere else.
-- Alpha surface: APIs break, sometimes in batches; there is no deprecation
-  policy yet.
+- Alpha surface: APIs break, sometimes in batches. A stability-tier and
+  deprecation policy is proposed ([VERSIONING.md](../../VERSIONING.md),
+  [ADR-0389](../adr/0389-stability-tiers-per-package-and-what-a-version-number-promises.md))
+  and binds nothing until it is accepted.
 - No third-party contributions and no support channel.
 - The integrated stack pulls in Go and Rust toolchains plus a ClickHouse
   instance.
