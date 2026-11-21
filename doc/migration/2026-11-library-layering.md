@@ -39,7 +39,9 @@ Rewrite each prefix; package names are unchanged unless stated.
 | `public/db/clickhouse/dsl/env` (package `env`) | `public/db/clickhouse/dsl/grammarenv` (package `grammarenv`) |
 
 `public/keelson/runtime/factsschema/factsread` and `…/storegen` stay where they
-are. Every path is under `github.com/stergiotis/boxer/`.
+are. The facts table's layout names (`factsschema.DefaultEngineClause`,
+`TsColumn`, `MigrationRecipe`) move with the package. Every path is under
+`github.com/stergiotis/boxer/`.
 
 A `gofmt -r` rule per package rename does the qualifier: for example
 `gofmt -r 'env.Extract -> grammarenv.Extract'` after the import line changes.
