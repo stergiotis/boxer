@@ -160,6 +160,7 @@ if err != nil {
 
 ### Sentinel Errors
 *   **A package-level error is `errors.New`.** `eh.Errorf`, `eh.New` and `eb.Build` record the stack where they run, and a package-level `var ErrX = eh.Errorf("…")` runs during initialisation, so every error wrapping it reports `runtime.doInit` instead of the failing path. `errors.Is` matches the sentinel by identity either way; the code that returns it wraps it with `eh.Errorf("…: %w", ErrX)` or `eb.Build()…Errorf` where the stack and the facts are worth recording. Codelint `CS019` reports the init-time form.
+*   **A sentinel that refines another is `fmt.Errorf` with `%w`.** `var ErrX = fmt.Errorf("…: %w", ErrBase)` records no stack and keeps `errors.Is(err, ErrBase)` true for everything that matches `ErrX`, which `errors.New` would lose. It is the one place `fmt.Errorf` is used outside `eh`: codelint `CS001` accepts it when the call is the whole value of a package-level variable, the format is a literal holding `%w`, and every other argument is a package-level error variable.
 *   **Read a fact back with `eh.LookupFact[T](err, key)`** rather than matching on the message text.
 
 ### Message Text

@@ -26,11 +26,15 @@ func TestCS001_FlagsFmtErrorfOutsideEh(t *testing.T) {
 		findings = append(findings, f)
 	}
 
-	require.Len(t, findings, 1, "expected exactly one unsuppressed CS001 finding")
-	assert.Equal(t, "CS001", findings[0].RuleId)
-	assert.Equal(t, codelint.FindingSeverityWarn, findings[0].Severity)
-	assert.Contains(t, findings[0].Path, "bad.go")
-	assert.Equal(t, int32(9), findings[0].Line)
+	require.Len(t, findings, 2, "expected two unsuppressed CS001 findings")
+	lines := []int32{}
+	for _, f := range findings {
+		assert.Equal(t, "CS001", f.RuleId)
+		assert.Equal(t, codelint.FindingSeverityWarn, f.Severity)
+		assert.Contains(t, f.Path, "bad.go")
+		lines = append(lines, f.Line)
+	}
+	assert.ElementsMatch(t, []int32{9, 15}, lines)
 }
 
 func TestCS002_FlagsMisplacedCtx(t *testing.T) {
