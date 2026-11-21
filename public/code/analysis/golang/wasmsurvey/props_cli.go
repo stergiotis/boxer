@@ -301,7 +301,15 @@ func runPropsVerify(ctx context.Context, cmd *cli.Command) (err error) {
 	if wasmErr != nil {
 		return wasmErr
 	}
-	return stabilityErr
+	if stabilityErr != nil {
+		return stabilityErr
+	}
+	var imports map[string][]string
+	var rootModule string
+	if imports, rootModule, err = LoadModuleImports(ctx, opts.Dir, opts.Patterns, opts.Tags); err != nil {
+		return err
+	}
+	return reportLayering(imports, rootModule)
 }
 
 // verifyStability applies the ADR-0389 stability rules to the working-tree
