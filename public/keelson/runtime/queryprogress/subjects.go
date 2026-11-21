@@ -9,7 +9,7 @@ import (
 )
 
 // SubjectRoot is the subject family carrying inflight progress.
-const SubjectRoot = "queryrun.progress"
+const SubjectRoot = "runtime.queryrun.progress"
 
 // SubjectWildcard matches every run's progress subject. It is the pattern a
 // subscriber that watches more than one run asks for, and the pattern the

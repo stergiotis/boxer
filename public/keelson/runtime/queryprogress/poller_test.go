@@ -110,7 +110,7 @@ func TestPollerPublishesTicksForWatchedRuns(t *testing.T) {
 
 	subjects, ticks := bus.seen()
 	require.Len(t, ticks, 1)
-	assert.Equal(t, "queryrun.progress.play-main-1-1", subjects[0])
+	assert.Equal(t, "runtime.queryrun.progress.play-main-1-1", subjects[0])
 	assert.Equal(t, "play-main-1-1", ticks[0].QueryID)
 	assert.Equal(t, uint64(500), ticks[0].Progress.ReadRows)
 	assert.Equal(t, uint64(10000), ticks[0].Progress.TotalRowsToRead)
