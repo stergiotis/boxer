@@ -12,14 +12,42 @@ generator: boxer gov releasenotes
 
 # Release notes: v0.0.23..HEAD
 
-1872 commit(s) in the range.
+2025 commit(s) in the range.
 
 ## Build requirements
 
 - `go` directive: 1.27.0 → 1.27.3.
 - `toolchain` line: absent at both ends.
 
-## Breaking changes (23)
+## Breaking changes (30)
+
+### feat(tabhost)!: a tab link decides what to show, not what to write or reach
+
+`44751a54b501` — a tab link can no longer set an arbitrary module environment. BOXER_PLAY_ALLOW_WRITES, credentials, and a CLICKHOUSE_URL off the page's origin (other than an .invalid host) are dropped; autorun of non-read SQL is dropped; host=/module=/fonts on another origin are refused. A tab binary whose links set its own variables lists them in tabhost.Options.LinkEnv.
+
+### feat(extbin)!: a child keeps only the secrets its program declares
+
+`2a78bf5dd515` — a program declared with extbin.Declare whose child read a Sensitive variable (CLICKHOUSE_PASSWORD, BOXER_LLM_APIKEY, ...) from its environment no longer receives it. Declare it with InheritSensitive: []string{"NAME"} or InheritAllSensitive: true.
+
+### fix(hostboot)!: test-lane knobs take effect only on a host a scene launched
+
+`50e015eb1537` — a headless host started outside scene.Launch no longer honours these four variables. A hand-driven host that wants them sets BOXER_COMPONENT=scene-<name> beside IMZERO2_HEADLESS_LISTEN.
+
+### feat(loopback)!: every Go listener binds through one loopback gate
+
+`b239459a4666` — a non-loopback listen address is refused at startup. svgserver: --addr default ":8087" → "127.0.0.1:8087"; pass --allowNonLoopback to bind wider. imzero2tab serve --listen <wide> → add --allowNonLoopback (browserhost.ServeConfig.AllowNonLoopback). --pprofHttpListenAddress <wide> → add --pprofHttpAllowNonLoopback, and a failed bind now ends the command. http serve --listen <wide> → add --allowNonLoopback (serve.Config.AllowNonLoopback).
+
+### fix(inprocbus)!: a request's wait is bounded, and no responder fails at once
+
+`4f5528bf2a8b` — a Request on a subject nobody subscribes returns inprocbus.ErrNoResponders instead of inprocbus.ErrTimeout. A caller that reads ErrTimeout as "the service is not running" also checks errors.Is(err, inprocbus.ErrNoResponders). A handler that relied on running on its requester's goroutine reads msg.RequesterGoroutine instead.
+
+### feat(imzero2)!: the native host refuses a Go side built from another IDL
+
+`381ff556f38d` — the Rust host's `imzero2` command requires -idlFingerprint. A Go launcher from before this commit, or a host started by hand, must pass the fingerprint of the Go side it pairs with (the error names it); pairing a Go side and a host from different trees is refused rather than mis-decoded.
+
+### feat(wscarrier)!: the carrier refuses a non-loopback bind unless opted in
+
+`bb33017b7faf` — a host started with a non-loopback IMZERO2_HEADLESS_LISTEN (for example 0.0.0.0:8089) and without IMZERO2_HEADLESS_INSECURE_EXPOSE=1 now exits at start. Either bind 127.0.0.1 behind an authenticating TLS proxy, or add IMZERO2_HEADLESS_INSECURE_EXPOSE=1 to keep the old behaviour.
 
 ### refactor(hostboot)!: Options.SeedServices names servicehost.Seed
 
@@ -168,11 +196,43 @@ generator: boxer gov releasenotes
 
 ## Contract snapshots
 
-No snapshot under `contracts/` changed.
+- `contracts/BASELINE` (A)
+- `contracts/c18844936/cli.txt` (A)
+- `contracts/c18844936/ddl/public/fs/lading/ladingdata/fsdata_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/ddl/public/fs/lading/ladingmeta/fsmeta_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/ddl/public/fs/lading/ladingpolicy/facts_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/ddl/public/keelson/runtime/agentrun/agentrunstore/agentrun_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/ddl/public/keelson/runtime/agentrun/agentrunstore/agentrunentry_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/ddl/public/keelson/runtime/agentrun/agentrunstore/agentrunentryvault_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/ddl/public/keelson/runtime/persist/persiststore/persiststate_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/ddl/public/keelson/runtime/sysmfacts/facts_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/ddl/public/keelson/runtime/trail/facts_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/ddl/public/keelson/runtime/watchbill/watchbillpresence/facts_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/ddl/public/keelson/runtime/watchbill/watchbillstore/watchbill_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/ddl/public/keelson/runtime/watchbill/watchbillstore/watchbillevent_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/ddl/public/semistructured/markdown/mddocfacts/facts_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/ddl/public/storage/recordstore/dimension/actor/actor_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/ddl/public/storage/recordstore/dimension/provenance/provenance_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/ddl/public/storage/recordstore/pushoutstore/pushout_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/ddl/public/streaming/stevedore/stevedorefacts/facts_ddl_clickhouse.out.sql` (A)
+- `contracts/c18844936/env.txt` (A)
+- `contracts/c18844936/idl.txt` (A)
+- `contracts/c18844936/lwsurface.txt` (A)
+- `contracts/c18844936/membership/apps/jsonbench/testdata/membership-assignments.golden` (A)
+- `contracts/c18844936/membership/public/fs/lading/ladingvocab/testdata/membership-assignments.golden` (A)
+- `contracts/c18844936/membership/public/gov/capmapvocab/testdata/membership-assignments.golden` (A)
+- `contracts/c18844936/membership/public/keelson/runtime/factsschema/meshdemo/testdata/membership-assignments.golden` (A)
+- `contracts/c18844936/membership/public/keelson/runtime/sysmvocab/testdata/membership-assignments.golden` (A)
+- `contracts/c18844936/membership/public/keelson/runtime/vocab/testdata/membership-assignments.golden` (A)
+- `contracts/c18844936/membership/public/keelson/vdd/testdata/membership-assignments.golden` (A)
+- `contracts/c18844936/membership/public/semistructured/markdown/mddocvocab/testdata/membership-assignments.golden` (A)
+- `contracts/c18844936/membership/public/streaming/stevedore/stevedorevocab/testdata/membership-assignments.golden` (A)
+- `contracts/c18844936/versions.txt` (A)
 
 ## Migration notes added
 
 - [2026-10-watchbill-delegation.md](../../doc/migration/2026-10-watchbill-delegation.md)
+- [README.md](../../doc/migration/README.md)
 
 ## API differences in Stable packages
 
@@ -199,10 +259,16 @@ Output of `scripts/ci/apidiff.sh` for the same range.
 ## public/extbin (acknowledged)
 - ClickHouseFormat: removed
 breaking commits touching it:
+  2a78bf5dd feat(extbin)!: a child keeps only the secrets its program declares
   be7504315 refactor!: remove six packages nothing imports
 
-## public/keelson/runtime/app (NOT acknowledged by any breaking commit)
+## public/keelson/runtime/app (acknowledged)
 - StaticFrameContext: old is comparable, new is not
+breaking commits touching it:
+  4f5528bf2 fix(inprocbus)!: a request's wait is bounded, and no responder fails at once
+
+## public/observability/eh/eb (NOT acknowledged by any breaking commit)
+- NewCliCommand: changed from func() *github.com/urfave/cli/v2.Command to func() *github.com/urfave/cli/v3.Command
 
 ## public/thestack/imzero2/egui2/bindings (acknowledged)
 - (*Fetcher).FetchGraphEvents: removed
@@ -784,6 +850,6 @@ breaking commits touching it:
 breaking commits touching it:
   9e6e40b10 refactor(imzero2)!: migrate the Go widgets to the ADR-0267 contract (M1–M4)
 
-apidiff v0.0.23..HEAD: 49 stable package(s) compared, 25 compatible, 22 incompatible and acknowledged, 2 incompatible and not acknowledged; 16 new since the base
+apidiff v0.0.23..HEAD: 58 stable package(s) compared, 33 compatible, 23 incompatible and acknowledged, 2 incompatible and not acknowledged; 16 new since the base
 apidiff: v0.0.23 declares no Stable package, so no promise was made at it; reporting only
 ```
