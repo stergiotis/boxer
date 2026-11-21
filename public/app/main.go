@@ -10,7 +10,6 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/capslock"
 	"github.com/stergiotis/boxer/public/app/commands/compression"
 	"github.com/stergiotis/boxer/public/app/commands/datacatalog"
-	"github.com/stergiotis/boxer/public/app/commands/datasource"
 	"github.com/stergiotis/boxer/public/app/commands/designsystem"
 	"github.com/stergiotis/boxer/public/app/commands/egui2gen"
 	"github.com/stergiotis/boxer/public/app/commands/errordemo"
@@ -148,7 +147,6 @@ func newApp() (app *cli.Command) {
 			stevedoredemo.NewCliCommand(),
 			compression.NewCliCommand(),
 			datacatalog.NewCliCommand(),
-			datasource.NewCliCommand(),
 			designsystem.NewCliCommand(),
 			fairleadcli.NewCliCommand(),
 			findAnchor.NewCliCommand(),

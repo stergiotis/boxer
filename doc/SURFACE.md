@@ -26,7 +26,7 @@ itself; ADR-0389 states its tier.
 | [Experimental](#experimental) | 282 |
 | [Internal](#internal) | 16 |
 | [Test support](#test-support) | 14 |
-| [Tools](#tools) | 91 |
+| [Tools](#tools) | 90 |
 | [Demos and examples](#demos-and-examples) | 40 |
 | [Unclassified](#unclassified) | 208 |
 
@@ -580,7 +580,6 @@ Command and governance packages of this repository's tooling. Their Go API is ou
 - `public/app/commands/capslock` — Package capslock is the CLI wiring for the ADR-0026 §SD10 capslock cross-checker.
 - `public/app/commands/compression`
 - `public/app/commands/datacatalog` — Package datacatalog is the `boxer datacatalog` command: it discovers what a live ClickHouse instance holds and writes the answers into `boxer.*` as four derived tables (ADR-0170).
-- `public/app/commands/datasource`
 - `public/app/commands/designsystem` — Package designsystem is the CLI wiring for the IDS toolchain (ADR-0029).
 - `public/app/commands/egui2gen` — Package egui2gen exposes the FFFI2 egui2-widget code generator as a boxer subcommand.
 - `public/app/commands/errordemo` — Package errordemo is `boxer error demo`: it returns a nested structured error so a person can see how the logger renders one.
