@@ -1,8 +1,12 @@
 package containers
 
 import (
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"errors"
 )
+
+// ErrEmptyStack is returned by Swap, Pop and Peek on an empty stack. It is
+// a plain sentinel, so this package links no error-handling library.
+var ErrEmptyStack = errors.New("containers: empty stack")
 
 // Stack is a slice-backed LIFO stack. The zero value is an empty,
 // usable stack; NewStack / NewStackSized pre-size the backing storage.
@@ -45,11 +49,11 @@ func (inst *Stack[T]) Push(value T) {
 }
 
 // Swap replaces the top element and returns the previous top. Errors on
-// an empty stack.
+// an empty stack (ErrEmptyStack).
 func (inst *Stack[T]) Swap(newValue T) (oldValue T, err error) {
 	l := len(inst.items)
 	if l == 0 {
-		err = eh.Errorf("cannot swap last element of an empty stack")
+		err = ErrEmptyStack
 		return
 	}
 	oldValue = inst.items[l-1]
@@ -57,12 +61,13 @@ func (inst *Stack[T]) Swap(newValue T) (oldValue T, err error) {
 	return
 }
 
-// Pop removes and returns the top element. Errors on an empty stack;
+// Pop removes and returns the top element. Errors on an empty stack
+// (ErrEmptyStack);
 // PopDefault is the non-error variant.
 func (inst *Stack[T]) Pop() (retr T, err error) {
 	n := len(inst.items)
 	if n <= 0 {
-		err = eh.Errorf("cannot pop an empty stack")
+		err = ErrEmptyStack
 		return
 	}
 	retr = inst.items[n-1]
@@ -87,11 +92,11 @@ func (inst *Stack[T]) PopDefault(emptyValue T) (retr T) {
 }
 
 // Peek returns the top element without removing it. Errors on an empty
-// stack; PeekDefault is the non-error variant.
+// stack (ErrEmptyStack); PeekDefault is the non-error variant.
 func (inst *Stack[T]) Peek() (retr T, err error) {
 	n := len(inst.items)
 	if n <= 0 {
-		err = eh.Errorf("cannot peek an empty stack")
+		err = ErrEmptyStack
 		return
 	}
 	retr = inst.items[n-1]
