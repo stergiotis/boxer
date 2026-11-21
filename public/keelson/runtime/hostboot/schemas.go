@@ -43,10 +43,12 @@ func (rt *Runtime) checkSchemas(ctx context.Context, factsCfg chstore.Config) (e
 		}
 	}
 	contracts := make([]recordstore.TableContract, 0, 8)
-	if facts, ferr := chstore.SchemaContract(factsCfg); ferr != nil {
+	// The facts table, and the read relation by its columns when it is
+	// another one or the storage is the deployment's (ADR-0402 §SD4).
+	if facts, ferr := chstore.SchemaContracts(factsCfg); ferr != nil {
 		logger.Warn().Err(ferr).Msg("schema: the facts table's contract could not be composed; it is not checked")
 	} else {
-		contracts = append(contracts, facts)
+		contracts = append(contracts, facts...)
 	}
 	contracts = append(contracts, persiststore.PersistSchemaContract(""))
 	if rt.PersistExec != nil {

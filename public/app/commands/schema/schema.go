@@ -62,14 +62,17 @@ func NewCliCommand() *cli.Command {
 // Contracts are the stored tables this build knows, in their default
 // layouts: the facts table (which the facts-bound stores share), the state
 // table, the journal's three, the watchbill pair and the snapshot store's
-// three.
+// three. Where the facts are read from another relation, or stored in a
+// deployment's own table, that relation is judged by its columns and gets
+// no statement (ADR-0402 §SD4, §SD5).
 func Contracts() (cs []recordstore.TableContract, err error) {
-	facts, err := chstore.SchemaContract(chstore.ConfigFromEnv())
+	facts, err := chstore.SchemaContracts(chstore.ConfigFromEnv())
 	if err != nil {
 		return
 	}
 	lading := ladingschema.Layout{}
-	cs = append(cs, facts, persiststore.PersistSchemaContract(""))
+	cs = append(cs, facts...)
+	cs = append(cs, persiststore.PersistSchemaContract(""))
 	cs = append(cs, agentrunstore.Layout{}.SchemaContracts()...)
 	cs = append(cs, watchbillstore.Layout{}.SchemaContracts()...)
 	cs = append(cs,
