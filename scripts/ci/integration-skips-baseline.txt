@@ -1,0 +1,133 @@
+# Integration-lane tests expected to skip under release.sh and nightly.sh
+# (gotest-integration.sh --strict-skips). A skip not listed here fails the
+# step: that is what makes a lane whose ClickHouse server was never reached
+# fail rather than pass with its members skipped. An entry whose test ran is
+# reported, so remove it then.
+#
+# One `<package relative to the module> <test>` per line; subtests are named
+# as go test names them. Grouped by why the test does not run, so a group a
+# release machine should cover — a tool, a corpus, a server state — can be
+# deleted to make its absence a failure.
+
+# --- by design: diagnostics, child-process helpers, fuzz seeds and corpus entries the test itself declines
+public/db/clickhouse/chclient TestConfigFromEnvChild
+public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/6a90cb6646d49b99
+public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/7f82d1411c019232
+public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/adbd2279efb1fb56
+public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/e50b035a2dd27d5f
+public/db/clickhouse/dsl/nanopass/highlight_test TestDebugCTERef
+public/db/clickhouse/dsl/nanopass/passes_test TestDebugAliases
+public/db/clickhouse/dsl/nanopass/passes_test TestDebugCasts
+public/db/clickhouse/dsl/nanopass/passes_test TestDebugFormat
+public/db/clickhouse/dsl/nanopass/passes_test TestDebugFuncArgContext
+public/db/clickhouse/dsl/nanopass/passes_test TestDebugMultipleSettings
+public/db/clickhouse/dsl/nanopass/passes_test TestDebugNegateParens
+public/db/clickhouse/dsl/nanopass/passes_test TestDebugNotExpr
+public/db/clickhouse/dsl/nanopass/passes_test TestDebugNotParens
+public/db/clickhouse/dsl/nanopass/passes_test TestDebugOperatorContext
+public/db/clickhouse/dsl/nanopass/passes_test TestDebugTupleArray
+public/db/clickhouse/dsl/nanopass/passes_test TestDebugWithClause
+public/db/clickhouse/dsl/nanopass/passes_test TestExplainSmokeCanonicalizedSQLValid/053_set_param_slots
+public/db/clickhouse/dsl/nanopass/passes_test TestExplainSyntaxCorpus/053_set_param_slots
+public/db/clickhouse/dsl/nanopass/passes_test TestExplainSyntaxEquivalence/combined
+public/db/clickhouse/dsl/nanopass/passes_test TestInjectParamsAsCTECorpus/053_set_param_slots
+public/db/clickhouse/dsl/nanopass/passes_test TestRewriterAllChannels
+public/db/clickhouse/dsl/nanopass/passes_test TestRewriterDiagnostic
+public/db/clickhouse/dsl/nanopass_test TestDebugFromClause
+public/db/clickhouse/dsl/nanopass_test TestDebugJoinExpr
+public/db/clickhouse/dsl/nanopass_test TestDebugScopeTree
+public/db/clickhouse/dsl/nanopass_test TestDebugUnionAll
+public/db/clickhouse/dsl/nanopass_test TestDebugUnionMethods
+public/db/clickhouse/dsl/nanopass_test TestSLLNeverDisagreesWhenItSucceeds/bench_large
+public/db/clickhouse/dsl/nanopass_test TestSLLNeverDisagreesWhenItSucceeds/bench_medium
+public/keelson/runtime/factsstore/chstore TestConfigFromEnvChild
+
+# --- by design: needs a build tag the lane does not pass
+public/keelson/runtime/agent TestUnattendedAcceptsASuggestProposal
+public/keelson/runtime/agent TestUnattendedApprovesAGrant
+public/keelson/runtime/agent TestUnattendedApprovesAWidening
+public/keelson/runtime/agent TestUnattendedAsksForTheBudgetAWideningRevealed
+public/keelson/runtime/agent TestUnattendedKeepsASuggestCeiling
+public/keelson/runtime/agent TestUnattendedLeavesARequestWithoutACeilingToThePerson
+public/keelson/runtime/agent TestUnattendedLeavesASpentBudgetToThePerson
+public/keelson/runtime/agent TestUnattendedLeavesMoreTimeToThePerson
+public/keelson/runtime/agent TestUnattendedPacesAWriteAfterAWidening
+public/keelson/runtime/agent TestUnattendedStillConfirmsAConsequentialCommand
+public/thestack/fffi2/ir TestNewAbstractType_InvalidName_PanicsUnderExtraChecks
+public/thestack/fffi2/ir TestNewConcreteType_InvalidName_PanicsUnderExtraChecks
+
+# --- by design: opt-in by a variable — fixture regeneration, a trial's harness, a heap guard, a live URL, a spawn mark
+apps/imzrt TestSampler_SteadyStateHeapBounded
+apps/imztop TestSampler_SteadyStateHeapBounded
+apps/play TestMapRasterLive
+doc/trials/map-tile-addressing/harness TestBrightness
+doc/trials/map-tile-addressing/harness TestFirstPixels
+doc/trials/map-tile-addressing/harness TestOverscan
+doc/trials/map-tile-addressing/harness TestQueryCache
+doc/trials/map-tile-addressing/harness TestResultShape
+doc/trials/map-tile-addressing/harness TestSequenceCounts
+doc/trials/map-tile-addressing/harness TestServerCost
+public/keelson/runtime/llm TestTranscribeAgainstALiveRoute
+public/observability/coverage TestRegenFixtures
+public/observability/profiling/pprofarrow TestRegenFixtures
+public/observability/sysmetrics/proc TestSample_RealProc_OwnComponentMark
+
+# --- by design: the run's server is fresh — no Keeper, no query_log history
+public/db/clickhouse/jackstay TestReplicatedCreate_LiveServer
+public/keelson/runtime/queryrunsvc TestLiveOldBackfillStaysDuplicateFree
+
+# --- environment: a tool not on PATH (nats-server, pijul, tinygo), a container runtime, or a test binary without a symbol table or go.mod above it
+public/algebraicarch/pushout/pijul TestBackends_DifferentialStateEquivalence
+public/code/analysis/golang/codevol TestReadSelfSymbols_ReadsOwnTable
+public/code/analysis/golang/wasmsurvey TestProbeBuild_Smoke
+public/keelson/runtime/natsbus TestClient_PublishSubscribe
+public/keelson/runtime/natsbus TestClient_RequestReply
+public/keelson/runtime/natsbus TestClient_SubscribeInbox
+public/keelson/runtime/natsbus TestHeadlessBridge_EndToEnd
+public/keelson/runtime/natsbus TestSysmetricsProducerConsumerOverNATS
+public/semistructured/leeway/canonicaltypes/codegen TestGenerateGoCode
+public/streaming/persisted/kafka TestIntegrationConnectivity
+public/streaming/persisted/kafka TestIntegrationProduceConsume
+
+# --- environment: the headless imzero2 client is not built (rust/imzero2/build_rust_dist.sh headless_soft)
+apps/play TestSceneChatBodiesTakeTheirHeightUpToTheCeiling
+apps/sqlapplet TestSceneCompBrowserWalksFromTheTable
+public/keelson/runtime/windowhost TestSceneTiledDesktop
+public/keelson/runtime/windowhost TestSceneWindowArrangements
+public/thestack/imzero2/egui2/widgets/portolan TestScenePortolanCamera
+public/thestack/imzero2/egui2/widgets/waveform TestSceneWaveformFile
+public/thestack/imzero2/egui2/widgets/waveform TestSceneWaveformPlayer
+
+# --- environment: a data corpus the machine does not hold (BOXER_GRIB_CORPUS, SWISSTOPO_TILES_DIR)
+public/science/geo/grib TestCorpusMatchesTheOracleDumps
+public/science/geo/grib/tables TestEmbeddedTablesMatchTheCheckout
+public/science/geo/grib/tables TestGenerateWmoTables
+public/science/geo/swisstopo TestElevationSampler_SampleProfile
+public/science/geo/swisstopo TestElevationSampler_SampleProfile_CrossTileBoundary
+public/science/geo/swisstopo TestElevationSampler_SampleProfile_SamePoint
+public/science/geo/swisstopo TestElevationSampler_Sample_ReferencePoints
+public/science/geo/swisstopo TestElevationSampler_Sample_WGS84RoundTrip
+public/science/geo/swisstopo TestLineOfSightSweepEnsemble_Integration
+public/science/geo/swisstopo TestLineOfSightSweep_Structure
+public/science/geo/swisstopo TestLineOfSight_HeightMatters
+public/science/geo/swisstopo TestLineOfSight_Obstructed_PilatusToRigi
+public/science/geo/swisstopo TestLineOfSight_Obstructed_RigiToBurgenstock
+public/science/geo/swisstopo TestLineOfSight_ProfileArrays
+public/science/geo/swisstopo TestLineOfSight_SamePoint
+public/science/geo/swisstopo TestLineOfSight_Visible
+public/science/geo/swisstopo TestReadSwissALTI3DTile_BernGrid
+public/science/geo/swisstopo TestReadSwissALTI3DTile_ElevationRange
+public/science/geo/swisstopo TestReadSwissALTI3DTile_MountainTile
+
+# --- server state the run does not provision: the lading store, the data catalog, the anchor demo table, an introspection catalogue
+apps/chat TestAResumedConversationGetsItsExportBack
+apps/chat TestAnExportLandsInTheStoreAndIsJournaled
+apps/play TestLiveEveryOfferedIntrospectionTableRuns
+apps/play TestLiveTraceRewrite
+apps/play TestLiveValidateResolvesHandles
+apps/play TestSceneDetailCardIdsAreUnique
+apps/sqlapplet TestCatalogBookQueries_LiveServer
+apps/sqlapplet TestLadingBookQueries_LiveServer
+apps/tally TestComponentsOnARealEntry_LiveServer
+apps/tally TestPathSetOverAPublishedTree_LiveServer
+apps/tally TestPathSetOverAnotherLayout_LiveServer

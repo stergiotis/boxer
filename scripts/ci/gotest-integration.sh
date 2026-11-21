@@ -24,9 +24,10 @@
 # Members skip themselves when their server or tool is unavailable, so running
 # this without ClickHouse reports skips rather than failures, and tparse's
 # summary does not name them. --strict-skips, which release.sh and nightly.sh
-# pass, prints one "skipped: <package> <test>: <reason>" line per skipped test
-# after the run; gate_lib.sh's gate() counts such a line as a failure, so a
-# lane whose server was never reached cannot pass as green.
+# pass, compares the skipped tests with integration-skips-baseline.txt beside
+# this script and prints one "skipped: <package> <test>: <reason>" line per
+# skip the baseline does not list; gate_lib.sh's gate() counts such a line as
+# a failure, so a lane whose server was never reached cannot pass as green.
 #
 # `-race` is on, as in the default runner. It was off for a while because the
 # queryrunsvc pipeline test could not finish under it — root-caused since to a
@@ -64,9 +65,11 @@ rc=0
 go test -race -json -count=1 -p 1 -tags "$tags" "${args[@]}" \
   | tee "$events" | go tool tparse -progress -trimpath auto -slow 20 || rc=$?
 
-# One line per skipped test, with the first line it logged (its t.Skip
+# One "<package> <test>\t<reason>" line per skipped test, the package relative
+# to the module and the reason the first line the test logged (its t.Skip
 # message). Lines that are not JSON — build output — are passed over.
-skips=$(jq -R -r -n '
+mod="$(go list -m)/"
+skips=$(jq -R -r -n --arg mod "$mod" '
     [inputs | fromjson? | select(type == "object" and .Test != null)] as $ev
     | ($ev | map(select(.Action == "output"))
            | group_by(.Package + " " + .Test)
@@ -76,10 +79,37 @@ skips=$(jq -R -r -n '
                           | first // "")})
            | from_entries) as $why
     | $ev[] | select(.Action == "skip")
-    | "skipped: \(.Package) \(.Test): \($why[.Package + " " + .Test] // "")"' "$events")
-if [ -n "$skips" ]; then
-    echo
-    echo "$skips"
-    echo "integration: $(wc -l <<<"$skips") test(s) did not run"
+    | "\(.Package | ltrimstr($mod)) \(.Test)\t\($why[.Package + " " + .Test] // "")"' "$events")
+tested=$(jq -R -r -n --arg mod "$mod" '[inputs | fromjson? | select(type == "object" and .Package != null) | .Package | ltrimstr($mod)] | unique | .[]' "$events")
+
+# The baseline: skips the lane is expected to have on a release machine (see
+# the file's header). A skip outside it is printed as "skipped: …", which
+# gate() fails; an entry whose package ran and whose test did not skip is
+# reported, so the file only shrinks.
+baseline="$here/integration-skips-baseline.txt"
+declare -A expected=() seen=() pkgs=()
+if [ -f "$baseline" ]; then
+    while read -r p t _; do
+        [ -n "$p" ] && [ "${p:0:1}" != "#" ] && expected["$p $t"]=1
+    done <"$baseline"
+fi
+while read -r p; do [ -n "$p" ] && pkgs["$p"]=1; done <<<"$tested"
+unexpected=0
+while IFS=$'\t' read -r key why; do
+    [ -n "$key" ] || continue
+    seen["$key"]=1
+    if [ -z "${expected[$key]:-}" ]; then
+        [ "$unexpected" -gt 0 ] || echo
+        echo "skipped: $key: $why"
+        unexpected=$((unexpected + 1))
+    fi
+done <<<"$skips"
+for key in "${!expected[@]}"; do
+    if [ -n "${pkgs[${key%% *}]:-}" ] && [ -z "${seen[$key]:-}" ]; then
+        echo "integration: $key ran; remove it from $(basename "$baseline")"
+    fi
+done
+if [ "$unexpected" -gt 0 ]; then
+    echo "integration: $unexpected test(s) did not run and are not in $(basename "$baseline")"
 fi
 exit "$rc"
