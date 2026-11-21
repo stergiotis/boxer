@@ -11,10 +11,11 @@ import (
 )
 
 // Gate is one TCP listener's bind policy, the ADR-0082 §SD1 posture made the
-// default for every listener boxer opens: a loopback bind proceeds; any other
-// bind — an empty host (":8080" binds every interface), "0.0.0.0", a routable
-// address, a name — is refused unless one of three things lifts the refusal
-// for this listener:
+// default for every listener boxer opens.
+//
+// A loopback bind proceeds. Any other bind — an empty host (":8080" binds
+// every interface), "0.0.0.0", a routable address, a name — is refused
+// unless one of three things lifts the refusal for this listener:
 //
 //   - the operator opted in (AllowNonLoopback, named by OptIn);
 //   - the listener exists to serve other machines and says whom and why
