@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 )
 
 // play_runs_history.go is the ADR-0115 S2 glass surface: the History tab's
@@ -34,11 +35,20 @@ import (
 // the render thread with the armColumnDiag generation guard; the render
 // polls a snapshot.
 
+// runsHistoryFactsTable is the relation captured runs are read from: the
+// facts read table (BOXER_FACTS_READ_TABLE, ADR-0402 §SD3), boxer.facts by
+// default. A malformed setting, which a host refuses at boot, reads
+// boxer.facts. Endpoints without it (chlocal, a foreign server) surface the
+// server error plus a hint instead.
+func runsHistoryFactsTable() (table string) {
+	table, err := factsschema.ReadTable()
+	if err != nil {
+		table = factsschema.QualifiedTableName
+	}
+	return
+}
+
 const (
-	// runsHistoryFactsTable is the conventional capture destination
-	// (factsschema DatabaseName.TableName). Endpoints without it (chlocal,
-	// a foreign server) surface the server error plus a hint instead.
-	runsHistoryFactsTable = "boxer.facts"
 	// runsHistoryLimit bounds one read; queryrunfacts caps it further.
 	runsHistoryLimit = 100
 	// runsHistoryTimeout bounds one fetch round-trip (diagProbeTimeout's
@@ -90,7 +100,7 @@ func newRunsHistoryDriver(client *Client) (d *runsHistoryDriver) {
 			if err = queryrunfacts.CheckSurfaceVersion(marker, mErr); err != nil {
 				return
 			}
-			sql, err := queryrunfacts.ComposeHistorySql(runsHistoryFactsTable, runsHistoryLimit)
+			sql, err := queryrunfacts.ComposeHistorySql(runsHistoryFactsTable(), runsHistoryLimit)
 			if err != nil {
 				return
 			}
@@ -102,8 +112,9 @@ func newRunsHistoryDriver(client *Client) (d *runsHistoryDriver) {
 			return
 		}
 		d.status = func(ctx context.Context) (st queryrunfacts.CaptureStatus) {
-			database, _, _ := strings.Cut(runsHistoryFactsTable, ".")
-			raw, qErr := client.rawTsvQuery(ctx, queryrunfacts.CaptureStatusSql(database))
+			// The capture view lives in the facts database, wherever the
+			// rows are read from.
+			raw, qErr := client.rawTsvQuery(ctx, queryrunfacts.CaptureStatusSql(factsschema.DatabaseName))
 			st, pErr := queryrunfacts.ParseCaptureStatus(raw, qErr)
 			if pErr != nil {
 				st = queryrunfacts.CaptureStatus{State: queryrunfacts.CaptureUnknown}
@@ -297,7 +308,7 @@ func (inst *PlayApp) renderRecordedRuns() {
 		case fetchErr != nil:
 			c.Label(firstErrorLine(fetchErr)).Wrap().Selectable(true).Send()
 			if capture.State == queryrunfacts.CaptureUnknown {
-				diagWeak("Captured runs live in " + runsHistoryFactsTable + " — the queryrunsd service (ADR-0115) records them against this server.")
+				diagWeak("Captured runs live in " + runsHistoryFactsTable() + " — the queryrunsd service (ADR-0115) records them against this server.")
 			}
 			return
 		case len(rows) == 0:

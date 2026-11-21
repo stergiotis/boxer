@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 )
 
 // Client is a minimal ClickHouse HTTP query surface — enough to pull a series
@@ -164,6 +165,17 @@ var DefaultEventKinds = []string{"app-lifecycle", "runtime-run", "started", "sto
 // and would not be for a product path.
 const factsTimestampColumn = "`ts:ts:z64:47::0:`"
 
+// factsTable is the relation events are read from: the facts read table
+// (BOXER_FACTS_READ_TABLE, ADR-0402 §SD3), boxer.facts by default or when the
+// setting is malformed.
+func factsTable() (table string) {
+	table, err := factsschema.ReadTable()
+	if err != nil {
+		table = factsschema.QualifiedTableName
+	}
+	return
+}
+
 // factsSymbolColumn holds each row's symbol values, which is where the fact kind
 // lives.
 const factsSymbolColumn = "`tv:symbol:value:val:s:124::I:0::data`"
@@ -312,9 +324,9 @@ func eventStamps(ctx context.Context, client *Client, from time.Time, kinds []st
 	for _, k := range kinds {
 		quoted = append(quoted, quote(k))
 	}
-	sql := fmt.Sprintf(`SELECT toString(toDateTime(%s, 'UTC')) FROM boxer.facts
+	sql := fmt.Sprintf(`SELECT toString(toDateTime(%s, 'UTC')) FROM %s
 WHERE %s >= %s AND hasAny(%s, [%s]) ORDER BY 1 FORMAT TSV`,
-		factsTimestampColumn, factsTimestampColumn, chTime64(from),
+		factsTimestampColumn, factsTable(), factsTimestampColumn, chTime64(from),
 		factsSymbolColumn, strings.Join(quoted, ", "))
 
 	rows, err := client.QueryTSV(ctx, sql)
@@ -553,13 +565,13 @@ func eventSQL(kinds []string, from time.Time, to time.Time, step int32) (sql str
 		quoted = append(quoted, quote(k))
 	}
 	sql = fmt.Sprintf(`SELECT toString(toDateTime(toStartOfInterval(%s, INTERVAL %d SECOND), 'UTC')) AS b, toString(count()) AS c
-FROM boxer.facts
+FROM %s
 WHERE %s >= %s AND %s < %s
   AND hasAny(%s, [%s])
 GROUP BY b
 ORDER BY b
 FORMAT TSV`,
-		factsTimestampColumn, step,
+		factsTimestampColumn, step, factsTable(),
 		factsTimestampColumn, chTime64(from), factsTimestampColumn, chTime64(to),
 		factsSymbolColumn, strings.Join(quoted, ", "))
 	return

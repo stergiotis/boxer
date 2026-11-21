@@ -371,7 +371,7 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// buffer, so the bridge below knows to stay out of the way.
 	seededSQL := initSQL != ""
 	if initSQL == "" {
-		initSQL = "SELECT * FROM boxer.facts"
+		initSQL = "SELECT * FROM " + runsHistoryFactsTable()
 	}
 	// The endpoint and credentials resolve as everywhere else in boxer:
 	// CLICKHOUSE_ENDPOINT, then CLICKHOUSE_URL, then localhost.

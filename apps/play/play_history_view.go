@@ -295,7 +295,7 @@ func (inst *PlayApp) renderRunDetail(row queryrunfacts.HistoryRow) {
 		}
 		if c.Button(ids.PrepareStr("profile-as-query"), c.Atoms().Text("Profile events as query").Keep()).
 			SendResp().HasPrimaryClicked() {
-			if sql, err := queryrunfacts.ComposeProfileEventsSql(runsHistoryFactsTable, row.Id); err == nil {
+			if sql, err := queryrunfacts.ComposeProfileEventsSql(runsHistoryFactsTable(), row.Id); err == nil {
 				inst.ReplaceSql(sql)
 			}
 		}
