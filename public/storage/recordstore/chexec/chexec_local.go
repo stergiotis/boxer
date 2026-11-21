@@ -142,7 +142,8 @@ func (inst *LocalExecutor) queryArrowBuffered(ctx context.Context, sql string) (
 			err = eb.Build().Int("record", i).Errorf("read arrow record: %w", err)
 			return
 		}
-		rec.Retain()
+		// RecordBatchAt hands over ownership: the one reference is the
+		// consumer's to release.
 		records = append(records, rec)
 	}
 	return
