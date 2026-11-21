@@ -291,12 +291,8 @@ func main() {
 			[]cli.Flag{
 				&cli.StringFlag{
 					Name:  "addr",
-					Value: "127.0.0.1:8087",
-					Usage: "HTTP listen address; a loopback host unless --allowNonLoopback",
-				},
-				&cli.BoolFlag{
-					Name:  "allowNonLoopback",
-					Usage: "allow --addr to bind a non-loopback address; the server is unauthenticated",
+					Value: ":8087",
+					Usage: "HTTP listen address; the server is unauthenticated",
 				},
 				&cli.StringFlag{
 					Name:  "clientBinary",
@@ -378,11 +374,10 @@ func runServer(ctx context.Context, cmd *cli.Command) (err error) {
 
 	// HTTP server on its own goroutine; the render loop owns the main goroutine
 	// (app.Run blocks). The jobs channel is the only bridge between them.
-	// The listener is bound before the client launches, so a refused or
-	// failed bind ends the command instead of a render loop with no server.
+	// The listener is bound before the client launches, so a failed bind
+	// ends the command instead of a render loop with no server.
 	addr := cmd.String("addr")
-	gate := loopback.Gate{Name: "svgserver", OptIn: "--allowNonLoopback", AllowNonLoopback: cmd.Bool("allowNonLoopback")}
-	ln, err := gate.Listen(ctx, addr)
+	ln, err := loopback.Gate{Name: "svgserver"}.Listen(ctx, addr)
 	if err != nil {
 		return
 	}

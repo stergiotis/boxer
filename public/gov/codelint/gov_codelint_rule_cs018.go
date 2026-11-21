@@ -28,12 +28,12 @@ var listenBannedFuncs = map[string]struct{}{
 
 // RuleCS018 — a listener bound outside package loopback.
 //
-// A listener bound with net.Listen or http.ListenAndServe takes whatever
-// address it is handed, and ":port" binds every interface. loopback.Gate
-// refuses a non-loopback bind unless the operator sets the listener's
-// opt-in, the listener declares whom it serves and why (Exposure), or it
-// authenticates its peers by TLS client certificate (PeerTLS); it returns
-// a failed bind instead of letting it be logged and dropped. Test files are exempt; a listener that must bind directly (a
+// A listener bound with net.Listen or http.ListenAndServe is one nothing
+// lists, and http.ListenAndServe's failed bind is easily logged and
+// dropped. loopback.Gate binds the address it is given, returns a failed
+// bind, and lists the listener while it is open with what its address
+// exposes it to; a listener that serves this machine only is marked
+// LoopbackOnly and refuses any other address. Test files are exempt; a listener that must bind directly (a
 // Unix socket, say) carries a `//boxer:lint disable=CS018 reason="…"`
 // directive saying why.
 type RuleCS018 struct{}
@@ -91,7 +91,7 @@ func (inst *RuleCS018) run(pass *analysis.Pass) (res any, err error) {
 			pass.Report(analysis.Diagnostic{
 				Pos:     call.Pos(),
 				End:     call.End(),
-				Message: "CS018: " + name + " outside public/keelson/runtime/loopback — bind through loopback.Gate: a non-loopback address then needs an operator opt-in, an Exposure declaration (whom it serves and why) or a PeerTLS config that requires client certificates",
+				Message: "CS018: " + name + " outside public/keelson/runtime/loopback — bind through loopback.Gate, which returns a failed bind and lists the open listener; mark one that serves this machine only LoopbackOnly",
 			})
 			return
 		})

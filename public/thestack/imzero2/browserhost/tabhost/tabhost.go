@@ -193,8 +193,7 @@ func New(opts Options, cliApp *cli.Command) (inst *Program) {
 		Usage: "serve a tab bundle: its files, the page, worker and shim this binary embeds where the bundle lacks them, /ch/ proxied to ClickHouse, the worker's log and report sinks",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "dir", Required: true, Usage: "the bundle directory"},
-			&cli.StringFlag{Name: "listen", Value: "127.0.0.1:8765", Usage: "bind address, a loopback host unless --allowNonLoopback; port 0 picks one, printed as `PORT <n>`"},
-			&cli.BoolFlag{Name: "allowNonLoopback", Usage: "allow --listen to bind a non-loopback address; the server is unauthenticated and proxies /ch/ to ClickHouse"},
+			&cli.StringFlag{Name: "listen", Value: "127.0.0.1:8765", Usage: "bind address; port 0 picks one, printed as `PORT <n>`. The server is unauthenticated and proxies /ch/ to ClickHouse"},
 			&cli.StringFlag{Name: "chURL", Value: "http://127.0.0.1:8123/", Usage: "the ClickHouse HTTP endpoint /ch/ proxies to"},
 			&cli.BoolFlag{Name: "exitOnReport", Usage: "end after the first POST /report (the trial's browser arms)"},
 		},
@@ -313,11 +312,10 @@ func serve(ctx context.Context, cmd *cli.Command) (err error) {
 	sigCtx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
 	return browserhost.Serve(sigCtx, browserhost.ServeConfig{
-		Dir:              cmd.String("dir"),
-		Listen:           cmd.String("listen"),
-		AllowNonLoopback: cmd.Bool("allowNonLoopback"),
-		ChURL:            cmd.String("chURL"),
-		ExitOnReport:     cmd.Bool("exitOnReport"),
-		Assets:           web.Assets(),
+		Dir:          cmd.String("dir"),
+		Listen:       cmd.String("listen"),
+		ChURL:        cmd.String("chURL"),
+		ExitOnReport: cmd.Bool("exitOnReport"),
+		Assets:       web.Assets(),
 	}, log.Logger)
 }

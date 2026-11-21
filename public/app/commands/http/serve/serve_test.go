@@ -37,9 +37,7 @@ func TestFileDumpServiceBoundsTheBody(t *testing.T) {
 	require.Empty(t, entries, "a truncated body is not kept")
 }
 
-func TestFileDumpServiceRefusesAWideBindWithoutOptIn(t *testing.T) {
-	svc := NewFileDumpService(&Config{Listen: ":0", OutputDirectory: t.TempDir(), FilePattern: "b-%d"})
-	err := svc.Listen()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "refusing non-loopback")
+func TestFileDumpServiceReturnsAFailedBind(t *testing.T) {
+	svc := NewFileDumpService(&Config{Listen: "no-port", OutputDirectory: t.TempDir(), FilePattern: "b-%d"})
+	require.Error(t, svc.Listen())
 }

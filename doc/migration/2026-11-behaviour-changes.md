@@ -38,11 +38,12 @@ relied on the old behaviour.
   page, and sends a content security policy
   ([ADR-0082](../adr/0082-imzero2-remote-session-auth-tls.md), update of
   2026-11-20).
-- **Listen gate.** Every Go listener binds through `loopback.Gate`; codelint
-  CS018 reports a direct `net.Listen` or `http.ListenAndServe`. A wide bind
-  needs the operator's opt-in, an `Exposure` declaration or a `PeerTLS`
-  configuration that requires client certificates (ADR-0082, updates of
-  2026-11-20 and 2026-11-21).
+- **Listeners bind through one helper.** Every Go listener binds through
+  `loopback.Gate`; codelint CS018 reports a direct `net.Listen` or
+  `http.ListenAndServe`. The helper binds the address it is given, `:8080`
+  included, returns a failed bind instead of logging it, and lists the open
+  listener in `keelson.listeners`. A listener marked `LoopbackOnly` refuses
+  any other address (ADR-0082, updates of 2026-11-20 and 2026-11-21).
 - **Test-lane knobs need a scene mark.** `BOXER_AGENT_TEST_GRANTS`,
   `BOXER_LLM_SCRIPT`, `BOXER_LLM_TRANSCRIBE_SCRIPT` and
   `BOXER_AGENT_ACTIONS_FILE` take effect only on a headless host carrying a

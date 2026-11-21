@@ -73,9 +73,10 @@ trial, not this page.
 2. **Serve it.** The same binary, built natively, serves the directory and
    proxies `/ch/` to ClickHouse, so the data plane stays same-origin;
    `--chURL` points it elsewhere and `--listen` moves it. It is a
-   development server: no auth, no TLS, so `--listen` must be a loopback
-   address unless `--allowNonLoopback` is passed, and a wide bind hands the
-   `/ch/` proxy to anyone who reaches the port. It sends a
+   development server: no auth, no TLS. `--listen` defaults to a loopback
+   address; `--listen :8765` binds every interface, which hands the `/ch/`
+   proxy to anyone who reaches the port, so that form belongs behind a
+   reverse proxy that authenticates. It sends a
    Content-Security-Policy and `nosniff` on every response. The page, worker and shim are
    embedded in the binary and served from there when the directory lacks
    them; a file in the directory wins, which is how a harness brings its

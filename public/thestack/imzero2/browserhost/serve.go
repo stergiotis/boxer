@@ -31,13 +31,11 @@ type ServeConfig struct {
 	Dir string
 	// Listen is the bind address; a port of 0 picks one, and Serve prints
 	// the chosen address as `PORT <n>` on stdout either way, which is how
-	// the trial's measurement script finds it. It must be a loopback host
-	// unless AllowNonLoopback is set.
+	// the trial's measurement script finds it. The server has no
+	// authentication and proxies /ch/ to ClickHouse, so whoever reaches a
+	// non-loopback address reaches that endpoint: a reverse proxy in front
+	// is what decides who does.
 	Listen string
-	// AllowNonLoopback lets Listen name a non-loopback address. The server
-	// has no authentication and proxies /ch/ to ClickHouse, so a wide bind
-	// hands that endpoint to anyone who can reach the port.
-	AllowNonLoopback bool
 	// ChURL is the ClickHouse HTTP endpoint that `/ch/` proxies to, so the
 	// page's data plane stays same-origin (ADR-0077 SD9).
 	ChURL string
@@ -68,8 +66,7 @@ func Serve(ctx context.Context, cfg ServeConfig, logger zerolog.Logger) (err err
 	if err != nil || target.Host == "" {
 		return eb.Build().Str("chURL", env.RedactURL(cfg.ChURL)).Errorf("browserhost: serve: ClickHouse endpoint is not an absolute URL")
 	}
-	gate := loopback.Gate{Name: "imzero2tab serve", OptIn: "--allowNonLoopback", AllowNonLoopback: cfg.AllowNonLoopback}
-	ln, err := gate.Listen(ctx, cfg.Listen)
+	ln, err := loopback.Gate{Name: "imzero2tab serve"}.Listen(ctx, cfg.Listen)
 	if err != nil {
 		return
 	}

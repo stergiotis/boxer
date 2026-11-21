@@ -58,16 +58,16 @@ func TestServeMuxServesPprofPathsAndNothingElse(t *testing.T) {
 	}
 }
 
-// A wide bind without the opt-in ends the command rather than being logged
-// and ignored while the process runs on without its listener.
-func TestListenAddressRefusesWideBindWithoutOptIn(t *testing.T) {
+// A failed bind ends the command rather than being logged and ignored while
+// the process runs on without its listener.
+func TestListenAddressFailedBindEndsTheCommand(t *testing.T) {
 	run := func(args ...string) error {
 		cmd := &cli.Command{Name: "x", Flags: Flags, Action: func(context.Context, *cli.Command) error { return nil }}
 		return cmd.Run(t.Context(), append([]string{"x"}, args...))
 	}
-	err := run("--pprofHttpListenAddress", ":0")
-	if err == nil || !strings.Contains(err.Error(), "refusing non-loopback") {
-		t.Fatalf("want a non-loopback refusal, got %v", err)
+	err := run("--pprofHttpListenAddress", "no-port")
+	if err == nil || !strings.Contains(err.Error(), "bad listen address") {
+		t.Fatalf("want a bind error, got %v", err)
 	}
 	if err = run("--pprofHttpListenAddress", "127.0.0.1:0"); err != nil {
 		t.Fatalf("loopback bind: %v", err)

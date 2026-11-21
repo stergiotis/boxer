@@ -29,23 +29,17 @@ import (
 )
 
 const flagNameHttpListenAddress = "pprofHttpListenAddress"
-const flagNameHttpAllowNonLoopback = "pprofHttpAllowNonLoopback"
 
-// Flags carries the listener's address and its bind opt-in. The address
-// must be a loopback host unless --pprofHttpAllowNonLoopback is set: the
-// pprof surface has no authentication, and a profile or a goroutine dump
-// shows a process's memory and arguments.
+// Flags carries the listener's address. The pprof surface has no
+// authentication, and a profile or a goroutine dump shows a process's
+// memory and arguments: give it a loopback host unless something in front
+// of the port decides who reaches it.
 var Flags = []cli.Flag{
 	&cli.StringFlag{
 		Name:     flagNameHttpListenAddress,
 		Category: "profiling",
-		Usage:    "serve net/http/pprof on this address (a loopback host unless --" + flagNameHttpAllowNonLoopback + ")",
+		Usage:    "serve net/http/pprof on this address; the surface is unauthenticated",
 		Action:   httpServerAddressAction,
-	},
-	&cli.BoolFlag{
-		Name:     flagNameHttpAllowNonLoopback,
-		Category: "profiling",
-		Usage:    "allow --" + flagNameHttpListenAddress + " to bind a non-loopback address; the pprof surface is unauthenticated",
 	},
 }
 
@@ -61,15 +55,10 @@ func NewServeMux() (mux *http.ServeMux) {
 	return
 }
 
-// httpServerAddressAction binds the listener before returning, so a refused
-// or failed bind ends the command instead of being logged and ignored.
+// httpServerAddressAction binds the listener before returning, so a failed
+// bind ends the command instead of being logged and ignored.
 func httpServerAddressAction(ctx context.Context, cmd *cli.Command, s string) (err error) {
-	gate := loopback.Gate{
-		Name:             "pprofhttp",
-		OptIn:            "--" + flagNameHttpAllowNonLoopback,
-		AllowNonLoopback: cmd.Bool(flagNameHttpAllowNonLoopback),
-	}
-	ln, err := gate.Listen(ctx, s)
+	ln, err := loopback.Gate{Name: "pprofhttp"}.Listen(ctx, s)
 	if err != nil {
 		return
 	}

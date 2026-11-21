@@ -88,7 +88,7 @@ type Session struct {
 // freePortPair finds p with p and p+1 both free: the carrier takes the
 // WebSocket on one and the viewer page on the next.
 func freePortPair() (port int, err error) {
-	gate := loopback.Gate{Name: "scene port probe"}
+	gate := loopback.Gate{Name: "scene port probe", LoopbackOnly: true}
 	for attempt := 0; attempt < 32; attempt++ {
 		var l net.Listener
 		if l, err = gate.Listen(context.Background(), "127.0.0.1:0"); err != nil {

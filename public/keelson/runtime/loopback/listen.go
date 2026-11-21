@@ -10,44 +10,42 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// Gate is one TCP listener's bind policy, the ADR-0082 §SD1 posture made the
-// default for every listener boxer opens.
+// Gate is the one place a TCP listener is bound (ADR-0082).
 //
-// A loopback bind proceeds. Any other bind — an empty host (":8080" binds
-// every interface), "0.0.0.0", a routable address, a name — is refused
-// unless one of three things lifts the refusal for this listener:
+// A listener binds the address it is given, ":8080" and "0.0.0.0" included:
+// which interfaces a process serves is the operator's choice, and a
+// deployment that serves other machines is assumed to sit behind a reverse
+// proxy that terminates TLS and authenticates. The gate does not check for
+// that proxy and adds no authentication of its own. What it does:
 //
-//   - the operator opted in (AllowNonLoopback, named by OptIn);
-//   - the listener exists to serve other machines and says whom and why
-//     (Exposure);
-//   - the listener authenticates every peer by its TLS client certificate
-//     (PeerTLS), which Listen then enforces.
+//   - returns a failed bind instead of logging and dropping it;
+//   - lists every listener it opened until it is closed ([OpenListeners]),
+//     with what its bind address means: loopback, declared, peer-tls, or
+//     undeclared — a non-loopback bind that says nothing about itself;
+//   - refuses a non-loopback bind for a listener marked LoopbackOnly;
+//   - serves TLS over PeerTLS, after checking that it authenticates every
+//     peer.
 //
-// Every listener in the tree binds through [Gate.Listen]; codelint CS018
-// reports a direct net.Listen or http.ListenAndServe outside this package.
-// Each listener Listen opens is listed by [OpenListeners] until it is
-// closed.
+// Codelint CS018 reports a direct net.Listen or http.ListenAndServe outside
+// this package, so a listener does not go missing from the list.
 type Gate struct {
-	// Name names the listener in a refusal, e.g. "svgserver".
+	// Name names the listener in an error and in the list, e.g. "svgserver".
 	Name string
-	// OptIn names the flag or registered environment variable that sets
-	// AllowNonLoopback; a refusal carries it as the optIn field. Empty
-	// means the listener has no opt-in.
-	OptIn string
-	// AllowNonLoopback is the operator's opt-in. It lifts the refusal only;
-	// authentication and TLS stay the listener's own business.
-	AllowNonLoopback bool
-	// Exposure declares a listener whose purpose is to serve other
-	// machines. Its non-loopback bind proceeds without an opt-in; the
-	// declaration is what an audit reads. Both fields must be set.
+	// LoopbackOnly marks a listener that serves this machine only — a debug
+	// surface, a local daemon, a port probe. Any other bind address is
+	// refused, whatever else is set.
+	LoopbackOnly bool
+	// Exposure says whom a listener serves beyond this machine and why. It
+	// is what an audit of the listener list reads; a bind proceeds without
+	// it. When set, both fields are required.
 	Exposure *Exposure
 	// PeerTLS is the TLS configuration of a listener that authenticates
 	// its peers by client certificate. It must require and verify one
 	// (tls.RequireAndVerifyClientCert with ClientCAs, or
 	// tls.RequireAnyClientCert with VerifyPeerCertificate) and carry a
-	// server certificate; then a non-loopback bind proceeds, and Listen
-	// returns a TLS listener over this configuration, so what the gate
-	// checked is what every accepted connection goes through.
+	// server certificate. Listen returns a TLS listener over this
+	// configuration, so what the gate checked is what every accepted
+	// connection goes through.
 	PeerTLS *tls.Config
 }
 
@@ -60,17 +58,20 @@ type Exposure struct {
 	Reason string
 }
 
-// ExposureE names what let a listener's bind proceed.
+// ExposureE names what a listener's bind address exposes it to.
 type ExposureE uint8
 
 const (
 	// ExposureLoopback: the bind address is a loopback host.
 	ExposureLoopback ExposureE = iota
-	// ExposureOptIn: the operator's AllowNonLoopback.
-	ExposureOptIn
-	// ExposureDeclared: the listener's Exposure declaration.
+	// ExposureUndeclared: a non-loopback bind with no declaration and no
+	// peer authentication in this process; the deployment's proxy and
+	// network are what stand in front of it.
+	ExposureUndeclared
+	// ExposureDeclared: a non-loopback bind with an Exposure declaration.
 	ExposureDeclared
-	// ExposurePeerTLS: the listener authenticates its peers over TLS.
+	// ExposurePeerTLS: a non-loopback bind whose peers are authenticated
+	// over TLS.
 	ExposurePeerTLS
 )
 
@@ -78,8 +79,8 @@ func (inst ExposureE) String() (s string) {
 	switch inst {
 	case ExposureLoopback:
 		return "loopback"
-	case ExposureOptIn:
-		return "opt-in"
+	case ExposureUndeclared:
+		return "undeclared"
 	case ExposureDeclared:
 		return "declared"
 	case ExposurePeerTLS:
@@ -113,16 +114,14 @@ func (inst Gate) check(addr string) (exposure ExposureE, err error) {
 	switch {
 	case IsHost(host):
 		exposure = ExposureLoopback
+	case inst.LoopbackOnly:
+		err = eb.Build().Str("listener", inst.Name).Str("addr", addr).Errorf("refusing non-loopback bind: this listener serves loopback only")
 	case inst.PeerTLS != nil:
 		exposure = ExposurePeerTLS
 	case inst.Exposure != nil:
 		exposure = ExposureDeclared
-	case inst.OptIn == "":
-		err = eb.Build().Str("listener", inst.Name).Str("addr", addr).Errorf("refusing non-loopback bind: this listener serves loopback only")
-	case !inst.AllowNonLoopback:
-		err = eb.Build().Str("listener", inst.Name).Str("addr", addr).Str("optIn", inst.OptIn).Errorf("refusing non-loopback bind: bind a loopback host, or set the listener's opt-in (optIn) to expose it beyond this machine")
 	default:
-		exposure = ExposureOptIn
+		exposure = ExposureUndeclared
 	}
 	return
 }
@@ -143,8 +142,8 @@ func (inst Gate) checkPeerTLS(addr string) (err error) {
 	return
 }
 
-// Listen binds a TCP listener on addr after [Gate.Check] allows it, over
-// TLS when PeerTLS is set. A bind failure is returned, never logged and
+// Listen binds a TCP listener on addr after [Gate.Check] passes, over TLS
+// when PeerTLS is set. A bind failure is returned, never logged and
 // dropped, so a caller that cannot listen does not run on as if it did.
 func (inst Gate) Listen(ctx context.Context, addr string) (ln net.Listener, err error) {
 	var exposure ExposureE
@@ -165,8 +164,8 @@ func (inst Gate) Listen(ctx context.Context, addr string) (ln net.Listener, err 
 	switch exposure {
 	case ExposureDeclared:
 		info.Serves, info.Reason = inst.Exposure.Serves, inst.Exposure.Reason
-	case ExposureOptIn:
-		info.Reason = "operator opt-in " + inst.OptIn
+	case ExposureUndeclared:
+		info.Reason = "the operator's bind address; no peer authentication in this process"
 	case ExposurePeerTLS:
 		info.Reason = "peers authenticated by TLS client certificate"
 	}
@@ -180,7 +179,7 @@ type ListenerInfo struct {
 	Addr     string
 	Exposure ExposureE
 	// Serves and Reason come from an Exposure declaration; Reason also
-	// names the opt-in or the peer authentication that let a bind proceed.
+	// says what an undeclared or peer-authenticated bind rests on.
 	Serves string
 	Reason string
 }

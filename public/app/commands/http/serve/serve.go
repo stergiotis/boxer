@@ -100,15 +100,14 @@ func (inst *FileDumpService) ServeHTTP(writer http.ResponseWriter, request *http
 }
 
 // Listen binds the configured address and serves until the listener fails.
-// The service has no authentication, so the address must be a loopback host
-// unless Config.AllowNonLoopback is set.
+// The service has no authentication and writes every body it accepts to
+// disk; whatever stands in front of the address decides who may post.
 func (inst *FileDumpService) Listen() (err error) {
 	err = inst.skipExistingFiles()
 	if err != nil {
 		return eh.Errorf("unable to skip already existing files: %w", err)
 	}
-	gate := loopback.Gate{Name: "http serve", OptIn: "--allowNonLoopback", AllowNonLoopback: inst.config.AllowNonLoopback}
-	ln, err := gate.Listen(context.Background(), inst.config.Listen)
+	ln, err := loopback.Gate{Name: "http serve"}.Listen(context.Background(), inst.config.Listen)
 	if err != nil {
 		return
 	}
@@ -134,9 +133,6 @@ type Config struct {
 	Listen          string `toml:"listen"`
 	OutputDirectory string `toml:"outputDirectory"`
 	FilePattern     string `toml:"filePattern"`
-	// AllowNonLoopback lets Listen bind a non-loopback address. The service
-	// is unauthenticated and writes every body it accepts to disk.
-	AllowNonLoopback bool `toml:"allowNonLoopback"`
 	// MaxBodyBytes bounds one request body; zero means DefaultMaxBodyBytes.
 	MaxBodyBytes        int64 `toml:"maxBodyBytes"`
 	validated           bool
@@ -160,11 +156,6 @@ func (inst *Config) ToCliFlags(nameTransf config.NameTransformFunc, envVarNameTr
 			Required: inst.FilePattern == "",
 			Value:    inst.FilePattern,
 		},
-		&cli.BoolFlag{
-			Name:  nameTransf("allowNonLoopback"),
-			Value: inst.AllowNonLoopback,
-			Usage: "allow listen to bind a non-loopback address; the service is unauthenticated",
-		},
 		&cli.Int64Flag{
 			Name:  nameTransf("maxBodyBytes"),
 			Value: inst.MaxBodyBytes,
@@ -177,7 +168,6 @@ func (inst *Config) FromContext(ctx context.Context, nameTransf config.NameTrans
 	inst.Listen = cmd.String(nameTransf("listen"))
 	inst.OutputDirectory = cmd.String(nameTransf("outputDirectory"))
 	inst.FilePattern = cmd.String(nameTransf("filePattern"))
-	inst.AllowNonLoopback = cmd.Bool(nameTransf("allowNonLoopback"))
 	inst.MaxBodyBytes = cmd.Int64(nameTransf("maxBodyBytes"))
 	nMessages = inst.Validate(true)
 	return

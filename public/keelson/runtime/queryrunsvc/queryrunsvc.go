@@ -272,9 +272,9 @@ func (s *Service) Start(ctx context.Context) (err error) {
 		err = eb.Build().Str("chURL", env.RedactURL(s.cfg.ChURL)).Errorf("queryrunsvc: refusing a ClickHouse endpoint off this host; the materialized view reaches /pull over loopback")
 		return
 	}
-	// No opt-in: the refreshable MV reaches /pull over loopback, and remote
+	// Loopback only: the refreshable MV reaches /pull over loopback, and remote
 	// exposure (token+TLS) is deferred to ADR-0082 §SD1.
-	ln, lnErr := loopback.Gate{Name: "queryrunsvc"}.Listen(ctx, s.cfg.Listen)
+	ln, lnErr := loopback.Gate{Name: "queryrunsvc", LoopbackOnly: true}.Listen(ctx, s.cfg.Listen)
 	if lnErr != nil {
 		err = lnErr
 		return

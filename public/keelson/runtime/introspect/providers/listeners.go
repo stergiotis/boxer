@@ -9,9 +9,9 @@ import (
 
 // listenersProvider exposes the TCP listeners this process opened through
 // loopback.Gate and has not closed (ADR-0082) as keelson.listeners: one row
-// per listener with its name, bound address, what let the bind proceed
-// (loopback, opt-in, declared, peer-tls) and, for a declared exposure,
-// whom it serves and why.
+// per listener with its name, bound address, what the address exposes it
+// to (loopback, undeclared, declared, peer-tls) and, for a declared
+// exposure, whom it serves and why.
 type listenersProvider struct{}
 
 func (listenersProvider) Name() string                         { return "listeners" }
