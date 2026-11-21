@@ -12,14 +12,114 @@ generator: boxer gov releasenotes
 
 # Release notes: v0.0.23..HEAD
 
-2106 commit(s) in the range.
+2143 commit(s) in the range.
 
 ## Build requirements
 
 - `go` directive: 1.27.0 → 1.27.3.
 - `toolchain` line: absent at both ends.
 
-## Breaking changes (57)
+## Breaking changes (82)
+
+### feat(app)!: a module extends the topic vocabulary with RegisterTopic
+
+`d82af01d9cf4` — - app.AllTopics (var) -> app.Topics() (func, shared read-only slice). - new: app.RegisterTopic, app.AddTopic, app.MaxTopics (32, the launcher's filter width).
+
+### refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
+
+`4292dacc0d61` — - import .../egui2/widgets/graphview/scenetest (package scenetest) -> .../egui2/egui2test (package egui2test); scenetest.Install() -> egui2test.Install(), and the package's other helpers likewise.
+
+### feat(app)!: capability patterns follow the subject grammar, and services export capability helpers
+
+`c3da2d9d474b` — - a manifest capability outside runtime.* / app.* / ext.<module>.* / _INBOX.* now refuses the registration (and so stops the host). A service another module defines moves under ext.<module-token>.<service>. - new: app.ValidateCapPattern, app.SubjectRoot{Runtime,App,Ext,Inbox}.
+
+### refactor(sysmetricsbus,coveragebus,fsbroker)!: the metric planes move under runtime., and the stragglers follow
+
+`d10b4fb7c222` — - sysmetrics.{host}.bundle -> runtime.sysmetrics.{host}.bundle; sysmetrics.> -> runtime.sysmetrics.> (also across NATS: a scraper and a reader must be on the same side of this change). - coverage.{host}.sample -> runtime.coverage.{host}.sample. - ch.server.read.<target> -> runtime.ch.server.read.<target>. - capslock: CAPABILITY_FILES is justified by runtime.fs.*, NETWORK by runtime.ch.* or runtime.net.* (nats.* and kafka.* are no longer roots). - new: fsbroker.SubjectRoot = "runtime.fs.".
+
+### refactor(chlocalbroker)!: the clickhouse-local broker subjects move under runtime.
+
+`c690a7439791` — - ch.local.exec.<pool> -> runtime.ch.local.exec.<pool>; ch.local.exec.> -> runtime.ch.local.exec.>.
+
+### refactor(appletstore)!: the applet store subjects move under runtime.
+
+`64acf3478b21` — - applet.store.save -> runtime.applet.store.save.
+
+### refactor(moderator)!: the moderator signal subjects move under runtime.
+
+`131efa845527` — - moderator.event.signal -> runtime.moderator.event.signal.
+
+### refactor(queryprogress)!: the query progress subjects move under runtime.
+
+`6445eeaf62fb` — - queryrun.progress[.…] -> runtime.queryrun.progress[.…].
+
+### refactor(ladingpublish)!: the lading publish subjects move under runtime.
+
+`c24f2f95956f` — - lading.publish.<op> -> runtime.lading.publish.<op>.
+
+### refactor(audioout)!: the audio output subjects move under runtime.
+
+`5a8d0275badb` — - audio.out.open -> runtime.audio.out.open.
+
+### refactor(clipboardbroker)!: the clipboard subjects move under runtime.
+
+`d2a56a56150c` — - clipboard.write -> runtime.clipboard.write; clipboard.resolve -> runtime.clipboard.resolve. Codelint CS015 matches the new subject.
+
+### refactor(windowopen)!: the window open and raise subjects move under runtime.
+
+`0e7daba072cf` — - windowhost.open -> runtime.windowhost.open (windowopen.OpenSubject); windowhost.raise -> runtime.windowhost.raise (windowopen.RaiseSubject).
+
+### refactor(keelsonquery)!: the introspection read subjects move under runtime.
+
+`13a192753551` — - keelson.query.<table> -> runtime.keelson.query.<table>; keelson.query.* -> runtime.keelson.query.*.
+
+### refactor(httpegress)!: the HTTP egress subjects move under runtime.
+
+`6fd77f79ba3c` — - net.http.fetch.<destination> -> runtime.net.http.fetch.<destination>; net.http.fetch.* -> runtime.net.http.fetch.*.
+
+### refactor(externaledit)!: the external editor subjects move under runtime.
+
+`652f96b33f84` — - externaledit.{offer,resolve,wait,close,*} -> runtime.externaledit.{...}.
+
+### refactor(watchbill)!: the job queue subjects move under runtime.
+
+`df0626c885a6` — - watchbill.job.{enqueue,cancel,retry,get,list} -> runtime.watchbill.job.{...}; watchbill.job.* -> runtime.watchbill.job.*; watchbill.wake -> runtime.watchbill.wake; watchbill.changed -> runtime.watchbill.changed.
+
+### refactor(task)!: the task primitive subjects move under runtime.
+
+`f4becf222eae` — - task.<id>.{created,progress,cancel,done,error} -> runtime.task.<id>.{...}; task.> -> runtime.task.>; task.*.cancel -> runtime.task.*.cancel; task.list.inflight -> runtime.task.list.inflight. The supervisor's audit messages (task.created, task.done, ...) are row kinds, not subjects, and keep their names.
+
+### refactor(fsbroker)!: the file broker subjects move under runtime.
+
+`657e6d70f688` — - fs.dialog.{read,write,bundle,watch} -> runtime.fs.dialog.{...}; fs.handle.{uuid}.{op} -> runtime.fs.handle.{uuid}.{op}; fs.appdata.{...} -> runtime.fs.appdata.{...}.
+
+### refactor(adhocdata)!: the ad-hoc dataset subjects move under runtime.
+
+`188ec1496973` — - adhoc.{read,publish,retract,resolve} -> runtime.adhoc.{...}; adhoc.bundle.{publish,retract,resolve} -> runtime.adhoc.bundle.{...}; adhoc.event.{published,retracted,>} and adhoc.bundle.event.{...} -> runtime.adhoc.event.{...} / runtime.adhoc.bundle.event.{...}.
+
+### refactor(llm)!: the model service's subjects move under runtime.
+
+`9dce1930d21b` — - llm.describe -> runtime.llm.describe; llm.complete -> runtime.llm.complete; llm.cancel -> runtime.llm.cancel; llm.transcribe -> runtime.llm.transcribe; llm.* -> runtime.llm.*; llm.retain.* -> runtime.llm.retain.*; llm.ration.{set,list,cancel,ask,*} -> runtime.llm.ration.{...}; llm.event.{call,threshold,*} -> runtime.llm.event.{...}. Code naming the llm.Subject* constants needs no change.
+
+### refactor(app)!: remove the manifest members no host reads, and state the contract without milestones
+
+`d956f0f20c6c` — - Manifest.BackgroundTickHz -> removed; keelson('apps') column background_tick_hz -> removed; carousel list column bg_tick_hz removed, so caps/persisted_keys/version/summary move from positions 11..14 to 10..13. - SurfaceHints.ScreenshotStage, SurfaceHints.ScreenshotFlags, app.ScreenshotFlagsE and its constants -> removed. - app.Lookup / app.All / (*Registry).Lookup / (*Registry).All -> removed; use LookupManifest / AllManifests for metadata, Open for an instance.
+
+### feat(appops)!: an operation call carries the context its handler runs under
+
+`504fd45997a5` — - opengine.New(catalog, h) -> opengine.New(life, catalog, h) - (*opengine.Engine).Submit(op, req) -> Submit(ctx, op, req)
+
+### refactor(app)!: context capabilities are methods of the mount and frame contexts
+
+`37f92338af09` — - app.LifetimeI, app.LifetimeOf(ctx) -> ctx.Lifetime() - app.MountValuesI, app.MountValueOf(ctx, k) -> ctx.MountValue(k) - app.WindowFocusI (ctx.(app.WindowFocusI)) -> ctx.WindowFocused() - app.WindowCloseI -> ctx.CloseWindow(reason) - app.OperationsGestureI -> ctx.OperationGesture(op, args) - FrameContextI.EguiScope() -> removed - app.NewStaticFrameContext(mc, scope) -> app.NewStaticFrameContext(mc) - colwidth.HostI / ColumnWidthStore() -> colwidth.StoreOf(ctx); a host sets ctx.SetMountValue(colwidth.StoreKey{}, store) - a type implementing MountContextI / FrameContextI by hand must add the methods, or embed *app.StaticMountContext / *app.StaticFrameContext or the interface it wraps
+
+### refactor(registries)!: init-time registrations record their failure instead of panicking or logging
+
+`e4453bcf6435` — - kindcheck.Register / httpegress.Register / hostboot.RegisterHostService / notebookview.RegisterRenderer: panic -> recorded failure. Tests that asserted the panic use kindcheck.Add / httpegress.Add / hostboot.AddHostService / notebookview.AddRenderer, which return it.
+
+### feat(app)!: an explicit app alias, and registrations that fail stop the host
+
+`94bb1837bac9` — - AppIdT.SubjectAlias() -> AppIdT.DerivedAlias(); a host keys a registered app by Manifest.SubjectAlias() or app.AliasOf(id) (Registry.AliasOf). - persist.NewClient(bus, appId) -> persist.NewClient(bus, alias string); persist.AliasOf removed (use app.AliasOf or AppIdT.DerivedAlias). - app.Register/RegisterFactory no longer drop a bad app with a warning: the failure is recorded and a host does not start. - Registration.OperationsDiagnostic, Registry.OperationsDiagnostic, appops.View.Diagnostic and keelson('operations').diagnostic removed.
 
 ### fix(leeway)!: drop the module version from the canonical-type and DDL headers
 
@@ -249,7 +349,7 @@ generator: boxer gov releasenotes
 
 `9e6e40b10f81` — the commit has no `Breaks:` paragraph; read its body.
 
-## Packages removed or renamed (41)
+## Packages removed or renamed (42)
 
 - apps/mdedit/transform (removed)
 - public/app/commands/codedriven (removed)
@@ -291,6 +391,7 @@ generator: boxer gov releasenotes
 - public/storage/recordstore/cqrsexample (removed)
 - public/storage/recordstore/example (removed)
 - public/storage/recordstore/sharedsection (removed)
+- public/thestack/imzero2/egui2/widgets/graphview/scenetest (removed)
 - public/thestack/utfsafe → `public/semistructured/utfsafe`
 
 ## Dependency floors
@@ -364,6 +465,7 @@ generator: boxer gov releasenotes
 ## Migration notes added
 
 - [2026-10-watchbill-delegation.md](../../doc/migration/2026-10-watchbill-delegation.md)
+- [2026-11-app-contract.md](../../doc/migration/2026-11-app-contract.md)
 - [2026-11-behaviour-changes.md](../../doc/migration/2026-11-behaviour-changes.md)
 - [2026-11-facts-layout.md](../../doc/migration/2026-11-facts-layout.md)
 - [2026-11-io-context.md](../../doc/migration/2026-11-io-context.md)
@@ -417,13 +519,44 @@ breaking commits touching it:
 - (*NoopStorage).Delete: changed from func(string) error to func(context.Context, string) error
 - (*NoopStorage).Get: changed from func(string) ([]byte, bool, error) to func(context.Context, string) ([]byte, bool, error)
 - (*NoopStorage).Set: changed from func(string, []byte) error to func(context.Context, string, []byte) error
+- (*Registry).All: removed
+- (*Registry).Lookup: removed
+- (*StaticFrameContext).EguiScope: removed
+- All: removed
+- AllTopics: removed
+- AppIdT.SubjectAlias: removed
 - BusI.Request: changed from func(string, []byte) ([]byte, error) to func(context.Context, string, []byte) ([]byte, error)
 - BusI.RequestWithTimeout: removed
+- FrameContextI.CloseWindow: added
+- FrameContextI.EguiScope: removed
+- FrameContextI.OperationGesture: added
+- FrameContextI.WindowFocused: added
+- Lookup: removed
+- Manifest.BackgroundTickHz: removed
+- MountContextI.Lifetime: added
+- MountContextI.MountValue: added
+- NewStaticFrameContext: changed from func(*StaticMountContext, any) *StaticFrameContext to func(*StaticMountContext) *StaticFrameContext
+- ScreenshotFlagNeedsLargeArea: removed
+- ScreenshotFlagNeedsNetwork: removed
+- ScreenshotFlagNone: removed
+- ScreenshotFlagSkipInTour: removed
+- ScreenshotFlagsE: removed
 - StaticFrameContext: old is comparable, new is not
 - StorageI.Delete: changed from func(string) error to func(context.Context, string) error
 - StorageI.Get: changed from func(string) ([]byte, bool, error) to func(context.Context, string) ([]byte, bool, error)
 - StorageI.Set: changed from func(string, []byte) error to func(context.Context, string, []byte) error
+- SurfaceHints.ScreenshotFlags: removed
+- SurfaceHints.ScreenshotStage: removed
+- WindowFocusI: removed
 breaking commits touching it:
+  d82af01d9 feat(app)!: a module extends the topic vocabulary with RegisterTopic
+  c3da2d9d4 feat(app)!: capability patterns follow the subject grammar, and services export capability helpers
+  0e7daba07 refactor(windowopen)!: the window open and raise subjects move under runtime.
+  657e6d70f refactor(fsbroker)!: the file broker subjects move under runtime.
+  d956f0f20 refactor(app)!: remove the manifest members no host reads, and state the contract without milestones
+  504fd4599 feat(appops)!: an operation call carries the context its handler runs under
+  37f92338a refactor(app)!: context capabilities are methods of the mount and frame contexts
+  94bb1837b feat(app)!: an explicit app alias, and registrations that fail stop the host
   3a719e59a refactor(app,inprocbus)!: a bus request takes a context; RequestWithTimeout goes
   d6d8dc662 refactor(persist,app,statestore)!: persist, app storage and the state stores take a context
   4f5528bf2 fix(inprocbus)!: a request's wait is bounded, and no responder fails at once
@@ -438,10 +571,13 @@ breaking commits touching it:
 - (*StoreBackend).Delete: changed from func(StorageRef, string) error to func(context.Context, StorageRef, string) error
 - (*StoreBackend).Get: changed from func(StorageRef, string) ([]byte, bool, error) to func(context.Context, StorageRef, string) ([]byte, bool, error)
 - (*StoreBackend).Set: changed from func(StorageRef, string, []byte) error to func(context.Context, StorageRef, string, []byte) error
+- AliasOf: removed
+- NewClient: changed from func(github.com/stergiotis/boxer/public/keelson/runtime/app.BusI, github.com/stergiotis/boxer/public/keelson/runtime/app.AppIdT) (*Client, error) to func(github.com/stergiotis/boxer/public/keelson/runtime/app.BusI, string) (*Client, error)
 - StorageBackendI.Delete: changed from func(StorageRef, string) error to func(context.Context, StorageRef, string) error
 - StorageBackendI.Get: changed from func(StorageRef, string) ([]byte, bool, error) to func(context.Context, StorageRef, string) ([]byte, bool, error)
 - StorageBackendI.Set: changed from func(StorageRef, string, []byte) error to func(context.Context, StorageRef, string, []byte) error
 breaking commits touching it:
+  94bb1837b feat(app)!: an explicit app alias, and registrations that fail stop the host
   24767430f refactor(recordstore)!: generated stores write under a context only
   3a719e59a refactor(app,inprocbus)!: a bus request takes a context; RequestWithTimeout goes
   d6d8dc662 refactor(persist,app,statestore)!: persist, app storage and the state stores take a context
@@ -453,8 +589,16 @@ breaking commits touching it:
 ## public/keelson/runtime/task (acknowledged)
 - (*BusApi).ListInflight: changed from func() ([]InflightSnapshotEntry, error) to func(context.Context) ([]InflightSnapshotEntry, error)
 - (*NoopTaskApi).ListInflight: changed from func() ([]InflightSnapshotEntry, error) to func(context.Context) ([]InflightSnapshotEntry, error)
+- PatternAll: value changed from "task.>" to "runtime.task.>"
+- PatternCancelAll: value changed from "task.*.cancel" to "runtime.task.*.cancel"
+- SubjectListInflight: value changed from "task.list.inflight" to "runtime.task.list.inflight"
+- SubjectPrefix: value changed from "task." to "runtime.task."
 - TaskApiI.ListInflight: changed from func() ([]InflightSnapshotEntry, error) to func(context.Context) ([]InflightSnapshotEntry, error)
 breaking commits touching it:
+  f4becf222 refactor(task)!: the task primitive subjects move under runtime.
+  657e6d70f refactor(fsbroker)!: the file broker subjects move under runtime.
+  d956f0f20 refactor(app)!: remove the manifest members no host reads, and state the contract without milestones
+  37f92338a refactor(app)!: context capabilities are methods of the mount and frame contexts
   3a719e59a refactor(app,inprocbus)!: a bus request takes a context; RequestWithTimeout goes
   9c56dc6a1 refactor(buscodec)!: move buscodec to semistructured/cbor
   b90ad3b31 refactor(task)!: Run takes the context first
@@ -776,6 +920,8 @@ breaking commits touching it:
 - TextEditMethodIdSetCursor: value changed from 17 to 19
 - WidgetIdCreatorI.PushIdToStack: added
 breaking commits touching it:
+  d956f0f20 refactor(app)!: remove the manifest members no host reads, and state the contract without milestones
+  37f92338a refactor(app)!: context capabilities are methods of the mount and frame contexts
   7b847c47f fix(imzero2)!: labelAtomsLinked reports a link only in the frame it is clicked
   1aa6bf1ef refactor(imzero2)!: remove the captureAvailableSize op and StateManager.GetAvailableSize
   3c0ee9c9d fix(imzero2)!: the id stack combines a scope and its local id order-sensitively (ADR-0321)
@@ -784,6 +930,7 @@ breaking commits touching it:
 - New: removed
 - Renderer: removed
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
   9e6e40b10 refactor(imzero2)!: migrate the Go widgets to the ADR-0267 contract (M1–M4)
 
 ## public/thestack/imzero2/egui2/widgets/colorscale (acknowledged)
@@ -808,12 +955,14 @@ breaking commits touching it:
 - New: removed
 - Renderer: removed
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
   9e6e40b10 refactor(imzero2)!: migrate the Go widgets to the ADR-0267 contract (M1–M4)
 
 ## public/thestack/imzero2/egui2/widgets/fieldview (acknowledged)
 - New: removed
 - Renderer: removed
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
   9e6e40b10 refactor(imzero2)!: migrate the Go widgets to the ADR-0267 contract (M1–M4)
 
 ## public/thestack/imzero2/egui2/widgets/fsmview (acknowledged)
@@ -851,6 +1000,7 @@ breaking commits touching it:
 - WithStateColor: removed
 - WithStateOrder: removed
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
   9e6e40b10 refactor(imzero2)!: migrate the Go widgets to the ADR-0267 contract (M1–M4)
 
 ## public/thestack/imzero2/egui2/widgets/gauge (acknowledged)
@@ -859,6 +1009,7 @@ breaking commits touching it:
 - SizeMd: value changed from 1 to 0
 - SizeSm: value changed from 0 to 1
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
   9e6e40b10 refactor(imzero2)!: migrate the Go widgets to the ADR-0267 contract (M1–M4)
 
 ## public/thestack/imzero2/egui2/widgets/graphview (acknowledged)
@@ -867,6 +1018,7 @@ breaking commits touching it:
 - (*View).Render: changed from func([]NodeSpec, []EdgeSpec, float32, float32) to func([]NodeSpec, []EdgeSpec, float32, float32) Events
 - (*View).RenderFill: changed from func([]NodeSpec, []EdgeSpec, float32, float32) to func([]NodeSpec, []EdgeSpec, float32, float32) Events
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
   7c646cbee refactor(imzero2)!: delete the deprecated Events() accessors (ADR-0267 M6)
   9e6e40b10 refactor(imzero2)!: migrate the Go widgets to the ADR-0267 contract (M1–M4)
 
@@ -882,6 +1034,7 @@ breaking commits touching it:
 - (*HeatmapScroll).Wheel: removed
 - New: changed from func(*github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.WidgetIdStack, string, *github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap.Config, uint32, uint32) *HeatmapScroll to func(*github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.WidgetIdStack, string, *github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap.Config, Options) *HeatmapScroll
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
   9e6e40b10 refactor(imzero2)!: migrate the Go widgets to the ADR-0267 contract (M1–M4)
 
 ## public/thestack/imzero2/egui2/widgets/markdown (acknowledged)
@@ -900,6 +1053,7 @@ breaking commits touching it:
 - WithScrollToSection: removed
 - WithSectionFilter: removed
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
   404b534e7 refactor(imzero2)!: finish the ADR-0267 widget migration (M5)
 
 ## public/thestack/imzero2/egui2/widgets/pager (acknowledged)
@@ -909,6 +1063,7 @@ breaking commits touching it:
 - (*Pager).WithUnit: removed
 - New: changed from func(*github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.WidgetIdStack, int64) *Pager to func(*github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.WidgetIdStack, string, Options) *Pager
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
   9e6e40b10 refactor(imzero2)!: migrate the Go widgets to the ADR-0267 contract (M1–M4)
 
 ## public/thestack/imzero2/egui2/widgets/portolan (acknowledged)
@@ -921,6 +1076,8 @@ breaking commits touching it:
 - LoaderOptions.UserAgent: removed
 - New: changed from func(*github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.WidgetIdStack, Options) *Map to func(*github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.WidgetIdStack, string, Options) *Map
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
+  6fd77f79b refactor(httpegress)!: the HTTP egress subjects move under runtime.
   7c646cbee refactor(imzero2)!: delete the deprecated Events() accessors (ADR-0267 M6)
   404b534e7 refactor(imzero2)!: finish the ADR-0267 widget migration (M5)
   9e6e40b10 refactor(imzero2)!: migrate the Go widgets to the ADR-0267 contract (M1–M4)
@@ -928,6 +1085,7 @@ breaking commits touching it:
 ## public/thestack/imzero2/egui2/widgets/portolan/landoverlay (acknowledged)
 - (*Layer).Draw: removed
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
   404b534e7 refactor(imzero2)!: finish the ADR-0267 widget migration (M5)
 
 ## public/thestack/imzero2/egui2/widgets/regexedit (acknowledged)
@@ -939,6 +1097,8 @@ breaking commits touching it:
 - ClickHandler: removed
 - RenderInline: removed
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
+  188ec1496 refactor(adhocdata)!: the ad-hoc dataset subjects move under runtime.
   9e6e40b10 refactor(imzero2)!: migrate the Go widgets to the ADR-0267 contract (M1–M4)
 
 ## public/thestack/imzero2/egui2/widgets/selector (acknowledged)
@@ -966,6 +1126,7 @@ breaking commits touching it:
 - (*SpectrumDisplay).SetTimeAxis: removed
 - New: changed from func(*github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.WidgetIdStack, string, *github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap.Config, uint32, uint32) *SpectrumDisplay to func(*github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.WidgetIdStack, string, *github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap.Config, Options) *SpectrumDisplay
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
   9e6e40b10 refactor(imzero2)!: migrate the Go widgets to the ADR-0267 contract (M1–M4)
 
 ## public/thestack/imzero2/egui2/widgets/timeline (acknowledged)
@@ -994,6 +1155,7 @@ breaking commits touching it:
 - WithTimeZone: removed
 - WithVisuals: removed
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
   404b534e7 refactor(imzero2)!: finish the ADR-0267 widget migration (M5)
   9e6e40b10 refactor(imzero2)!: migrate the Go widgets to the ADR-0267 contract (M1–M4)
 
@@ -1022,6 +1184,7 @@ breaking commits touching it:
 - WithStatusLine: removed
 - WithStyle: removed
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
   3c0ee9c9d fix(imzero2)!: the id stack combines a scope and its local id order-sensitively (ADR-0321)
   404b534e7 refactor(imzero2)!: finish the ADR-0267 widget migration (M5)
 
@@ -1030,6 +1193,7 @@ breaking commits touching it:
 - ShowGallery: removed
 - ShowStatus: removed
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
   9e6e40b10 refactor(imzero2)!: migrate the Go widgets to the ADR-0267 contract (M1–M4)
 
 ## public/thestack/imzero2/egui2/widgets/worldmap (acknowledged)
@@ -1050,8 +1214,9 @@ breaking commits touching it:
 - Widget.StrokeRGBA: removed
 - Widget: removed
 breaking commits touching it:
+  4292dacc0 refactor(egui2test)!: the headless frame harness moves out of one widget's subpackage
   9e6e40b10 refactor(imzero2)!: migrate the Go widgets to the ADR-0267 contract (M1–M4)
 
-apidiff v0.0.23..HEAD: 57 stable package(s) compared, 29 compatible, 28 incompatible and acknowledged, 0 incompatible and not acknowledged; 19 new since the base
+apidiff v0.0.23..HEAD: 57 stable package(s) compared, 29 compatible, 28 incompatible and acknowledged, 0 incompatible and not acknowledged; 20 new since the base
 apidiff: v0.0.23 declares no Stable package, so no promise was made at it; reporting only
 ```
