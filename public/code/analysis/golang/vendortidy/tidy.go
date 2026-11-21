@@ -20,9 +20,13 @@ const (
 	// ProblemKindWorkspaceOnly is a module reached only through a used
 	// module's source, with no version in modules.txt to require it at.
 	ProblemKindWorkspaceOnly
+	// ProblemKindNotExplicit is a vendored module that modules.txt does not
+	// mark explicit at the version it builds: no workspace go.mod requires
+	// it, and Go's vendor check rejects any go.mod that does.
+	ProblemKindNotExplicit
 )
 
-var AllProblemKinds = []ProblemKindE{ProblemKindUnresolvedImport, ProblemKindWorkspaceOnly}
+var AllProblemKinds = []ProblemKindE{ProblemKindUnresolvedImport, ProblemKindWorkspaceOnly, ProblemKindNotExplicit}
 
 func (inst ProblemKindE) String() string {
 	switch inst {
@@ -30,6 +34,8 @@ func (inst ProblemKindE) String() string {
 		return "unresolved-import"
 	case ProblemKindWorkspaceOnly:
 		return "workspace-only"
+	case ProblemKindNotExplicit:
+		return "not-explicit"
 	}
 	return "unknown"
 }
@@ -52,7 +58,10 @@ type Requirement struct {
 type Problem struct {
 	Path     string
 	Importer string
-	Kind     ProblemKindE
+	// Version is the vendored version of a module the problem names, when
+	// there is one.
+	Version string
+	Kind    ProblemKindE
 }
 
 // Result is what tidy would write into a member's go.mod, as far as the
@@ -165,6 +174,10 @@ func (inst *Workspace) Tidy(moduleDir string) (res Result, err error) {
 		vm, found := inst.vendor.Selected(m)
 		if !found || vm.Version == "" {
 			problems["module "+m] = Problem{Path: m, Kind: ProblemKindWorkspaceOnly}
+			continue
+		}
+		if !vm.Explicit {
+			problems["module "+m] = Problem{Path: m, Version: vm.Version, Kind: ProblemKindNotExplicit}
 			continue
 		}
 		res.Requires = append(res.Requires, Requirement{Path: m, Version: vm.Version, Replacement: vm.Replacement, Indirect: !direct[m]})

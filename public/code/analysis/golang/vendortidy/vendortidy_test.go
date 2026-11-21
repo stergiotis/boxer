@@ -132,6 +132,34 @@ func TestTidyRefusesUnresolvedImport(t *testing.T) {
 	assert.Contains(t, res.Problems, Problem{Path: "example.com/missing", Importer: "example.com/member", Kind: ProblemKindUnresolvedImport})
 }
 
+// A vendored module no workspace go.mod requires has no `## explicit` line, so
+// a require of it fails Go's vendor check. It is reported, not required, and a
+// require already in go.mod is dropped.
+func TestTidyDoesNotRequireNotExplicitModule(t *testing.T) {
+	root := newFixture(t)
+	const memberGoMod = fixtureMemberGoMod + "\nrequire example.com/loose v0.3.0 // indirect\n"
+	writeTree(t, root, map[string]string{
+		"vendor/modules.txt":            fixtureModulesTxt + "# example.com/loose v0.3.0\nexample.com/loose\n",
+		"vendor/example.com/loose/l.go": "package loose\n",
+		"member/go.mod":                 memberGoMod,
+		"member/extra.go":               "package main\n\nimport _ \"example.com/loose\"\n",
+	})
+	_, res := tidyFixture(t, root, "member")
+
+	assert.False(t, res.HasUnresolved(), "the package is vendored")
+	assert.Contains(t, res.Problems, Problem{Path: "example.com/loose", Version: "v0.3.0", Kind: ProblemKindNotExplicit})
+	for _, r := range res.Requires {
+		assert.NotEqual(t, "example.com/loose", r.Path)
+	}
+
+	changes, err := CompareRequires([]byte(memberGoMod), res)
+	require.NoError(t, err)
+	assert.Contains(t, changes, VersionChange{Path: "example.com/loose", OldVersion: "v0.3.0", Kind: VersionChangeKindRemoved, Indirect: true})
+	out, err := FormatGoMod([]byte(memberGoMod), res)
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), "example.com/loose")
+}
+
 func TestTidyRejectsDirOutsideWorkspace(t *testing.T) {
 	root := newFixture(t)
 	ws, err := LoadWorkspace(filepath.Join(root, "go.work"), testGoRoot(t))

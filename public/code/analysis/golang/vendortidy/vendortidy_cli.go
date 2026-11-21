@@ -192,6 +192,8 @@ func reportProblems(w io.Writer, res Result) {
 			_, _ = fmt.Fprintf(w, "unresolved import %s (imported by %s)\n", p.Path, p.Importer)
 		case ProblemKindWorkspaceOnly:
 			_, _ = fmt.Fprintf(w, "not required: %s is used through the workspace and has no version in vendor/modules.txt\n", p.Path)
+		case ProblemKindNotExplicit:
+			_, _ = fmt.Fprintf(w, "not required: %s %s is vendored, but no go.mod in the workspace requires it (not explicit in vendor/modules.txt), so a require would fail the vendor check; it builds in the workspace, and with GOWORK=off once the vendor tree is rebuilt with a workspace module requiring it\n", p.Path, p.Version)
 		}
 	}
 }
