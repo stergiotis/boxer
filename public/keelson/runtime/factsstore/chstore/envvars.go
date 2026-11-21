@@ -2,7 +2,7 @@ package chstore
 
 import (
 	"github.com/stergiotis/boxer/public/config/env"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 )
 
 // BOXER_LOG_FACTS / BOXER_LOG_FACTS_URL are declared here (not in

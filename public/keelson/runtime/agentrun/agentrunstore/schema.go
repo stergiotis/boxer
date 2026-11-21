@@ -3,12 +3,12 @@ package agentrunstore
 import (
 	"slices"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	easp "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 )

@@ -5,8 +5,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
 

@@ -46,7 +46,7 @@ write time. A domain formulates a component today over rows another domain wrote
 months ago; ids come from the vocabulary registry both went to.
 
 The worked example runs it:
-[`runtime/factsschema/meshdemo`](../../../public/keelson/runtime/factsschema/meshdemo/)
+[`runtime/factsschema/meshdemo`](../../../public/semistructured/leeway/factsschema/meshdemo/)
 — an agent writing through a generated store, and a component formulated
 afterwards (a Go struct with no generated artifact at all) reading those rows in
 memory and through the table. Read it before the rules below; the rules are what
@@ -243,7 +243,7 @@ test is where to look first when a field is unexpectedly empty.
   [ADR-0109](../../adr/0109-leeway-marshall-multi-membership-ref-tuples.md) are
   the shape record for tuples and views. The rest are historical for consumers.
 - **Running code**:
-  [`meshdemo`](../../../public/keelson/runtime/factsschema/meshdemo/) (the main
+  [`meshdemo`](../../../public/semistructured/leeway/factsschema/meshdemo/) (the main
   scenario), [`sharedsection`](../../../public/storage/recordstore/internal/sharedsection/)
   (two kinds, one section, registry-stable ids),
   [`anchor/ecsdemo`](../../../public/semistructured/leeway/anchor/ecsdemo/) (the

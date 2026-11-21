@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	factsddl "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ddl"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	factsddl "github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/ddl"
 )
 
 // MvBaseName is the unqualified name of the refreshable materialized

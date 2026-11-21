@@ -721,10 +721,6 @@ Illustrative and demonstration code. Outside the promise.
 - `apps/taskdemo` — Package taskdemo is the ADR-0038 M2 + M4 showcase app.
 - `apps/watchbilldemo` — Package watchbilldemo is the first in-tree client of the watchbill protocol (ADR-0234 §M5): one window that enqueues jobs of its own kind through [watchbill.Client], lists the queue with a cancel and a retry on every row, and embeds the task monitor so a running job's progress and its cancel button are the task's.
 
-### keelson
-
-- `public/keelson/runtime/factsschema/meshdemo` — Package meshdemo is the worked example for the scenario the component layer exists for, and did not have one of: **two domains sharing one facts table and nothing else**, where the second formulates its component *after* the first has already written rows.
-
 ### science
 
 - `public/science/geo/vectorfield/gribfield/gfsdemo` — Package gfsdemo is one real wind forecast for demos and tests (ADR-0292 SD5): NOAA GFS 10 m wind at 1.0°, 17 steps over 48 hours, committed so that a build that shows it stays offline.
@@ -739,6 +735,7 @@ Illustrative and demonstration code. Outside the promise.
 - `public/semistructured/leeway/anchor/ecsdemo/stage2` — Package stage2 is the leeway-backed mirror of the json/v2 ecsdemo (stage 1).
 - `public/semistructured/leeway/canonicaltypes/internal/test`
 - `public/semistructured/leeway/canonicaltypes/sample`
+- `public/semistructured/leeway/factsschema/meshdemo` — Package meshdemo is the worked example for the scenario the component layer exists for, and did not have one of: **two domains sharing one facts table and nothing else**, where the second formulates its component *after* the first has already written rows.
 - `public/semistructured/leeway/internal/canonwire/example`
 - `public/semistructured/leeway/internal/dml/example`
 - `public/semistructured/leeway/internal/test`
@@ -881,15 +878,7 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 - `public/keelson/runtime/codec/watchrequest` — Package watchrequest is the leeway-coded wire form of the watch-request payload on `fs.handle.{uuid}.watch`.
 - `public/keelson/runtime/configview` — Package configview renders the boxer/public/config/env registry as a read-only inspector.
 - `public/keelson/runtime/externaledit` — Package externaledit is the contract by which a window hands a text to an editor in another window and gets every saved revision back.
-- `public/keelson/runtime/factsschema` — Package factsschema defines the boxer.facts leeway table per ADR-0026 §SD6.
-- `public/keelson/runtime/factsschema/arrowrowcbor` — Package arrowrowcbor is the Phase-0' sparse-CBOR sibling of arrowrowbinary.
-- `public/keelson/runtime/factsschema/cborarrow` — Package cborarrow converts boxer.facts rows from sparse-CBOR (per arrowrowcbor's wire shape) into an ArrowStream IPC payload using the typed Arrow builder generated under factsschema/dml.
-- `public/keelson/runtime/factsschema/codegen` — Package codegen drives the leeway code generators for the runtime facts schema (ADR-0026 M2.5b, plus ADR-0042's Phase-1 pivot).
-- `public/keelson/runtime/factsschema/ddl`
-- `public/keelson/runtime/factsschema/dml`
-- `public/keelson/runtime/factsschema/dml_cbor` — Package dml_cbor is the generated write side of the boxer.facts table targeting the arrowrowcbor backend: the same builders as the factsschema dml package, emitting the sparse, self-describing CBOR rows the bus codec carries instead of Arrow records.
 - `public/keelson/runtime/factsschema/factsread` — Package factsread is how Go code reads the facts table in SQL: a statement is authored against leeway's read surface — column handles and the LW_GET family — and [Prepare] turns it into the statement that executes.
-- `public/keelson/runtime/factsschema/ra` — Package ra is the generated read side of the boxer.facts table: typed readers over the table's plain columns and tagged-value sections (runtime_facts_ra.out.go), and the canonical wire encoder bound to them (runtime_facts_canonwire.out.go).
 - `public/keelson/runtime/factsschema/storegen` — Package storegen generates a record store bound to the `boxer.facts` table: it hands github.com/stergiotis/boxer/public/storage/recordstore/gen the facts schema and a registry-resolved membership-id snapshot, so the store's baked ids agree with the vocabulary its writers use.
 - `public/keelson/runtime/factsstore` — Package factsstore is the durable view of runtime facts per ADR-0026 §SD6.
 - `public/keelson/runtime/factsstore/chstore` — Package chstore is the ClickHouse-backed factsstore.FactsStoreI per ADR-0026 M2.5c.
@@ -955,6 +944,14 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 - `public/semistructured/cbor`
 - `public/semistructured/cbor/builder`
 - `public/semistructured/leeway/canonicaltypes/ctabb` — Package ctabb holds every primitive canonical type as a ready-made Go value, named by its abbreviation: U64 is `u64`, Sh is `sh` (an array of strings), Z64 is `z64`.
+- `public/semistructured/leeway/factsschema` — Package factsschema defines the boxer.facts leeway table per ADR-0026 §SD6.
+- `public/semistructured/leeway/factsschema/arrowrowcbor` — Package arrowrowcbor is the Phase-0' sparse-CBOR sibling of arrowrowbinary.
+- `public/semistructured/leeway/factsschema/cborarrow` — Package cborarrow converts boxer.facts rows from sparse-CBOR (per arrowrowcbor's wire shape) into an ArrowStream IPC payload using the typed Arrow builder generated under factsschema/dml.
+- `public/semistructured/leeway/factsschema/codegen` — Package codegen drives the leeway code generators for the runtime facts schema (ADR-0026 M2.5b, plus ADR-0042's Phase-1 pivot).
+- `public/semistructured/leeway/factsschema/ddl`
+- `public/semistructured/leeway/factsschema/dml`
+- `public/semistructured/leeway/factsschema/dml_cbor` — Package dml_cbor is the generated write side of the boxer.facts table targeting the arrowrowcbor backend: the same builders as the factsschema dml package, emitting the sparse, self-describing CBOR rows the bus codec carries instead of Arrow records.
+- `public/semistructured/leeway/factsschema/ra` — Package ra is the generated read side of the boxer.facts table: typed readers over the table's plain columns and tagged-value sections (runtime_facts_ra.out.go), and the canonical wire encoder bound to them (runtime_facts_canonwire.out.go).
 - `public/semistructured/leeway/readaccess/fatruntime`
 - `public/semistructured/markdown/mdgraph` — Package mdgraph turns a corpus of extracted Markdown documents into a document graph: a node per note, per tag and per unresolved link target, an edge per note-to-note link or embed and per note-to-tag use (ADR-0353).
 - `public/semistructured/markdown/obsidian`

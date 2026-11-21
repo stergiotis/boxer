@@ -389,4 +389,4 @@ Resolved during M2/M3 (recorded here for documentary continuity):
 - [`keelson_dimdata_lw.go`](keelson_dimdata_lw.go) — leeway-meta memberships and the `Resolve*` bridges.
 - the upstream repository's spinnaker `vdd/` registry — prior-art the keelson layout mirrors (not present in boxer).
 - [`public/keelson/runtime/codec/`](../runtime/codec/) — the ADR-0042 codec generator output (one subdirectory per fact-kind / broker DTO). Subsumed the hand-coded `rowmarshall/` reference codec in M11; the no-reflection-on-hot-path rule this vdd model inherits is now realized through the generator emit rather than hand-written.
-- [`public/keelson/runtime/factsschema/`](../runtime/factsschema/) — the DML/RA/RowBinaryArrow building blocks the codec generator targets.
+- [`public/semistructured/leeway/factsschema/`](../runtime/factsschema/) — the DML/RA/RowBinaryArrow building blocks the codec generator targets.

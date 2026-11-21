@@ -15,11 +15,11 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 

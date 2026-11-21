@@ -16,10 +16,10 @@ import (
 
 	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowalloc"
 	"github.com/stergiotis/boxer/public/identity/identifier"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 	"github.com/stergiotis/boxer/public/storage/recordstore/schemaplan"

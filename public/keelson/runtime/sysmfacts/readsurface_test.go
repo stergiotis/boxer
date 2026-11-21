@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"

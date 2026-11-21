@@ -1,7 +1,7 @@
 package chstore
 
 import (
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 

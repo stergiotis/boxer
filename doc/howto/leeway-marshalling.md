@@ -732,7 +732,7 @@ type DroneMission struct {
   silently wrong when they disagree are the
   [leeway-components skill](../skills/leeway-components/SKILL.md)'s subject —
   it is the entry point for that layer, with
-  [`meshdemo`](../../public/keelson/runtime/factsschema/meshdemo/) as the
+  [`meshdemo`](../../public/semistructured/leeway/factsschema/meshdemo/) as the
   worked example and
   [`anchor/ecsdemo/`](../../public/semistructured/leeway/anchor/ecsdemo/) as
   the closed-world one.

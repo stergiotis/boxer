@@ -1,6 +1,6 @@
 package ladingschema
 
-import "github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+import "github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 
 // Layout is where one lading store's three tables live. The zero value is
 // the default: [DatabaseName], beside the facts table whose shape the tables

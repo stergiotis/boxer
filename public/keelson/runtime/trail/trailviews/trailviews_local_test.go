@@ -15,10 +15,10 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/identity/callident"
 	busaudit "github.com/stergiotis/boxer/public/keelson/runtime/audit"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 )

@@ -9,8 +9,8 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 )
 

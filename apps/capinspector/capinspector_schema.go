@@ -20,11 +20,11 @@ import (
 	"sync"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/schemaview"
 )

@@ -132,6 +132,6 @@ func TestCollectReadsTheTree(t *testing.T) {
 func TestProductionDDL(t *testing.T) {
 	assert.True(t, productionDDL("public/keelson/runtime/trail/facts_ddl_clickhouse.out.sql"))
 	assert.False(t, productionDDL("public/storage/recordstore/internal/example/device_ddl_clickhouse.out.sql"))
-	assert.False(t, productionDDL("public/keelson/runtime/factsschema/meshdemo/facts_ddl_clickhouse.out.sql"))
+	assert.False(t, productionDDL("public/semistructured/leeway/factsschema/meshdemo/facts_ddl_clickhouse.out.sql"))
 	assert.False(t, productionDDL("public/semistructured/leeway/anchor/card_anchor_ddl_clickhouse.out.sql"))
 }

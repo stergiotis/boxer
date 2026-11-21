@@ -16,10 +16,10 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/extbin"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/storegen"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"

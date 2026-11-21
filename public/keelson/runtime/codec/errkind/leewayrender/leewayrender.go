@@ -28,8 +28,8 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/errkind"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/cborarrow"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/cborarrow"
 )
 
 // Render drives one errkind.Error through the full leeway widget

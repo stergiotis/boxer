@@ -41,7 +41,7 @@ type WrapperEmitterI interface {
 	//	[]string{
 	//		"\"bytes\"",
 	//		"\"sync\"",
-	//		"cbdml \"github.com/.../keelson/runtime/factsschema/dml_cbor\"",
+	//		"cbdml \"github.com/.../semistructured/leeway/factsschema/dml_cbor\"",
 	//	}
 	//
 	// NoOpWrapper returns nil.

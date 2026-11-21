@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/jackstay"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 )
 
 var updateGolden = flag.Bool("update", false, "rewrite testdata/probe_sql.golden")

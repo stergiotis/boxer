@@ -302,7 +302,7 @@ func CreateSchemaAgentrunentryvaultTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1494
 
 type InEntityAgentrunentryvaultTable struct {
 	errs               []error
@@ -446,7 +446,7 @@ var InEntityAgentrunentryvaultTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1697
 
 // setId sets the entity's id, ordinal, component columns, one positional
 // argument per column in that order. Hand-written code should call the
@@ -515,7 +515,7 @@ func (inst *InEntityAgentrunentryvaultTable) setComponent(component2 string) *In
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1697
 
 // setLifecycle sets the entity's revision column.
 func (inst *InEntityAgentrunentryvaultTable) setLifecycle(revision3 uint32) *InEntityAgentrunentryvaultTable {

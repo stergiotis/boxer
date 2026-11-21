@@ -1255,7 +1255,7 @@ removed from `factsschema/{dml*,ra,ddl}/*.out.go` net). Reproduction:
 ```bash
 go test -tags "$(cat tags | tr -d $'\n')" -bench . -benchmem \
         -count=10 -run='^$' \
-        ./public/keelson/runtime/factsschema/bench/ \
+        ./public/semistructured/leeway/factsschema/bench/ \
         | tee /tmp/bench.log
 benchstat /tmp/bench.log
 ```
@@ -1459,8 +1459,8 @@ measured saving was taken on the shim path and is unaffected.
 - [ADR-0041 — rowmarshall error shredding](0041-rowmarshall-error-shredding.md) — settled the no-reflection-on-hot-path rule and the parallel-array shape for tree-shaped fact kinds.
 - [`public/keelson/vdd/`](../../public/keelson/vdd) — central membership registry consumed by the generator.
 - [`public/keelson/runtime/codec/capabilitygrant/`](../../public/keelson/runtime/codec/capabilitygrant) and [`/errkind/`](../../public/keelson/runtime/codec/errkind) — the retrofits that supersede the (now-deleted) hand-coded `rowmarshall` package per the Updates entry below.
-- [`public/keelson/runtime/factsschema/dml/`](../../public/keelson/runtime/factsschema/dml) — Arrow-builder codegen target (chstore-ingest path).
-- [`public/keelson/runtime/factsschema/dml_cbor/`](../../public/keelson/runtime/factsschema/dml_cbor) — sparse-CBOR codegen target (codec wire).
-- [`public/keelson/runtime/factsschema/cborarrow/`](../../public/keelson/runtime/factsschema/cborarrow) — sparse-CBOR → Arrow bridge used by codec Decode.
-- [`public/keelson/runtime/factsschema/ra/`](../../public/keelson/runtime/factsschema/ra) — Arrow-read codegen target.
+- [`public/semistructured/leeway/factsschema/dml/`](../../public/semistructured/leeway/factsschema/dml) — Arrow-builder codegen target (chstore-ingest path).
+- [`public/semistructured/leeway/factsschema/dml_cbor/`](../../public/semistructured/leeway/factsschema/dml_cbor) — sparse-CBOR codegen target (codec wire).
+- [`public/semistructured/leeway/factsschema/cborarrow/`](../../public/semistructured/leeway/factsschema/cborarrow) — sparse-CBOR → Arrow bridge used by codec Decode.
+- [`public/semistructured/leeway/factsschema/ra/`](../../public/semistructured/leeway/factsschema/ra) — Arrow-read codegen target.
 - `public/spinnaker/vdd/` — prior-art registry pattern that `keelson/vdd` mirrors.

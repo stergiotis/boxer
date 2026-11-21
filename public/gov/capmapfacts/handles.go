@@ -6,9 +6,9 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 )
 

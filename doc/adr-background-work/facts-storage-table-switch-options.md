@@ -115,7 +115,7 @@ backstop's lagged re-scan as the permanent answer to the cursor.
 ### 2.1 Engine, key, partitions, settings
 
 The DDL is one generated statement,
-[`factsddl.ComposeCreateTableSql`](../../public/keelson/runtime/factsschema/ddl/runtime_facts_ddl.out.go):
+[`factsddl.ComposeCreateTableSql`](../../public/semistructured/leeway/factsschema/ddl/runtime_facts_ddl.out.go):
 `CREATE DATABASE IF NOT EXISTS boxer; CREATE TABLE IF NOT EXISTS boxer.facts (…) ENGINE <clause> SETTINGS allow_suspicious_low_cardinality_types=1`.
 The engine clause is the caller's;
 [`chstore.defaultEngineClause`](../../public/keelson/runtime/factsstore/chstore/chstore.go)
@@ -182,7 +182,7 @@ and `apps/`, 2026-10-30). The one mention in code is
 | **markdown** | generated [`MddocStore`](../../public/semistructured/markdown/mddocfacts/ingest.go) from the [`markdown` command](../../public/app/commands/markdown/markdown_ingest.go) and mdedit's [send-to-play](../../apps/mdedit/mdedit_sendplay.go) ([ADR-0218](../adr/0218-markdown-ingestor-facts-model.md)) | one document and its items per flush | baked |
 | **lading policy** | generated [`PolicyStore`](../../public/fs/lading/ladingpolicy/policy_store.out.go) via [`ladingingest.RecordPolicy`](../../public/fs/lading/ladingingest/record.go) ([ADR-0198](../adr/0198-fs-snapshot-store.md)) | one row per mount | callers pass `Table: layout.PolicyTable()` — the one store whose table is a runtime choice |
 | **capmap** | hand-rolled `factsschema/dml` encoding, one `InsertArrow` of the whole corpus ([`capmapfacts.Ingest`](../../public/gov/capmapfacts/capmapfacts.go)) | one insert per load | the table is a parameter |
-| **meshdemo**, **jsonbench** | a demo store ([`meshdemo.go`](../../public/keelson/runtime/factsschema/meshdemo/meshdemo.go)); a benchmark writing the facts shape to its own database ([`jsonbench_ddl.go`](../../apps/jsonbench/jsonbench_ddl.go)) | — | not production writers |
+| **meshdemo**, **jsonbench** | a demo store ([`meshdemo.go`](../../public/semistructured/leeway/factsschema/meshdemo/meshdemo.go)); a benchmark writing the facts shape to its own database ([`jsonbench_ddl.go`](../../apps/jsonbench/jsonbench_ddl.go)) | — | not production writers |
 
 Not writers, for the record: app persist state left for `boxer.persiststate`
 ([ADR-0105](../adr/0105-keelson-adopts-generated-record-stores.md)); the
@@ -596,7 +596,7 @@ Explanations and trials:
 [citing a trial](../trials/README.md)).
 
 Code — the DDL and its one path:
-[`runtime_facts_ddl.out.go`](../../public/keelson/runtime/factsschema/ddl/runtime_facts_ddl.out.go),
+[`runtime_facts_ddl.out.go`](../../public/semistructured/leeway/factsschema/ddl/runtime_facts_ddl.out.go),
 [`chstore.go`](../../public/keelson/runtime/factsstore/chstore/chstore.go),
 [`keelsonddl.go`](../../public/app/commands/keelsonddl/keelsonddl.go),
 [`storegen.go`](../../public/keelson/runtime/factsschema/storegen/storegen.go),

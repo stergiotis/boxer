@@ -31,7 +31,7 @@ why:
 
 That is the trigger §SD9 was waiting for. The second sentence is also wrong
 about the schema, and has been since before it was written:
-[`factsschema`](../../public/keelson/runtime/factsschema/factsschema.go) builds
+[`factsschema`](../../public/semistructured/leeway/factsschema/factsschema.go) builds
 `u8`…`i64Array` sections, `u32Set`/`u64Set`, and `f32Array`/`f64Array` under
 `AspectLightSlowlyChangingFloat` — an encoding hint chosen for slowly-changing
 floating-point series. The substrate was provisioned for metric-shaped payloads

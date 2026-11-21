@@ -35,11 +35,11 @@ package storegen
 import (
 	"iter"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -205,7 +205,7 @@ type Input struct {
 // exports that surface for the hand-written facts writers — so binding it
 // would drop the wall. That is a decision for ADR-0100, not a default here.
 var sharedRA = gen.Scaffold{
-	ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra",
+	ImportPath: "github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/ra",
 	Package:    "ra",
 	// factsschema/codegen generates under the bare table name, where this
 	// generator's default would be "facts_table".

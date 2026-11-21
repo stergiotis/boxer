@@ -35,8 +35,8 @@ import (
 	"github.com/stergiotis/boxer/public/gov/adrcorpus"
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 )
 
 // IndexWindow is how long one index of the checkout is reused. The corpora

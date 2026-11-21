@@ -11,7 +11,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml"
 )
 
 func TestDeterministicIdBandAndStability(t *testing.T) {

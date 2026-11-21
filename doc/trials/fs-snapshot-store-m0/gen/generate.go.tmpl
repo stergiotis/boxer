@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
@@ -56,7 +56,7 @@ func genOne(td common.TableDesc, table string, store string, kind string, ids ma
 		ImportPath:     "m0gen/" + table,
 		Wrapper:        marshallgen.FixedIdsWrapper{Ids: ids},
 		SharedRA: &gen.Scaffold{
-			ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra",
+			ImportPath: "github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/ra",
 			Package:    "ra",
 			Stylable:   factsschema.TableName,
 		},

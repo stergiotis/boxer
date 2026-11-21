@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	factsdml "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
+	factsdml "github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mddocfacts"

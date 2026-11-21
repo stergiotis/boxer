@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 )
 
 // The Facts cap's backend owns boxer.facts; the section header and the

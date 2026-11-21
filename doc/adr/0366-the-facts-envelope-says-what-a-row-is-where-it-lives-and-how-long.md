@@ -19,7 +19,7 @@ row.
 
 The envelope — the plain columns every row carries, declared by
 `LoadFactsEnvelope` in
-[`public/keelson/runtime/factsschema`](../../public/keelson/runtime/factsschema)
+[`public/semistructured/leeway/factsschema`](../../public/semistructured/leeway/factsschema)
 — is four columns: `id`, `naturalKey`, `ts` and `expiresAt`. A table
 generated from it is ordered by `(id, ts)`, has no partition key and
 declares no TTL (a consumer's generated DDL, 2026-11-09). Where row ids
@@ -384,5 +384,5 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 ## References
 
 - ADR-0106 — tagged ids, the declined carrier of the genus.
-- [`public/keelson/runtime/factsschema`](../../public/keelson/runtime/factsschema)
+- [`public/semistructured/leeway/factsschema`](../../public/semistructured/leeway/factsschema)
   — the envelope's definition.

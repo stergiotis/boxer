@@ -46,10 +46,10 @@ import (
 
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml"
 	"lukechampine.com/blake3"
 )
 

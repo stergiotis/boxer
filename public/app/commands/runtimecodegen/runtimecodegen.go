@@ -2,7 +2,7 @@
 // code generator. Mirrors the pattern established by designsystem and
 // envgen: a thin urfave/cli v2 surface that bridges to the existing
 // implementation at
-// [github.com/stergiotis/boxer/public/keelson/runtime/factsschema/codegen]
+// [github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/codegen]
 // without changing the library.
 //
 // [Subcommands] is the raw subcommand list, for a caller that wants
@@ -27,7 +27,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/urfave/cli/v3"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/codegen"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/codegen"
 )
 
 // NewCliCommand returns the top-level `runtimecodegen` command for the

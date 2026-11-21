@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/extbin"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 )

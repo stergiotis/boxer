@@ -116,7 +116,7 @@ be modelled as facts. Once modelled as facts, four things had to be checked.
 ### 5.1 `u64h` and `f64h` already exist
 
 **Measured** (`grep` over the generated DDL at
-`public/keelson/runtime/factsschema/ddl/runtime_facts_ddl.out.go`). The schema
+`public/semistructured/leeway/factsschema/ddl/runtime_facts_ddl.out.go`). The schema
 promotes every numeric scalar with `ScalarModifierHomogenousArray` in two
 loops, so the array sections are already there:
 

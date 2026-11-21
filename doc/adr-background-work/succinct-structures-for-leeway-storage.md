@@ -38,7 +38,7 @@ ClickHouse already ships.
 
 A leeway table stores one entity (or event) per row —
 `TableRowConfigMultiAttributesPerRow`
-(`public/keelson/runtime/factsschema/factsschema.go`). Within a row, each
+(`public/semistructured/leeway/factsschema/factsschema.go`). Within a row, each
 tagged-value section contributes parallel array lanes
 (`public/semistructured/leeway/common/lw_enums.go`):
 
@@ -55,7 +55,7 @@ tagged-value section contributes parallel array lanes
 `ColumnRoleCusumLength` / `ColumnRoleCusumCardinality`
 (`lw_enums.go:43-44`) and the naming grammar and vdd registry know them, but
 no generator emits them — the facts DDL
-(`public/keelson/runtime/factsschema/ddl/runtime_facts_ddl.out.go`) carries
+(`public/semistructured/leeway/factsschema/ddl/runtime_facts_ddl.out.go`) carries
 only count lanes. Consequently every read that crosses a flattening
 recomputes prefix sums:
 

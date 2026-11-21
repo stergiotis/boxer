@@ -3,7 +3,7 @@ package datacatalog
 import (
 	"strings"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 )
 
 // The catalog's ClickHouse coordinates.

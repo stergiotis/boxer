@@ -79,7 +79,7 @@ scheme already:
   an `fs.handle.{uuid}` grant and the app never sees a path
   ([ADR-0026](../adr/0026-app-runtime-and-capability-subjects.md)).
 - `boxer.facts` is a leeway table with a generated `TableDesc`
-  ([runtime_facts_ddl.out.go](../../public/keelson/runtime/factsschema/ddl/runtime_facts_ddl.out.go)),
+  ([runtime_facts_ddl.out.go](../../public/semistructured/leeway/factsschema/ddl/runtime_facts_ddl.out.go)),
   and the standing policy for a new kind is a generated record store
   ([facts-bound record stores](../explanation/facts-bound-record-stores.md),
   [ADR-0105 §D5](../adr/0105-keelson-adopts-generated-record-stores.md));

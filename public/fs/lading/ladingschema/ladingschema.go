@@ -38,12 +38,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/storage/recordstore/gen"
 )
@@ -71,7 +71,7 @@ const TableRowConfig = factsschema.TableRowConfig
 // Stylable stays "facts": it is the name the bound package was generated
 // under, which is independent of the table a store binds it for.
 var SharedRA = gen.Scaffold{
-	ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra",
+	ImportPath: "github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/ra",
 	Package:    "ra",
 	Stylable:   factsschema.TableName,
 }

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

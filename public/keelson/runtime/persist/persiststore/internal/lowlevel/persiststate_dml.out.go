@@ -83,7 +83,7 @@ func CreateSchemaPersiststateTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1494
 
 type InEntityPersiststateTable struct {
 	errs               []error
@@ -168,7 +168,7 @@ var InEntityPersiststateTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1697
 
 // setId sets the entity's id column.
 func (inst *InEntityPersiststateTable) setId(id0 string) *InEntityPersiststateTable {
@@ -184,7 +184,7 @@ func (inst *InEntityPersiststateTable) setId(id0 string) *InEntityPersiststateTa
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1697
 
 // setTimestamp sets the entity's ts column.
 func (inst *InEntityPersiststateTable) setTimestamp(ts1 time.Time) *InEntityPersiststateTable {
@@ -200,7 +200,7 @@ func (inst *InEntityPersiststateTable) setTimestamp(ts1 time.Time) *InEntityPers
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1697
 
 // setLifecycle sets the entity's lifecycle column.
 func (inst *InEntityPersiststateTable) setLifecycle(lifecycle2 uint8) *InEntityPersiststateTable {

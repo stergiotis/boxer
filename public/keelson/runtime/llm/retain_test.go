@@ -17,12 +17,12 @@ import (
 	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 )

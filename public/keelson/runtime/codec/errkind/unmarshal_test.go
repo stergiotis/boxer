@@ -7,7 +7,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/cborarrow"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/cborarrow"
 )
 
 // TestUnmarshal_RoundTrip exercises Marshal → cborarrow.Convert →

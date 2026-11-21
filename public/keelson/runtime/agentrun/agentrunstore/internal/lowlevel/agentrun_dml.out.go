@@ -273,7 +273,7 @@ func CreateSchemaAgentrunTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1494
 
 type InEntityAgentrunTable struct {
 	errs               []error
@@ -415,7 +415,7 @@ var InEntityAgentrunTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1697
 
 // setId sets the entity's id column.
 func (inst *InEntityAgentrunTable) setId(id0 uint64) *InEntityAgentrunTable {
@@ -431,7 +431,7 @@ func (inst *InEntityAgentrunTable) setId(id0 uint64) *InEntityAgentrunTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1697
 
 // setTimestamp sets the entity's ts column.
 func (inst *InEntityAgentrunTable) setTimestamp(ts1 time.Time) *InEntityAgentrunTable {
@@ -447,7 +447,7 @@ func (inst *InEntityAgentrunTable) setTimestamp(ts1 time.Time) *InEntityAgentrun
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1697
 
 // setLifecycle sets the entity's lifecycle column.
 func (inst *InEntityAgentrunTable) setLifecycle(lifecycle2 uint8) *InEntityAgentrunTable {

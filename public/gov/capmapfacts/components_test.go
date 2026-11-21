@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/ra"
 )
 
 // Each facts row reads back as the components it was written from, through

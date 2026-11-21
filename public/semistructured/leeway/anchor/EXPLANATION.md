@@ -70,7 +70,7 @@ ResolveColumnNames the query-level WITH clause).
 | `ecsdemo/stage2/roundtrip_test.go` | `keelson/data/chlocalpool` (ADR-0028): the readback scripts run in a pre-spawned single-use `clickhouse-local` worker, binary resolution via the extbin chokepoint (ADR-0118). |
 
 The runtime facts store is the production-scale consumer of the same
-leeway machinery shown here — `keelson/runtime/factsschema` describes
+leeway machinery shown here — `semistructured/leeway/factsschema` describes
 `boxer.facts` with the same TableDesc/DDL/DML/RA drivers this package
 demonstrates. It is deliberately not imported here; anchor showcases the
 data pillar (`keelson/data/*`) and leaves the runtime spine by reference.

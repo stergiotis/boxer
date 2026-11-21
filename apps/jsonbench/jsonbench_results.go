@@ -16,9 +16,9 @@ import (
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml"
 )
 
 // resultsCommand lands a run directory's measurements in a facts table, which

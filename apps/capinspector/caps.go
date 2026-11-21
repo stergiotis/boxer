@@ -6,13 +6,13 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 )
 
 // CapId is the short identifier the carousel's status bar uses when

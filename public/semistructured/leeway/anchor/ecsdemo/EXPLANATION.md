@@ -14,7 +14,7 @@ status: draft
 > writing and the reading, and the shared `MapLookup` below is a map it wrote
 > itself. That is a legitimate shape and not the main one — for two domains
 > sharing a facts table with ids from a vocabulary registry, see
-> [`runtime/factsschema/meshdemo`](../../../../keelson/runtime/factsschema/meshdemo/).
+> [`runtime/factsschema/meshdemo`](../../../../semistructured/leeway/factsschema/meshdemo/).
 > The layer's rules live in the
 > [leeway-components skill](../../../../../doc/skills/leeway-components/SKILL.md).
 

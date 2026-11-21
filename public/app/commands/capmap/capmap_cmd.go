@@ -45,11 +45,11 @@ import (
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
 	"github.com/stergiotis/boxer/public/gov/capmapfacts"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 )
 
 // defaultEngine is empty on purpose: an empty clause makes the store apply the

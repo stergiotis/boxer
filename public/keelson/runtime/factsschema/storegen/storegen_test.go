@@ -9,9 +9,9 @@ import (
 
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/identity/tagmint"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/storegen"
 	"github.com/stergiotis/boxer/public/keelson/vdd"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -188,7 +188,7 @@ func TestGenerate_EmitsAFactsBoundStore(t *testing.T) {
 	_, err := os.Stat(filepath.Join(out, "internal", "lowlevel", "facts_ra.out.go"))
 	assert.True(t, os.IsNotExist(err),
 		"a facts-bound store must not emit its own read-access copy")
-	assert.Contains(t, store, `"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra"`)
+	assert.Contains(t, store, `"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/ra"`)
 	assert.Contains(t, store, "ra.NewReadAccessFactsPlainEntityIdAttributes()",
 		"the class names must carry factsschema's stylable name, not this generator's _table default")
 

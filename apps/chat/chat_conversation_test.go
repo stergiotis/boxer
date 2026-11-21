@@ -16,12 +16,12 @@ import (
 	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
 )

@@ -4,10 +4,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
-	factsddl "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ddl"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
+	factsddl "github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/ddl"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 

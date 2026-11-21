@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/config/env/envtest"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 )
 

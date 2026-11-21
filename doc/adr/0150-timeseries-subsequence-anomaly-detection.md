@@ -647,7 +647,7 @@ That entry explains the load channels' provenance partly by ruling out
 here rather than editing that entry, per the edit policy.
 
 It was wrong about the schema when written:
-[`factsschema`](../../public/keelson/runtime/factsschema/factsschema.go) builds
+[`factsschema`](../../public/semistructured/leeway/factsschema/factsschema.go) builds
 the full `u8`…`i64Array` set, `u32Set`/`u64Set`, and `f32Array`/`f64Array`
 under `AspectLightSlowlyChangingFloat` — an encoding hint chosen for
 slowly-changing series, which is as close to "provisioned for metrics" as a

@@ -20,9 +20,9 @@ import (
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/logcomment"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml"
 )
 
 // KindLabel is the human-readable kind tag on the symbol section — the

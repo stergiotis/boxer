@@ -24,7 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
 
-	cbdml "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml_cbor"
+	cbdml "github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml_cbor"
 )
 
 // FactsWrapper wires the marshallgen core into the boxer.facts
@@ -148,10 +148,10 @@ func (inst FactsWrapper) Imports(plan *mappingplan.Plan) []string {
 		`"github.com/apache/arrow-go/v18/arrow/memory"`,
 		``,
 		`"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"`,
-		`"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/arrowrowcbor"`,
-		`cbdml "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml_cbor"`,
-		`"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra"`,
-		`"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/cborarrow"`,
+		`"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/arrowrowcbor"`,
+		`cbdml "github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml_cbor"`,
+		`"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/ra"`,
+		`"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/cborarrow"`,
 		// eh + eb back this wrapper's own emitted code: Marshal's error wrap
 		// (eh) and the codec Decode row-count check (eb). Declared because the
 		// wrapper uses them, full stop — the import set dedups against the

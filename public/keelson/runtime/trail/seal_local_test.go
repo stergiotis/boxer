@@ -15,10 +15,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"

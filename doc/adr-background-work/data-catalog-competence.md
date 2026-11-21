@@ -80,7 +80,7 @@ found code instead of re-deriving this survey. Line numbers are as of
 - `apps/jsonbench/` — the CLI template: `jsonbench.go` (urfave/cli app),
   `ddl.go` (emit-or-apply with `--url/--user/--password`, guard rails),
   `chpack.go` (minimal chclient wiring).
-- `public/keelson/runtime/factsschema/factsschema.go` L38 —
+- `public/semistructured/leeway/factsschema/factsschema.go` L38 —
   `DatabaseName = "boxer"`; reference it, do not restate the string.
 
 **play / sqlapplet surface**:

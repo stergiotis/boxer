@@ -6,7 +6,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/require"
 
-	cbdml "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml_cbor"
+	cbdml "github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml_cbor"
 )
 
 // TestBuildEntities_Smoke proves the new schema-agnostic

@@ -24,11 +24,11 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/arrowrowcbor"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/cborarrow"
-	cbdml "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml_cbor"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra"
 	"github.com/stergiotis/boxer/public/keelson/vdd"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/arrowrowcbor"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/cborarrow"
+	cbdml "github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml_cbor"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/ra"
 )
 
 // --- Resolved membership ids from vdd. ---

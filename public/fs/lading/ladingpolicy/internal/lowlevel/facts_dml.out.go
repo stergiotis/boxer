@@ -215,7 +215,7 @@ func CreateSchemaFactsTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1494
 
 type InEntityFactsTable struct {
 	errs               []error
@@ -353,7 +353,7 @@ var InEntityFactsTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1697
 
 // setId sets the entity's id, naturalKey columns, one positional argument per
 // column in that order. Hand-written code should call the per-column setters
@@ -405,7 +405,7 @@ func (inst *InEntityFactsTable) setNaturalKey(naturalKey1 []byte) *InEntityFacts
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1697
 
 // setTimestamp sets the entity's ts column.
 func (inst *InEntityFactsTable) setTimestamp(ts2 time.Time) *InEntityFactsTable {
@@ -421,7 +421,7 @@ func (inst *InEntityFactsTable) setTimestamp(ts2 time.Time) *InEntityFactsTable 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1697
 
 // setLifecycle sets the entity's expiresAt column.
 func (inst *InEntityFactsTable) setLifecycle(expiresAt3 time.Time) *InEntityFactsTable {
