@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,9 +12,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 )
@@ -168,15 +171,45 @@ func TestACallThatSettlesInTheWaitAnswersDirectly(t *testing.T) {
 	assert.Zero(t, running+waiting)
 }
 
-// The wait binds: a poll of the host does not outlast it.
+// The wait binds: a poll of the host does not outlast it. Every status
+// request is read off the bus. The turn's own polls ask the host to wait no
+// longer than the profile's call wait — the host's own bound, five seconds,
+// would otherwise apply; the only longer ones are the watcher's, which
+// takes over a call once it is pending and polls at watchPoll.
 func TestTheCallWaitBinds(t *testing.T) {
 	shortWait(t)
 	bus := inprocbus.NewInst(zerolog.Nop())
-	_, coord, cli, req, ctx := coordRigWith(t, bus, asyncScript(), false, asyncNoteOps, agentrun.NewMemStore())
-	started := time.Now()
-	_, err := runTurn(ctx, cli, coord, req, nil)
+	var mu sync.Mutex
+	var waits []uint32
+	observer := bus.NewClient("test.chat.observer", []app.SubjectFilter{{Pattern: agent.SubjectStatus, Direction: app.CapDirectionSub}})
+	_, err := observer.Subscribe(agent.SubjectStatus, func(msg *app.Msg) {
+		req, derr := buscodec.Decode[struct {
+			WaitMs uint32 `json:"wait_ms,omitempty"`
+		}](msg.Payload)
+		if derr != nil {
+			return
+		}
+		mu.Lock()
+		waits = append(waits, req.WaitMs)
+		mu.Unlock()
+	})
 	require.NoError(t, err)
-	assert.Less(t, time.Since(started), 3*time.Second, "well under one poll of the host's %s", "5s")
+	_, coord, cli, req, ctx := coordRigWith(t, bus, asyncScript(), false, asyncNoteOps, agentrun.NewMemStore())
+	_, err = runTurn(ctx, cli, coord, req, nil)
+	require.NoError(t, err)
+	callWait, _, _ := coord.callLimits()
+	mu.Lock()
+	defer mu.Unlock()
+	var turnPolls int
+	for _, w := range waits {
+		d := time.Duration(w) * time.Millisecond
+		if d == watchPoll {
+			continue
+		}
+		turnPolls++
+		assert.LessOrEqual(t, d, callWait, "a poll of the turn asks for no more than the call wait")
+	}
+	assert.Positive(t, turnPolls, "the turn polled the call's status")
 }
 
 func TestTheCallLimitsAreTheProfiles(t *testing.T) {
