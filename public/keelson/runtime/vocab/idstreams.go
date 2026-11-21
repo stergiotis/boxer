@@ -26,15 +26,24 @@ var (
 	// lane's runs and entries (ADR-0319 §SD6).
 	IdStreamAgentRunMem      = tagmint.MustClaim("agentrunRunMem", 439204, MaxExpectedAgentRuns)
 	IdStreamAgentRunEntryMem = tagmint.MustClaim("agentrunEntryMem", 64079, MaxExpectedAgentRunEntries)
+	// IdStreamFactsRow identifies the rows the facts store writes to
+	// boxer.facts (ADR-0397 §SD2), leased like the journal's.
+	IdStreamFactsRow = tagmint.MustClaim("factsRow", 57314, MaxExpectedFactsRows)
+	// IdStreamFactsRowLocal is the facts store's process-local twin: the
+	// rows it writes while no block can be leased. Such an id is unique only
+	// within the process that minted it, and its tag says so.
+	IdStreamFactsRowLocal = tagmint.MustClaim("factsRowLocal", 53133, MaxExpectedFactsRows)
 )
 
 // MaxExpectedAgentRuns and MaxExpectedAgentRunEntries are what the journal's
 // streams tell the mint they will need, gaps included: width 28 holds 2^36
-// bodies, width 24 holds 2^40.
+// bodies, width 24 holds 2^40. MaxExpectedFactsRows is the facts store's,
+// in the entries' class: a log line is a row.
 const (
 	MaxExpectedAgentRuns       = 1 << 35
 	MaxExpectedAgentRunEntries = 1 << 39
+	MaxExpectedFactsRows       = 1 << 39
 )
 
 // IdStreams lists the streams this package claims, for the golden.
-var IdStreams = []tagmint.ClaimedTagValue{IdStreamAgentRun, IdStreamAgentRunEntry, IdStreamAgentRunMem, IdStreamAgentRunEntryMem}
+var IdStreams = []tagmint.ClaimedTagValue{IdStreamAgentRun, IdStreamAgentRunEntry, IdStreamAgentRunMem, IdStreamAgentRunEntryMem, IdStreamFactsRow, IdStreamFactsRowLocal}
