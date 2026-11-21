@@ -50,7 +50,7 @@ func newService(t *testing.T, r *stubReader) *Service {
 	// is the bracket's reads and the service's holding of updates.
 	rec := trail.NewRecorder(nil, "run-1", zerolog.Nop())
 	t.Cleanup(rec.Close)
-	svc := New(Options{Trail: rec, Log: zerolog.Nop(), Read: r.read, Clock: func() time.Time { return time.Unix(0, 0) }})
+	svc := New(t.Context(), Options{Trail: rec, Log: zerolog.Nop(), Read: r.read, Clock: func() time.Time { return time.Unix(0, 0) }})
 	return svc
 }
 

@@ -78,7 +78,7 @@ func (inst *Service) accept(p proposalRef) {
 	rec.proposal.taken = true
 	rec.consent = ConsentDialogPerson
 	e := rec.entry
-	inst.grantEventAsked(trail.GrantEventConfirmed, "person", proposalReason(rec), p.t, nil, rec.asked())
+	inst.grantEventAsked(inst.ctx, trail.GrantEventConfirmed, "person", proposalReason(rec), p.t, nil, rec.asked())
 	inst.mu.Unlock()
 	go inst.route(inst.ctx, p.t, rec, req, rec.spec, e)
 }
@@ -89,7 +89,7 @@ func (inst *Service) rejectProposal(p proposalRef) {
 	defer inst.mu.Unlock()
 	if p.rec.outcome.Phase == opwire.PhaseProposed {
 		p.rec.outcome = phaseOutcome(opwire.PhaseRejected, "rejected by the person")
-		inst.grantEventAsked(trail.GrantEventDeclined, "person", proposalReason(p.rec), p.t, nil, p.rec.asked())
+		inst.grantEventAsked(inst.ctx, trail.GrantEventDeclined, "person", proposalReason(p.rec), p.t, nil, p.rec.asked())
 	}
 }
 

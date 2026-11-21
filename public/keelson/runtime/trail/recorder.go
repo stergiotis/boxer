@@ -304,8 +304,8 @@ func (inst *Recorder) OriginOf(appId app.AppIdT, instance uint64) (o Origin) {
 
 // write buffers one row keyed key with c's components through the shared
 // writer, add contributing the row's own; without a store it does
-// nothing. The verbs whose identity is a bus envelope pass
-// context.Background().
+// nothing. ctx is the verb's: the call identity it carries reaches the
+// configured stampers.
 func (inst *Recorder) write(ctx context.Context, key string, at time.Time, c Context, add func(b *TrailEntityBuilder, id uint64)) (err error) {
 	if inst == nil {
 		return nil
@@ -324,8 +324,8 @@ func (inst *Recorder) write(ctx context.Context, key string, at time.Time, c Con
 }
 
 // LlmCall buffers a model call's row; its natural key is the call id.
-func (inst *Recorder) LlmCall(at time.Time, c Context, row LlmCall) (err error) {
-	return inst.write(context.Background(), row.CallId, at, c, func(b *TrailEntityBuilder, id uint64) {
+func (inst *Recorder) LlmCall(ctx context.Context, at time.Time, c Context, row LlmCall) (err error) {
+	return inst.write(ctx, row.CallId, at, c, func(b *TrailEntityBuilder, id uint64) {
 		row.Id, row.Kind = id, "llmCall"
 		b.AddLlmCall(row)
 	})
@@ -333,9 +333,9 @@ func (inst *Recorder) LlmCall(at time.Time, c Context, row LlmCall) (err error) 
 
 // LlmMessage buffers one message's row, with its text when body is set;
 // its natural key is the call id and the ordinal.
-func (inst *Recorder) LlmMessage(at time.Time, c Context, row LlmMessage, body option.Option[LlmMessageBody]) (err error) {
+func (inst *Recorder) LlmMessage(ctx context.Context, at time.Time, c Context, row LlmMessage, body option.Option[LlmMessageBody]) (err error) {
 	key := row.CallId + "/" + strconv.FormatUint(uint64(row.Ordinal), 10)
-	return inst.write(context.Background(), key, at, c, func(b *TrailEntityBuilder, id uint64) {
+	return inst.write(ctx, key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		row.Id, row.Kind = id, "llmMessage"
 		b.AddLlmMessage(row)
 		if body.Has {
@@ -349,9 +349,9 @@ func (inst *Recorder) LlmMessage(at time.Time, c Context, row LlmMessage, body o
 // AgentAction buffers one action-record row. Its natural key names the
 // task, the call's key and the decision, and is unique like every event's,
 // so the dispatcher's row and the final row of one call are two rows.
-func (inst *Recorder) AgentAction(at time.Time, c Context, cause option.Option[Cause], row AgentAction) (err error) {
+func (inst *Recorder) AgentAction(ctx context.Context, at time.Time, c Context, cause option.Option[Cause], row AgentAction) (err error) {
 	key := "action|" + c.Delegation.Val.Task + "|" + row.Key + "|" + row.Decision + "|" + inst.unique(at)
-	return inst.write(context.Background(), key, at, c, func(b *TrailEntityBuilder, id uint64) {
+	return inst.write(ctx, key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		if cause.Has {
 			v := cause.Val
 			v.Id = id
@@ -364,9 +364,9 @@ func (inst *Recorder) AgentAction(at time.Time, c Context, cause option.Option[C
 
 // AgentGrant buffers one grant event; cause names the model call that asked
 // for it, when one did.
-func (inst *Recorder) AgentGrant(at time.Time, c Context, cause option.Option[Cause], row AgentGrant) (err error) {
+func (inst *Recorder) AgentGrant(ctx context.Context, at time.Time, c Context, cause option.Option[Cause], row AgentGrant) (err error) {
 	key := "grant|" + c.Delegation.Val.Task + "|" + row.Event + "|" + inst.unique(at)
-	return inst.write(context.Background(), key, at, c, func(b *TrailEntityBuilder, id uint64) {
+	return inst.write(ctx, key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		if cause.Has {
 			v := cause.Val
 			v.Id = id
@@ -379,9 +379,9 @@ func (inst *Recorder) AgentGrant(at time.Time, c Context, cause option.Option[Ca
 
 // AgentCapture buffers one capture's row; cause names the model call that
 // asked for the capture, when one did.
-func (inst *Recorder) AgentCapture(at time.Time, c Context, cause option.Option[Cause], row AgentCapture) (err error) {
+func (inst *Recorder) AgentCapture(ctx context.Context, at time.Time, c Context, cause option.Option[Cause], row AgentCapture) (err error) {
 	key := "capture|" + inst.unique(at)
-	return inst.write(context.Background(), key, at, c, func(b *TrailEntityBuilder, id uint64) {
+	return inst.write(ctx, key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		if cause.Has {
 			v := cause.Val
 			v.Id = id
@@ -393,9 +393,9 @@ func (inst *Recorder) AgentCapture(at time.Time, c Context, cause option.Option[
 }
 
 // AgentDisclosure buffers one view's row (ADR-0287 §SD6).
-func (inst *Recorder) AgentDisclosure(at time.Time, c Context, cause option.Option[Cause], row AgentDisclosure) (err error) {
+func (inst *Recorder) AgentDisclosure(ctx context.Context, at time.Time, c Context, cause option.Option[Cause], row AgentDisclosure) (err error) {
 	key := "disclosure|" + inst.unique(at)
-	return inst.write(context.Background(), key, at, c, func(b *TrailEntityBuilder, id uint64) {
+	return inst.write(ctx, key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		if cause.Has {
 			v := cause.Val
 			v.Id = id
@@ -407,18 +407,18 @@ func (inst *Recorder) AgentDisclosure(at time.Time, c Context, cause option.Opti
 }
 
 // LadingPublish buffers one publish's row (ADR-0341 §SD5).
-func (inst *Recorder) LadingPublish(at time.Time, c Context, row LadingPublish) (err error) {
+func (inst *Recorder) LadingPublish(ctx context.Context, at time.Time, c Context, row LadingPublish) (err error) {
 	key := "ladingpublish|" + inst.unique(at)
-	return inst.write(context.Background(), key, at, c, func(b *TrailEntityBuilder, id uint64) {
+	return inst.write(ctx, key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		row.Id, row.Kind = id, "ladingPublish"
 		b.AddLadingPublish(row)
 	})
 }
 
 // HttpFetch buffers one egress fetch's row.
-func (inst *Recorder) HttpFetch(at time.Time, c Context, row HttpFetch) (err error) {
+func (inst *Recorder) HttpFetch(ctx context.Context, at time.Time, c Context, row HttpFetch) (err error) {
 	key := "fetch|" + inst.unique(at)
-	return inst.write(context.Background(), key, at, c, func(b *TrailEntityBuilder, id uint64) {
+	return inst.write(ctx, key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		row.Id, row.Kind = id, "httpFetch"
 		b.AddHttpFetch(row)
 	})
@@ -427,9 +427,9 @@ func (inst *Recorder) HttpFetch(at time.Time, c Context, row HttpFetch) (err err
 // AdhocDataset buffers one bundle operation's row (ADR-0288
 // §SD5); cause names the model call whose reply asked for the operation,
 // when the dispatcher recorded one.
-func (inst *Recorder) AdhocDataset(at time.Time, c Context, cause option.Option[Cause], row AdhocDataset) (err error) {
+func (inst *Recorder) AdhocDataset(ctx context.Context, at time.Time, c Context, cause option.Option[Cause], row AdhocDataset) (err error) {
 	key := "adhoc|" + inst.unique(at)
-	return inst.write(context.Background(), key, at, c, func(b *TrailEntityBuilder, id uint64) {
+	return inst.write(ctx, key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		if cause.Has {
 			v := cause.Val
 			v.Id = id

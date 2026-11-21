@@ -617,7 +617,7 @@ func (inst *Service) endTaskAsked(t *task, why string, by string, asked wireCaus
 		return
 	}
 	t.revoked = why
-	inst.grantEventAsked(trail.GrantEventEnded, by, why, t, nil, asked)
+	inst.grantEventAsked(inst.ctx, trail.GrantEventEnded, by, why, t, nil, asked)
 	inst.unpinCoordinator(t)
 	// The task's captures go with it: each sealed artifact's key is dropped
 	// once its last reader leaves (ADR-0281 §SD6).

@@ -59,10 +59,10 @@ func TestRowsOfThreeLanesJoinByKey(t *testing.T) {
 	deleg := option.Some(trail.Delegation{Task: task, Epoch: 1, Call: option.Some(call)})
 
 	// The model call, from the chat window.
-	require.NoError(t, rec.LlmCall(at, trail.Context{Origin: rec.OriginOf(chat, 4), Conversation: conv},
+	require.NoError(t, rec.LlmCall(ctx, at, trail.Context{Origin: rec.OriginOf(chat, 4), Conversation: conv},
 		trail.LlmCall{CallId: modelCall, Purpose: "chat/turn", ToolCalls: 1}))
 	// The action its reply asked for, in the play window 9.
-	require.NoError(t, rec.AgentAction(at.Add(time.Second), trail.Context{Origin: rec.OriginOf(chat, 4), Conversation: conv, Delegation: deleg},
+	require.NoError(t, rec.AgentAction(ctx, at.Add(time.Second), trail.Context{Origin: rec.OriginOf(chat, 4), Conversation: conv, Delegation: deleg},
 		option.Some(trail.Cause{ModelCall: modelCall, ToolCall: option.Some("call_0")}),
 		trail.AgentAction{Key: trail.ToolKey(modelCall, 0), Instance: 9, App: play, Operation: "run", Decision: "final", Phase: "completed"}))
 	require.NoError(t, rec.Flush(ctx))
@@ -162,9 +162,9 @@ func TestBundleRowJoinsTheActionThatCausedIt(t *testing.T) {
 	deleg := option.Some(trail.Delegation{Task: task, Epoch: 2, Call: option.Some(call)})
 	cause := option.Some(trail.Cause{ModelCall: modelCall, ToolCall: option.Some("call_3"), ToolIndex: 1})
 
-	require.NoError(t, rec.AgentAction(at, trail.Context{Origin: rec.OriginOf(chat, 4), Conversation: conv, Delegation: deleg}, cause,
+	require.NoError(t, rec.AgentAction(ctx, at, trail.Context{Origin: rec.OriginOf(chat, 4), Conversation: conv, Delegation: deleg}, cause,
 		trail.AgentAction{Key: trail.ToolKey(modelCall, 1), Instance: 9, App: play, Operation: "publish_result", Decision: "final", Phase: "applied"}))
-	require.NoError(t, rec.AdhocDataset(at.Add(time.Second), trail.Context{Origin: rec.OriginOf(play, 9), Conversation: conv, Delegation: deleg}, cause,
+	require.NoError(t, rec.AdhocDataset(ctx, at.Add(time.Second), trail.Context{Origin: rec.OriginOf(play, 9), Conversation: conv, Delegation: deleg}, cause,
 		trail.AdhocDataset{Operation: "publish", Outcome: "applied", Bundle: "sales", Revision: 1, OwnerApp: play, OwnerInstance: 9,
 			LocalNames: []string{"orders", "regions"}, Aliases: []string{"sales__orders", "sales__regions"},
 			Handles: []string{"adhoc_0000000000000001", "adhoc_0000000000000002"}, Rows: []uint64{3, 1}, Bytes: []uint64{512, 256},

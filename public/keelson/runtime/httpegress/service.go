@@ -304,7 +304,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	if !rep.Ok {
 		rec.Error = rep.Reason
 	}
-	inst.record(rec)
+	inst.record(ctx, rec)
 	lg := inst.log.Debug()
 	if !rep.Ok {
 		lg = inst.log.Warn()
@@ -367,7 +367,7 @@ func recordedURL(u *url.URL) (s string) {
 // is a call the table should show.
 func (inst *Service) refuse(msg *app.Msg, reason string, rec CallRecord) {
 	rec.Refused, rec.Error = true, reason
-	inst.record(rec)
+	inst.record(context.WithoutCancel(msg.Context()), rec)
 	inst.log.Warn().Str("sender", string(msg.Sender)).Str("destination", rec.Destination).Str("purpose", rec.Purpose).Str("reason", reason).Msg("httpegress: refused")
 	inst.reply(msg.Reply, wireReply{ErrorKind: errKindRefused, Reason: reason})
 }

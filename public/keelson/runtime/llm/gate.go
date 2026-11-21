@@ -277,7 +277,7 @@ func (inst *Service) gate(msg *app.Msg, in gateIn, rec *CallRecord, t *turn) (p 
 	// trail before the request leaves the machine, so a process that dies
 	// mid-call leaves "sent, outcome unknown" rather than nothing.
 	if t != nil {
-		inst.writeRequest(rec, t)
+		inst.writeRequest(ctx, rec, t)
 	}
 	ahead, refuse := inst.cfg.Trail.WriteAhead(inst.base)
 	if refuse != nil {

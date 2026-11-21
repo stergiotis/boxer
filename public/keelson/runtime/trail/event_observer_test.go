@@ -73,11 +73,11 @@ func TestEventCommitsUnderTheCallIdentity(t *testing.T) {
 	ci := callident.CallIdentity{Origin: callident.Origin{Run: "run-1", App: "apps/dmdm", Instance: 3}, Claims: callident.Claims{Principal: "p-1", Purpose: "art-15"}}
 	ctx := callident.WithCallIdentity(context.Background(), ci)
 	require.NoError(t, rec.Event(ctx, time.Now(), Context{}, event()))
-	require.NoError(t, rec.LlmCall(time.Now(), Context{}, LlmCall{CallId: "c1"}))
+	require.NoError(t, rec.LlmCall(ctx, time.Now(), Context{}, LlmCall{CallId: "c1"}))
 	require.NoError(t, rec.Flush(context.Background()))
 	require.Len(t, obs.committed, 3, "the two rows and the batch's seal")
 	assert.Equal(t, ci, obs.committed[0].Identity, "the event's row carries the identity it was committed under")
-	assert.True(t, obs.committed[1].Identity.IsZero(), "a verb without a context commits under no identity")
+	assert.Equal(t, ci, obs.committed[1].Identity, "every verb commits under the identity its ctx carries")
 	n, batches := obs.durableKeys()
 	assert.Equal(t, 3, n, "the two rows and the seal land together")
 	assert.Equal(t, 1, batches)

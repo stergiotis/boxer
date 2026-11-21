@@ -66,7 +66,7 @@ func TestPromptPathForwardsDurableEvents(t *testing.T) {
 	fwd := &collectForwarder{}
 	rec := NewRecorder(exec, "run-1", zerolog.Nop(), WithForwarder(fwd))
 	require.NoError(t, rec.Event(context.Background(), time.Now(), Context{Origin: rec.OriginOf("apps/dmdm", 2)}, event()))
-	require.NoError(t, rec.LlmCall(time.Now(), Context{}, LlmCall{CallId: "c1"}))
+	require.NoError(t, rec.LlmCall(t.Context(), time.Now(), Context{}, LlmCall{CallId: "c1"}))
 	require.Error(t, rec.Flush(context.Background()), "the server is down")
 	assert.Empty(t, fwd.ids(), "nothing is forwarded before it is durable")
 	require.NoError(t, rec.Event(context.Background(), time.Now(), Context{}, event()))

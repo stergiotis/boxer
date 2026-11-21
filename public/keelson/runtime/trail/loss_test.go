@@ -22,7 +22,7 @@ func TestGapRowAfterRecovery(t *testing.T) {
 	const batch, batches = 10, 5
 	for i := range batches {
 		for range batch {
-			require.NoError(t, rec.HttpFetch(time.Now(), Context{}, HttpFetch{}))
+			require.NoError(t, rec.HttpFetch(t.Context(), time.Now(), Context{}, HttpFetch{}))
 		}
 		require.Error(t, rec.Flush(context.Background()), "batch %d is held", i)
 	}
@@ -59,10 +59,10 @@ func TestGapRowAfterRecovery(t *testing.T) {
 func TestCloseCountsWhatItLoses(t *testing.T) {
 	exec := &gateExec{}
 	rec := NewRecorder(exec, "run-1", zerolog.Nop())
-	require.NoError(t, rec.HttpFetch(time.Now(), Context{}, HttpFetch{}))
-	require.NoError(t, rec.HttpFetch(time.Now(), Context{}, HttpFetch{}))
+	require.NoError(t, rec.HttpFetch(t.Context(), time.Now(), Context{}, HttpFetch{}))
+	require.NoError(t, rec.HttpFetch(t.Context(), time.Now(), Context{}, HttpFetch{}))
 	require.Error(t, rec.Flush(context.Background()))
-	require.NoError(t, rec.HttpFetch(time.Now(), Context{}, HttpFetch{}))
+	require.NoError(t, rec.HttpFetch(t.Context(), time.Now(), Context{}, HttpFetch{}))
 	rec.Close()
 	c := rec.Counts()
 	assert.EqualValues(t, 3, c.Buffered)

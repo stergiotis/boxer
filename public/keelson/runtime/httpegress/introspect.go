@@ -1,6 +1,7 @@
 package httpegress
 
 import (
+	"context"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -64,8 +65,8 @@ type DestinationRecord struct {
 // record puts rec into the bounded ring, overwriting the oldest once it is
 // full: a screenful of tiles is dozens of calls, so the ring must not copy
 // itself per call.
-func (inst *Service) record(rec CallRecord) {
-	inst.persist(rec)
+func (inst *Service) record(ctx context.Context, rec CallRecord) {
+	inst.persist(ctx, rec)
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	inst.next++
@@ -200,7 +201,7 @@ func sensitivityName(s queryengine.SensitivityE) (name string) {
 // §SD2): a fetch never waits on the store, and a screenful of tiles lands
 // in a few flushes. A failed buffer is logged; the in-process record keeps
 // the row either way.
-func (inst *Service) persist(rec CallRecord) {
+func (inst *Service) persist(ctx context.Context, rec CallRecord) {
 	if !inst.cfg.Trail.Durable() {
 		return
 	}
@@ -223,7 +224,7 @@ func (inst *Service) persist(rec CallRecord) {
 	if rec.Error != "" {
 		row.Error = []string{rec.Error}
 	}
-	if err := inst.cfg.Trail.HttpFetch(rec.At, c, row); err != nil {
+	if err := inst.cfg.Trail.HttpFetch(ctx, rec.At, c, row); err != nil {
 		inst.log.Warn().Err(err).Str("destination", rec.Destination).Msg("httpegress: buffer fetch row")
 		return
 	}

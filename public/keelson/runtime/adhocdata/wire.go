@@ -1,6 +1,7 @@
 package adhocdata
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -199,7 +200,7 @@ func (inst *Service) handleInstanceClosed(msg *app.Msg) {
 		inst.log.Warn().Err(err).Msg("adhocdata: decode instance-closed")
 		return
 	}
-	if n := inst.retractOwnedBy(Identity{App: app.AppIdT(ev.AppId), Instance: ev.InstanceKey}); n > 0 {
+	if n := inst.retractOwnedBy(context.WithoutCancel(msg.Context()), Identity{App: app.AppIdT(ev.AppId), Instance: ev.InstanceKey}); n > 0 {
 		inst.log.Info().Str("app", ev.AppId).Uint64("instance", ev.InstanceKey).Int("retracted", n).
 			Msg("adhocdata: instance closed; its datasets retracted")
 	}
@@ -339,7 +340,7 @@ func (inst *Service) handleBundlePublish(msg *app.Msg) {
 	for i, name := range req.LocalNames {
 		datasets = append(datasets, BundleDatasetInput{LocalName: name, ArrowIPCStream: req.ArrowStreams[i]})
 	}
-	res, pErr := inst.PublishBundle(BundlePublishInput{
+	res, pErr := inst.PublishBundle(context.WithoutCancel(msg.Context()), BundlePublishInput{
 		Alias: req.Bundle, Document: req.Document, Datasets: datasets,
 		KeepAfterClose: req.KeepAfterClose, By: sender(msg),
 		Provenance: BundleProvenance{SourceSql: req.SourceSql, InputHandles: req.InputHandles},
@@ -358,7 +359,7 @@ func (inst *Service) handleBundleResolve(msg *app.Msg) {
 		inst.refuse(msg, "decode: "+err.Error())
 		return
 	}
-	res, rErr := inst.ResolveBundle(req.Bundle, sender(msg), callContextFields(req.OboTask, req.OboEpoch, req.OboCall))
+	res, rErr := inst.ResolveBundle(context.WithoutCancel(msg.Context()), req.Bundle, sender(msg), callContextFields(req.OboTask, req.OboEpoch, req.OboCall))
 	if rErr != nil {
 		inst.reply(msg.Reply, adhocreply.AdhocReply{
 			At: time.Now().UTC(), Reason: rErr.Error(), Bundle: req.Bundle, NoLive: errors.Is(rErr, ErrNoLiveBundle),
@@ -374,7 +375,7 @@ func (inst *Service) handleBundleRetract(msg *app.Msg) {
 		inst.refuse(msg, "decode: "+err.Error())
 		return
 	}
-	if rErr := inst.RetractBundle(req.Bundle, sender(msg), callContextFields(req.OboTask, req.OboEpoch, req.OboCall)); rErr != nil {
+	if rErr := inst.RetractBundle(context.WithoutCancel(msg.Context()), req.Bundle, sender(msg), callContextFields(req.OboTask, req.OboEpoch, req.OboCall)); rErr != nil {
 		inst.refuse(msg, rErr.Error())
 		return
 	}

@@ -83,7 +83,7 @@ func (inst *Service) acceptOnArrival(t *task, rec *callRec, out opwire.Outcome) 
 	if out.Phase != opwire.PhaseProposed || !inst.autoAccepts(t, rec.spec, rec.consent) {
 		return out, false
 	}
-	inst.grantEventAsked(trail.GrantEventConfirmed, "host", reasonUnattended+": "+proposalReason(rec), t, nil, rec.asked())
+	inst.grantEventAsked(inst.ctx, trail.GrantEventConfirmed, "host", reasonUnattended+": "+proposalReason(rec), t, nil, rec.asked())
 	return opwire.Outcome{}, true
 }
 

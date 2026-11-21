@@ -73,7 +73,7 @@ func TestAnAgentsPublishCarriesTheDispatchersContext(t *testing.T) {
 	svc := newTestService(t)
 	d := &fakeDispatcher{call: agentCall()}
 	svc.SetDispatcher(d)
-	res, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
+	res, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
 		By: windowA, OnBehalfOf: oboOf(d.call)})
 	require.NoError(t, err)
 	require.True(t, res.Context.Has)
@@ -111,7 +111,7 @@ func TestAnAgentsPublishCarriesTheDispatchersContext(t *testing.T) {
 	}
 	assert.False(t, a.Context.Val.InFlight, "the fake dispatcher answers for a call already answered")
 
-	re, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
+	re, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
 		By: windowA, OnBehalfOf: oboOf(d.call)})
 	require.NoError(t, err)
 	assert.Equal(t, AuditRepublish, svc.auditRecords()[1].Operation)
@@ -124,13 +124,13 @@ func TestAnUnattestedContextIsRefusedAndAudited(t *testing.T) {
 	svc := newTestService(t)
 	call := agentCall()
 
-	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
+	_, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
 		By: windowA, OnBehalfOf: oboOf(call)})
 	assert.ErrorIs(t, err, ErrUnattested, "no dispatcher, nothing can confirm the claim")
 
 	d := &fakeDispatcher{call: call}
 	svc.SetDispatcher(d)
-	_, err = svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
+	_, err = svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
 		By: windowB, OnBehalfOf: oboOf(call)})
 	assert.ErrorIs(t, err, ErrUnattested, "another window cannot publish under the call")
 	assert.Equal(t, 0, svc.LiveCount())
@@ -147,11 +147,11 @@ func TestAnUnattestedContextIsRefusedAndAudited(t *testing.T) {
 
 func TestThePersonsOperationsAreAuditedWithoutAContext(t *testing.T) {
 	svc := newTestService(t)
-	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
+	_, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
 	require.NoError(t, err)
-	_, err = svc.ResolveBundle("sales", windowB, nil)
+	_, err = svc.ResolveBundle(t.Context(), "sales", windowB, nil)
 	require.NoError(t, err)
-	require.NoError(t, svc.RetractBundle("sales", windowA, nil))
+	require.NoError(t, svc.RetractBundle(t.Context(), "sales", windowA, nil))
 	audits := svc.auditRecords()
 	require.Len(t, audits, 2, "a resolve no agent caused is not a trail row")
 	assert.Equal(t, AuditPublish, audits[0].Operation)
@@ -166,9 +166,9 @@ func TestAnAgentsResolveIsAudited(t *testing.T) {
 	svc := newTestService(t)
 	d := &fakeDispatcher{call: agentCall()}
 	svc.SetDispatcher(d)
-	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowB})
+	_, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowB})
 	require.NoError(t, err)
-	_, err = svc.ResolveBundle("sales", windowA, oboOf(d.call))
+	_, err = svc.ResolveBundle(t.Context(), "sales", windowA, oboOf(d.call))
 	require.NoError(t, err)
 	audits := svc.auditRecords()
 	require.Len(t, audits, 2)
@@ -234,7 +234,7 @@ func TestTheAuditLandsOnTheTrail(t *testing.T) {
 	d := &fakeDispatcher{call: agentCall()}
 	svc.SetDispatcher(d)
 
-	_, err = svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
+	_, err = svc.PublishBundle(ctx, BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
 		By: windowA, OnBehalfOf: oboOf(d.call)})
 	require.NoError(t, err)
 	require.NoError(t, rec.Flush(ctx))
@@ -263,11 +263,11 @@ func TestTheAuditLandsOnTheTrail(t *testing.T) {
 // §SD5).
 func TestProvenanceNamesTheBytesABundleCameFrom(t *testing.T) {
 	svc := newTestService(t)
-	first, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
+	first, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
 	require.NoError(t, err)
 	orders := first.Datasets[0]
 
-	derived, err := svc.PublishBundle(BundlePublishInput{Alias: "summary", Document: []byte(testDoc), By: windowA,
+	derived, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "summary", Document: []byte(testDoc), By: windowA,
 		Datasets:   []BundleDatasetInput{{LocalName: "orders", ArrowIPCStream: int64Stream(t, false, 6)}},
 		Provenance: BundleProvenance{SourceSql: "SELECT sum(v) FROM keelson('orders')", InputHandles: []string{orders.Handle, "adhoc_00000000000000ff"}}})
 	require.NoError(t, err)
@@ -293,7 +293,7 @@ func TestProvenanceNamesTheBytesABundleCameFrom(t *testing.T) {
 	assert.Equal(t, []string{"sales__orders", ""}, row.inputAliases)
 	assert.Equal(t, "SELECT sum(v) FROM keelson('orders')", row.sourceSql)
 
-	_, err = svc.PublishBundle(BundlePublishInput{Alias: "bad", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA,
+	_, err = svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "bad", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA,
 		Provenance: BundleProvenance{InputHandles: []string{"orders"}}})
 	assert.Error(t, err, "an input is a handle, never an alias")
 }

@@ -577,7 +577,7 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 		t.reply = option.Some(openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: resp.Content, ToolCalls: resp.ToolCalls})
 		t.reasoning = resp.Reasoning
 	}
-	rep.Retention, rep.RetentionReason = inst.record(rec, t)
+	rep.Retention, rep.RetentionReason = inst.record(context.WithoutCancel(msg.Context()), rec, t)
 	inst.publishCall(rec, chain, class, decision, used)
 	lg := inst.log.Debug()
 	if !rep.Ok {
@@ -635,7 +635,7 @@ func (inst *Service) refuseWith(msg *app.Msg, reason string, rec CallRecord, t *
 	if rec.CallId == "" {
 		rec.CallId = inst.mintCallId()
 	}
-	inst.record(rec, t)
+	inst.record(context.WithoutCancel(msg.Context()), rec, t)
 	inst.log.Warn().Str("sender", string(msg.Sender)).Str("purpose", rec.Purpose).Str("reason", reason).Str("path", rep.ApprovalPath).Msg(logMsg)
 	rep.ErrorKind, rep.Reason, rep.CallId = errKindRefused, reason, rec.CallId
 	inst.reply(msg.Reply, rep)
@@ -645,7 +645,7 @@ func (inst *Service) refuseWith(msg *app.Msg, reason string, rec CallRecord, t *
 // reply says whether to wait or stop, which rule, and when to retry.
 func (inst *Service) refuseAdmission(msg *app.Msg, d ration.Decision, rec CallRecord, t *turn, chain ration.Chain, class ration.ClassE) {
 	rec.Refused, rec.Error = true, d.Reason
-	inst.record(rec, t)
+	inst.record(context.WithoutCancel(msg.Context()), rec, t)
 	inst.log.Info().Str("sender", string(msg.Sender)).Str("purpose", rec.Purpose).Str("rule", d.Rule).Str("refusal", d.Refusal.String()).
 		Str("reason", d.Reason).Msg("llm: refused by a metering rule")
 	inst.publishCall(rec, chain, class, d, nil)

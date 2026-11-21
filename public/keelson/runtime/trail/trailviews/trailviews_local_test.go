@@ -163,20 +163,20 @@ func writeEpisode(t *testing.T, exec *chexec.LocalExecutor) {
 	delegated := chat
 	delegated.Delegation = task
 
-	require.NoError(t, rec.AgentGrant(step(), delegated, option.None[trail.Cause](), trail.AgentGrant{
+	require.NoError(t, rec.AgentGrant(t.Context(), step(), delegated, option.None[trail.Cause](), trail.AgentGrant{
 		Event: trail.GrantEventApproved, Plan: "write a note", PlanDigest: "pd-1", DecidedBy: "host", CallsBudget: 200,
 	}))
 
 	callAt := step()
-	require.NoError(t, rec.LlmCall(callAt, chat, trail.LlmCall{
+	require.NoError(t, rec.LlmCall(t.Context(), callAt, chat, trail.LlmCall{
 		CallId: "call-1", Purpose: "chat/turn", Sensitivity: "ordinary", Model: "m", EndpointHost: "localhost",
 		Messages: 2, InputTokens: 10, OutputTokens: 1, ToolCalls: 1, FinishReason: "tool_calls", Retention: "kept",
 		Admission: option.Some("queued"), QueuedMs: option.Some(uint64(40)), Route: option.Some("local"), Tier: 2,
 		Approval: option.Some(uint64(77)),
 	}))
-	require.NoError(t, rec.LlmMessage(callAt, chat, trail.LlmMessage{CallId: "call-1", Ordinal: 0, Role: "user", Sensitivity: "ordinary", Bytes: 19},
+	require.NoError(t, rec.LlmMessage(t.Context(), callAt, chat, trail.LlmMessage{CallId: "call-1", Ordinal: 0, Role: "user", Sensitivity: "ordinary", Bytes: 19},
 		option.Some(trail.LlmMessageBody{Content: "please write a note"})))
-	require.NoError(t, rec.LlmMessage(callAt, chat, trail.LlmMessage{CallId: "call-1", Ordinal: 1, Role: "assistant", Sensitivity: "ordinary", ToolNames: []string{"call_operation"}},
+	require.NoError(t, rec.LlmMessage(t.Context(), callAt, chat, trail.LlmMessage{CallId: "call-1", Ordinal: 1, Role: "assistant", Sensitivity: "ordinary", ToolNames: []string{"call_operation"}},
 		option.None[trail.LlmMessageBody]()))
 
 	cause := func(index uint32) option.Option[trail.Cause] {
@@ -186,20 +186,20 @@ func writeEpisode(t *testing.T, exec *chexec.LocalExecutor) {
 		return trail.AgentAction{Key: key, Instance: 2, App: "apps/opsdemo", Operation: "set_note", Effect: "document",
 			Decision: decision, Phase: phase, CallTitle: title, Reason: reason, BudgetLeft: 199}
 	}
-	require.NoError(t, rec.AgentAction(step(), delegated, cause(0), action("call-1#0", "dispatch", "accepted", []string{"Writing the note"}, nil)))
-	require.NoError(t, rec.AgentAction(step(), delegated, cause(0), action("call-1#0", "final", "rendered", nil, nil)))
-	require.NoError(t, rec.AgentAction(step(), delegated, cause(1), action("call-1#1", "dispatch", "refused", nil, []string{"above the ceiling"})))
+	require.NoError(t, rec.AgentAction(t.Context(), step(), delegated, cause(0), action("call-1#0", "dispatch", "accepted", []string{"Writing the note"}, nil)))
+	require.NoError(t, rec.AgentAction(t.Context(), step(), delegated, cause(0), action("call-1#0", "final", "rendered", nil, nil)))
+	require.NoError(t, rec.AgentAction(t.Context(), step(), delegated, cause(1), action("call-1#1", "dispatch", "refused", nil, []string{"above the ceiling"})))
 
 	answerAt := step()
 	answer := trail.Context{Origin: chat.Origin, Conversation: conv("turn-1", 1)}
-	require.NoError(t, rec.LlmCall(answerAt, answer, trail.LlmCall{
+	require.NoError(t, rec.LlmCall(t.Context(), answerAt, answer, trail.LlmCall{
 		CallId: "call-2", Parent: option.Some("call-1"), Purpose: "chat/turn", Sensitivity: "ordinary", Model: "m",
 		EndpointHost: "localhost", Messages: 1, InputTokens: 4, OutputTokens: 1, FinishReason: "stop", Retention: "kept",
 	}))
-	require.NoError(t, rec.LlmMessage(answerAt, answer, trail.LlmMessage{CallId: "call-2", Ordinal: 2, Role: "assistant", Sensitivity: "ordinary", Bytes: 5},
+	require.NoError(t, rec.LlmMessage(t.Context(), answerAt, answer, trail.LlmMessage{CallId: "call-2", Ordinal: 2, Role: "assistant", Sensitivity: "ordinary", Bytes: 5},
 		option.Some(trail.LlmMessageBody{Content: "Done."})))
 
-	require.NoError(t, rec.AgentGrant(step(), delegated, option.None[trail.Cause](), trail.AgentGrant{
+	require.NoError(t, rec.AgentGrant(t.Context(), step(), delegated, option.None[trail.Cause](), trail.AgentGrant{
 		Event: trail.GrantEventEnded, Plan: "write a note", PlanDigest: "pd-1", DecidedBy: "host",
 	}))
 	require.NoError(t, rec.Flush(context.Background()))

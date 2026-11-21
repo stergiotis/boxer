@@ -29,7 +29,7 @@ type ColumnsResult struct {
 // agent's read attested and held to the task's grant, or to its having
 // published the dataset. keelson('adhoc_bundles') and the trail carry only
 // the statistics that are not values.
-func (inst *Service) ReadColumns(alias string, by Identity, obo *app.OnBehalfOf) (res ColumnsResult, err error) {
+func (inst *Service) ReadColumns(ctx context.Context, alias string, by Identity, obo *app.OnBehalfOf) (res ColumnsResult, err error) {
 	cc, err := inst.attest(by, obo)
 	if err == nil {
 		res, err = inst.columns(alias)
@@ -46,7 +46,7 @@ func (inst *Service) ReadColumns(alias string, by Identity, obo *app.OnBehalfOf)
 	} else {
 		r.Outcome, r.Revision, r.Handles = AuditApplied, res.Revision, []string{res.Handle}
 	}
-	inst.audit(r)
+	inst.audit(ctx, r)
 	return
 }
 
@@ -65,7 +65,7 @@ func (inst *Service) columns(alias string) (res ColumnsResult, err error) {
 }
 
 func (inst *Service) handleReadColumns(msg *app.Msg, req adhocrequest.AdhocRequest) {
-	res, err := inst.ReadColumns(req.Alias, sender(msg), callContextFields(req.OboTask, req.OboEpoch, req.OboCall))
+	res, err := inst.ReadColumns(context.WithoutCancel(msg.Context()), req.Alias, sender(msg), callContextFields(req.OboTask, req.OboEpoch, req.OboCall))
 	if err != nil {
 		inst.reply(msg.Reply, readRefusal(err))
 		return

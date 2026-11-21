@@ -149,7 +149,7 @@ func TestAnAgentsReadOfABundleNeedsTheBundle(t *testing.T) {
 	d := &fakeDispatcher{call: agentCall()}
 	d.call.App, d.call.Instance = "test.notebook", 2
 	svc.SetDispatcher(d)
-	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t)})
+	_, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t)})
 	require.NoError(t, err)
 	reader := bus.NewClient("test.notebook", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	reader.SetInstanceKey(2)
@@ -177,7 +177,7 @@ func TestATaskReadsWhatItPublished(t *testing.T) {
 	svc, bus := readService(t)
 	d := &fakeDispatcher{call: agentCall()}
 	svc.SetDispatcher(d)
-	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
+	_, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
 		By: windowA, OnBehalfOf: oboOf(d.call)})
 	require.NoError(t, err)
 	window := bus.NewClient(windowA.App, []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
@@ -207,7 +207,7 @@ func TestColumnValuesAreReadAsTheDataIs(t *testing.T) {
 	svc, bus := readService(t)
 	d := &fakeDispatcher{call: agentCall()}
 	svc.SetDispatcher(d)
-	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
+	_, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
 		By: windowA, OnBehalfOf: oboOf(d.call)})
 	require.NoError(t, err)
 	window := bus.NewClient(windowA.App, []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})

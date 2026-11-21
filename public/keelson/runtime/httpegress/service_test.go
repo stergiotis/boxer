@@ -240,7 +240,7 @@ func TestCallRingWraps(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	for i := range 5 {
-		svc.record(CallRecord{Purpose: string(rune('a' + i))})
+		svc.record(t.Context(), CallRecord{Purpose: string(rune('a' + i))})
 	}
 	var got []string
 	for _, r := range svc.Calls() {

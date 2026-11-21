@@ -84,7 +84,7 @@ type ReadResult struct {
 // audited, and one an agent's call caused is attested first and then held
 // to the task's grant as a run in play is: it needs the bundle, or the
 // dataset's alias, among the grant's destinations.
-func (inst *Service) Read(alias string, by Identity, obo *app.OnBehalfOf) (res ReadResult, err error) {
+func (inst *Service) Read(ctx context.Context, alias string, by Identity, obo *app.OnBehalfOf) (res ReadResult, err error) {
 	cc, err := inst.attest(by, obo)
 	if err == nil {
 		res, err = inst.read(alias)
@@ -103,7 +103,7 @@ func (inst *Service) Read(alias string, by Identity, obo *app.OnBehalfOf) (res R
 		r.Handles, r.Rows = []string{res.Handle}, []uint64{res.Rows}
 		r.Bytes, r.StreamDigests = []uint64{uint64(len(res.ArrowIPCStream))}, []string{res.StreamDigest}
 	}
-	inst.audit(r)
+	inst.audit(ctx, r)
 	return
 }
 
@@ -205,7 +205,7 @@ func (inst *Service) handleRead(msg *app.Msg) {
 		inst.handleReadColumns(msg, req)
 		return
 	}
-	res, rErr := inst.Read(req.Alias, sender(msg), callContextFields(req.OboTask, req.OboEpoch, req.OboCall))
+	res, rErr := inst.Read(context.WithoutCancel(msg.Context()), req.Alias, sender(msg), callContextFields(req.OboTask, req.OboEpoch, req.OboCall))
 	if rErr != nil {
 		inst.reply(msg.Reply, readRefusal(rErr))
 		return

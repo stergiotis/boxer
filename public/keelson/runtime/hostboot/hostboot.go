@@ -905,7 +905,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			var covTrail *covtrail.Service
 			var sinks []func(upd *covsnap.Update)
 			if covtrail.Enabled.Get() {
-				covTrail = covtrail.New(covtrail.Options{Trail: rt.Trail, Run: rt.RunInfo, Log: logger})
+				covTrail = covtrail.New(ctx, covtrail.Options{Trail: rt.Trail, Run: rt.RunInfo, Log: logger})
 				sinks = append(sinks, covTrail.OnUpdate)
 			}
 			if s, stop, cerr := covscrape.StartCoverageSampler(context.Background(), covPub, covscrape.DefaultHostToken(), covInterval, logger, sinks...); cerr != nil {

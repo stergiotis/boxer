@@ -1,6 +1,7 @@
 package adhocdata
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -109,7 +110,7 @@ func (inst *Service) attest(by Identity, obo *app.OnBehalfOf) (cc option.Option[
 }
 
 // audit buffers r as a trail row and hands it to the test hook.
-func (inst *Service) audit(r AuditRecord) {
+func (inst *Service) audit(ctx context.Context, r AuditRecord) {
 	if r.At.IsZero() {
 		r.At = time.Now()
 	}
@@ -117,12 +118,12 @@ func (inst *Service) audit(r AuditRecord) {
 		(*hook)(r)
 	}
 	inst.emitAudit(r.Operation+"-bundle-"+r.Outcome, "", r.Bundle, r.Revision)
-	inst.persistAudit(r)
+	inst.persistAudit(ctx, r)
 }
 
 // persistAudit buffers r as an AdhocDataset row on the trail (ADR-0277)
 // and wakes the flusher; without a durable trail it does nothing.
-func (inst *Service) persistAudit(r AuditRecord) {
+func (inst *Service) persistAudit(ctx context.Context, r AuditRecord) {
 	rec := inst.trail
 	if !rec.Durable() {
 		return
@@ -165,7 +166,7 @@ func (inst *Service) persistAudit(r AuditRecord) {
 	if r.Reason != "" {
 		row.Reason = []string{r.Reason}
 	}
-	if err := rec.AdhocDataset(r.At, c, cause, row); err != nil {
+	if err := rec.AdhocDataset(ctx, r.At, c, cause, row); err != nil {
 		inst.log.Warn().Err(err).Str("bundle", r.Bundle).Msg("adhocdata: buffer bundle audit row")
 		return
 	}

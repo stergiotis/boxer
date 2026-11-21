@@ -63,6 +63,8 @@ type Options struct {
 // the sampler, so its sink can be handed to the producer, and attached to
 // the sampler once that exists; updates that arrive in between are held.
 type Service struct {
+	// ctx is New's: the service's lifetime.
+	ctx   context.Context
 	rec   *trail.Recorder
 	run   *runinfo.Inst
 	log   zerolog.Logger
@@ -84,9 +86,10 @@ type Service struct {
 	buf   bytes.Buffer
 }
 
-// New builds the service; it writes nothing until Attach.
-func New(opts Options) (inst *Service) {
-	inst = &Service{rec: opts.Trail, run: opts.Run, log: opts.Log, read: opts.Read, clock: opts.Clock}
+// New builds the service; it writes nothing until Attach. ctx is its
+// lifetime: the rows it writes carry its values.
+func New(ctx context.Context, opts Options) (inst *Service) {
+	inst = &Service{ctx: ctx, rec: opts.Trail, run: opts.Run, log: opts.Log, read: opts.Read, clock: opts.Clock}
 	if inst.read == nil {
 		inst.read = coverage.ReadCounters
 	}
@@ -106,7 +109,7 @@ func (inst *Service) OnUpdate(upd *covsnap.Update) {
 		return
 	}
 	inst.mu.Unlock()
-	inst.writeSample(upd)
+	inst.writeSample(inst.ctx, upd)
 }
 
 // Attach binds the service to the build the sampler decoded: it writes
@@ -133,7 +136,7 @@ func (inst *Service) Attach(ctx context.Context, src MetaSourceI) (err error) {
 		inst.writeBuild(ctx, meta)
 	}()
 	for _, upd := range pending {
-		inst.writeSample(upd)
+		inst.writeSample(ctx, upd)
 	}
 	return nil
 }
@@ -186,7 +189,7 @@ func (inst *Service) writeBuild(ctx context.Context, meta *covsnap.MetaProfile) 
 	if inst.run != nil {
 		row.BuildId, row.VcsRevision, row.VcsModified = inst.run.BuildId, inst.run.VcsRevision, inst.run.VcsModified
 	}
-	if err = inst.rec.CoverageBuild(at, inst.origin(), row); err != nil {
+	if err = inst.rec.CoverageBuild(ctx, at, inst.origin(), row); err != nil {
 		inst.log.Warn().Err(err).Msg("coverage trail: unable to write the build row")
 		return
 	}
@@ -219,7 +222,7 @@ func (inst *Service) writeFuncs(ctx context.Context, at time.Time, meta *covsnap
 		if len(batch) == 0 {
 			return nil
 		}
-		if err = inst.rec.CoverageFuncs(at, c, batch); err != nil {
+		if err = inst.rec.CoverageFuncs(ctx, at, c, batch); err != nil {
 			return
 		}
 		batch = batch[:0]
@@ -250,7 +253,7 @@ func (inst *Service) writeFuncs(ctx context.Context, at time.Time, meta *covsnap
 	return
 }
 
-func (inst *Service) writeSample(upd *covsnap.Update) {
+func (inst *Service) writeSample(ctx context.Context, upd *covsnap.Update) {
 	if inst.rec == nil || upd == nil || upd.Units == nil || upd.Units.IsEmpty() {
 		return
 	}
@@ -262,7 +265,7 @@ func (inst *Service) writeSample(upd *covsnap.Update) {
 	if upd.SampledAtUnixMs == 0 {
 		at = inst.clock()
 	}
-	if err := inst.rec.CoverageSample(at, inst.origin(), row); err != nil {
+	if err := inst.rec.CoverageSample(ctx, at, inst.origin(), row); err != nil {
 		inst.log.Warn().Err(err).Msg("coverage trail: unable to write a sample row")
 		return
 	}
@@ -360,7 +363,7 @@ func (inst *bracket) End(a opengine.Applied) {
 	if inst.svc.rec == nil {
 		return
 	}
-	if err = inst.svc.rec.CoverageAgentApply(t0, c, row); err != nil {
+	if err = inst.svc.rec.CoverageAgentApply(inst.svc.ctx, t0, c, row); err != nil {
 		inst.svc.log.Warn().Err(err).Msg("coverage trail: unable to write an apply row")
 		return
 	}

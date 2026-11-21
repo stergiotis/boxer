@@ -64,7 +64,7 @@ func TestBundleListSqlRunsAgainstTheCatalog(t *testing.T) {
 	require.NoError(t, w.Write(rec))
 	require.NoError(t, w.Close())
 	rec.Release()
-	_, err = svc.PublishBundle(adhocdata.BundlePublishInput{Alias: "sales", Document: []byte("doc"),
+	_, err = svc.PublishBundle(t.Context(), adhocdata.BundlePublishInput{Alias: "sales", Document: []byte("doc"),
 		Datasets: []adhocdata.BundleDatasetInput{{LocalName: "orders", ArrowIPCStream: buf.Bytes()}}})
 	require.NoError(t, err)
 

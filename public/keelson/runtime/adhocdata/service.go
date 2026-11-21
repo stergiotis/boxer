@@ -734,7 +734,7 @@ func WindowAlias(alias string, instance uint64) (scoped string) {
 // not mark KeepAfterClose (ADR-0240 §SD5). The runtime is the caller, so
 // ownership is not re-checked; a dataset kept after close is the app's and
 // lives until Close.
-func (inst *Service) retractOwnedBy(who Identity) (retracted int) {
+func (inst *Service) retractOwnedBy(ctx context.Context, who Identity) (retracted int) {
 	inst.mu.RLock()
 	var bundles []string
 	for alias, b := range inst.bundles {
@@ -753,7 +753,7 @@ func (inst *Service) retractOwnedBy(who Identity) (retracted int) {
 	}
 	inst.mu.RUnlock()
 	for _, alias := range bundles {
-		if err := inst.retractBundle(alias, Identity{}, option.None[app.CallContext](), AuditWithdraw); err == nil {
+		if err := inst.retractBundle(ctx, alias, Identity{}, option.None[app.CallContext](), AuditWithdraw); err == nil {
 			retracted++
 		}
 	}

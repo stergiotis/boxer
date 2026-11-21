@@ -1,6 +1,7 @@
 package adhocdata
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"strings"
@@ -231,7 +232,7 @@ func validateBundle(in BundlePublishInput) (err error) {
 // quota checks run before any byte is sealed and again at commit. An
 // agent-caused publish is attested first, and every publish, applied or
 // refused, is audited (§SD5).
-func (inst *Service) PublishBundle(in BundlePublishInput) (res BundleResult, err error) {
+func (inst *Service) PublishBundle(ctx context.Context, in BundlePublishInput) (res BundleResult, err error) {
 	cc, err := inst.attest(in.By, in.OnBehalfOf)
 	op := AuditPublish
 	if err == nil {
@@ -243,7 +244,7 @@ func (inst *Service) PublishBundle(in BundlePublishInput) (res BundleResult, err
 		for _, d := range in.Datasets {
 			r.LocalNames = append(r.LocalNames, d.LocalName)
 		}
-		inst.audit(r)
+		inst.audit(ctx, r)
 		return
 	}
 	r.Outcome, r.Revision, r.Owner, r.DocumentDigest = AuditApplied, res.Revision, res.Owner, res.DocumentDigest
@@ -255,7 +256,7 @@ func (inst *Service) PublishBundle(in BundlePublishInput) (res BundleResult, err
 		r.InputDigests = append(r.InputDigests, in.StreamDigest)
 	}
 	r.fillColumns(inst, res.Datasets)
-	inst.audit(r)
+	inst.audit(ctx, r)
 	return
 }
 
@@ -502,7 +503,7 @@ func (inst *Service) aliasHolderLocked(alias string) (holder *Identity) {
 // §SD5); the person's and the apps' own resolves — every bundle view
 // resolves on each revision — are not, so the trail records what an agent
 // looked up rather than every follower's reconcile.
-func (inst *Service) ResolveBundle(alias string, by Identity, obo *app.OnBehalfOf) (res BundleResult, err error) {
+func (inst *Service) ResolveBundle(ctx context.Context, alias string, by Identity, obo *app.OnBehalfOf) (res BundleResult, err error) {
 	cc, err := inst.attest(by, obo)
 	if err == nil {
 		res, err = inst.resolveBundle(alias)
@@ -517,7 +518,7 @@ func (inst *Service) ResolveBundle(alias string, by Identity, obo *app.OnBehalfO
 		r.Outcome, r.Revision, r.Owner, r.DocumentDigest = AuditApplied, res.Revision, res.Owner, res.DocumentDigest
 		r.fillDatasets(res.Datasets)
 	}
-	inst.audit(r)
+	inst.audit(ctx, r)
 	return
 }
 
@@ -545,18 +546,18 @@ func (inst *Service) resolveBundle(alias string) (res BundleResult, err error) {
 // phases as Retract withdraws one, and the bundle stops resolving at once.
 // Only its owner, or the runtime, may retract it. An agent-caused retract
 // is attested first; every retract is audited (ADR-0288 §SD5).
-func (inst *Service) RetractBundle(alias string, by Identity, obo *app.OnBehalfOf) (err error) {
+func (inst *Service) RetractBundle(ctx context.Context, alias string, by Identity, obo *app.OnBehalfOf) (err error) {
 	cc, err := inst.attest(by, obo)
 	if err != nil {
-		inst.audit(AuditRecord{Operation: AuditRetract, Outcome: AuditRefused, Reason: err.Error(), Bundle: alias, By: by})
+		inst.audit(ctx, AuditRecord{Operation: AuditRetract, Outcome: AuditRefused, Reason: err.Error(), Bundle: alias, By: by})
 		return
 	}
-	return inst.retractBundle(alias, by, cc, AuditRetract)
+	return inst.retractBundle(ctx, alias, by, cc, AuditRetract)
 }
 
 // retractBundle is RetractBundle's body, audited as op: retract, or
 // withdraw when the runtime retracts for a closed window.
-func (inst *Service) retractBundle(alias string, by Identity, cc option.Option[app.CallContext], op string) (err error) {
+func (inst *Service) retractBundle(ctx context.Context, alias string, by Identity, cc option.Option[app.CallContext], op string) (err error) {
 	r := AuditRecord{Operation: op, Bundle: alias, By: by, Context: cc}
 	defer func() {
 		if err != nil {
@@ -564,7 +565,7 @@ func (inst *Service) retractBundle(alias string, by Identity, cc option.Option[a
 		} else {
 			r.Outcome = AuditApplied
 		}
-		inst.audit(r)
+		inst.audit(ctx, r)
 	}()
 	inst.mu.Lock()
 	if inst.closed {

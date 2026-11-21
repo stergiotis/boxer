@@ -348,7 +348,7 @@ func startCoverageTrail(ctx context.Context, exec recordstore.ExecutorI, runInst
 		{Pattern: coveragebus.SubjectWildcard, Direction: app.CapDirectionPub},
 	})
 	rec := trail.NewRecorder(exec, runInst.RunId, logger, trail.WithOriginBy(evidence.OriginBySelf))
-	covTrail := covtrail.New(covtrail.Options{Trail: rec, Run: runInst, Log: logger})
+	covTrail := covtrail.New(ctx, covtrail.Options{Trail: rec, Run: runInst, Log: logger})
 	sampler, stopSampler, err := covscrape.StartCoverageSampler(ctx, pub, covscrape.DefaultHostToken(), interval, logger, covTrail.OnUpdate)
 	if err != nil {
 		logger.Info().Err(err).Msg("watchbill: coverage sampling unavailable for this run")

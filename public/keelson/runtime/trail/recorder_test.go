@@ -57,12 +57,12 @@ func (inst *gateExec) landed() (n int64) {
 func TestFlushDoesNotBlockWriters(t *testing.T) {
 	exec := &gateExec{open: true, held: make(chan struct{}), entered: make(chan struct{}, 1)}
 	rec := NewRecorder(exec, "run-1", zerolog.Nop())
-	require.NoError(t, rec.LlmCall(time.Now(), Context{}, LlmCall{CallId: "c1"}))
+	require.NoError(t, rec.LlmCall(t.Context(), time.Now(), Context{}, LlmCall{CallId: "c1"}))
 	flushed := make(chan error, 1)
 	go func() { flushed <- rec.Flush(context.Background()) }()
 	<-exec.entered
 	wrote := make(chan error, 1)
-	go func() { wrote <- rec.LlmCall(time.Now(), Context{}, LlmCall{CallId: "c2"}) }()
+	go func() { wrote <- rec.LlmCall(t.Context(), time.Now(), Context{}, LlmCall{CallId: "c2"}) }()
 	select {
 	case err := <-wrote:
 		require.NoError(t, err)
@@ -83,9 +83,9 @@ func TestHeldRowsLandOnRecovery(t *testing.T) {
 	exec := &gateExec{}
 	rec := NewRecorder(exec, "run-1", zerolog.Nop())
 	defer rec.Close()
-	require.NoError(t, rec.LlmCall(time.Now(), Context{}, LlmCall{CallId: "c1"}))
+	require.NoError(t, rec.LlmCall(t.Context(), time.Now(), Context{}, LlmCall{CallId: "c1"}))
 	require.Error(t, rec.Flush(context.Background()))
-	require.NoError(t, rec.LlmCall(time.Now(), Context{}, LlmCall{CallId: "c2"}))
+	require.NoError(t, rec.LlmCall(t.Context(), time.Now(), Context{}, LlmCall{CallId: "c2"}))
 	require.Error(t, rec.Flush(context.Background()))
 	exec.mu.Lock()
 	exec.open = true
@@ -102,7 +102,7 @@ func TestBacklogIsBounded(t *testing.T) {
 	defer rec.Close()
 	for i := 0; i < 2*maxBacklog/batch; i++ {
 		for j := 0; j < batch; j++ {
-			require.NoError(t, rec.HttpFetch(time.Now(), Context{}, HttpFetch{}))
+			require.NoError(t, rec.HttpFetch(t.Context(), time.Now(), Context{}, HttpFetch{}))
 		}
 		require.Error(t, rec.Flush(context.Background()))
 	}

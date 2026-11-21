@@ -184,7 +184,7 @@ func (inst *Service) handle(msg *app.Msg) {
 	case derr != nil:
 		// Not a publish yet, but a refused one all the same (ADR-0341 §SD5).
 		res := Result{Refused: true, Reason: "the request does not decode: " + derr.Error()}
-		inst.record(time.Now(), msg.Sender, msg.SenderInstance, trail.LadingPublish{Tag: uint64(tag)}, res)
+		inst.record(context.WithoutCancel(msg.Context()), time.Now(), msg.Sender, msg.SenderInstance, trail.LadingPublish{Tag: uint64(tag)}, res)
 		inst.reply(msg, res)
 		return
 	case req.DryRun:
@@ -225,7 +225,7 @@ func (inst *Service) reply(msg *app.Msg, res Result) {
 func (inst *Service) Publish(ctx context.Context, by app.AppIdT, instance uint64, tag identifier.TagValue, req Request) (res Result) {
 	row := trailRow(tag, req)
 	at := time.Now()
-	defer func() { inst.record(at, by, instance, row, res) }()
+	defer func() { inst.record(ctx, at, by, instance, row, res) }()
 	refuse := func(reason string) Result {
 		return Result{Mount: req.Mount, Refused: true, Reason: reason}
 	}
@@ -430,7 +430,7 @@ func trailRow(tag identifier.TagValue, req Request) (row trail.LadingPublish) {
 }
 
 // record writes the publish's trail row and logs it.
-func (inst *Service) record(at time.Time, by app.AppIdT, instance uint64, row trail.LadingPublish, res Result) {
+func (inst *Service) record(ctx context.Context, at time.Time, by app.AppIdT, instance uint64, row trail.LadingPublish, res Result) {
 	switch {
 	case res.Refused:
 		row.Decision = "refused"
@@ -453,7 +453,7 @@ func (inst *Service) record(at time.Time, by app.AppIdT, instance uint64, row tr
 		return
 	}
 	c := trail.Context{Origin: rec.OriginOf(by, instance)}
-	if err := rec.LadingPublish(at, c, row); err != nil {
+	if err := rec.LadingPublish(ctx, at, c, row); err != nil {
 		inst.log.Warn().Err(err).Msg("ladingpublish: buffer the trail row")
 		return
 	}

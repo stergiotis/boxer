@@ -881,7 +881,7 @@ func (inst *Service) outcomeOf(t *task, rec *callRec, wait time.Duration) (w wir
 				rec.outcome.Confined = confined
 				if st.Phase.Final() {
 					info, _ := inst.captures.Info(rec.job)
-					inst.recordCapture(t, rec, info.Decision, info, st.Phase, st.Reason, confined)
+					inst.recordCapture(inst.ctx, t, rec, info.Decision, info, st.Phase, st.Reason, confined)
 				}
 			}
 		} else if rec.routed && !rec.outcome.Phase.Final() && inst.cfg.Host != nil {
@@ -1161,7 +1161,7 @@ func (inst *Service) capture(msg *app.Msg) (rep wireCallReply) {
 	rec.capture = &captureRec{format: format, windows: windows}
 	if err == nil && decision.Effect != capture.EffectPermit {
 		inst.mu.Lock()
-		inst.recordCapture(t, rec, decision, capture.Info{}, opwire.PhaseRefused, decision.Reason, confined)
+		inst.recordCapture(context.WithoutCancel(msg.Context()), t, rec, decision, capture.Info{}, opwire.PhaseRefused, decision.Reason, confined)
 		inst.mu.Unlock()
 		out = phaseOutcome(opwire.PhaseRefused, decision.Reason)
 		inst.settle(t, rec, out, false)

@@ -144,7 +144,7 @@ func (inst *Service) disclose(msg *app.Msg) (rep wireAck) {
 	if req.Reason != "" {
 		row.Reason = []string{req.Reason}
 	}
-	if err = inst.cfg.Trail.AgentDisclosure(r.At, c, cause, row); err != nil {
+	if err = inst.cfg.Trail.AgentDisclosure(context.WithoutCancel(msg.Context()), r.At, c, cause, row); err != nil {
 		rep.Reason = "the trail could not record the view: " + err.Error()
 		return
 	}

@@ -223,7 +223,7 @@ func TestTheSeriesStatisticsRunOverLocal(t *testing.T) {
 	at := time.Unix(1_700_000_000, 0).UTC()
 	c := trail.Context{Origin: rec.OriginOf("apps/chat", 1)}
 	call := func(offset time.Duration, in, out uint32, elapsed uint64) {
-		require.NoError(t, rec.LlmCall(at.Add(offset), c, trail.LlmCall{CallId: "call-" + offset.String(), Purpose: "book/slug", Sensitivity: "open",
+		require.NoError(t, rec.LlmCall(ctx, at.Add(offset), c, trail.LlmCall{CallId: "call-" + offset.String(), Purpose: "book/slug", Sensitivity: "open",
 			Model: "m", EndpointHost: "h", FinishReason: "stop", Retention: "ops", InputTokens: in, OutputTokens: out, ElapsedMs: elapsed}))
 	}
 	call(1*time.Second, 100, 10, 50)
@@ -299,12 +299,12 @@ func TestTheRulesAndAMarkRunOverLocal(t *testing.T) {
 	// The window.
 	event(1*time.Second, keelsonaudit.BusDomain, keelsonaudit.BusActionRequest, trail.OutcomeDenied, nil, keelsonaudit.BusRefSubject, "a.b")
 	grant := trail.Context{Origin: c.Origin, Delegation: option.Some(trail.Delegation{Task: "task-1", Epoch: 2})}
-	require.NoError(t, rec.AgentGrant(at.Add(2*time.Second), grant, option.None[trail.Cause](),
+	require.NoError(t, rec.AgentGrant(ctx, at.Add(2*time.Second), grant, option.None[trail.Cause](),
 		trail.AgentGrant{Event: trail.GrantEventWidened, Destinations: []string{"a", "b"}, DecidedBy: "person"}))
 	event(3*time.Second, "rules", "archived", trail.OutcomeOk, []string{"state", "archived"}, "rule", "r1")
 	event(5*time.Second, "rules", "updated", trail.OutcomeOk, []string{"state", "active", "from", "retired"}, "rule", "r1")
 	event(6*time.Second, "rules", "created", trail.OutcomeOk, []string{"state", "draft"}, "rule", "r3")
-	require.NoError(t, rec.LlmCall(at.Add(7*time.Second), c, trail.LlmCall{CallId: "call-1", Purpose: "book/slug", Sensitivity: "open",
+	require.NoError(t, rec.LlmCall(ctx, at.Add(7*time.Second), c, trail.LlmCall{CallId: "call-1", Purpose: "book/slug", Sensitivity: "open",
 		Model: "m", EndpointHost: "h", FinishReason: "stop", Retention: "ops", Refused: true}))
 	gap(12*time.Second, 10*time.Second, 11*time.Second)
 	require.NoError(t, rec.Flush(ctx))

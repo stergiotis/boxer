@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json/v2"
 	"slices"
 	"strconv"
@@ -135,7 +136,7 @@ func (inst *Service) record(t *task, rec *callRec, decision string, out opwire.O
 		}
 	}
 	inst.recMu.Unlock()
-	inst.persist(r)
+	inst.persist(inst.ctx, r)
 	inst.queueAction(r)
 }
 
@@ -165,9 +166,9 @@ func (inst *Service) recordGrantRefusal(msg *app.Msg, req wireGrantRequest, reas
 // persist buffers the row for the trail and wakes its flusher, so a call
 // never waits on the store. A failed buffer is logged; the in-process
 // record keeps the row either way.
-func (inst *Service) persist(r ActionRecord) {
+func (inst *Service) persist(ctx context.Context, r ActionRecord) {
 	c, cause, row := TrailRowOf(inst.cfg.Trail, r)
-	if err := inst.cfg.Trail.AgentAction(r.At, c, cause, row); err != nil {
+	if err := inst.cfg.Trail.AgentAction(ctx, r.At, c, cause, row); err != nil {
 		inst.log.Warn().Err(err).Str("task", r.Task).Str("key", r.Key).Msg("agent: buffer action row")
 		return
 	}
@@ -187,7 +188,7 @@ type captureRec struct {
 
 // recordCapture writes a capture's row on the trail (ADR-0281 §SD6), once:
 // when the capture service denies it, or when it reaches its final phase.
-func (inst *Service) recordCapture(t *task, rec *callRec, d capture.Decision, info capture.Info, phase opwire.PhaseE,
+func (inst *Service) recordCapture(ctx context.Context, t *task, rec *callRec, d capture.Decision, info capture.Info, phase opwire.PhaseE,
 	reason string, confined bool) {
 	if rec.capture == nil || rec.capture.recorded {
 		return
@@ -217,7 +218,7 @@ func (inst *Service) recordCapture(t *task, rec *callRec, d capture.Decision, in
 	if reason != "" {
 		row.Reason = []string{reason}
 	}
-	if err := inst.cfg.Trail.AgentCapture(r.At, c, cause, row); err != nil {
+	if err := inst.cfg.Trail.AgentCapture(ctx, r.At, c, cause, row); err != nil {
 		inst.log.Warn().Err(err).Str("task", r.Task).Str("key", r.Key).Msg("agent: buffer capture row")
 		return
 	}
@@ -283,12 +284,12 @@ func (inst *Service) grantEvent(event string, decidedBy string, reason string, t
 	if r != nil {
 		asked = r.asked
 	}
-	inst.grantEventAsked(event, decidedBy, reason, t, r, asked)
+	inst.grantEventAsked(inst.ctx, event, decidedBy, reason, t, r, asked)
 }
 
 // grantEventAsked is grantEvent with the turn and the model call that asked
 // for the event, when one did (ADR-0277 §SD1).
-func (inst *Service) grantEventAsked(event string, decidedBy string, reason string, t *task, r *request, asked wireCause) {
+func (inst *Service) grantEventAsked(ctx context.Context, event string, decidedBy string, reason string, t *task, r *request, asked wireCause) {
 	if !inst.cfg.Trail.Durable() {
 		return
 	}
@@ -336,7 +337,7 @@ func (inst *Service) grantEventAsked(event string, decidedBy string, reason stri
 	if reason != "" {
 		row.Reason = []string{reason}
 	}
-	if err := inst.cfg.Trail.AgentGrant(time.Now(), c, asked.cause(), row); err != nil {
+	if err := inst.cfg.Trail.AgentGrant(ctx, time.Now(), c, asked.cause(), row); err != nil {
 		inst.log.Warn().Err(err).Str("event", event).Msg("agent: buffer grant event")
 		return
 	}

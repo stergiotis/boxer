@@ -42,7 +42,7 @@ func TestEvidenceChecksL34HoldsBesideOtherWritersOfTheRun(t *testing.T) {
 	const run = "run-shared"
 	rec := trail.NewRecorder(exec, run, zerolog.Nop())
 	t.Cleanup(rec.Close)
-	require.NoError(t, rec.LlmCall(time.Now(), trail.Context{Origin: rec.OriginOf("apps/chat", 2)}, trail.LlmCall{CallId: "c1"}))
+	require.NoError(t, rec.LlmCall(ctx, time.Now(), trail.Context{Origin: rec.OriginOf("apps/chat", 2)}, trail.LlmCall{CallId: "c1"}))
 	require.NoError(t, rec.Flush(ctx))
 
 	sysm := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{})

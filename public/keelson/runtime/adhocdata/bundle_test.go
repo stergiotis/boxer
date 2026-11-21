@@ -29,7 +29,7 @@ var windowB = Identity{App: "test.app", Instance: 2}
 
 func TestPublishBundleMakesEveryDatasetLiveUnderMintedAliases(t *testing.T) {
 	svc := newTestService(t)
-	res, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
+	res, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1), res.Revision)
 	require.Len(t, res.Datasets, 2)
@@ -45,7 +45,7 @@ func TestPublishBundleMakesEveryDatasetLiveUnderMintedAliases(t *testing.T) {
 		assert.Equal(t, d.Handle, got.Handle, "the minted alias resolves to the bundle's dataset")
 	}
 
-	again, err := svc.ResolveBundle("sales", windowA, nil)
+	again, err := svc.ResolveBundle(t.Context(), "sales", windowA, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []byte(testDoc), again.Document)
 	assert.Equal(t, res.Datasets, again.Datasets)
@@ -56,10 +56,10 @@ func TestPublishBundleIsAllOrNothing(t *testing.T) {
 	svc := newTestService(t)
 	ds := twoDatasets(t)
 	ds[1].ArrowIPCStream = unsupportedStream(t)
-	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: ds, By: windowA})
+	_, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: ds, By: windowA})
 	require.Error(t, err)
 	assert.Equal(t, 0, svc.LiveCount(), "the dataset that sealed did not go live without its sibling")
-	_, err = svc.ResolveBundle("sales", windowA, nil)
+	_, err = svc.ResolveBundle(t.Context(), "sales", windowA, nil)
 	assert.ErrorIs(t, err, ErrNoLiveBundle)
 	_, err = svc.Resolve("sales__orders")
 	assert.ErrorIs(t, err, ErrNoLiveDataset)
@@ -83,7 +83,7 @@ func TestPublishBundleRefusesAMalformedBundle(t *testing.T) {
 	for name, in := range cases {
 		t.Run(name, func(t *testing.T) {
 			in.By = windowA
-			_, err := svc.PublishBundle(in)
+			_, err := svc.PublishBundle(t.Context(), in)
 			require.Error(t, err)
 			assert.Equal(t, 0, svc.LiveCount())
 		})
@@ -92,10 +92,10 @@ func TestPublishBundleRefusesAMalformedBundle(t *testing.T) {
 
 func TestRepublishBundleSwapsEverythingAndKeepsTheOldReadable(t *testing.T) {
 	svc := newTestService(t)
-	first, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
+	first, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
 	require.NoError(t, err)
 	doc2 := []byte(testDoc + "\n<!-- v2 -->\n")
-	second, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: doc2, By: windowA,
+	second, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: doc2, By: windowA,
 		Datasets: []BundleDatasetInput{{LocalName: "orders", ArrowIPCStream: int64Stream(t, false, 9, 9)}}})
 	require.NoError(t, err)
 	assert.Equal(t, uint64(2), second.Revision)
@@ -118,12 +118,12 @@ func TestRepublishBundleSwapsEverythingAndKeepsTheOldReadable(t *testing.T) {
 
 func TestBundleOwnershipAndAliasCollisions(t *testing.T) {
 	svc := newTestService(t)
-	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
+	_, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
 	require.NoError(t, err)
 
-	_, err = svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowB})
+	_, err = svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowB})
 	assert.ErrorIs(t, err, ErrNotOwner, "another window cannot republish the bundle")
-	assert.ErrorIs(t, svc.RetractBundle("sales", windowB, nil), ErrNotOwner)
+	assert.ErrorIs(t, svc.RetractBundle(t.Context(), "sales", windowB, nil), ErrNotOwner)
 
 	_, err = svc.Publish(PublishInput{Alias: "sales__orders", ArrowIPCStream: int64Stream(t, false, 1), By: windowB})
 	assert.ErrorIs(t, err, ErrAliasHeld, "a dataset cannot take a bundle member's alias")
@@ -138,24 +138,24 @@ func TestBundleOwnershipAndAliasCollisions(t *testing.T) {
 
 	_, err = svc.Publish(PublishInput{Alias: "plain", ArrowIPCStream: int64Stream(t, false, 1), By: windowB})
 	require.NoError(t, err)
-	_, err = svc.PublishBundle(BundlePublishInput{Alias: "plain", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
+	_, err = svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "plain", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
 	assert.ErrorIs(t, err, ErrAliasHeld, "a bundle cannot take another owner's dataset alias")
 }
 
 func TestRetractBundleWithdrawsItWhole(t *testing.T) {
 	svc := newTestService(t)
-	res, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
+	res, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
 	require.NoError(t, err)
-	require.NoError(t, svc.RetractBundle("sales", windowA, nil))
+	require.NoError(t, svc.RetractBundle(t.Context(), "sales", windowA, nil))
 	assert.Equal(t, 0, svc.LiveCount())
-	_, err = svc.ResolveBundle("sales", windowA, nil)
+	_, err = svc.ResolveBundle(t.Context(), "sales", windowA, nil)
 	assert.ErrorIs(t, err, ErrNoLiveBundle)
 	svc.FlushRetracts()
 	for _, d := range res.Datasets {
 		_, registered := svc.reg.Lookup(d.Handle)
 		assert.False(t, registered)
 	}
-	_, err = svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowB})
+	_, err = svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowB})
 	require.NoError(t, err, "a retracted alias is free again")
 }
 
@@ -166,7 +166,7 @@ func TestPublishBundleRespectsTheCountQuota(t *testing.T) {
 		_, err := svc.Publish(PublishInput{Alias: "fill", ArrowIPCStream: stream})
 		require.NoError(t, err)
 	}
-	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
+	_, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
 	require.Error(t, err)
 	assert.Equal(t, MaxDatasets-1, svc.LiveCount(), "a bundle that does not fit adds nothing")
 }
@@ -180,16 +180,16 @@ func TestPublishBundleRespectsThePerOwnerQuota(t *testing.T) {
 		_, err := svc.Publish(PublishInput{Alias: "fill", ArrowIPCStream: stream, By: windowA})
 		require.NoError(t, err)
 	}
-	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
+	_, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "per-owner")
-	_, err = svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowB})
+	_, err = svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowB})
 	require.NoError(t, err)
 }
 
 func TestBundleCatalogs(t *testing.T) {
 	svc := newTestService(t)
-	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
+	_, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
 	require.NoError(t, err)
 	rows := svc.bundleCatalogRows()
 	require.Len(t, rows, 1)
@@ -284,10 +284,10 @@ func TestResolveBundleRequestNamesNothingLive(t *testing.T) {
 // revision n does not take the next publish for the one it has.
 func TestARevisionContinuesAcrossARetract(t *testing.T) {
 	svc := newTestService(t)
-	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
+	_, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
 	require.NoError(t, err)
-	require.NoError(t, svc.RetractBundle("sales", windowA, nil))
-	res, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
+	require.NoError(t, svc.RetractBundle(t.Context(), "sales", windowA, nil))
+	res, err := svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
 	require.NoError(t, err)
 	assert.Equal(t, uint64(2), res.Revision)
 }

@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -160,7 +161,7 @@ func (inst *Service) parentOf(t *turn) (parent option.Option[seen]) {
 // writeRequest buffers the rows of the request's new messages, once: before
 // the request leaves the machine on the path that sends it (ADR-0277 §SD3),
 // and with the call row on a path that refuses it.
-func (inst *Service) writeRequest(rec *CallRecord, t *turn) {
+func (inst *Service) writeRequest(ctx context.Context, rec *CallRecord, t *turn) {
 	if t.requested {
 		return
 	}
@@ -170,18 +171,18 @@ func (inst *Service) writeRequest(rec *CallRecord, t *turn) {
 	}
 	rec.MessagesFrom = t.from
 	t.body = rec.RetainAsked && inst.cfg.Retain == RetainDurable && inst.cfg.Trail.Durable()
-	inst.writeMessages(*rec, t, t.messages[t.covered:], t.from, "")
+	inst.writeMessages(ctx, *rec, t, t.messages[t.covered:], t.from, "")
 }
 
 // writeMessages buffers ms as trail rows from ordinal first on.
-func (inst *Service) writeMessages(rec CallRecord, t *turn, ms []openaichat.Message, first int, reasoning string) {
+func (inst *Service) writeMessages(ctx context.Context, rec CallRecord, t *turn, ms []openaichat.Message, first int, reasoning string) {
 	c := inst.contextOf(rec)
 	for _, row := range messageRows(rec, ms, first, reasoning) {
 		var body option.Option[trail.LlmMessageBody]
 		if t.body {
 			body = option.Some(row.body)
 		}
-		if err := inst.cfg.Trail.LlmMessage(rec.At, c, row.audit, body); err != nil && t.failed == nil {
+		if err := inst.cfg.Trail.LlmMessage(ctx, rec.At, c, row.audit, body); err != nil && t.failed == nil {
 			t.failed = err
 		}
 	}
@@ -196,17 +197,17 @@ func (inst *Service) writeMessages(rec CallRecord, t *turn, ms []openaichat.Mess
 // The verdict is what a retained request's reply carries (ADR-0264 §SD4):
 // whether its text landed, and why not. Nil t is a request that could not
 // be read; it leaves a call row and no messages.
-func (inst *Service) record(rec CallRecord, t *turn) (retention uint8, reason string) {
+func (inst *Service) record(ctx context.Context, rec CallRecord, t *turn) (retention uint8, reason string) {
 	var failed error
 	if t != nil {
-		inst.writeRequest(&rec, t)
+		inst.writeRequest(ctx, &rec, t)
 		if t.reply.Has {
-			inst.writeMessages(rec, t, []openaichat.Message{t.reply.Val}, t.from+len(t.messages)-t.covered, t.reasoning)
+			inst.writeMessages(ctx, rec, t, []openaichat.Message{t.reply.Val}, t.from+len(t.messages)-t.covered, t.reasoning)
 		}
 		rec.HistoryHash = historyHash(t.logical())
 		failed = t.failed
 	}
-	if err := inst.cfg.Trail.LlmCall(rec.At, inst.contextOf(rec), RowOf(rec, t != nil && t.body)); err != nil && failed == nil {
+	if err := inst.cfg.Trail.LlmCall(ctx, rec.At, inst.contextOf(rec), RowOf(rec, t != nil && t.body)); err != nil && failed == nil {
 		failed = err
 	}
 	if err := inst.cfg.Trail.Flush(inst.base); err != nil && failed == nil {

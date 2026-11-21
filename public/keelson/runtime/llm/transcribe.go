@@ -634,7 +634,7 @@ func (inst *Service) handleTranscribe(msg *app.Msg) {
 	// The admission travels on a failure too, as on a completion's.
 	rep.V, rep.Model, rep.ElapsedNs, rep.CallId = wireVersion, model, int64(rec.Elapsed), rec.CallId
 	rep.Admission, rep.Rule, rep.QueuedNs, rep.Remaining = p.decision.Outcome.String(), p.decision.Rule, int64(p.decision.Queued), wireOfRemaining(p.decision.Remaining)
-	inst.record(rec, t)
+	inst.record(context.WithoutCancel(msg.Context()), rec, t)
 	inst.publishCall(rec, p.chain, p.class, p.decision, used)
 	lg := inst.log.Debug()
 	if !rep.Ok {

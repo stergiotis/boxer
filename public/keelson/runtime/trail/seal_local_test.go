@@ -37,7 +37,7 @@ func TestSealsHoldOverTheRowsAsTheyReadBack(t *testing.T) {
 	t.Cleanup(rec.Close)
 	e := trail.AuditEvent{Domain: "dmdm", Action: "vault-resolve", Outcome: trail.OutcomeOk, PrincipalBy: trail.PrincipalByNone, Subject: 7, Retention: "disclosure"}
 	require.NoError(t, rec.Event(ctx, time.Now(), trail.Context{Origin: rec.OriginOf("apps/dmdm", 1)}, e))
-	require.NoError(t, rec.LlmCall(time.Now(), trail.Context{}, trail.LlmCall{CallId: "c1"}))
+	require.NoError(t, rec.LlmCall(ctx, time.Now(), trail.Context{}, trail.LlmCall{CallId: "c1"}))
 	require.NoError(t, rec.Flush(ctx))
 	require.NoError(t, rec.Event(ctx, time.Now(), trail.Context{}, e))
 	require.NoError(t, rec.Flush(ctx))

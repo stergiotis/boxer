@@ -22,7 +22,7 @@ func TestEveryDurableFlushIsSealedOnce(t *testing.T) {
 	rec := NewRecorder(exec, "run-1", zerolog.Nop(), WithAnchors(anchors), WithWriteObserver(obs))
 	ctx := context.Background()
 	require.NoError(t, rec.Event(ctx, time.Now(), Context{}, event()))
-	require.NoError(t, rec.LlmCall(time.Now(), Context{}, LlmCall{CallId: "c1"}))
+	require.NoError(t, rec.LlmCall(ctx, time.Now(), Context{}, LlmCall{CallId: "c1"}))
 	require.NoError(t, rec.Flush(ctx))
 	assert.EqualValues(t, 3, exec.landed(), "two rows and their seal")
 	require.Len(t, anchors.All(), 1)

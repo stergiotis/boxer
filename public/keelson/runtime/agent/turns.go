@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"slices"
 	"strconv"
 	"strings"
@@ -184,7 +185,7 @@ func (inst *Service) turn(msg *app.Msg) (rep wireTurnReply) {
 		}
 		if _, paused := t.pausedAt[k]; paused {
 			delete(t.pausedAt, k)
-			inst.grantEventAsked(trail.GrantEventResumed, "coordinator",
+			inst.grantEventAsked(context.WithoutCancel(msg.Context()), trail.GrantEventResumed, "coordinator",
 				"window "+strconv.FormatUint(k, 10)+": the turn listed the changes", t, nil, req.wireCause)
 		}
 		t.turnSeq[k] = latest
