@@ -66,8 +66,8 @@ func (inst StorageRef) StateAppId() (id app.AppIdT) {
 }
 
 // StorageBackendI is the persistence contract. Keys are addressed by
-// (ref.Alias, key) where ref.Alias is the AppIdT.SubjectAlias of the owning
-// app. The alias rather than the raw AppId lets the service trust subject
+// (ref.Alias, key) where ref.Alias is the alias of the owning app
+// (app.Manifest.SubjectAlias). The alias rather than the raw AppId lets the service trust subject
 // parsing without a reverse-lookup step; ref.AppId carries the durable
 // identity alongside it for backends that record provenance.
 //
@@ -78,11 +78,4 @@ type StorageBackendI interface {
 	Get(ctx context.Context, ref StorageRef, key string) (value []byte, found bool, err error)
 	Set(ctx context.Context, ref StorageRef, key string, value []byte) (err error)
 	Delete(ctx context.Context, ref StorageRef, key string) (err error)
-}
-
-// Convenience: a backend that knows the AppId of every call (when the caller
-// has it) can chain into a StorageBackendI by deriving the alias once.
-func AliasOf(id app.AppIdT) (alias string) {
-	alias = id.SubjectAlias()
-	return
 }

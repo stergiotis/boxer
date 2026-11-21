@@ -58,6 +58,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/moderator"
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
+	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
 	"github.com/stergiotis/boxer/public/keelson/runtime/schemacheck"
 	"github.com/stergiotis/boxer/public/keelson/runtime/servicehost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
@@ -424,9 +425,16 @@ type Runtime struct {
 // services, task supervisor, status snapshot, window host or screenshot
 // renderers, AfterHost, introspection. It does not create the imzero2
 // application; Run does. Every failure of an optional service is logged and
-// leaves that service nil; only a benchmark take the run row cannot carry,
+// leaves that service nil; only a failed registration (ADR-0396 §2), a
+// benchmark take the run row cannot carry,
 // a seeded window that cannot open or an AfterHost error abort.
 func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
+	// ADR-0396 §2: a registration that failed at package initialisation —
+	// an app, a launch kind, a destination, a host service — stops the host,
+	// with every failure listed, rather than leaving a hole found later.
+	if err = registration.Err(); err != nil {
+		return nil, eh.Errorf("hostboot: refusing to start; registrations failed:\n%w", err)
+	}
 	// A run row that cannot carry the take it was started for would pass
 	// for another run's (ADR-0344 §SD5).
 	take, err := runinfo.BenchTakeFromEnv()
@@ -1374,7 +1382,7 @@ func (rt *Runtime) bootAgent() {
 // backend, under the service's own id.
 type personStore struct{ backend persist.StorageBackendI }
 
-var attentionRef = persist.StorageRef{Alias: persist.AliasOf(attention.ServiceAppId), AppId: attention.ServiceAppId}
+var attentionRef = persist.StorageRef{Alias: attention.ServiceAppId.DerivedAlias(), AppId: attention.ServiceAppId}
 
 func (inst personStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	return inst.backend.Get(ctx, attentionRef, key)
@@ -1579,10 +1587,10 @@ func (rt *Runtime) bootWorkstateletStore(host *windowhost.Inst, reg *app.Registr
 						setStatus("Not saved: " + storeErr.Error())
 					case replaced:
 						logger.Info().Str("id", string(id)).Int("windows", len(doc.Windows)).Msg("hostboot: workstatelet replaced")
-						setStatus("Replaced " + id.SubjectAlias() + " (" + strconv.Itoa(len(doc.Windows)) + " windows)")
+						setStatus("Replaced " + app.AliasOf(id) + " (" + strconv.Itoa(len(doc.Windows)) + " windows)")
 					default:
 						logger.Info().Str("id", string(id)).Int("windows", len(doc.Windows)).Msg("hostboot: workstatelet saved")
-						setStatus("Saved as " + id.SubjectAlias() + " (" + strconv.Itoa(len(doc.Windows)) + " windows); it is in the launcher")
+						setStatus("Saved as " + app.AliasOf(id) + " (" + strconv.Itoa(len(doc.Windows)) + " windows); it is in the launcher")
 					}
 				}()
 			})

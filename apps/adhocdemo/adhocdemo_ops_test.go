@@ -91,7 +91,7 @@ func TestOperationsCatalogRegisters(t *testing.T) {
 	require.NoError(t, manifest.Operations.Validate())
 	m, ok := app.LookupManifest(manifest.Id)
 	require.True(t, ok)
-	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(manifest.Id))
+	require.NotNil(t, m.Operations)
 	regen, found := m.Operations.Lookup(opRegenerate)
 	require.True(t, found)
 	assert.True(t, regen.Async)

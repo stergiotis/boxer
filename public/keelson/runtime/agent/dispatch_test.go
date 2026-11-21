@@ -123,7 +123,7 @@ func (inst *fakeHost) OpsInstances() (out []opwire.InstanceInfo) {
 	for k, e := range inst.engines {
 		l := inst.loads[k]
 		a := inst.appOf(k)
-		out = append(out, opwire.InstanceInfo{App: a, Alias: a.SubjectAlias(), Key: k, Title: "Doc", Ops: true,
+		out = append(out, opwire.InstanceInfo{App: a, Alias: a.DerivedAlias(), Key: k, Title: "Doc", Ops: true,
 			Confined: e.Confined(), Load: l.Load, Reason: l.Reason})
 	}
 	return

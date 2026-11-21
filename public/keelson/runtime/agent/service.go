@@ -277,7 +277,7 @@ func (inst *Service) reply(subject string, v any) {
 
 // matchesApp reports whether name names m by id or by subject alias.
 func matchesApp(m app.Manifest, name string) (ok bool) {
-	return name == string(m.Id) || name == m.Id.SubjectAlias()
+	return name == string(m.Id) || name == m.SubjectAlias()
 }
 
 func containsFold(haystack string, needle string) (ok bool) {

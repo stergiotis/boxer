@@ -39,6 +39,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/trivialsql"
+	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/logging"
@@ -222,6 +223,11 @@ func (inst *Program) run(args []string) (step func() int32) {
 }
 
 func (inst *Program) tab(ctx context.Context, cmd *cli.Command) (err error) {
+	// ADR-0396 §2: a registration that failed at package initialisation
+	// stops the host, with every failure listed.
+	if err = registration.Err(); err != nil {
+		return eh.Errorf("tabhost: refusing to start; registrations failed:\n%w", err)
+	}
 	// Deliberate and once: the module's HTTP leaves through the host.
 	browserhost.InstallHostTransport()
 	if inst.opts.Services.NoEgress {

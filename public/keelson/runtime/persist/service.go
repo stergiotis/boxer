@@ -81,7 +81,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	// stamping the sender's id on a row in someone else's namespace would
 	// misattribute it — so the id is withheld and the backend falls back to
 	// the alias.
-	senderAlias := msg.Sender.SubjectAlias()
+	senderAlias := app.AliasOf(msg.Sender)
 	ref := StorageRef{Alias: alias}
 	if senderAlias == alias {
 		ref.AppId = msg.Sender

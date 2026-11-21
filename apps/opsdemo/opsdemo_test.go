@@ -13,7 +13,7 @@ func TestTheCatalogRegisters(t *testing.T) {
 	require.NoError(t, manifest.Operations.Validate())
 	m, ok := app.LookupManifest(AppId)
 	require.True(t, ok)
-	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(AppId))
+	require.NotNil(t, m.Operations)
 	for _, name := range []string{opGetState, opSetNote, opSetLevel, opClearNote, opCopyNote} {
 		spec, found := m.Operations.Lookup(name)
 		require.True(t, found, name)

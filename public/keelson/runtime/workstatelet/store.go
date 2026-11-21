@@ -54,10 +54,10 @@ func StartStore(ctx context.Context, reg *app.Registry, cat *Catalog, bus *inpro
 		return
 	}
 	busClient := bus.NewClient(StoreAppId, []app.SubjectFilter{
-		{Pattern: persist.SubjectPrefix + StoreAppId.SubjectAlias() + ".>", Direction: app.CapDirectionPub,
+		{Pattern: persist.SubjectPrefix + StoreAppId.DerivedAlias() + ".>", Direction: app.CapDirectionPub,
 			Reason: "persist captured workstatelet documents"},
 	})
-	storage, err := persist.NewClient(busClient, StoreAppId)
+	storage, err := persist.NewClient(busClient, StoreAppId.DerivedAlias())
 	if err != nil {
 		err = eh.Errorf("persist client: %w", err)
 		return

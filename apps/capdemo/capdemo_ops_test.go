@@ -26,7 +26,7 @@ func TestOperationsCatalogIsReadOnly(t *testing.T) {
 	require.NoError(t, manifest.Operations.Validate())
 	m, ok := app.LookupManifest(manifest.Id)
 	require.True(t, ok)
-	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(manifest.Id))
+	require.NotNil(t, m.Operations)
 	spec, found := m.Operations.Lookup(opGetView)
 	require.True(t, found)
 	assert.Equal(t, app.OperationClassQuery, spec.Class)

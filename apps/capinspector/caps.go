@@ -248,7 +248,7 @@ var Registry = map[CapId]CapSpec{
 		Display:       "runtime.persist.* state",
 		SubjectFamily: "runtime.persist.{appAlias}.{key}.{get|set|delete}",
 		Description: "Per-app key-value cold-state surface. " +
-			"persist.NewClient(busC, appId) is the StorageI MountCtx hands to " +
+			"persist.NewClient(busC, alias) is the StorageI MountCtx hands to " +
 			"every app; the wire subject is runtime.persist.{ownAlias}.{key}.{op}. " +
 			"Keys must be a single NATS token (no dots). The windowhost auto- " +
 			"injects the runtime.persist.{ownAlias}.> cap when Manifest.PersistedKeys " +
@@ -261,7 +261,7 @@ var Registry = map[CapId]CapSpec{
 			if len(m.PersistedKeys) == 0 {
 				return ""
 			}
-			return "runtime.persist." + m.Id.SubjectAlias() + ".>"
+			return "runtime.persist." + m.SubjectAlias() + ".>"
 		},
 		// Two impls: the durable generated store on boxer.persiststate
 		// (ADR-0105 D3a) when ClickHouse is reachable, else the in-process

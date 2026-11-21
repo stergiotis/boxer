@@ -189,7 +189,7 @@ func TestMintBooks(t *testing.T) {
 	id, err := cat.Mint(reg, docs[0], OriginBook, "test")
 	require.NoError(t, err)
 	assert.Equal(t, AppIdOf("trail-review"), id)
-	assert.Equal(t, "ws-trail-review", id.SubjectAlias())
+	assert.Equal(t, "ws-trail-review", id.DerivedAlias())
 
 	m, ok := reg.LookupManifest(id)
 	require.True(t, ok)

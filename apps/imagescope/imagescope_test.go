@@ -167,7 +167,7 @@ func TestTheImageMachineIsMounted(t *testing.T) {
 	require.NoError(t, manifest.Operations.Validate())
 	m, ok := app.LookupManifest(manifest.Id)
 	require.True(t, ok)
-	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(manifest.Id))
+	require.NotNil(t, m.Operations)
 
 	h := testApp(t).Operations()
 	raw, err := h.Snapshot().Query("image_machine", nil)

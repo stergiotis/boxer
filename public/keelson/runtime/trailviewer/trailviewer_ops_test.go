@@ -164,7 +164,7 @@ func TestOperationsCatalogRegisters(t *testing.T) {
 	require.NoError(t, manifest.Operations.Validate())
 	m, ok := app.LookupManifest(manifest.Id)
 	require.True(t, ok)
-	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(manifest.Id))
+	require.NotNil(t, m.Operations)
 	names := make([]string, 0, len(m.Operations.Operations))
 	for _, o := range m.Operations.Operations {
 		names = append(names, o.Name)

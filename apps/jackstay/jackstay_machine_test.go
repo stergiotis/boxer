@@ -77,7 +77,7 @@ func TestThePlanMachineIsMounted(t *testing.T) {
 	require.NoError(t, manifest.Operations.Validate())
 	m, ok := app.LookupManifest(AppId)
 	require.True(t, ok)
-	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(AppId))
+	require.NotNil(t, m.Operations)
 
 	h := phaseApp().Operations()
 	raw, err := h.Snapshot().Query("plan_machine", nil)

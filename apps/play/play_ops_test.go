@@ -102,7 +102,7 @@ func TestSampleRowsWithoutAResultIsRefused(t *testing.T) {
 func TestRunAndSetParamAreInTheRegisteredCatalog(t *testing.T) {
 	m, ok := app.LookupManifest((&PlayLauncher{}).Manifest().Id)
 	require.True(t, ok)
-	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(m.Id))
+	require.NotNil(t, m.Operations)
 	for _, name := range []string{opRun, opSetParam} {
 		_, found := m.Operations.Lookup(name)
 		assert.True(t, found, name)

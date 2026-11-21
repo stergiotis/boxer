@@ -136,9 +136,9 @@ func newCaller(bus *inprocbus.Inst) (caller *inprocbus.Client) {
 func storedKeys(t *testing.T, bus *inprocbus.Inst) (storage app.StorageI) {
 	t.Helper()
 	c := bus.NewClient(appletstore.AppId, []app.SubjectFilter{
-		{Pattern: persist.SubjectPrefix + appletstore.AppId.SubjectAlias() + ".>", Direction: app.CapDirectionPub, Reason: "test reads the store's keys"},
+		{Pattern: persist.SubjectPrefix + appletstore.AppId.DerivedAlias() + ".>", Direction: app.CapDirectionPub, Reason: "test reads the store's keys"},
 	})
-	storage, err := persist.NewClient(c, appletstore.AppId)
+	storage, err := persist.NewClient(c, appletstore.AppId.DerivedAlias())
 	require.NoError(t, err)
 	return
 }

@@ -12,7 +12,7 @@ func TestRegistry_Coordinator(t *testing.T) {
 	assert.False(t, reg.Coordinator(id), "none until the host resolved them")
 	reg.SetCoordinators([]string{string(id)})
 	assert.True(t, reg.Coordinator(id))
-	reg.SetCoordinators([]string{id.SubjectAlias()})
+	reg.SetCoordinators([]string{id.DerivedAlias()})
 	assert.True(t, reg.Coordinator(id), "a subject alias names the app too")
 	assert.False(t, reg.Coordinator("github.com/example/apps/other"))
 }

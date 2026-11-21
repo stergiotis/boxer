@@ -122,7 +122,7 @@ func resolveLaunchSql(whereExpr string) (apps []app.AppI, err error) {
 	// aliases; that expansion stays as the CH-side form and stays unit-tested.
 	if trimmed := strings.TrimSpace(whereExpr); bareAliasRe.MatchString(trimmed) {
 		for _, m := range app.AllManifests() {
-			if m.Id.SubjectAlias() != trimmed {
+			if m.SubjectAlias() != trimmed {
 				continue
 			}
 			a, lookupOk := app.Lookup(m.Id)

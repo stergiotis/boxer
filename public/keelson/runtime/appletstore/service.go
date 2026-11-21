@@ -104,10 +104,10 @@ func Start(ctx context.Context, reg *app.Registry, bus *inprocbus.Inst, minter M
 			Reason: "applet store serves save requests (ADR-0132 O4)"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub,
 			Reason: "publish save replies to caller inboxes"},
-		{Pattern: persist.SubjectPrefix + AppId.SubjectAlias() + ".>", Direction: app.CapDirectionPub,
+		{Pattern: persist.SubjectPrefix + AppId.DerivedAlias() + ".>", Direction: app.CapDirectionPub,
 			Reason: "persist stored applet documents"},
 	})
-	storage, err := persist.NewClient(busClient, AppId)
+	storage, err := persist.NewClient(busClient, AppId.DerivedAlias())
 	if err != nil {
 		err = eh.Errorf("appletstore: Start: persist client: %w", err)
 		return

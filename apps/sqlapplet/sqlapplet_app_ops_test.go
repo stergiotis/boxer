@@ -48,7 +48,6 @@ func TestAMintedAppletRegistersItsCatalog(t *testing.T) {
 	require.Empty(t, errs)
 	require.Equal(t, 1, minted)
 	id := app.AppIdT(appletIdPrefix + "reader")
-	assert.Empty(t, reg.OperationsDiagnostic(id), "the catalog was not withdrawn")
 	m, ok := reg.LookupManifest(id)
 	require.True(t, ok)
 	require.NotNil(t, m.Operations)

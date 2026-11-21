@@ -31,7 +31,7 @@ func (inst *Service) resolveApp(name string) (id app.AppIdT, ok bool) {
 	}
 	n := 0
 	for _, m := range ms {
-		if strings.EqualFold(string(m.Id), name) || strings.EqualFold(m.Id.SubjectAlias(), name) || strings.EqualFold(m.Display, name) {
+		if strings.EqualFold(string(m.Id), name) || strings.EqualFold(m.SubjectAlias(), name) || strings.EqualFold(m.Display, name) {
 			id, n = m.Id, n+1
 		}
 	}
@@ -189,7 +189,7 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 	}
 	load, loadReason := inst.waitLoaded(key)
 	inst.mu.Lock()
-	t.entries[key] = &entry{instance: key, app: id, alias: id.SubjectAlias(), mode: mode}
+	t.entries[key] = &entry{instance: key, app: id, alias: app.AliasOf(id), mode: mode}
 	t.launched[key] = true
 	inst.startTurnAt(t, key)
 	inst.mu.Unlock()

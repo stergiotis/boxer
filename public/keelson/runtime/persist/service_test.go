@@ -221,12 +221,12 @@ func TestService_AttributesSenderAppId(t *testing.T) {
 	defer svc.Close()
 
 	const id app.AppIdT = "elle/factsplay"
-	require.Equal(t, "factsplay", id.SubjectAlias())
+	require.Equal(t, "factsplay", id.DerivedAlias())
 	bus := inst.NewClient(id, []app.SubjectFilter{
 		{Pattern: "runtime.persist.factsplay.>", Direction: app.CapDirectionPub, Reason: "own state"},
 	})
 
-	_, err := bus.Request(t.Context(), SubjectFor(id.SubjectAlias(), "lastSql", OpSet), []byte("x"))
+	_, err := bus.Request(t.Context(), SubjectFor(id.DerivedAlias(), "lastSql", OpSet), []byte("x"))
 	require.NoError(t, err)
 
 	got := rec.Last()

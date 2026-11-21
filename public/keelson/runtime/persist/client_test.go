@@ -25,7 +25,7 @@ func newClientSetup(t *testing.T, appId app.AppIdT) (svc *persist.Service, cli *
 	s, err := persist.NewService(bus, zerolog.Nop(), backend)
 	require.NoError(t, err)
 
-	alias := appId.SubjectAlias()
+	alias := appId.DerivedAlias()
 	caps := []app.SubjectFilter{
 		{Pattern: persist.SubjectPrefix + alias + ".>", Direction: app.CapDirectionPub,
 			Reason: "test fixture: own state"},
@@ -33,7 +33,7 @@ func newClientSetup(t *testing.T, appId app.AppIdT) (svc *persist.Service, cli *
 			Reason: "Request must subscribe to its reply inbox"},
 	}
 	busC := bus.NewClient(appId, caps)
-	c, err := persist.NewClient(busC, appId)
+	c, err := persist.NewClient(busC, alias)
 	require.NoError(t, err)
 
 	svc = s
@@ -45,7 +45,7 @@ func newClientSetup(t *testing.T, appId app.AppIdT) (svc *persist.Service, cli *
 }
 
 func TestClient_NewClient_RejectsNilBus(t *testing.T) {
-	_, err := persist.NewClient(nil, "test.x")
+	_, err := persist.NewClient(nil, "x")
 	require.Error(t, err)
 }
 
@@ -110,7 +110,7 @@ func TestClient_PermissionDenied_NoCap(t *testing.T) {
 
 	// No caps at all.
 	busC := bus.NewClient("github.com/example/nocaps", nil)
-	cli, err := persist.NewClient(busC, "github.com/example/nocaps")
+	cli, err := persist.NewClient(busC, "nocaps")
 	require.NoError(t, err)
 
 	err = cli.Set(t.Context(), "any.key", []byte("v"))

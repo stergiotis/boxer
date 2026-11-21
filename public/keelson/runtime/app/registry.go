@@ -5,19 +5,16 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// AppCtor produces a fresh AppI instance. Hosts that want true
-// multi-instance dispatch (e.g., the M3 DockHost opening the same app
-// in two tiles with isolated state) invoke the ctor once per dispatch.
-// For apps registered via the legacy Register(a AppI) path, the ctor is
-// a singleton closure that returns a on every call — i.e., multi-instance
-// dispatch on a singleton-registered app yields shared state, matching
-// the pre-M3 behaviour. Apps that want isolated per-tile state migrate
-// to RegisterFactory and avoid package-level state in their AppI.
+// AppCtor produces a fresh AppI instance. A host invokes it once per
+// window it opens. For an app registered with Register the ctor is a
+// closure returning the one instance on every call, so two windows of it
+// share state; an app that wants isolated per-window state registers with
+// RegisterFactory and keeps no package-level state in its AppI.
 //
 // Ctors should be lightweight — heavyweight resource acquisition belongs
 // in Mount, not the ctor.
@@ -38,9 +35,6 @@ type entry struct {
 	manifest  Manifest
 	ctor      AppCtor
 	singleton bool
-	// opsDiagnostic says why the manifest's operations catalog was
-	// withdrawn at registration; empty when it was kept or absent.
-	opsDiagnostic string
 	// origin is the code that registered, observed at registration
 	// (ADR-0339).
 	origin Origin
@@ -59,9 +53,6 @@ type Registration struct {
 	// Singleton is true for Register (one AppI for every Open) and false
 	// for RegisterFactory (a fresh AppI per Open).
 	Singleton bool
-	// OperationsDiagnostic says why the operations catalog was withdrawn
-	// (ADR-0269 §SD2); empty when it was kept or none was declared.
-	OperationsDiagnostic string
 	// Origin is the package and module whose code registered the app
 	// (ADR-0339), observed rather than declared.
 	Origin Origin
@@ -72,13 +63,12 @@ type Registration struct {
 
 // Registry is the canonical list of apps in this process. Apps register
 // themselves from init() via the package-level Register or
-// RegisterFactory; the runtime hosts (DockHost, CliHost, ScreenshotHost)
-// consume the iteration and lookup API.
+// RegisterFactory; the hosts consume the iteration and lookup API.
 //
-// Manifest validation runs at registration; invalid manifests are rejected
-// with an error. Duplicate Ids are rejected — first registration wins,
-// subsequent attempts are logged at Warn level by the package-level helpers
-// and returned as an error by the method forms.
+// Registration validates the manifest and refuses a duplicate id or alias
+// (ADR-0396 §1). The method forms return the refusal; the package-level
+// helpers record it with package registration, and a host refuses to start
+// while any is recorded (ADR-0396 §2).
 type Registry struct {
 	mu      sync.RWMutex
 	entries []entry
@@ -113,28 +103,21 @@ func NewRegistry() (inst *Registry) {
 // populate.
 var DefaultRegistry = NewRegistry()
 
-// Register adds a singleton app to DefaultRegistry. All Open() calls
-// return the same a, preserving pre-M3 behaviour. Errors are logged at
-// Warn and dropped — appropriate from init(), where the caller has no
-// error channel. Tests and code that need the error should call
-// DefaultRegistry.Register directly.
+// Register adds a singleton app to DefaultRegistry: every Open returns the
+// same a. It is called from init(), where no caller can handle an error, so
+// a refusal is recorded with package registration and the host refuses to
+// start (ADR-0396 §2). Code that needs the error calls
+// DefaultRegistry.Register.
 func Register(a AppI) {
-	err := DefaultRegistry.Register(a)
-	if err != nil {
-		log.Warn().Err(err).Msg("app.Register: dropping app")
-	}
+	registration.Fail("app.Register", DefaultRegistry.Register(a))
 }
 
-// RegisterFactory adds a factory-backed app to DefaultRegistry. Each
-// Open(id) invokes ctor() for a fresh AppI instance; multi-instance
-// dispatch yields isolated state when the AppI is implemented without
-// package-level state. Errors are logged at Warn and dropped.
+// RegisterFactory adds a factory-backed app to DefaultRegistry: each Open
+// invokes ctor for a fresh AppI, so windows of the app have isolated state
+// when the AppI keeps no package-level state. A refusal is recorded as
+// Register's is.
 func RegisterFactory(m Manifest, ctor AppCtor) {
-	err := DefaultRegistry.RegisterFactory(m, ctor)
-	if err != nil {
-		log.Warn().Err(err).Str("id", string(m.Id)).
-			Msg("app.RegisterFactory: dropping app")
-	}
+	registration.Fail("app.RegisterFactory", DefaultRegistry.RegisterFactory(m, ctor))
 }
 
 // Register inserts a singleton app, preserving sorted-Id iteration order.
@@ -198,19 +181,18 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 		}
 	}
 	// ADR-0269 §SD2: a catalog is served per instance, so it needs one
-	// instance per window, as a workingset does. Unlike a workingset, a bad
-	// catalog costs only the catalog: the app registers without it.
-	var opsDiagnostic string
+	// instance per window, as a workingset does. A catalog that does not
+	// validate refuses the registration (ADR-0396 §2) rather than being
+	// withdrawn with a log line.
 	if m.Operations != nil {
 		if singleton {
-			opsDiagnostic = "operations require factory registration (RegisterFactory), not Register"
-		} else if vErr := m.Operations.Validate(); vErr != nil {
-			opsDiagnostic = vErr.Error()
+			err = eb.Build().Str("id", string(m.Id)).
+				Errorf("registry: operations require factory registration (RegisterFactory), not Register")
+			return
 		}
-		if opsDiagnostic != "" {
-			log.Warn().Str("id", string(m.Id)).Str("diagnostic", opsDiagnostic).
-				Msg("app registry: withdrawing the operations catalog; the app still registers")
-			m.Operations = nil
+		if vErr := m.Operations.Validate(); vErr != nil {
+			err = eb.Build().Str("id", string(m.Id)).Errorf("registry: invalid operations catalog: %w", vErr)
+			return
 		}
 	}
 	origin := observeOrigin()
@@ -221,18 +203,18 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 		err = eb.Build().Str("id", string(m.Id)).Errorf("registry: duplicate Id")
 		return
 	}
-	// Distinct Ids must also produce distinct SubjectAliases: the alias is
-	// what keys persisted state and the auto-injected persist cap
-	// (runtime.persist.{alias}.>), so a collision would silently share one
-	// app's cold state and permissions with another. The Id-uniqueness check
-	// above does not catch this (e.g. ".../foo/play" and ".../bar/play" both
-	// alias to "play").
-	newAlias := m.Id.SubjectAlias()
+	// Distinct Ids must also produce distinct aliases: the alias is what
+	// keys persisted state and the auto-injected persist cap
+	// (runtime.persist.{alias}.>), so a collision would share one app's
+	// stored state and permissions with another. The id check above does not
+	// catch this (".../foo/play" and ".../bar/play" both derive "play"); the
+	// remedy is Manifest.Alias on one of them (ADR-0396 §1).
+	newAlias := m.SubjectAlias()
 	for i := range inst.entries {
-		if inst.entries[i].manifest.Id.SubjectAlias() == newAlias {
+		if inst.entries[i].manifest.SubjectAlias() == newAlias {
 			err = eb.Build().Str("id", string(m.Id)).Str("alias", newAlias).
 				Str("collidesWith", string(inst.entries[i].manifest.Id)).
-				Errorf("registry: SubjectAlias collides with an already-registered app")
+				Errorf("registry: alias %q of %s is already the alias of %s; set Manifest.Alias on one of them", newAlias, m.Id, inst.entries[i].manifest.Id)
 			return
 		}
 	}
@@ -241,7 +223,7 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 	})
 	inst.entries = append(inst.entries, entry{})
 	copy(inst.entries[idx+1:], inst.entries[idx:])
-	inst.entries[idx] = entry{manifest: m, ctor: ctor, singleton: singleton, opsDiagnostic: opsDiagnostic, origin: origin}
+	inst.entries[idx] = entry{manifest: m, ctor: ctor, singleton: singleton, origin: origin}
 	for i := idx; i < len(inst.entries); i++ {
 		inst.byId[inst.entries[i].manifest.Id] = i
 	}
@@ -271,16 +253,18 @@ func (inst *Registry) rebuildLaunchable() {
 }
 
 // Open invokes the registered ctor for id and returns the resulting AppI
-// instance. Hosts that dispatch apps (DockHost tiles, CLI invocations,
-// screenshot tours) call Open. For singleton-registered apps the same
-// instance comes back every call; for factory-registered apps each call
+// instance. Hosts call it once per window. For singleton-registered apps the
+// same instance comes back every call; for factory-registered apps each call
 // yields a fresh instance.
 func Open(id AppIdT) (a AppI, err error) {
 	a, err = DefaultRegistry.Open(id)
 	return
 }
 
-// Open returns a fresh AppI instance from the registered ctor for id.
+// Open returns a fresh AppI instance from the registered ctor for id. An
+// instance whose manifest declares operations but that does not implement
+// OperationsAppI is refused: this is the first point the instance exists
+// (ADR-0396 §2).
 func (inst *Registry) Open(id AppIdT) (a AppI, err error) {
 	inst.mu.RLock()
 	idx, exists := inst.byId[id]
@@ -290,6 +274,7 @@ func (inst *Registry) Open(id AppIdT) (a AppI, err error) {
 		return
 	}
 	ctor := inst.entries[idx].ctor
+	declaresOps := inst.entries[idx].manifest.Operations != nil
 	inst.mu.RUnlock()
 	a, err = ctor()
 	if err != nil {
@@ -299,6 +284,14 @@ func (inst *Registry) Open(id AppIdT) (a AppI, err error) {
 	if a == nil {
 		err = eb.Build().Str("id", string(id)).Errorf("registry: ctor returned nil AppI")
 		return
+	}
+	if declaresOps {
+		if _, ok := a.(OperationsAppI); !ok {
+			a = nil
+			err = eb.Build().Str("id", string(id)).
+				Errorf("registry: the manifest declares operations but the instance does not implement app.OperationsAppI")
+			return
+		}
 	}
 	return
 }
@@ -385,20 +378,39 @@ func (inst *Registry) Registrations() (regs []Registration) {
 	defer inst.mu.RUnlock()
 	regs = make([]Registration, len(inst.entries))
 	for i, e := range inst.entries {
-		regs[i] = Registration{Manifest: e.manifest, Singleton: e.singleton, OperationsDiagnostic: e.opsDiagnostic, Origin: e.origin, Overridden: slices.Clone(e.overridden)}
+		regs[i] = Registration{Manifest: e.manifest, Singleton: e.singleton, Origin: e.origin, Overridden: slices.Clone(e.overridden)}
 	}
 	return
 }
 
-// OperationsDiagnostic says why the operations catalog of id was withdrawn
-// at registration (ADR-0269 §SD2); empty when it was kept, none was
-// declared, or id is not registered.
-func (inst *Registry) OperationsDiagnostic(id AppIdT) (diagnostic string) {
+// AliasOf returns the alias of the app registered under id
+// (Manifest.SubjectAlias), or the alias derived from id when id is not
+// registered — a service's own id, a test's.
+func (inst *Registry) AliasOf(id AppIdT) (alias string) {
 	inst.mu.RLock()
-	defer inst.mu.RUnlock()
-	if idx, ok := inst.byId[id]; ok {
-		diagnostic = inst.entries[idx].opsDiagnostic
+	idx, ok := inst.byId[id]
+	if ok {
+		alias = inst.entries[idx].manifest.SubjectAlias()
 	}
+	inst.mu.RUnlock()
+	if !ok {
+		alias = id.DerivedAlias()
+	}
+	return
+}
+
+// aliasLocked is AliasOf for a caller holding mu.
+func (inst *Registry) aliasLocked(id AppIdT) (alias string) {
+	if idx, ok := inst.byId[id]; ok {
+		return inst.entries[idx].manifest.SubjectAlias()
+	}
+	return id.DerivedAlias()
+}
+
+// AliasOf is DefaultRegistry.AliasOf: the alias a bus subject names the
+// app registered under id by.
+func AliasOf(id AppIdT) (alias string) {
+	alias = DefaultRegistry.AliasOf(id)
 	return
 }
 

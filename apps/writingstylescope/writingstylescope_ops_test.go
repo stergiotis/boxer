@@ -45,7 +45,7 @@ func TestOperationsCatalogRegisters(t *testing.T) {
 	require.NoError(t, manifest.Operations.Validate())
 	m, ok := app.LookupManifest(manifest.Id)
 	require.True(t, ok)
-	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(manifest.Id))
+	require.NotNil(t, m.Operations)
 	for _, name := range []string{opGetView, opGetPairs, opGetDistribution, opSetDocument, opSetFloor, opAnalyze, opOpenInPlay} {
 		spec, found := m.Operations.Lookup(name)
 		require.True(t, found, name)

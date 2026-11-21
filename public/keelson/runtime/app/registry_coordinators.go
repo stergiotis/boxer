@@ -17,6 +17,6 @@ func (inst *Registry) Coordinator(id AppIdT) (ok bool) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	return slices.ContainsFunc(inst.coordinators, func(n string) bool {
-		return n == string(id) || n == id.SubjectAlias()
+		return n == string(id) || n == inst.aliasLocked(id)
 	})
 }

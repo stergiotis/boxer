@@ -62,7 +62,7 @@ func TestRefT_IsZero(t *testing.T) {
 // the full Id via app.LookupManifest, then build the RefT.
 func TestRefT_AppIdSubjectAlias(t *testing.T) {
 	r := RefT{AppId: "github.com/stergiotis/boxer/apps/capinspector"}
-	alias := r.AppId.SubjectAlias()
+	alias := r.AppId.DerivedAlias()
 	if alias != "capinspector" {
 		t.Errorf("SubjectAlias: got %q, want %q", alias, "capinspector")
 	}

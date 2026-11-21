@@ -43,12 +43,12 @@ func setupAppTimeout(t *testing.T, busTimeout time.Duration) (a *App, fsSvc *fsb
 	// declared caps + the auto-injected persist cap for PersistedKeys.
 	caps := append([]app.SubjectFilter(nil), manifest.Caps...)
 	caps = append(caps, app.SubjectFilter{
-		Pattern:   persist.SubjectPrefix + id.SubjectAlias() + ".>",
+		Pattern:   persist.SubjectPrefix + id.DerivedAlias() + ".>",
 		Direction: app.CapDirectionPub,
 		Reason:    "test fixture: PersistedKeys auto-inject",
 	})
 	busC := bus.NewClient(id, caps)
-	storage, err := persist.NewClient(busC, id)
+	storage, err := persist.NewClient(busC, id.DerivedAlias())
 	require.NoError(t, err)
 
 	a = newApp()

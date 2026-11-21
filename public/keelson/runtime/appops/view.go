@@ -6,8 +6,7 @@ import (
 )
 
 // View is an operation as a caller and a table see it: its declaration with
-// the JSON Schemas of its arguments and result derived. A withdrawn catalog
-// is one View with an empty Name and the Diagnostic set.
+// the JSON Schemas of its arguments and result derived.
 type View struct {
 	App        app.AppIdT
 	AppDisplay string
@@ -34,19 +33,13 @@ type View struct {
 	DryRun       string
 	ArgsSchema   string
 	ResultSchema string
-	Diagnostic   string
 }
 
 // Views lists the operations of every registration, in registry order and
-// catalog order within an app. Apps without a catalog contribute nothing;
-// a withdrawn catalog contributes its diagnostic.
+// catalog order within an app. Apps without a catalog contribute nothing.
 func Views(regs []app.Registration) (views []View) {
 	for _, r := range regs {
 		m := r.Manifest
-		if r.OperationsDiagnostic != "" {
-			views = append(views, View{App: m.Id, AppDisplay: m.Display, Diagnostic: r.OperationsDiagnostic})
-			continue
-		}
 		if m.Operations == nil {
 			continue
 		}

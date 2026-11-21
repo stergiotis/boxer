@@ -760,7 +760,7 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 		caps := append([]app.SubjectFilter(nil), m.Caps...)
 		if len(m.PersistedKeys) > 0 {
 			caps = append(caps, app.SubjectFilter{
-				Pattern:   persist.SubjectPrefix + m.Id.SubjectAlias() + ".>",
+				Pattern:   persist.SubjectPrefix + m.SubjectAlias() + ".>",
 				Direction: app.CapDirectionPub,
 				Reason:    "host-injected for declared PersistedKeys",
 			})
@@ -779,7 +779,7 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 			}
 			// Storage client wraps the same bus client so MountCtx.Storage()
 			// shares the per-app permission set with MountCtx.Bus().
-			sc, sErr := persist.NewClient(busC, m.Id)
+			sc, sErr := persist.NewClient(busC, m.SubjectAlias())
 			if sErr != nil {
 				inst.logger.Warn().Err(sErr).Str("appId", string(m.Id)).
 					Msg("windowhost: persist client construction failed; using NoopStorage")

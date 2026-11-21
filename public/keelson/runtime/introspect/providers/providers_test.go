@@ -265,17 +265,16 @@ func firstStringList(t *testing.T, rec arrow.RecordBatch, col string) (out []str
 	return
 }
 
-func TestOperationsTableShowsCatalogsAndWithdrawals(t *testing.T) {
+func TestOperationsTableShowsCatalogs(t *testing.T) {
 	type args struct{ Text string }
 	vs := []appops.View{
 		appops.ViewOf(app.Manifest{Id: "x/apps/notes", Display: "Notes"}, app.OperationSpec{
 			Name: "set_note", Version: 1, Summary: "replace the note", Class: app.OperationClassCommand,
 			Effect: app.OperationEffectDocument, Writes: []string{"note"}, Args: reflect.TypeFor[args](), Agents: true}),
-		{App: "x/apps/broken", AppDisplay: "Broken", Diagnostic: "operations: version starts at 1"},
 	}
 	rec := operationsTable(vs).Build(introspect.Projection{}, len(vs))
 	defer rec.Release()
-	require.EqualValues(t, 2, rec.NumRows())
+	require.EqualValues(t, 1, rec.NumRows())
 	col := func(name string) arrow.Array {
 		idx := rec.Schema().FieldIndices(name)
 		require.Len(t, idx, 1, name)
@@ -284,6 +283,4 @@ func TestOperationsTableShowsCatalogsAndWithdrawals(t *testing.T) {
 	assert.Equal(t, "set_note", col("operation").(*array.String).Value(0))
 	assert.Equal(t, "document", col("effect").(*array.String).Value(0))
 	assert.Contains(t, col("args_schema").(*array.String).Value(0), `"text"`)
-	assert.Equal(t, "", col("operation").(*array.String).Value(1))
-	assert.Contains(t, col("diagnostic").(*array.String).Value(1), "version")
 }

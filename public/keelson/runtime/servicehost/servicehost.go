@@ -286,7 +286,7 @@ func (inst *Inst) mount(ctx context.Context, s *service, sd Seed) (err error) {
 		caps := append([]app.SubjectFilter(nil), m.Caps...)
 		if len(m.PersistedKeys) > 0 {
 			caps = append(caps, app.SubjectFilter{
-				Pattern:   persist.SubjectPrefix + m.Id.SubjectAlias() + ".>",
+				Pattern:   persist.SubjectPrefix + m.SubjectAlias() + ".>",
 				Direction: app.CapDirectionPub,
 				Reason:    "host-injected for declared PersistedKeys",
 			})
@@ -299,7 +299,7 @@ func (inst *Inst) mount(ctx context.Context, s *service, sd Seed) (err error) {
 			if bi, ok := client.(app.BusInstanceI); ok {
 				bi.SetInstanceKey(key)
 			}
-			sc, sErr := persist.NewClient(busC, m.Id)
+			sc, sErr := persist.NewClient(busC, m.SubjectAlias())
 			if sErr != nil {
 				inst.cfg.Log.Warn().Err(sErr).Str("id", string(m.Id)).Msg("servicehost: persist client construction failed; using NoopStorage")
 			} else {

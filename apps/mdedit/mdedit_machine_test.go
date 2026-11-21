@@ -67,7 +67,7 @@ func TestTheDocumentMachineIsMounted(t *testing.T) {
 	require.NoError(t, manifest.Operations.Validate())
 	m, ok := app.LookupManifest(manifest.Id)
 	require.True(t, ok)
-	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(manifest.Id))
+	require.NotNil(t, m.Operations)
 
 	inst := newApp()
 	inst.logger = zerolog.Nop()

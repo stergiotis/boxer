@@ -207,7 +207,7 @@ func (inst *noteHost) OpsInstances() (out []opwire.InstanceInfo) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	for k := range inst.engines {
-		out = append(out, opwire.InstanceInfo{App: notesId, Alias: notesId.SubjectAlias(), Key: k, Title: "Notes", Ops: true, Confined: inst.sealed[k]})
+		out = append(out, opwire.InstanceInfo{App: notesId, Alias: notesId.DerivedAlias(), Key: k, Title: "Notes", Ops: true, Confined: inst.sealed[k]})
 	}
 	return
 }

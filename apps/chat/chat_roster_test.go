@@ -79,9 +79,9 @@ func TestTheRostersTitleReachesTheStore(t *testing.T) {
 	svc, err := persist.NewService(bus, zerolog.Nop(), backend)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
-	alias := ManifestId.SubjectAlias()
+	alias := ManifestId.DerivedAlias()
 	clientOver := func(caps []app.SubjectFilter) (storage app.StorageI) {
-		storage, cErr := persist.NewClient(bus.NewClient(ManifestId, caps), ManifestId)
+		storage, cErr := persist.NewClient(bus.NewClient(ManifestId, caps), alias)
 		require.NoError(t, cErr)
 		return
 	}

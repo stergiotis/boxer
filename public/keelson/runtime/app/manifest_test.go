@@ -205,7 +205,7 @@ func TestAppIdT_SubjectAlias(t *testing.T) {
 		"weird/name with spaces":                "name_with_spaces",
 	}
 	for id, want := range cases {
-		assert.Equal(t, want, id.SubjectAlias(), "id=%q", id)
+		assert.Equal(t, want, id.DerivedAlias(), "id=%q", id)
 	}
 }
 

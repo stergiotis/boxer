@@ -25,18 +25,23 @@ type Client struct {
 
 var _ app.StorageI = (*Client)(nil)
 
-// NewClient binds the bus client (whose AppId matches appId) to the
-// runtime.persist.{alias} subject family. A nil bus is rejected at
-// construction so the host fails fast rather than handing the app a
-// Storage that errors on every call.
-func NewClient(bus app.BusI, appId app.AppIdT) (inst *Client, err error) {
+// NewClient binds the bus client to the runtime.persist.{alias} subject
+// family of the app known by alias — its manifest's SubjectAlias, which the
+// bus client's capabilities were declared for. A nil bus or a malformed
+// alias is rejected at construction so the host fails fast rather than
+// handing the app a Storage that errors on every call.
+func NewClient(bus app.BusI, alias string) (inst *Client, err error) {
 	if bus == nil {
 		err = eh.Errorf("persist: NewClient: nil bus")
 		return
 	}
+	if err = app.ValidateAlias(alias); err != nil {
+		err = eh.Errorf("persist: NewClient: %w", err)
+		return
+	}
 	inst = &Client{
 		bus:   bus,
-		alias: appId.SubjectAlias(),
+		alias: alias,
 	}
 	return
 }

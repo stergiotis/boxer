@@ -107,31 +107,40 @@ func TestAConsequentialCommandMayDeclareAConsent(t *testing.T) {
 	assert.Equal(t, "publish:sales_", c.Operations[1].Consent.Destination("sales_"))
 }
 
-func TestRegistryWithdrawsABadCatalogAndKeepsTheApp(t *testing.T) {
+func TestRegistryRefusesABadCatalog(t *testing.T) {
 	r := NewRegistry()
 	m := validManifestForOps("github.com/x/apps/bad")
 	m.Operations = validCatalog()
 	m.Operations.Operations[0].Version = 0
-	require.NoError(t, r.RegisterFactory(m, func() (AppI, error) { return nil, nil }))
-	got, ok := r.LookupManifest(m.Id)
-	require.True(t, ok)
-	assert.Nil(t, got.Operations)
-	assert.Contains(t, r.OperationsDiagnostic(m.Id), "version")
-	regs := r.Registrations()
-	require.Len(t, regs, 1)
-	assert.NotEmpty(t, regs[0].OperationsDiagnostic)
+	err := r.RegisterFactory(m, func() (AppI, error) { return nil, nil })
+	require.ErrorContains(t, err, "version")
+	_, ok := r.LookupManifest(m.Id)
+	assert.False(t, ok)
 }
 
-func TestRegistryWithdrawsACatalogOnASingleton(t *testing.T) {
+func TestRegistryRefusesACatalogOnASingleton(t *testing.T) {
 	r := NewRegistry()
 	m := validManifestForOps("github.com/x/apps/single")
 	m.Operations = validCatalog()
 	a, err := NewLegacyFuncApp(m, func() error { return nil })
 	require.NoError(t, err)
-	require.NoError(t, r.Register(a))
-	got, _ := r.LookupManifest(m.Id)
-	assert.Nil(t, got.Operations)
-	assert.Contains(t, r.OperationsDiagnostic(m.Id), "factory")
+	require.ErrorContains(t, r.Register(a), "factory")
+}
+
+type plainApp struct{ m Manifest }
+
+func (inst *plainApp) Manifest() (m Manifest)                { return inst.m }
+func (inst *plainApp) Mount(ctx MountContextI) (err error)   { return }
+func (inst *plainApp) Frame(ctx FrameContextI) (err error)   { return }
+func (inst *plainApp) Unmount(ctx MountContextI) (err error) { return }
+
+func TestOpenRefusesAnInstanceWithoutOperationsAppI(t *testing.T) {
+	r := NewRegistry()
+	m := validManifestForOps("github.com/x/apps/noops")
+	m.Operations = validCatalog()
+	require.NoError(t, r.RegisterFactory(m, func() (AppI, error) { return &plainApp{m: m}, nil }))
+	_, err := r.Open(m.Id)
+	require.ErrorContains(t, err, "OperationsAppI")
 }
 
 func TestRegistryKeepsAValidCatalog(t *testing.T) {
@@ -144,7 +153,6 @@ func TestRegistryKeepsAValidCatalog(t *testing.T) {
 	spec, ok := got.Operations.Lookup("set_doc")
 	require.True(t, ok)
 	assert.True(t, spec.Agents)
-	assert.Empty(t, r.OperationsDiagnostic(m.Id))
 }
 
 func validManifestForOps(id AppIdT) Manifest {

@@ -233,7 +233,7 @@ func (inst *App) openDemo(name string) {
 	bus := inst.bus
 	target := app.AppIdT(name)
 	for _, m := range app.AllManifests() {
-		if string(m.Id) == name || m.Id.SubjectAlias() == name {
+		if string(m.Id) == name || m.SubjectAlias() == name {
 			target = m.Id
 		}
 	}

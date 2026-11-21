@@ -99,7 +99,7 @@ func manifestsToArrowIPC(manifests []runtimeapp.Manifest) (buf []byte, err error
 
 	for _, m := range sorted {
 		id.Append(string(m.Id))
-		alias.Append(m.Id.SubjectAlias())
+		alias.Append(m.SubjectAlias())
 		if code, ok := codeForId(m.Id); ok {
 			legacy.Append(code)
 		} else {
@@ -248,7 +248,7 @@ func renderManifestsAscii(manifests []runtimeapp.Manifest, w io.Writer) (err err
 		}
 		rows = append(rows, []string{
 			code,
-			m.Id.SubjectAlias(),
+			m.SubjectAlias(),
 			m.Surface.String(),
 			joinTopics(m.Topics),
 			m.Display,

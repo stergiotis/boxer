@@ -135,7 +135,7 @@ var AppsSeed = env.NewBool(env.Spec{
 // window starts with it on.
 func registeredCoordinator() (yes bool) {
 	for _, n := range agent.ParseCoordinators(agent.CoordinatorsEnv.Get()) {
-		if n == string(ManifestId) || n == ManifestId.SubjectAlias() {
+		if n == string(ManifestId) || n == app.AliasOf(ManifestId) {
 			return true
 		}
 	}

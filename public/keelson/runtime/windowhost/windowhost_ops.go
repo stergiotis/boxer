@@ -110,7 +110,7 @@ func (inst *Inst) engineOf(alias string, key uint64) (eng *opengine.Engine, w *w
 		if uint64(cand.key) != key || cand.closeReq {
 			continue
 		}
-		if alias != "" && cand.manifest.Id.SubjectAlias() != alias {
+		if alias != "" && cand.manifest.SubjectAlias() != alias {
 			return
 		}
 		return cand.ops.Load(), cand
@@ -129,7 +129,7 @@ func (inst *Inst) OpsInstances() (out []opwire.InstanceInfo) {
 		eng := w.ops.Load()
 		load, reason := w.loadState()
 		out = append(out, opwire.InstanceInfo{
-			App: w.manifest.Id, Alias: w.manifest.Id.SubjectAlias(), Key: uint64(w.key),
+			App: w.manifest.Id, Alias: w.manifest.SubjectAlias(), Key: uint64(w.key),
 			Title: w.manifest.WindowTitle(), Ops: eng != nil, Confined: eng != nil && eng.Confined(),
 			Load: load, Reason: reason, Stalled: stalledOf(eng),
 		})

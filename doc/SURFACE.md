@@ -22,7 +22,7 @@ itself; ADR-0389 states its tier.
 
 | Section | Packages |
 | --- | ---: |
-| [Stable](#stable) | 76 |
+| [Stable](#stable) | 77 |
 | [Experimental](#experimental) | 282 |
 | [Internal](#internal) | 16 |
 | [Test support](#test-support) | 15 |
@@ -88,6 +88,7 @@ Covered by the compatibility promise in [VERSIONING.md](../VERSIONING.md): an in
 - `public/keelson/runtime/icons` — Package icons supplies the IDS iconography catalogue.
 - `public/keelson/runtime/lifetime` — Package lifetime groups work that is retired as one, and lets the owner wait for it to finish (ADR-0322).
 - `public/keelson/runtime/persist` — Package persist implements the ADR-0026 §SD3 runtime.persist.{alias}.{key}.{op} subject family.
+- `public/keelson/runtime/registration` — Package registration collects the failures of registrations a process makes at package initialisation (ADR-0396 §2): an app whose manifest does not validate, a duplicate alias, a launch-kind probe or an egress destination registered twice.
 - `public/keelson/runtime/task` — Package task is keelson's bus-protocol primitive for long-running, cancellable, observable work — the M1 surface of ADR-0038.
 
 ### math

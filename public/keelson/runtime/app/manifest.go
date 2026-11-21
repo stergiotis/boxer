@@ -30,10 +30,11 @@ import (
 // Stable across implementation churn; renaming an Id is a deprecation event.
 type AppIdT string
 
-// SubjectAlias returns the NATS-token-safe alias used to encode this AppId
-// in subject patterns (e.g., runtime.persist.{alias}.{key}.{op}). Derivation:
-// take the last '/'-separated segment of the Id; replace any character that
-// is not [A-Za-z0-9_-] with '_'. The result is one NATS subject token.
+// DerivedAlias is the alias an app whose manifest sets no Alias is known
+// by: the last '/'-separated segment of the id, with every byte outside
+// [A-Za-z0-9_-] replaced by '_', so the result is one subject token. It keys
+// the app's persisted state (runtime.persist.{alias}.>), its workstatelet
+// entries and its operation subjects, so the derivation does not change.
 //
 // Examples:
 //
@@ -41,9 +42,10 @@ type AppIdT string
 //	"github.com/.../apps/widgets/table"               -> "table"
 //	"runtime.broker"                                  -> "runtime_broker"
 //
-// Hosts that register apps are responsible for ensuring distinct AppIds
-// produce distinct aliases; collisions would route to the wrong app.
-func (inst AppIdT) SubjectAlias() (alias string) {
+// A host names a registered app by [Manifest.SubjectAlias] or [AliasOf],
+// which honour an explicit Alias; DerivedAlias is for an id no manifest
+// stands behind.
+func (inst AppIdT) DerivedAlias() (alias string) {
 	s := string(inst)
 	if i := lastIndexByte(s, '/'); i >= 0 {
 		s = s[i+1:]
@@ -51,14 +53,34 @@ func (inst AppIdT) SubjectAlias() (alias string) {
 	b := make([]byte, 0, len(s))
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-			(c >= '0' && c <= '9') || c == '_' || c == '-' {
+		if isAliasByte(c) {
 			b = append(b, c)
 		} else {
 			b = append(b, '_')
 		}
 	}
 	alias = string(b)
+	return
+}
+
+func isAliasByte(c byte) (ok bool) {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+		(c >= '0' && c <= '9') || c == '_' || c == '-'
+}
+
+// ValidateAlias reports an alias that is not one subject token of
+// [A-Za-z0-9_-].
+func ValidateAlias(alias string) (err error) {
+	if alias == "" {
+		err = eh.Errorf("alias is empty")
+		return
+	}
+	for i := 0; i < len(alias); i++ {
+		if !isAliasByte(alias[i]) {
+			err = eb.Build().Str("alias", alias).Errorf("alias %q has a byte outside [A-Za-z0-9_-]", alias)
+			return
+		}
+	}
 	return
 }
 
@@ -208,7 +230,17 @@ type SurfaceHints struct {
 // once at registration time; never mutated. The registry validates manifests
 // at Register and rejects malformed ones.
 type Manifest struct {
-	Id      AppIdT
+	Id AppIdT
+	// Alias is the one subject token the app is known by on the bus and in
+	// stored state: its persist subjects (runtime.persist.{alias}.>), its
+	// workstatelet entries, its operation subjects (ADR-0396 §1). Empty
+	// means the alias derived from Id ([AppIdT.DerivedAlias]), which is
+	// what every app had before the field existed. Set it when two apps'
+	// derived aliases collide — a module outside this one prefixes a token
+	// of its own, "acme_play" — or when the app's directory is renamed, to
+	// the old alias, so its users' stored state stays reachable. Changing
+	// an alias orphans that state.
+	Alias   string
 	Version string
 	// Display is the human label used in launcher menus, dock tab strips,
 	// and crash banners. Required.
@@ -322,9 +354,9 @@ type Manifest struct {
 
 	// Operations is the optional catalog of commands and queries the app
 	// offers to callers on the bus, agents among them (ADR-0269 §SD2). It
-	// requires factory registration. A catalog that fails validation is
-	// withdrawn at registration with a diagnostic, and the app still
-	// registers; [Registry.OperationsDiagnostic] says why.
+	// requires factory registration, and an instance implementing
+	// [OperationsAppI]. A catalog that fails validation refuses the
+	// registration (ADR-0396 §2).
 	Operations *OperationsCatalog
 
 	// Help is the optional inline-help corpus for this app. When non-nil,
@@ -346,6 +378,16 @@ type Manifest struct {
 	// or goldmark into the app package's transitive imports; consumers
 	// of [Manifest] that don't read .Help see no dependency change.
 	Help fs.FS
+}
+
+// SubjectAlias is the alias hosts key the app by: Alias when set, else the
+// alias derived from Id.
+func (inst Manifest) SubjectAlias() (alias string) {
+	alias = inst.Alias
+	if alias == "" {
+		alias = inst.Id.DerivedAlias()
+	}
+	return
 }
 
 // WindowTitle returns the composed window title hosts use when building
@@ -378,6 +420,12 @@ func (inst Manifest) Validate() (err error) {
 	if inst.Display == "" {
 		err = eb.Build().Str("id", string(inst.Id)).Errorf("manifest: empty Display")
 		return
+	}
+	if inst.Alias != "" {
+		if aErr := ValidateAlias(inst.Alias); aErr != nil {
+			err = eb.Build().Str("id", string(inst.Id)).Errorf("manifest: %w", aErr)
+			return
+		}
 	}
 	if inst.Surface == SurfaceUnspecified {
 		err = eb.Build().Str("id", string(inst.Id)).Errorf("manifest: Surface must be set")

@@ -143,7 +143,7 @@ type request struct {
 
 func (inst *Service) isCoordinator(id app.AppIdT) (ok bool) {
 	for _, n := range inst.cfg.Coordinators {
-		if n == string(id) || n == id.SubjectAlias() {
+		if n == string(id) || n == app.AliasOf(id) {
 			return true
 		}
 	}

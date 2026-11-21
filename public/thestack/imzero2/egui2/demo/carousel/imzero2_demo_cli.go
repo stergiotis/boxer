@@ -270,7 +270,7 @@ func parseLaunchConfigs(specs []string) (seeds []hostboot.SeedWindow, err error)
 		var m runtimeapp.Manifest
 		found := false
 		for _, cand := range runtimeapp.AllManifests() {
-			if cand.Id.SubjectAlias() == alias {
+			if cand.SubjectAlias() == alias {
 				m, found = cand, true
 				break
 			}

@@ -55,12 +55,12 @@ func setupPlayWithCapsTimeout(t *testing.T, busTimeout time.Duration) (inst *Pla
 	// windowhost derives that one from PersistedKeys rather than the manifest.
 	caps := append([]app.SubjectFilter(nil), (&PlayLauncher{}).Manifest().Caps...)
 	caps = append(caps, app.SubjectFilter{
-		Pattern:   persist.SubjectPrefix + id.SubjectAlias() + ".>",
+		Pattern:   persist.SubjectPrefix + id.DerivedAlias() + ".>",
 		Direction: app.CapDirectionPub,
 		Reason:    "test fixture: persist auto-inject",
 	})
 	busC := bus.NewClient(id, caps)
-	storage, err := persist.NewClient(busC, id)
+	storage, err := persist.NewClient(busC, id.DerivedAlias())
 	require.NoError(t, err)
 
 	graph := newLiveQueryGraph(nil, memory.NewGoAllocator(), 10)

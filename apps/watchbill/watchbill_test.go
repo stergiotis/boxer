@@ -391,7 +391,7 @@ func TestSplitState(t *testing.T) {
 func TestTheCatalogRegisters(t *testing.T) {
 	m, ok := app.LookupManifest(manifest.Id)
 	require.True(t, ok)
-	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(manifest.Id))
+	require.NotNil(t, m.Operations)
 	cancel, found := m.Operations.Lookup(opCancel)
 	require.True(t, found)
 	assert.Equal(t, app.OperationEffectConsequential, cancel.Effect, "cancel writes outside the window")

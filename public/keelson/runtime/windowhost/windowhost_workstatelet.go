@@ -173,7 +173,7 @@ func (inst *Inst) resolveAppName(name string) (id app.AppIdT, err error) {
 		return
 	}
 	for _, m := range inst.registry.Manifests() {
-		if m.Id.SubjectAlias() == name {
+		if m.SubjectAlias() == name {
 			id = m.Id
 			return
 		}
@@ -281,7 +281,7 @@ func (inst *Inst) CaptureWorkstatelet() (doc workstatelet.Doc, err error) {
 	var displays []string
 	topics := make(map[app.TopicT]bool, 4)
 	for _, w := range windows {
-		out := workstatelet.Window{App: w.manifest.Id.SubjectAlias(), Floating: floating[w.key]}
+		out := workstatelet.Window{App: w.manifest.SubjectAlias(), Floating: floating[w.key]}
 		if cfg := inst.captureConfig(w); len(cfg) > 0 {
 			out.Kind, out.Config = w.manifest.LaunchKind, cfg
 		}
