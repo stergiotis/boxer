@@ -16,7 +16,9 @@ first on every I/O interface and removes the ctx-less twins. No stored table
 and no wire format changes. A consuming module regenerates its generated
 stores, then passes a ctx at each call the compiler reports. Changes of
 behaviour from the same period that compile unchanged are listed in
-[2026-11-behaviour-changes.md](./2026-11-behaviour-changes.md).
+[2026-11-behaviour-changes.md](./2026-11-behaviour-changes.md), and the app
+contract that changed with them in
+[2026-11-app-contract.md](./2026-11-app-contract.md).
 
 ## When to use this recipe
 

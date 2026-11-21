@@ -15,6 +15,11 @@
 //     harness (egui2test) and unmounts it; FrameAll does so for every
 //     windowed app of a registry. Strict mode fails on what a host only
 //     warns about: an id used twice in a frame, an unbalanced pop.
+//
+// The harness under FrameHeadless is egui2test: Install for a frame that
+// emits into nothing, InstallRecording with Messages, FindOpcode and
+// CountOpcode for a test that reads back what a frame emitted. An app that
+// declares external programs adds extbin.CheckDeclarations.
 package apptest
 
 import (

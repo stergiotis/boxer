@@ -16,7 +16,11 @@ contract between a host and its apps explicit: an alias that keys stored
 state, registrations that stop the host when they fail, context
 capabilities as methods, one subject grammar, and a conformance kit. No
 stored table changes, and no app's alias changes unless it sets one. Bus
-subjects change: every runtime service gains the `runtime.` root.
+subjects change: every runtime service gains the `runtime.` root. The
+context these calls take is in
+[2026-11-io-context.md](./2026-11-io-context.md), and the period's changes
+that compile unchanged in
+[2026-11-behaviour-changes.md](./2026-11-behaviour-changes.md).
 
 ## When to use this recipe
 
@@ -52,7 +56,10 @@ as "outside the subject grammar".
    app has a catalog, and `apptest.FrameHeadless(t, app.DefaultRegistry, id,
    apptest.FrameOpts{Strict: true})`. A test that builds an app without
    `Mount` takes its context from `app.ContextOf(apptest.MountContext(t, id))`
-   or `t.Context()`. Import the headless harness as `egui2test`.
+   or `t.Context()`. Import the headless harness as `egui2test`; its
+   `InstallRecording`, `Messages`, `FindOpcode` and `CountOpcode` read back
+   what a frame emitted. An app that declares external programs adds
+   `extbin.CheckDeclarations(t)`.
 6. **Gate.** `gov gate` applies CS017 to `<module>/apps` and CS020 to the
    module; pass `--app-prefix`, `--ctx-prefix` or `--ctx-baseline` to change
    that.
@@ -145,7 +152,7 @@ Audit rows already stored keep the subjects they were written with.
 
 | Old | New |
 |---|---|
-| `…/egui2/widgets/graphview/scenetest` (`scenetest.Install`) | `…/egui2/egui2test` (`egui2test.Install`, now bound to the calling goroutine) |
+| `…/egui2/widgets/graphview/scenetest` (`scenetest.Install`, `InstallRecording`, `Messages`, `FindOpcode`, `CountOpcode`) | `…/egui2/egui2test` (same names; `Install` now binds the channel to the calling goroutine) |
 | per-app help-corpus test functions | `apptest.HelpCorpus`, `apptest.HelpNamesCatalog` |
 | codelint CS017/CS020 fixed to boxer's trees | `codelint.Scope`, `NewLinterFor`, `ModuleScope`; gate flags `--app-prefix`, `--ctx-prefix`, `--ctx-baseline` |
 

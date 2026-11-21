@@ -17,7 +17,9 @@ does not point at them; a test, a deployment or the module's own gate does,
 later. The API breaks and package moves of the same period are in
 [2026-11-library-layering.md](./2026-11-library-layering.md); the context
 now passed to store, persist and bus calls is in
-[2026-11-io-context.md](./2026-11-io-context.md).
+[2026-11-io-context.md](./2026-11-io-context.md); the app contract —
+alias, registration, context capabilities, subjects — is in
+[2026-11-app-contract.md](./2026-11-app-contract.md).
 
 ## When to use this recipe
 
