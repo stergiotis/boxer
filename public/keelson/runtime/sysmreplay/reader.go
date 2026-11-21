@@ -86,6 +86,16 @@ func (inst *Reader) Key(domain string) (key uint64) {
 	return
 }
 
+// table is the relation the reader's own SQL reads: the store's read table,
+// so the aggregates and the store's scans read the same rows (ADR-0402
+// §SD3). A reader with no store reads the baked table.
+func (inst *Reader) table() string {
+	if inst.store == nil {
+		return sysmfacts.SysmetricsTableName
+	}
+	return inst.store.SchemaContract().Table
+}
+
 // cursor is one per-tick kind's position in its ascending row stream.
 type cursor struct {
 	domain string
@@ -418,7 +428,7 @@ func (inst *Reader) fetchCarry(ctx context.Context, domain string, w Window) (c 
 // section is touched, so this is not the hand-written array arithmetic the
 // read-surface page warns against.
 func (inst *Reader) fetchAsOf(ctx context.Context, domain string, key uint64, bound time.Time) (ent *sysmfacts.SysmetricsEntity, err error) {
-	pred := asOfPredicate(key, bound)
+	pred := asOfPredicate(inst.table(), key, bound)
 	opts := recordstore.ScanOpts{ExtraPredicate: pred, Limit: 1}
 	var seq iter.Seq2[*sysmfacts.SysmetricsEntity, error]
 	switch domain {
@@ -445,12 +455,12 @@ func (inst *Reader) fetchAsOf(ctx context.Context, domain string, key uint64, bo
 }
 
 // asOfPredicate restricts a scan to the single newest row for key before bound.
-func asOfPredicate(key uint64, bound time.Time) (pred string) {
+func asOfPredicate(table string, key uint64, bound time.Time) (pred string) {
 	k := strconv.FormatUint(key, 10)
 	lit := "fromUnixTimestamp64Nano(" + strconv.FormatInt(bound.UnixNano(), 10) + ")"
 	pred = sysmfacts.SysmetricsColKey + " = " + k +
 		" AND " + sysmfacts.SysmetricsColOrder + " = (SELECT max(" + sysmfacts.SysmetricsColOrder + ")" +
-		" FROM " + sysmfacts.SysmetricsTableName +
+		" FROM " + table +
 		" WHERE " + sysmfacts.SysmetricsColKey + " = " + k +
 		" AND " + sysmfacts.SysmetricsColOrder + " < " + lit + ")"
 	return

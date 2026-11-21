@@ -66,7 +66,7 @@ func (inst *Reader) CountBundles(ctx context.Context, w Window) (n int64, err er
 		err = eh.Errorf("sysmreplay: counting needs Options.Exec")
 		return
 	}
-	sql := "SELECT toInt64(count()) AS c FROM " + sysmfacts.SysmetricsTableName +
+	sql := "SELECT toInt64(count()) AS c FROM " + inst.table() +
 		" WHERE " + inst.windowPredicate(w, DomainCPU)
 	var cols struct {
 		Count []int64 `ch:"c"`
@@ -119,7 +119,7 @@ func (inst *Reader) PlanDecimation(ctx context.Context, w Window, slots int) (pl
 	// choice is stable across runs — a plan the user re-enters must show them
 	// the same frames.
 	sql := "SELECT toInt64(toUnixTimestamp64Milli(min(" + col + "))) AS t FROM " +
-		sysmfacts.SysmetricsTableName +
+		inst.table() +
 		" WHERE " + inst.windowPredicate(w, DomainCPU) +
 		" GROUP BY toStartOfInterval(" + col + ", INTERVAL " + strconv.FormatInt(secs, 10) + " SECOND)" +
 		" ORDER BY t"

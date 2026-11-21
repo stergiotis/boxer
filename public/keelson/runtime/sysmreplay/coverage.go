@@ -124,7 +124,7 @@ func (inst *Reader) coverageSQL(w Window, bucket time.Duration) (sql string) {
 	b.WriteString(", INTERVAL ")
 	b.WriteString(strconv.FormatInt(secs, 10))
 	b.WriteString(" SECOND))) * 1000 AS b, toUInt64(count()) AS c FROM ")
-	b.WriteString(sysmfacts.SysmetricsTableName)
+	b.WriteString(inst.table())
 	b.WriteString(" WHERE ")
 	b.WriteString(sysmfacts.SysmetricsColKey)
 	b.WriteString(" IN (")

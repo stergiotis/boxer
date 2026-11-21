@@ -114,7 +114,7 @@ func (inst *Reader) previewSQL(w Window, bucket time.Duration) (sql string) {
 	b.WriteString(" AS ts, (")
 	b.WriteString(a.Projection)
 	b.WriteString(").TotalPercent AS v FROM ")
-	b.WriteString(sysmfacts.SysmetricsTableName)
+	b.WriteString(inst.table())
 	b.WriteString(" WHERE (")
 	b.WriteString(a.Filter)
 	b.WriteString(") AND ")
