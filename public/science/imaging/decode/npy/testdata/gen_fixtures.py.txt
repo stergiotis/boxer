@@ -1,0 +1,102 @@
+# Provenance of the NPY and NPZ fixtures and of the tables beside them
+# (ADR-0398 §SD8, verification plan). Not part of any toolchain: run by hand
+# with numpy as the reference implementation, from this directory:
+#   uv run --no-project --with numpy python gen_fixtures.py.txt
+# Every file is synthetic and written by numpy.save, numpy.lib.format or
+# numpy.savez(_compressed); values.tsv is numpy's own reading of every
+# sample of every array this reader reads, by C-order index, and
+# members.tsv numpy's listing of the archives.
+import os
+import numpy as np
+from numpy.lib import format as npf
+
+out = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else '.'
+
+
+def ramp(shape, dtype, scale=1, offset=0):
+    """A distinct value at every index, so an axis-order error shows."""
+    n = int(np.prod(shape))
+    return (np.arange(n, dtype=np.float64) * scale + offset).reshape(shape).astype(dtype)
+
+
+arrays = {}  # file -> {member: array}; member '' for a plain .npy
+for code, scale, offset in [('u1', 7, 3), ('u2', 3001, 7), ('i2', -1111, 7000), ('i4', -123457, 900001),
+                            ('f4', 0.25, -1.5), ('f8', 1e-3, 1e10)]:
+    for order in '<>':
+        a = ramp((3, 5), np.dtype(order + code), scale, offset)
+        if code[0] == 'f':
+            a[1, 2] = np.nan
+        name = code + ('_le' if order == '<' else '_be') + '.npy'
+        if code == 'u1' and order == '>':
+            continue
+        arrays[name] = {'': a}
+
+arrays['cube_u2.npy'] = {'': ramp((3, 4, 5), '<u2', 1, 100)}
+arrays['nd4_i2.npy'] = {'': ramp((2, 3, 4, 5), '>i2', -7, 30)}
+arrays['fortran_i4.npy'] = {'': np.asfortranarray(ramp((2, 3, 4), '<i4', 11, -50))}
+arrays['fortran2d_f8.npy'] = {'': np.asfortranarray(ramp((3, 5), '>f8', 0.5, 1))}
+arrays['fortran4d_u1.npy'] = {'': np.asfortranarray(ramp((2, 3, 4, 5), '|u1', 1, 0))}
+
+for name, entries in arrays.items():
+    np.save(os.path.join(out, name), entries[''])
+
+# Format versions 2.0 and 3.0, written explicitly.
+for v in [(2, 0), (3, 0)]:
+    name = 'v%d_f4.npy' % v[0]
+    a = ramp((4, 3), '<f4', 1.5, 2)
+    with open(os.path.join(out, name), 'wb') as f:
+        npf.write_array(f, a, version=v)
+    arrays[name] = {'': a}
+
+# Archives: one stored array; several deflated ones.
+single = ramp((4, 6), '<i2', 3, -10)
+np.savez(os.path.join(out, 'single.npz'), single)
+arrays['single.npz'] = {'arr_0.npy': single}
+multi = {'image': ramp((3, 5), '<f4', 0.5, 0), 'cube': ramp((2, 3, 4), '>u2', 9, 1),
+         'line': ramp((7,), '<f8', 1, 0), 'flags': ramp((2, 2), '?', 1, 0)}
+np.savez_compressed(os.path.join(out, 'multi.npz'), **multi)
+arrays['multi.npz'] = {'image.npy': multi['image'], 'cube.npy': multi['cube']}
+
+# Refused, each by name.
+refused = {
+    'bool.npy': np.array([[True, False], [False, True]]),
+    'i8.npy': ramp((2, 2), '<i8'),
+    'u4.npy': ramp((2, 2), '<u4'),
+    'f2.npy': ramp((2, 2), '<f2'),
+    'c16.npy': ramp((2, 2), '<c16'),
+    'str.npy': np.array([['a', 'b'], ['c', 'd']]),
+    'datetime.npy': np.array([['2020-01-01', '2020-01-02']], dtype='M8[D]'),
+    'structured.npy': np.zeros((2, 2), dtype=[('x', '<f4'), ('y', '<i2')]),
+    'line.npy': ramp((5,), '<f4'),
+}
+for name, a in refused.items():
+    np.save(os.path.join(out, name), a)
+np.save(os.path.join(out, 'object.npy'), np.array([[None, 1], ['x', 2.0]], dtype=object), allow_pickle=True)
+
+
+def fmt(v):
+    v = float(v)
+    return 'nan' if np.isnan(v) else repr(v)
+
+
+with open(os.path.join(out, 'values.tsv'), 'w') as f:
+    f.write('# numpy ' + np.__version__ + '\nfile\tmember\tindex\tvalue\n')
+    for name in sorted(arrays):
+        if name.endswith('.npz'):
+            with np.load(os.path.join(out, name)) as z:
+                for member in sorted(arrays[name]):
+                    a = z[member[:-4]]
+                    for idx in np.ndindex(a.shape):
+                        f.write('%s\t%s\t%s\t%s\n' % (name, member, ','.join(map(str, idx)), fmt(a[idx])))
+        else:
+            a = np.load(os.path.join(out, name))
+            for idx in np.ndindex(a.shape):
+                f.write('%s\t\t%s\t%s\n' % (name, ','.join(map(str, idx)), fmt(a[idx])))
+
+with open(os.path.join(out, 'members.tsv'), 'w') as f:
+    f.write('# numpy ' + np.__version__ + '\nfile\tmember\tdescr\tshape\n')
+    for name in ['single.npz', 'multi.npz']:
+        with np.load(os.path.join(out, name)) as z:
+            for member in z.files:
+                a = z[member]
+                f.write('%s\t%s.npy\t%s\t%s\n' % (name, member, npf.dtype_to_descr(a.dtype), ','.join(map(str, a.shape))))
