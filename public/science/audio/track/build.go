@@ -29,6 +29,8 @@ const CacheFileExt = ".bxpk"
 // grows monotonically and is readable while it grows. Complete says the
 // whole pyramid is readable, including its trailing partial bins, which is
 // also the point from which a global-maximum normalisation is meaningful.
+// For a background build it also says the run has ended, so CacheErr and
+// Elapsed are final in the same snapshot.
 type BuildProgress struct {
 	BuiltFrames int64
 	TotalFrames int64
@@ -65,13 +67,22 @@ type buildOutcome struct {
 // BuildProgress returns the state of the peaks build. Safe from any
 // goroutine, including while a background build runs.
 func (inst *Track) BuildProgress() (bp BuildProgress) {
+	// The outcome is read before the pyramid: a background run fills the
+	// pyramid, then writes the cache, then publishes the outcome, so an
+	// outcome seen here means the fill seen after it is the finished one.
+	outcome := inst.outcome.Load()
 	bp = BuildProgress{
 		BuiltFrames: inst.pyramid.Built(),
 		TotalFrames: inst.frames,
 		Complete:    inst.pyramid.IsComplete(),
 		FromCache:   inst.fromCache,
 	}
-	outcome := inst.outcome.Load()
+	if inst.buildDone != nil && outcome == nil {
+		// A background run whose pyramid is full is still writing the
+		// cache; it is complete once its outcome, CacheErr included, is
+		// published.
+		bp.Complete = false
+	}
 	if outcome != nil {
 		bp.Err = outcome.err
 		bp.CacheErr = outcome.cacheErr
