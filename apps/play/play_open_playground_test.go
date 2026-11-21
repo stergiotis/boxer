@@ -16,7 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchrequest"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -78,7 +78,7 @@ func TestRequestOpenPlayground_ComposesRequestAndSucceeds(t *testing.T) {
 	assert.Empty(t, inst.openPlayErr)
 	assert.False(t, inst.openPlayBusy)
 	assert.Equal(t, "opened in play — this buffer, run", inst.actionNoteNow(), "the status line says what opened, after the reply")
-	assert.Equal(t, windowhost.OpenSubject, bus.gotSubject)
+	assert.Equal(t, windowopen.OpenSubject, bus.gotSubject)
 
 	req, err := buscodec.Decode[launchrequest.LaunchRequest](bus.gotPayload)
 	require.NoError(t, err)
@@ -176,7 +176,7 @@ func TestRequestSaveApplet_ComposesRequestAndSucceeds(t *testing.T) {
 	defer inst.saveAppletMu.Unlock()
 	assert.Empty(t, inst.saveAppletErr)
 	assert.False(t, inst.saveAppletBusy)
-	assert.Equal(t, windowhost.OpenSubject, bus.gotSubject)
+	assert.Equal(t, windowopen.OpenSubject, bus.gotSubject)
 
 	req, err := buscodec.Decode[launchrequest.LaunchRequest](bus.gotPayload)
 	require.NoError(t, err)
@@ -248,7 +248,7 @@ func TestRequestOpenTally_ComposesRequestNamingTally(t *testing.T) {
 	defer inst.openTallyMu.Unlock()
 	assert.Empty(t, inst.openTallyErr)
 	assert.False(t, inst.openTallyBusy)
-	assert.Equal(t, windowhost.OpenSubject, bus.gotSubject)
+	assert.Equal(t, windowopen.OpenSubject, bus.gotSubject)
 
 	req, err := buscodec.Decode[launchrequest.LaunchRequest](bus.gotPayload)
 	require.NoError(t, err)

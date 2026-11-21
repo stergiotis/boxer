@@ -7,7 +7,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 // A section's "Open in play" opens the SQL playground on the introspection
@@ -217,7 +217,7 @@ func (inst *App) request(target string, kind string, cfg []byte) {
 	inst.wg.Add(1)
 	go func() {
 		defer inst.wg.Done()
-		_, err := windowhost.RequestOpen(inst.bus, app.AppIdT(target), kind, cfg)
+		_, err := windowopen.RequestOpen(inst.bus, app.AppIdT(target), kind, cfg)
 		note := ""
 		if err != nil {
 			note = "open " + shortApp(target) + ": " + err.Error()

@@ -22,7 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -148,7 +148,7 @@ func (inst *App) publishAndOpen(ctx context.Context, gen int, mount identifier.T
 		err = eh.Errorf("encode tally launch config: %w", err)
 		return
 	}
-	if _, err = windowhost.RequestOpen(inst.bus, launchcfg.AppId, launchcfg.Kind, cfgBytes); err != nil {
+	if _, err = windowopen.RequestOpen(inst.bus, launchcfg.AppId, launchcfg.Kind, cfgBytes); err != nil {
 		err = eh.Errorf("open tally: %w", err)
 		return
 	}

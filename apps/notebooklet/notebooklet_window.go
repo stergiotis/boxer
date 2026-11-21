@@ -11,7 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -153,7 +153,7 @@ func (inst *window) openInNotebook() (err error) {
 	inst.mu.Unlock()
 	bus := inst.bus
 	started := inst.scope.Go(func(context.Context) {
-		_, oErr := windowhost.RequestOpen(bus, nblaunch.AppId, nblaunch.Kind, cfg)
+		_, oErr := windowopen.RequestOpen(bus, nblaunch.AppId, nblaunch.Kind, cfg)
 		note := "opened in the notebook window; it has the text and none of the stored results"
 		if oErr != nil {
 			note = "the notebook window was not opened: " + oErr.Error()

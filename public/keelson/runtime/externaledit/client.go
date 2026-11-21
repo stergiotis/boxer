@@ -6,7 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit/launchcfg"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -47,7 +47,7 @@ func Open(bus app.BusI, id string) (err error) {
 	if err != nil {
 		return eh.Errorf("externaledit: encode the launch config: %w", err)
 	}
-	_, err = windowhost.RequestOpenKind(bus, launchcfg.Kind, b)
+	_, err = windowopen.RequestOpenKind(bus, launchcfg.Kind, b)
 	return
 }
 

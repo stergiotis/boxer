@@ -10,7 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 // helpFS embeds the HelpHost's own help corpus — "Help about Help".
@@ -58,7 +58,7 @@ var manifest = app.Manifest{
 			Reason:    "copy help code blocks to the clipboard",
 		},
 		{
-			Pattern:   windowhost.OpenSubject,
+			Pattern:   windowopen.OpenSubject,
 			Direction: app.CapDirectionPub,
 			Reason:    "follow an mdedit:// link in a help page: open an mdedit window on the snapshot document it names (ADR-0347)",
 		},

@@ -12,7 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trailviewer/launchcfg"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 )
 
@@ -42,7 +42,7 @@ var manifest = runtimeapp.Manifest{
 		Direction: runtimeapp.CapDirectionPub,
 		Reason:    "Send to play: publish the table's rows as an ad-hoc dataset (ADR-0350 §SD9, ADR-0134)",
 	}, {
-		Pattern:   windowhost.OpenSubject,
+		Pattern:   windowopen.OpenSubject,
 		Direction: runtimeapp.CapDirectionPub,
 		Reason:    "Send to play: open a play window on the published rows (ADR-0135)",
 	}},

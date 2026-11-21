@@ -27,7 +27,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexsummary"
@@ -275,7 +275,7 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 				Reason:    "evaluate user time-range expressions (ADR-0016 Phase 4)",
 			},
 			{
-				Pattern:   windowhost.OpenSubject,
+				Pattern:   windowopen.OpenSubject,
 				Direction: app.CapDirectionPub,
 				Reason:    "open the applet creator window (ADR-0135 §SD7 / ADR-0132 O4)",
 			},

@@ -25,7 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -46,7 +46,7 @@ var BundleViewCaps = []app.SubjectFilter{
 		Reason: "and follows their republish and retract"},
 	{Pattern: clipboardbroker.SubjectWrite, Direction: app.CapDirectionPub,
 		Reason: "Copy a fenced block out of a bundle view's Definition drawer (ADR-0132 §SD3)"},
-	{Pattern: windowhost.OpenSubject, Direction: app.CapDirectionPub,
+	{Pattern: windowopen.OpenSubject, Direction: app.CapDirectionPub,
 		Reason: "a bundle view's Open in Playground opens the bundle in a play window (ADR-0288 §SD7)"},
 }
 

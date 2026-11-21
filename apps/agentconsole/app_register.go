@@ -22,7 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 // helpFS embeds the inline help (apps/agentconsole/help/*.md), indexed by
@@ -46,7 +46,7 @@ var manifest = app.Manifest{
 	Surface:  app.SurfaceWindowed,
 	Help:     help.MustSub(helpFS, "help"),
 	Caps: append(agent.ClientCaps("agentconsole: call operations by hand"),
-		app.SubjectFilter{Pattern: windowhost.OpenSubject, Direction: app.CapDirectionPub,
+		app.SubjectFilter{Pattern: windowopen.OpenSubject, Direction: app.CapDirectionPub,
 			Reason: "agentconsole: open a window to work in"}),
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  640,

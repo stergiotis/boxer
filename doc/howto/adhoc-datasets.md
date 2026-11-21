@@ -99,7 +99,7 @@ cfg := launchcfg.PlayLaunch{
     Datasets: []string{"items"},
 }
 cfgBytes, err := buscodec.Encode(cfg)
-_, err = windowhost.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfgBytes)
+_, err = windowopen.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfgBytes)
 ```
 
 The window follows the alias exactly as an applet does. Never splice a

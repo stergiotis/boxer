@@ -64,7 +64,7 @@ var manifest = app.Manifest{
 	// is handed (§SD3), not by publishing to windowhost.open — a host-mediated
 	// capability in the ADR-0382 §SD4 sense rather than a subject the cap
 	// broker arbitrates. An app that wanted to open others *over the bus*
-	// would declare windowhost.OpenSubject; this one is the host's own
+	// would declare windowopen.OpenSubject; this one is the host's own
 	// surface.
 }
 

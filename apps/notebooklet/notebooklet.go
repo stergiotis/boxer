@@ -21,7 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 )
@@ -114,7 +114,7 @@ func ParseDocSource(bookID string, p string, src []byte, fsys fs.FS, topics []ap
 // (notebook.EmbedCaps), and opening the notebook window on its document.
 // A document widens none of them.
 func Caps() (caps []app.SubjectFilter) {
-	return append(notebook.EmbedCaps(), app.SubjectFilter{Pattern: windowhost.OpenSubject, Direction: app.CapDirectionPub,
+	return append(notebook.EmbedCaps(), app.SubjectFilter{Pattern: windowopen.OpenSubject, Direction: app.CapDirectionPub,
 		Reason: "notebooklet: Open in notebook — open the notebook window on this document, where it is worked on and collected"})
 }
 

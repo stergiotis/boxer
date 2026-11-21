@@ -15,7 +15,7 @@ import (
 	mdeditlaunch "github.com/stergiotis/boxer/apps/mdedit/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -112,7 +112,7 @@ func (inst *App) openInMdedit() {
 			err = eh.Errorf("encode the mdedit launch config: %w", err)
 			return
 		}
-		if _, err = windowhost.RequestOpen(bus, mdeditlaunch.AppId, mdeditlaunch.Kind, cfg); err != nil {
+		if _, err = windowopen.RequestOpen(bus, mdeditlaunch.AppId, mdeditlaunch.Kind, cfg); err != nil {
 			err = eh.Errorf("open mdedit: %w", err)
 			return
 		}

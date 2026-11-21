@@ -9,7 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 // AppId is the window's durable identity.
@@ -39,7 +39,7 @@ var manifest = app.Manifest{
 	// The operations catalog (ADR-0345), in appcenter_ops.go.
 	Operations: ops.Catalog(),
 	Caps: append(append(keelsonquery.ClientCaps(readTables...), app.SubjectFilter{
-		Pattern:   windowhost.OpenSubject,
+		Pattern:   windowopen.OpenSubject,
 		Direction: app.CapDirectionPub,
 		Reason:    "app center: Open — open the app a page shows, the app-state manager, or play on a section's table",
 	}, app.SubjectFilter{

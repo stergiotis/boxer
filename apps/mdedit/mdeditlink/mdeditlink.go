@@ -34,7 +34,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -275,7 +275,7 @@ func Open(bus app.BusI, link string) (windowKey uint64, err error) {
 		err = eh.Errorf("mdeditlink: encode the launch config: %w", err)
 		return
 	}
-	return windowhost.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg)
+	return windowopen.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg)
 }
 
 // Follow is [Open] off the caller's goroutine, logging a failure. For a

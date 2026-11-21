@@ -1,4 +1,9 @@
-package windowhost
+// Package windowopen is the client half of the window host's open and raise
+// services: the subjects and the request helpers an app calls to open
+// another app's window or raise one of its own. It links none of the window
+// host, so an app that only opens windows does not carry the host
+// (ADR-0135, ADR-0394).
+package windowopen
 
 import (
 	"time"
@@ -10,14 +15,47 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
+// OpenSubject is the audited request/reply subject apps use to open
+// another app's window (ADR-0135 §SD1). Callers declare it in their
+// manifest Caps (Pub direction, OpenCap) and send a
+// launchrequest.LaunchRequest; the reply is a launchreply.LaunchReply.
+// Refusals are replies with a Reason, never silent drops.
+const OpenSubject = "windowhost.open"
+
+// RaiseSubject is the request/reply subject an app uses to bring one of its
+// own windows to the front: the chat's roster raises the chat window that
+// holds a conversation. The window must run the caller's app, as the bus
+// attributes it (Msg.Sender); another app's window is refused, so an app
+// cannot pull the person away to someone else's. The reply is a
+// launchreply.LaunchReply, its Reason set on refusal.
+const RaiseSubject = "windowhost.raise"
+
+// RaiseRequest is the payload sent on RaiseSubject.
+type RaiseRequest struct {
+	V      uint8  `json:"v"`
+	Window uint64 `json:"window"`
+}
+
+// OpenCap is the manifest capability RequestOpen and RequestOpenKind need,
+// with the caller's reason.
+func OpenCap(reason string) (c app.SubjectFilter) {
+	return app.SubjectFilter{Pattern: OpenSubject, Direction: app.CapDirectionPub, Reason: reason}
+}
+
+// RaiseCap is the manifest capability RequestRaise needs, with the caller's
+// reason.
+func RaiseCap(reason string) (c app.SubjectFilter) {
+	return app.SubjectFilter{Pattern: RaiseSubject, Direction: app.CapDirectionPub, Reason: reason}
+}
+
 // RequestOpen asks the window host to open targetAppId's window over the
 // audited OpenSubject (ADR-0135 §SD1), optionally delivering a launch
 // config: configKind is the vocabulary kind the config bytes claim and
 // config is its facts-CBOR (encode with the config's generated codec, e.g.
 // buscodec.Encode(playground.Launch{…})); pass "" and nil for a plain
-// open. It is the client half of OpenService — the mirror of
-// adhocdata.PublishRequest — so an app drives windowhost.open without
-// re-deriving the request/reply codec dance.
+// open. It is the client half of the window host's open service — the
+// mirror of adhocdata.PublishRequest — so an app drives windowhost.open
+// without re-deriving the request/reply codec dance.
 //
 // The caller's bus client needs Pub on OpenSubject; the caller identity is
 // attributed by the bus (Msg.Sender), not the payload. RequestOpen blocks
@@ -68,6 +106,31 @@ type RefusedError struct {
 
 func (inst *RefusedError) Error() string {
 	return "windowhost: " + inst.Act + " refused: " + inst.Reason
+}
+
+// RequestRaise asks the window host to raise windowKey, a window of the
+// caller's own app, over RaiseSubject. The caller's bus client needs Pub on
+// it (RaiseCap). It blocks on the round-trip, so call it off the frame loop.
+func RequestRaise(bus app.BusI, windowKey uint64) (err error) {
+	if bus == nil {
+		return eh.Errorf("windowhost: RequestRaise: no bus wired")
+	}
+	reqBytes, err := buscodec.Encode(RaiseRequest{V: 1, Window: windowKey})
+	if err != nil {
+		return eh.Errorf("windowhost: encode raise: %w", err)
+	}
+	replyBytes, err := bus.Request(RaiseSubject, reqBytes)
+	if err != nil {
+		return eh.Errorf("windowhost: raise request: %w", err)
+	}
+	rep, err := buscodec.Decode[launchreply.LaunchReply](replyBytes)
+	if err != nil {
+		return eh.Errorf("windowhost: decode raise reply: %w", err)
+	}
+	if rep.Reason != "" {
+		return &RefusedError{Act: "raise", Reason: rep.Reason}
+	}
+	return
 }
 
 // requestOpen runs the launch request/reply over the open subject and turns

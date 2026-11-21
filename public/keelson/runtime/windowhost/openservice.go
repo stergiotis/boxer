@@ -12,23 +12,17 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchrequest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
-
-// OpenSubject is the audited request/reply subject apps use to open
-// another app's window (ADR-0135 §SD1). Callers declare it in their
-// manifest Caps (Pub direction) and send a launchrequest.LaunchRequest;
-// the reply is a launchreply.LaunchReply. Refusals are replies with a
-// Reason, never silent drops.
-const OpenSubject = "windowhost.open"
 
 // OpenServiceAppId is the synthetic AppId the open service registers
 // under on the bus. Apps inspecting Msg.Sender on launch replies see
 // this string.
 const OpenServiceAppId app.AppIdT = "runtime.windowhost"
 
-// OpenService subscribes OpenSubject and forwards decoded requests to
+// OpenService subscribes windowopen.OpenSubject and forwards decoded requests to
 // the host's OpenWithConfig, replying with the window key or the named
 // refusal. A request with a kind and no target is first resolved to the
 // app that takes the kind (ADR-0361 §SD2, see ResolveLaunchKind); from
@@ -49,7 +43,7 @@ type OpenService struct {
 }
 
 // NewOpenService constructs the service bound to bus and host and
-// immediately subscribes OpenSubject. Callers keep it alive for the
+// immediately subscribes windowopen.OpenSubject. Callers keep it alive for the
 // bus's lifetime and invoke Close to release the subscription.
 func NewOpenService(bus *inprocbus.Inst, host *Inst, log zerolog.Logger) (svc *OpenService, err error) {
 	if bus == nil || host == nil {
@@ -61,19 +55,19 @@ func NewOpenService(bus *inprocbus.Inst, host *Inst, log zerolog.Logger) (svc *O
 		log:  log.With().Str("app", string(OpenServiceAppId)).Logger(),
 	}
 	svc.busClient = bus.NewClient(OpenServiceAppId, []app.SubjectFilter{
-		{Pattern: OpenSubject, Direction: app.CapDirectionSub, Reason: "windowhost services open requests"},
-		{Pattern: RaiseSubject, Direction: app.CapDirectionSub, Reason: "windowhost services raise requests"},
+		{Pattern: windowopen.OpenSubject, Direction: app.CapDirectionSub, Reason: "windowhost services open requests"},
+		{Pattern: windowopen.RaiseSubject, Direction: app.CapDirectionSub, Reason: "windowhost services raise requests"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "windowhost replies to inboxes"},
 	})
-	svc.unsub, err = svc.busClient.Subscribe(OpenSubject, svc.handleRequest)
+	svc.unsub, err = svc.busClient.Subscribe(windowopen.OpenSubject, svc.handleRequest)
 	if err != nil {
-		err = eb.Build().Str("openSubject", OpenSubject).Errorf("openservice: subscribe: %w", err)
+		err = eb.Build().Str("openSubject", windowopen.OpenSubject).Errorf("openservice: subscribe: %w", err)
 		return
 	}
-	svc.unsubR, err = svc.busClient.Subscribe(RaiseSubject, svc.handleRaise)
+	svc.unsubR, err = svc.busClient.Subscribe(windowopen.RaiseSubject, svc.handleRaise)
 	if err != nil {
 		svc.unsub()
-		err = eb.Build().Str("raiseSubject", RaiseSubject).Errorf("openservice: subscribe: %w", err)
+		err = eb.Build().Str("raiseSubject", windowopen.RaiseSubject).Errorf("openservice: subscribe: %w", err)
 		return
 	}
 	return

@@ -13,7 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 // helpFS embeds the inline help (apps/mdedit/help/*.md), indexed by the
@@ -87,7 +87,7 @@ var manifest = app.Manifest{
 			Reason:    "mdedit: Save — raise the save picker; later saves reuse the granted handle",
 		},
 		{
-			Pattern:   windowhost.OpenSubject,
+			Pattern:   windowopen.OpenSubject,
 			Direction: app.CapDirectionPub,
 			Reason:    "mdedit: Send to play — open the playground on the document persisted as a boxer.facts row; and follow an mdedit:// link, which opens another mdedit window on a snapshot document (ADR-0347)",
 		},

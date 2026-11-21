@@ -18,7 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 )
@@ -48,7 +48,7 @@ func TestMintedManifestsHoldToThePanesCaps(t *testing.T) {
 	minted, errs := mintBooks(reg, zerolog.Nop(), snapshotBooks())
 	require.Empty(t, errs)
 	require.Equal(t, 3, minted, "the three samples")
-	allowed := map[string]bool{windowhost.OpenSubject: true}
+	allowed := map[string]bool{windowopen.OpenSubject: true}
 	for _, cp := range notebook.EmbedCaps() {
 		allowed[cp.Pattern] = true
 	}

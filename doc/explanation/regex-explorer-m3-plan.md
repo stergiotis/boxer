@@ -384,7 +384,7 @@ pattern rather than a fixed corpus.
 ### B3. Launch and lifecycle
 
 - `launchcfg.PlayLaunch{Sql: …, AutoRun: true, Endpoint: launchcfg.EndpointIntrospection}`
-  → `buscodec.Encode` → `windowhost.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg)`.
+  → `buscodec.Encode` → `windowopen.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg)`.
 - **`AppId` moves from `apps/play/app_register.go:155` into the leaf package
   `apps/play/launchcfg`**, with `play.AppId` retained as `const AppId = launchcfg.AppId`.
   Without this, `regex_explorer` → `apps/play` would drag the whole play app — and
@@ -395,7 +395,7 @@ pattern rather than a fixed corpus.
   no cycle. The one existing external `play.AppId` call site keeps compiling
   untouched.
 - Manifest gains three `Pub` caps: `adhocdata.SubjectPublish`,
-  `adhocdata.SubjectRetract`, `windowhost.OpenSubject`.
+  `adhocdata.SubjectRetract`, `windowopen.OpenSubject`.
 - `AppInstance.Unmount` retracts both handles alongside the existing
   `cancelQueries()`.
 
@@ -530,7 +530,7 @@ All of it is in this repository; no downstream consumer needs a change.
   [`apps/play/play_renderer.go`](../../apps/play/play_renderer.go),
   [`apps/play/launchcfg`](../../apps/play/launchcfg),
   [`keelson/runtime/adhocdata`](../../public/keelson/runtime/adhocdata),
-  [`keelson/runtime/windowhost/openclient.go`](../../public/keelson/runtime/windowhost/openclient.go),
+  [`keelson/runtime/windowopen`](../../public/keelson/runtime/windowopen/windowopen.go),
   [`rust/imzero2/src/imzero2/text_edit_highlight.rs`](../../rust/imzero2/src/imzero2/text_edit_highlight.rs),
   `rust/imzero2/src/imzero2/interpreter.rs` (TextEdit apply block).
 - ADRs: [0054](../adr/0054-regex-explorer-offset-authority.md),

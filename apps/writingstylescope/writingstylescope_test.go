@@ -17,7 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
@@ -672,7 +672,7 @@ func TestManifestDeclaresTheHandoverCaps(t *testing.T) {
 	// Retract is the runtime's since ADR-0240 §SD5.
 	want := map[string]app.CapDirectionE{
 		adhocdata.SubjectPublish: app.CapDirectionPub,
-		windowhost.OpenSubject:   app.CapDirectionPub,
+		windowopen.OpenSubject:   app.CapDirectionPub,
 		task.PatternAll:          app.CapDirectionBoth,
 	}
 	seen := map[string]bool{}

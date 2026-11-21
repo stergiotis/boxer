@@ -31,7 +31,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 // ---------------------------------------------------------------------------
@@ -323,10 +323,10 @@ func setupEvalRig(t *testing.T) (rig *evalTestRig) {
 	// reply with a window key, so RequestOpen's round-trip completes.
 	opens := &capturedOpen{}
 	hostClient := bus.NewClient("test.windowhost", []runtimeapp.SubjectFilter{
-		{Pattern: windowhost.OpenSubject, Direction: runtimeapp.CapDirectionSub, Reason: "test"},
+		{Pattern: windowopen.OpenSubject, Direction: runtimeapp.CapDirectionSub, Reason: "test"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: runtimeapp.CapDirectionPub, Reason: "test"},
 	})
-	unsub, err := hostClient.Subscribe(windowhost.OpenSubject, func(msg *runtimeapp.Msg) {
+	unsub, err := hostClient.Subscribe(windowopen.OpenSubject, func(msg *runtimeapp.Msg) {
 		req, decErr := buscodec.Decode[launchrequest.LaunchRequest](msg.Payload)
 		if decErr != nil {
 			_ = buscodec.Reply(hostClient.Publish, msg.Reply,
@@ -344,7 +344,7 @@ func setupEvalRig(t *testing.T) (rig *evalTestRig) {
 	inst := newApp()
 	client := bus.NewClient("test.regex_explorer", []runtimeapp.SubjectFilter{
 		{Pattern: adhocdata.SubjectPublish, Direction: runtimeapp.CapDirectionPub, Reason: "test"},
-		{Pattern: windowhost.OpenSubject, Direction: runtimeapp.CapDirectionPub, Reason: "test"},
+		{Pattern: windowopen.OpenSubject, Direction: runtimeapp.CapDirectionPub, Reason: "test"},
 	})
 	client.SetInstanceKey(1) // a window's client, so its close is announced
 	inst.setBus(client)

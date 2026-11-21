@@ -17,7 +17,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit/launchcfg"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 // The subjects the service answers.
@@ -109,7 +109,7 @@ func ClientCaps(reason string) []app.SubjectFilter {
 		{Pattern: SubjectOffer, Direction: app.CapDirectionPub, Reason: reason},
 		{Pattern: SubjectWait, Direction: app.CapDirectionPub, Reason: reason},
 		{Pattern: SubjectClose, Direction: app.CapDirectionPub, Reason: reason},
-		{Pattern: windowhost.OpenSubject, Direction: app.CapDirectionPub, Reason: reason},
+		{Pattern: windowopen.OpenSubject, Direction: app.CapDirectionPub, Reason: reason},
 	}
 }
 

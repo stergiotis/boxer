@@ -14,7 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
 )
@@ -664,7 +664,7 @@ func TestManifestDeclaresExactlyTheFiveSubjects(t *testing.T) {
 		clipboardbroker.SubjectWrite,
 		fsbroker.SubjectDialogRead,
 		fsbroker.SubjectDialogWrite,
-		windowhost.OpenSubject,
+		windowopen.OpenSubject,
 		task.PatternAll,
 	}
 	got := make([]string, 0, len(manifest.Caps))

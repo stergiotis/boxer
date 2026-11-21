@@ -16,7 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 // The bundle's document composes and parses with sqlapplet's parser: the
@@ -70,7 +70,7 @@ func TestManifestCapsCoverEmbeddedApplet(t *testing.T) {
 		adhocdata.SubjectBundleResolve,
 		adhocdata.SubjectResolve,
 		clipboardbroker.SubjectWrite,
-		windowhost.OpenSubject,
+		windowopen.OpenSubject,
 	} {
 		dir, ok := patterns[want]
 		assert.True(t, ok, want)
@@ -94,7 +94,7 @@ func TestManifestCapsAuthorizeEscapeHatches(t *testing.T) {
 
 	// A replier per subject, so an authorized request completes rather
 	// than timing out; repliers need the inbox Pub cap to answer.
-	for _, subject := range []string{clipboardbroker.SubjectWrite, windowhost.OpenSubject} {
+	for _, subject := range []string{clipboardbroker.SubjectWrite, windowopen.OpenSubject} {
 		replier := bus.NewClient(app.AppIdT("test.replier."+subject), []app.SubjectFilter{
 			{Pattern: subject, Direction: app.CapDirectionSub},
 			{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub},
@@ -107,7 +107,7 @@ func TestManifestCapsAuthorizeEscapeHatches(t *testing.T) {
 	}
 
 	caller := bus.NewClient(ManifestId, manifest.Caps)
-	for _, subject := range []string{clipboardbroker.SubjectWrite, windowhost.OpenSubject} {
+	for _, subject := range []string{clipboardbroker.SubjectWrite, windowopen.OpenSubject} {
 		reply, err := caller.Request(subject, []byte("payload"))
 		require.NoError(t, err, subject)
 		assert.Equal(t, []byte("ok"), reply, subject)
@@ -116,7 +116,7 @@ func TestManifestCapsAuthorizeEscapeHatches(t *testing.T) {
 	// The inverse, so the assertion above means something: without the
 	// caps the same requests are refused — the pre-fix behaviour.
 	uncapped := bus.NewClient("test.uncapped", nil)
-	for _, subject := range []string{clipboardbroker.SubjectWrite, windowhost.OpenSubject} {
+	for _, subject := range []string{clipboardbroker.SubjectWrite, windowopen.OpenSubject} {
 		_, err := uncapped.Request(subject, []byte("payload"))
 		assert.ErrorIs(t, err, inprocbus.ErrPermissionViolation, subject)
 	}

@@ -23,7 +23,7 @@ itself; ADR-0389 states its tier.
 | Section | Packages |
 | --- | ---: |
 | [Stable](#stable) | 76 |
-| [Experimental](#experimental) | 281 |
+| [Experimental](#experimental) | 282 |
 | [Internal](#internal) | 16 |
 | [Test support](#test-support) | 14 |
 | [Tools](#tools) | 91 |
@@ -311,6 +311,7 @@ Public and usable, but may change in any MINOR version without a deprecation win
 - `public/keelson/runtime/sysmvocab` — Package sysmvocab is the system-metrics leeway natural-key vocabulary: the memberships that tag a metric sample in `boxer.facts` (ADR-0184 §SD4).
 - `public/keelson/runtime/trailviewer/launchcfg` — Package launchcfg is the trail viewer's launch configuration (ADR-0350, proposed): the leeway-declared DTO a launch request carries (ADR-0135) — the case the window opens on, and optionally its time window, its tab and a saved view.
 - `public/keelson/runtime/windowhost` — Package windowhost is the M3 multi-app host.
+- `public/keelson/runtime/windowopen` — Package windowopen is the client half of the window host's open and raise services: the subjects and the request helpers an app calls to open another app's window or raise one of its own.
 - `public/keelson/runtime/workstatelet` — Package workstatelet holds the workstatelet document (ADR-0369): one markdown file that lists windows to open and, optionally, the desktop layout they take.
 
 ### llm

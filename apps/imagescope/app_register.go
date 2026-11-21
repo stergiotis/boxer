@@ -18,7 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 // helpFS embeds the inline help (apps/imagescope/help/*.md), indexed by the
@@ -72,7 +72,7 @@ var manifest = app.Manifest{
 			Reason:    "imagescope: publish the pixels of the marked region as an ephemeral dataset for the play handover (ADR-0134)",
 		},
 		{
-			Pattern:   windowhost.OpenSubject,
+			Pattern:   windowopen.OpenSubject,
 			Direction: app.CapDirectionPub,
 			Reason:    "imagescope: Send to play — a play window seeded with the query behind the statistics table (ADR-0135 §SD7)",
 		},

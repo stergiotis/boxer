@@ -21,7 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -113,7 +113,7 @@ func (inst *App) editInMdedit() {
 	inst.mu.Unlock()
 	inst.note = "opening mdedit…"
 	started := inst.scope.Go(func(context.Context) {
-		_, oErr := windowhost.RequestOpen(bus, mdlaunch.AppId, mdlaunch.Kind, cfg)
+		_, oErr := windowopen.RequestOpen(bus, mdlaunch.AppId, mdlaunch.Kind, cfg)
 		inst.mu.Lock()
 		inst.handBusy = false
 		if oErr != nil {

@@ -7,7 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -230,7 +230,7 @@ func (inst *PlayApp) openCreator(cfg appletcreatecfg.AppletCreate) (err error) {
 		err = eh.Errorf("play: encode applet-create config: %w", err)
 		return
 	}
-	if _, err = windowhost.RequestOpen(inst.bus, appletcreatecfg.AppId, appletcreatecfg.Kind, cfgBytes); err != nil {
+	if _, err = windowopen.RequestOpen(inst.bus, appletcreatecfg.AppId, appletcreatecfg.Kind, cfgBytes); err != nil {
 		err = eh.Errorf("play: save as applet: %w", err)
 		return
 	}
@@ -289,7 +289,7 @@ func (inst *PlayApp) openTally(cfg tallylaunch.TallyLaunch) (err error) {
 		err = eh.Errorf("play: encode tally launch config: %w", err)
 		return
 	}
-	if _, err = windowhost.RequestOpen(inst.bus, tallylaunch.AppId, tallylaunch.Kind, cfgBytes); err != nil {
+	if _, err = windowopen.RequestOpen(inst.bus, tallylaunch.AppId, tallylaunch.Kind, cfgBytes); err != nil {
 		err = eh.Errorf("play: open in tally: %w", err)
 		return
 	}

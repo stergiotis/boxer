@@ -12,7 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchrequest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 // fakeBus captures the one Request Open makes and answers it.
@@ -45,7 +45,7 @@ func TestOpenNamesTheKindAndNoApp(t *testing.T) {
 	key, err := playground.Open(bus, playground.Launch{Sql: "SELECT 1", AutoRun: true, Endpoint: playground.EndpointIntrospection})
 	require.NoError(t, err)
 	assert.Equal(t, uint64(9), key)
-	assert.Equal(t, windowhost.OpenSubject, bus.subject)
+	assert.Equal(t, windowopen.OpenSubject, bus.subject)
 
 	req, err := buscodec.Decode[launchrequest.LaunchRequest](bus.payload)
 	require.NoError(t, err)

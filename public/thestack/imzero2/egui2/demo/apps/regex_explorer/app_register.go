@@ -7,7 +7,7 @@ import (
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 // manifest is the static AppI descriptor every instance returns. Kept
@@ -53,7 +53,7 @@ var manifest = runtimeapp.Manifest{
 			Reason:    "regex_explorer: copy the ClickHouse expression through the clipboard broker (ADR-0026)",
 		},
 		{
-			Pattern:   windowhost.OpenSubject,
+			Pattern:   windowopen.OpenSubject,
 			Direction: runtimeapp.CapDirectionPub,
 			Reason:    "regex_explorer: open a play window joined over both engines' extraction (ADR-0135 §SD7)",
 		},

@@ -15,7 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdlint"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
@@ -445,7 +445,7 @@ func (inst *App) openArtefactInMdedit(text string) {
 			err = eh.Errorf("encode the mdedit launch config: %w", err)
 			return
 		}
-		if _, err = windowhost.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg); err != nil {
+		if _, err = windowopen.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg); err != nil {
 			err = eh.Errorf("open mdedit: %w", err)
 			return
 		}

@@ -14,7 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/profiling/pprofarrow"
 )
 
@@ -27,7 +27,7 @@ func TestProfileCapsAuthorize(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
 	bus.SetRequestTimeout(2 * time.Second)
 
-	subjects := []string{adhocdata.SubjectPublish, windowhost.OpenSubject}
+	subjects := []string{adhocdata.SubjectPublish, windowopen.OpenSubject}
 	for _, subject := range subjects {
 		replier := bus.NewClient(app.AppIdT("test.replier."+subject), []app.SubjectFilter{
 			{Pattern: subject, Direction: app.CapDirectionSub},

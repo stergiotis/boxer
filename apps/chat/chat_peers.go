@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 // What each chat window's turn is doing, for the roster of the others
@@ -95,7 +95,7 @@ func (inst *App) raiseWindow(key string) {
 		return
 	}
 	inst.offFrame(func(context.Context) {
-		if rerr := windowhost.RequestRaise(bus, k); rerr != nil {
+		if rerr := windowopen.RequestRaise(bus, k); rerr != nil {
 			inst.log.Debug().Err(rerr).Str("window", key).Msg("chat: raise the conversation's window")
 		}
 	})

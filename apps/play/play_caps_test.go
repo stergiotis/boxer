@@ -20,7 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexsummary"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
@@ -209,7 +209,7 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 			"handle caps are granted dynamically, never declared")
 	}
 	assert.Contains(t, patterns, "ch.local.exec."+timerangepicker.PoolName)
-	assert.Contains(t, patterns, windowhost.OpenSubject)
+	assert.Contains(t, patterns, windowopen.OpenSubject)
 	assert.Contains(t, patterns, adhocdata.SubjectPublish)
 	assert.Contains(t, patterns, adhocdata.SubjectBundleResolve)
 	assert.Contains(t, patterns, adhocdata.SubjectBundleEventAll)

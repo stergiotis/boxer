@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchrequest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 const testCallerAppId app.AppIdT = "test.caller"
@@ -42,7 +43,7 @@ func mkOpenServiceFixture(t *testing.T, reg *app.Registry) (fx openServiceFixtur
 	fx.svc = svc
 	t.Cleanup(svc.Close)
 	fx.caller = fx.bus.NewClient(testCallerAppId, []app.SubjectFilter{
-		{Pattern: OpenSubject, Direction: app.CapDirectionPub},
+		{Pattern: windowopen.OpenSubject, Direction: app.CapDirectionPub},
 	})
 	return
 }
@@ -51,7 +52,7 @@ func (fx openServiceFixture) request(t *testing.T, req launchrequest.LaunchReque
 	t.Helper()
 	payload, err := buscodec.Encode(req)
 	require.NoError(t, err)
-	replyBytes, err := fx.caller.Request(OpenSubject, payload)
+	replyBytes, err := fx.caller.Request(windowopen.OpenSubject, payload)
 	require.NoError(t, err, "a refusal must be a reply, not a timeout")
 	rep, err = buscodec.Decode[launchreply.LaunchReply](replyBytes)
 	require.NoError(t, err)
@@ -170,7 +171,7 @@ func TestOpenService_UndecodableRequestIsRepliedTo(t *testing.T) {
 	reg, _ := mkRegistryWithSingleton(t, "test.plain")
 	fx := mkOpenServiceFixture(t, reg)
 
-	replyBytes, err := fx.caller.Request(OpenSubject, []byte("not a launch request"))
+	replyBytes, err := fx.caller.Request(windowopen.OpenSubject, []byte("not a launch request"))
 	require.NoError(t, err)
 	rep, err := buscodec.Decode[launchreply.LaunchReply](replyBytes)
 	require.NoError(t, err)
@@ -188,6 +189,6 @@ func TestOpenService_PublishWithoutReplyIsDropped(t *testing.T) {
 		TargetAppId: "test.plain",
 	})
 	require.NoError(t, err)
-	require.NoError(t, fx.caller.Publish(OpenSubject, payload))
+	require.NoError(t, fx.caller.Publish(windowopen.OpenSubject, payload))
 	assert.Equal(t, 0, fx.host.Len(), "fire-and-forget publish must not open windows")
 }

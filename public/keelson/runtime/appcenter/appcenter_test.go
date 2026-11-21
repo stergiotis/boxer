@@ -23,7 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 // statements is every read the window makes, by the table its grant names.
@@ -100,7 +100,7 @@ func TestManifestDeclaresEveryRead(t *testing.T) {
 		assert.True(t, declared[keelsonquery.Subject(s.table)], s.table)
 	}
 	require.Len(t, readTables, len(tables), "every declared table is read")
-	assert.True(t, declared[windowhost.OpenSubject])
+	assert.True(t, declared[windowopen.OpenSubject])
 	assert.Equal(t, AppId, manifest.Id)
 }
 

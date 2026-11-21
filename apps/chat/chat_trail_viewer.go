@@ -9,7 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trailviewer/launchcfg"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -42,7 +42,7 @@ func openTrailViewer(bus app.BusI, conv string) (note string, err error) {
 	if err != nil {
 		return
 	}
-	if _, err = windowhost.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg); err != nil {
+	if _, err = windowopen.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg); err != nil {
 		err = eh.Errorf("open the trail viewer: %w", err)
 		return
 	}

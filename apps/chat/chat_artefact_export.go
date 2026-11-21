@@ -32,7 +32,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -408,7 +408,7 @@ func (inst *App) exportNow(ctx context.Context, p *exportPlan, name string) (not
 	if err != nil {
 		return "", eh.Errorf("encode the mdedit launch config: %w", err)
 	}
-	if _, err = windowhost.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg); err != nil {
+	if _, err = windowopen.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg); err != nil {
 		return "", eh.Errorf("open mdedit: %w", err)
 	}
 	return note + ", and opened it in mdedit", nil

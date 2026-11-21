@@ -15,7 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -449,7 +449,7 @@ func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {
 				Reason:    "Copy a fenced block out of the Definition drawer (ADR-0132 §SD3): the document is the artifact",
 			},
 			{
-				Pattern:   windowhost.OpenSubject,
+				Pattern:   windowopen.OpenSubject,
 				Direction: app.CapDirectionPub,
 				Reason:    "Open in Playground (ADR-0135 §SD7): the §SD3 escape-hatch upgrade",
 			},

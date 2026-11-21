@@ -14,7 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -238,7 +238,7 @@ func (inst *App) openDemo(name string) {
 		}
 	}
 	inst.spawn(func(ctx context.Context) {
-		key, err := windowhost.RequestOpen(bus, target, "", nil)
+		key, err := windowopen.RequestOpen(bus, target, "", nil)
 		if err != nil {
 			inst.setNote("open: " + err.Error())
 			return

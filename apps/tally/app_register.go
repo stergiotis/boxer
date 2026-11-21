@@ -12,7 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 //go:embed help
@@ -39,7 +39,7 @@ var manifest = app.Manifest{
 	},
 	Caps: append([]app.SubjectFilter{
 		{
-			Pattern:   windowhost.OpenSubject,
+			Pattern:   windowopen.OpenSubject,
 			Reason:    "open the selection in play as a query over the store",
 			Direction: app.CapDirectionPub,
 		},

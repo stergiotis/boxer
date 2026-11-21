@@ -14,7 +14,7 @@ import (
 
 	nblaunch "github.com/stergiotis/boxer/apps/notebook/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -107,7 +107,7 @@ func (inst *App) openInNotebook() {
 	inst.mu.Unlock()
 	inst.status = "opening the notebook window…"
 	started := inst.spawn(func(context.Context) {
-		_, oErr := windowhost.RequestOpen(bus, nblaunch.AppId, nblaunch.Kind, cfg)
+		_, oErr := windowopen.RequestOpen(bus, nblaunch.AppId, nblaunch.Kind, cfg)
 		inst.mu.Lock()
 		inst.nbHand.busy = false
 		if oErr != nil {

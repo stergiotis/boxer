@@ -8,7 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 // helpFS embeds the inline help (apps/imzrt/help/*.md), indexed by the help
@@ -47,7 +47,7 @@ var manifest = app.Manifest{
 			Reason:    "imzrt: publish captured pprof profiles as ad-hoc datasets, republishing each kind onto its stable handle (ADR-0134)",
 		},
 		{
-			Pattern:   windowhost.OpenSubject,
+			Pattern:   windowopen.OpenSubject,
 			Direction: app.CapDirectionPub,
 			Reason:    "imzrt: Explore — open a play window seeded on a captured profile, bound to the introspection endpoint (ADR-0135)",
 		},
