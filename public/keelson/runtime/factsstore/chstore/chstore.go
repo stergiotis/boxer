@@ -239,6 +239,12 @@ func ComposeSetupSQL(cfg Config, engineClause string) (sql string, err error) {
 // automatic reconciliation. Recovering means ALTER TABLE ... RENAME COLUMN
 // per renamed column, or dropping and re-creating the table if the trail is
 // expendable.
+//
+// Under an insert transform for the table ([WriteTransformed], ADR-0402
+// §SD5) the facts table is not created: an empty table of that name beside
+// the deployment's storage is one that reads drain from without an error.
+// Only its database is, which the lease table and the trail views live in;
+// the lease table and the read surface are set up as without one.
 func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err error) {
 	var stmts []string
 	stmts, err = tableStatements(inst.cfg, engineClause)
@@ -355,6 +361,9 @@ func (inst *Store) serverRelease(ctx context.Context) (release string, err error
 // server already carries the revision, and nothing probes for a name
 // collision, drops a retired spelling or creates a dependent view.
 // [lwsqlsurface.Install] does those; a host boot runs it.
+//
+// Under an insert transform for the table the table DDL is left out, as in
+// SetupTable (ADR-0402 §SD5).
 func SetupStatements(cfg Config, engineClause string) (stmts []string, err error) {
 	stmts, err = tableStatements(cfg, engineClause)
 	if err != nil {
@@ -367,8 +376,15 @@ func SetupStatements(cfg Config, engineClause string) (stmts []string, err error
 	return
 }
 
-// tableStatements is ComposeSetupSQL split into statements.
+// tableStatements is ComposeSetupSQL split into statements; under an insert
+// transform for the table, only the database's (ADR-0402 §SD5).
 func tableStatements(cfg Config, engineClause string) (stmts []string, err error) {
+	if WriteTransformed(cfg) {
+		if err = recordstore.CheckTableRef(cfg.Database); err != nil {
+			return
+		}
+		return []string{"CREATE DATABASE IF NOT EXISTS " + cfg.Database}, nil
+	}
 	ddl, err := ComposeSetupSQL(cfg, engineClause)
 	if err != nil {
 		return
@@ -896,8 +912,13 @@ func (inst *Store) Count(ctx context.Context) (n uint64, err error) {
 	return
 }
 
-// Truncate is a test helper — removes all rows.
+// Truncate is a test helper — removes all rows. Under an insert transform
+// for the table it is refused with [recordstore.ErrTransformedTable]: the
+// storage is the deployment's (ADR-0402 §SD5).
 func (inst *Store) Truncate(ctx context.Context) (err error) {
+	if err = refuseTransformed(inst.cfg, "TRUNCATE"); err != nil {
+		return
+	}
 	err = inst.cli.Exec(ctx, "TRUNCATE TABLE IF EXISTS "+inst.writeTable())
 	return
 }
@@ -906,8 +927,12 @@ func (inst *Store) Truncate(ctx context.Context) (err error) {
 // subsequent SetupTable recreates it from the current DDL. Truncate
 // only clears rows, which leaves the column schema in place; tests
 // that span schema migrations need a real drop to pick up new
-// columns.
+// columns. Under an insert transform for the table it is refused, as
+// Truncate is.
 func (inst *Store) DropTable(ctx context.Context) (err error) {
+	if err = refuseTransformed(inst.cfg, "DROP TABLE"); err != nil {
+		return
+	}
 	err = inst.cli.Exec(ctx, "DROP TABLE IF EXISTS "+inst.writeTable())
 	return
 }

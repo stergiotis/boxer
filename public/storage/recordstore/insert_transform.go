@@ -2,6 +2,7 @@ package recordstore
 
 import (
 	"context"
+	"errors"
 	"iter"
 	"sync"
 
@@ -25,6 +26,13 @@ import (
 type InsertTransformI interface {
 	TransformInsert(table string, records []arrow.RecordBatch) (target string, out []arrow.RecordBatch, err error)
 }
+
+// ErrTransformedTable is what a statement that would change, empty or
+// create a table by its name returns when an insert transform is registered
+// for that table (ADR-0402 §SD5): the rows are stored in a deployment's own
+// table, which the statement would not reach, so it is refused rather than
+// run against a relation that holds none of them. Match with errors.Is.
+var ErrTransformedTable = errors.New("the table's inserts are transformed into a deployment's own table, which this statement does not reach")
 
 // InsertTransformFunc adapts a function as an InsertTransformI.
 type InsertTransformFunc func(table string, records []arrow.RecordBatch) (target string, out []arrow.RecordBatch, err error)

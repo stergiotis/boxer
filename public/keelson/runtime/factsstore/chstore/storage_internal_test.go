@@ -207,3 +207,86 @@ func TestConfigWithEnvDefaults_TheReadTableFollowsTheFactsTableOnly(t *testing.T
 	assert.Empty(t, ConfigWithEnvDefaults(Config{Database: "scratch", Table: "facts"}).ReadTable)
 	assert.Equal(t, "carrier.facts_view", ConfigFromEnv().ReadTable)
 }
+
+// passThrough is a transform that sends the batches as they are to target.
+func passThrough(target string) recordstore.InsertTransformFunc {
+	return func(_ string, records []arrow.RecordBatch) (string, []arrow.RecordBatch, error) {
+		for _, r := range records {
+			r.Retain()
+		}
+		return target, records, nil
+	}
+}
+
+// Under a transform setup creates no facts table — only its database — and
+// the statements that change or empty stored rows by its name are refused
+// before anything is sent (ADR-0402 §SD5).
+func TestUnderATransform_NoFactsDDLAndTheRefusals(t *testing.T) {
+	cfg := Config{Database: "scratch_sd5", Table: "facts"}
+	st, srv := newFakeStore(t, cfg)
+	unregister := recordstore.RegisterInsertTransform("scratch_sd5.facts", passThrough("scratch_sd5.carrier"))
+	defer unregister()
+
+	_ = st.SetupTable(context.Background(), "")
+	sent := srv.requests()
+	require.NotEmpty(t, sent)
+	assert.Equal(t, "CREATE DATABASE IF NOT EXISTS scratch_sd5", sent[0].query)
+	for _, s := range sent {
+		assert.NotContains(t, s.query, "CREATE TABLE IF NOT EXISTS scratch_sd5.facts")
+		assert.NotContains(t, s.query, "idlease", "an allocator was given, so no lease table")
+	}
+
+	stmts, err := SetupStatements(Config{Database: "scratch_sd5", Table: "facts"}, "")
+	require.NoError(t, err)
+	assert.Equal(t, "CREATE DATABASE IF NOT EXISTS scratch_sd5", stmts[0])
+	for _, s := range stmts {
+		assert.NotContains(t, s, "scratch_sd5.facts")
+	}
+
+	require.ErrorIs(t, st.Truncate(context.Background()), recordstore.ErrTransformedTable)
+	require.ErrorIs(t, st.DropTable(context.Background()), recordstore.ErrTransformedTable)
+	assert.Empty(t, srv.requests(), "a refused statement sends nothing")
+
+	unregister()
+	stmts, err = SetupStatements(Config{Database: "scratch_sd5", Table: "facts"}, "")
+	require.NoError(t, err)
+	assert.Contains(t, stmts[1], "CREATE TABLE IF NOT EXISTS scratch_sd5.facts", "without a transform the table is created")
+}
+
+// The schema check judges the table written to in full, and a read relation
+// other than it by its columns; under a transform only the read relation
+// (ADR-0402 §SD4).
+func TestSchemaContracts(t *testing.T) {
+	base := Config{Database: "scratch_sc", Table: "facts"}
+	cs, err := SchemaContracts(base)
+	require.NoError(t, err)
+	require.Len(t, cs, 1)
+	assert.Equal(t, "scratch_sc.facts", cs[0].Table)
+	assert.False(t, cs[0].ColumnsOnly)
+
+	withRead := base
+	withRead.ReadTable = "carrier.facts_view"
+	cs, err = SchemaContracts(withRead)
+	require.NoError(t, err)
+	require.Len(t, cs, 2)
+	assert.Equal(t, "scratch_sc.facts", cs[0].Table)
+	assert.False(t, cs[0].ColumnsOnly)
+	assert.Equal(t, "carrier.facts_view", cs[1].Table)
+	assert.True(t, cs[1].ColumnsOnly)
+	assert.Empty(t, cs[1].Stamp)
+	assert.True(t, cs[1].Layout.IsZero())
+	assert.Equal(t, cs[0].Columns, cs[1].Columns)
+
+	unregister := recordstore.RegisterInsertTransform("scratch_sc.facts", passThrough("scratch_sc.carrier"))
+	defer unregister()
+	cs, err = SchemaContracts(base)
+	require.NoError(t, err)
+	require.Len(t, cs, 1)
+	assert.Equal(t, "scratch_sc.facts", cs[0].Table, "the name itself, which the deployment may have made its view")
+	assert.True(t, cs[0].ColumnsOnly)
+	cs, err = SchemaContracts(withRead)
+	require.NoError(t, err)
+	require.Len(t, cs, 1)
+	assert.Equal(t, "carrier.facts_view", cs[0].Table)
+	assert.True(t, cs[0].ColumnsOnly)
+}
