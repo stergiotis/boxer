@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/nanopasstest"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/require"
@@ -155,5 +156,5 @@ func TestExpandProperties(t *testing.T) {
 		"SELECT descriptiveStatistics('gk', x, y) FROM t WHERE x > 0 GROUP BY svc",
 		"WITH c AS (SELECT 1 AS v) SELECT descriptiveStatistics(v) FROM c",
 	)
-	nanopass.AssertProperties(t, ExpandDescriptiveStatistics, corpus)
+	nanopasstest.AssertProperties(t, ExpandDescriptiveStatistics, corpus)
 }

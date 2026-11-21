@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/nanopasstest"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stretchr/testify/require"
@@ -95,5 +96,5 @@ func TestExpandPass_Properties(t *testing.T) {
 		"SELECT LW_ID_HAS_TAG(id, 42) FROM t WHERE LW_ID_IS_VALID(id)",
 		"SELECT LW_ID_BODY(LW_ID_TAG_BITS(id)) FROM t",
 	)
-	nanopass.AssertProperties(t, ExpandPass, corpus)
+	nanopasstest.AssertProperties(t, ExpandPass, corpus)
 }

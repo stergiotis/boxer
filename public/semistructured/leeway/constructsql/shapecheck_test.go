@@ -3,7 +3,7 @@ package constructsql
 import (
 	"testing"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/nanopasstest"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	"github.com/stretchr/testify/require"
 )
@@ -159,5 +159,5 @@ func TestShapeCheck_AssertProperties(t *testing.T) {
 		`SELECT "` + v + `", "` + memb + `", "` + card + `" FROM t`,
 		`SELECT "` + v + `", "` + memb + `" FROM t`,
 	}
-	nanopass.AssertProperties(t, ShapeCheckPass, corpus)
+	nanopasstest.AssertProperties(t, ShapeCheckPass, corpus)
 }

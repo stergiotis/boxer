@@ -1,9 +1,13 @@
-package nanopass
+// Package nanopasstest checks a nanopass pass's declared properties from a
+// test. It is apart from nanopass so that a binary running passes does not
+// link the testing package.
+package nanopasstest
 
 import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 )
 
 // AssertProperties verifies the declared PassProperties of p against a
@@ -23,7 +27,7 @@ import (
 // Pass authors call this from a corpus-backed unit test. AssertProperties
 // only fails the test on contract violations; it does not check semantic
 // correctness of the pass output.
-func AssertProperties(t *testing.T, p Pass, corpus []string) {
+func AssertProperties(t testing.TB, p nanopass.Pass, corpus []string) {
 	t.Helper()
 
 	if p.Properties.Idempotent && p.Properties.NeedsFixedPoint {

@@ -129,7 +129,7 @@ const DefaultFixedPointMaxIter = 128
 type ApplyFunc func(e *env.Environment, body string) (newBody string, err error)
 
 // Pass is the first-class unit of nanopass transformation. Apply does the work;
-// Properties declares behavioural metadata that the runner and AssertProperties
+// Properties declares behavioural metadata that the runner and nanopasstest.AssertProperties
 // consume.
 type Pass struct {
 	Name       string
@@ -146,7 +146,7 @@ type Pass struct {
 // PassProperties declares behavioural metadata for a Pass.
 //
 // Idempotent and NeedsFixedPoint are mutually exclusive — declaring both is
-// caught at AssertProperties time.
+// caught at nanopasstest.AssertProperties time.
 type PassProperties struct {
 	// Idempotent: f(f(x)) == f(x) over the corpus.
 	Idempotent bool
@@ -161,7 +161,7 @@ type PassProperties struct {
 	Reads, Writes EnvRegions
 
 	// Requires/Produces are tag strings for ordering hints. v1 carries them
-	// as documentation only; AssertProperties may corpus-check them later.
+	// as documentation only; nanopasstest.AssertProperties may corpus-check them later.
 	Requires []FormTag
 	Produces []FormTag
 }

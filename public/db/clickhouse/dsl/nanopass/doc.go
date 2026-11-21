@@ -14,6 +14,6 @@
 // Downstream passes are written against the canonical (function-call) form.
 // When a shape is not canonicalised, extend the canonicalize passes rather
 // than teaching each consumer the other spellings. README.md and the
-// nanopass-sql skill cover writing a pass; AssertProperties checks its
+// nanopass-sql skill cover writing a pass; nanopasstest.AssertProperties checks its
 // declared properties over a corpus.
 package nanopass

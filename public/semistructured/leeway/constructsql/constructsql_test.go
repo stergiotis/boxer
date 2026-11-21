@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/nanopasstest"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
@@ -213,7 +214,7 @@ func TestExpand_AssertProperties(t *testing.T) {
 		corpus = append(corpus, e.SQL)
 	}
 	corpus = append(corpus, authoringCorpus()...)
-	nanopass.AssertProperties(t, ExpandPass, corpus)
+	nanopasstest.AssertProperties(t, ExpandPass, corpus)
 }
 
 // TestExpand_SharedCorpusUntouched pins inertness byte for byte: no entry of

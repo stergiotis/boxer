@@ -103,7 +103,7 @@ github.com/stergiotis/boxer/public/db/clickhouse/dsl/
     ├── nanopass_macro.go         # MacroExpander, LiteralArg, LiteralTypeE, ExtractLiteralArgs
     ├── nanopass_identifier.go    # DecodeIdentifier, QuoteIdentifier, NormalizeCallName
     ├── nanopass_observation.go   # SourceRange, Observation, ObservationFuncI
-    ├── nanopass_assert_properties.go  # AssertProperties(t, p, corpus)
+    ├── nanopasstest/             # nanopasstest.AssertProperties(t, p, corpus)
     ├── analysis/                 # ExtractTables / ExtractColumns / ExtractFunctions
     ├── highlight/                # Highlight → []Span; RenderANSI / RenderHTML / HighlightCSS
     ├── passes/                   # the shipped passes (see "Included Passes")
@@ -487,7 +487,7 @@ so the runner forwards the input unchanged while keeping any env mutations:
 ## Testing a Pass
 
 Every pass MUST be covered by the categories below. The mechanised core is
-`nanopass.AssertProperties(t, p, corpus)`, which turns declared `PassProperties`
+`nanopasstest.AssertProperties(t, p, corpus)`, which turns declared `PassProperties`
 into enforced contracts (`Idempotent`, `NeedsFixedPoint`, their mutual exclusion,
 and "the property must actually be exercised — no vacuous pass").
 

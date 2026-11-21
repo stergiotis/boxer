@@ -5,6 +5,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/nanopasstest"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 	"github.com/stretchr/testify/require"
@@ -127,7 +128,7 @@ func TestAssertProperties(t *testing.T) {
 			if c.corpus != nil {
 				corpus = c.corpus
 			}
-			nanopass.AssertProperties(t, c.pass, corpus)
+			nanopasstest.AssertProperties(t, c.pass, corpus)
 		})
 	}
 
@@ -145,6 +146,6 @@ func TestAssertProperties(t *testing.T) {
 			canonical = append(canonical, out)
 		}
 		require.NotEmpty(t, canonical, "no corpus entry canonicalised")
-		nanopass.AssertProperties(t, nanopass.ValidateGrammar2, canonical)
+		nanopasstest.AssertProperties(t, nanopass.ValidateGrammar2, canonical)
 	})
 }

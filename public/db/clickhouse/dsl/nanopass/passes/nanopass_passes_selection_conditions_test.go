@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/nanopasstest"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 	"github.com/stretchr/testify/require"
@@ -279,7 +280,7 @@ func TestExposeConditionsProperties(t *testing.T) {
 		"SELECT * FROM tt WHERE c = 1",
 		"SELECT a FROM tt",
 	)
-	nanopass.AssertProperties(t, condPass(), corpus)
+	nanopasstest.AssertProperties(t, condPass(), corpus)
 }
 
 func TestExposeConditionsInvalidInput(t *testing.T) {

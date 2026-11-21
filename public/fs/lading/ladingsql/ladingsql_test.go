@@ -8,6 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/nanopasstest"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/identity/identifier"
@@ -272,7 +273,7 @@ func TestPassProperties(t *testing.T) {
 	corpus = append(corpus,
 		"SELECT path FROM fs(4322952322827452417)",
 		"SELECT data FROM fsdata(4322952322827452417, '*')")
-	nanopass.AssertProperties(t, ladingsql.ExpandPass(openCfg()), corpus)
+	nanopasstest.AssertProperties(t, ladingsql.ExpandPass(openCfg()), corpus)
 }
 
 // TestCorpusStaysValid — the pass must not damage a statement it has no

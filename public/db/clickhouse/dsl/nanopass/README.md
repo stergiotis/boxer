@@ -84,7 +84,7 @@ type Environment struct {
 | File | Purpose |
 |------|---------|
 | `nanopass_pipeline.go` | `Pass`, `PassProperties`, combinators, `Pass.Run`, `Pass.Apply`, validators, discard-marker contract |
-| `nanopass_assert_properties.go` | `AssertProperties(t, p, corpus)` — corpus-backed contract enforcement |
+| `nanopasstest/` | `nanopasstest.AssertProperties(t, p, corpus)` — corpus-backed contract enforcement, apart so a binary running passes does not link `testing` |
 | `nanopass_parse.go` | `Parse` (Grammar1) and `ParseCanonical` (Grammar2), lexer+parser diagnostics |
 | `nanopass_walk.go` | `WalkCST`, `FindAll`, `FindFirst` — depth-first CST traversal |
 | `nanopass_rewrite.go` | `RewriterI`, `ReplaceNode`, `DeleteNode`, `InsertBefore`, `InsertAfter`, `TrackedRewriter` |
@@ -209,7 +209,7 @@ state, structural reordering, or a node-conditional token rename
 
 ## AssertProperties — machine-checked annotations
 
-`nanopass.AssertProperties(t, p, corpus)` enforces declared properties against a corpus:
+`nanopasstest.AssertProperties(t, p, corpus)` enforces declared properties against a corpus:
 
 - `Idempotent: true` ⇒ `p.Apply(p.Apply(b)) == p.Apply(b)` byte-for-byte.
 - `NeedsFixedPoint: true` ⇒ at least one corpus entry exhibits non-convergence on the second Apply.
