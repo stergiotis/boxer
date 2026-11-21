@@ -81,6 +81,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/runinfo"
 	"github.com/stergiotis/boxer/public/science/audio/sink/lanesink"
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
@@ -480,6 +481,13 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 	// CLICKHOUSE_ENDPOINT repoints it. Every row carries the run (ADR-0191
 	// §SD3).
 	factsCfg := chstore.ConfigFromEnv()
+	// The read table (ADR-0402 §SD3) is checked once, before any reader is
+	// built: a malformed BOXER_FACTS_READ_TABLE fails the boot rather than
+	// leaving the readers that cannot report it on the table written to.
+	if _, err = factsschema.ReadTable(); err != nil {
+		err = eh.Errorf("hostboot: %w", err)
+		return
+	}
 	if runInst != nil {
 		factsCfg.RunId = runInst.RunId
 	}

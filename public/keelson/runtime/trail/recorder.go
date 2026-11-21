@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
@@ -141,7 +142,9 @@ func WithFlushInterval(d time.Duration) RecorderOption {
 
 // WithReadTable names the table the recorder's reads scan (ADR-0296
 // §SD9 d): a storage table, or a Merge over several, while writes still go
-// to the facts table. Empty reads the table written to.
+// to the facts table. Empty takes the read table from BOXER_FACTS_READ_TABLE
+// (factsschema.ReadTableFor, ADR-0402 §SD3), which reads the table written
+// to when the setting is empty.
 func WithReadTable(table string) RecorderOption {
 	return func(inst *Recorder) { inst.cfg.readTable = table }
 }
@@ -212,8 +215,16 @@ func NewRecorder(exec recordstore.ExecutorI, run string, log zerolog.Logger, opt
 	if exec == nil {
 		inst.notDurable = notDurableNoBackend
 	} else {
+		readTable := inst.cfg.readTable
 		var err error
-		if inst.st, err = newAuditStore(exec, inst.cfg.readTable); err != nil {
+		if readTable == "" {
+			if readTable, err = factsschema.ReadTableFor(TrailTableName); err != nil {
+				log.Error().Err(err).Msg("trail: the read table setting is malformed; the trail records nothing")
+				inst.notDurable = "the read table setting is malformed: " + err.Error()
+				return
+			}
+		}
+		if inst.st, err = newAuditStore(exec, readTable); err != nil {
 			log.Error().Err(err).Msg("trail: the store binding could not be built; the trail records nothing")
 			inst.notDurable = "the store binding could not be built: " + err.Error()
 			return

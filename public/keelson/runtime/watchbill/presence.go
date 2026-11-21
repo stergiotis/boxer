@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillpresence"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
@@ -66,9 +67,13 @@ var (
 )
 
 // NewPresence opens the store over exec, which must reach the server that
-// holds boxer.facts; chstore has provisioned the table. The caller closes.
+// holds boxer.facts; chstore has provisioned the table. Its reads go to the
+// read table BOXER_FACTS_READ_TABLE names (ADR-0402 §SD3); a malformed
+// setting, which the host refuses at boot, leaves them on the table written
+// to. The caller closes.
 func NewPresence(exec recordstore.ExecutorI) (inst *Presence) {
-	inst = &Presence{st: watchbillpresence.NewPresenceStore(exec, nil, watchbillpresence.PresenceStoreConfig{}), host: hostname()}
+	readTable, _ := factsschema.ReadTableFor(watchbillpresence.PresenceTableName)
+	inst = &Presence{st: watchbillpresence.NewPresenceStore(exec, nil, watchbillpresence.PresenceStoreConfig{ReadTable: readTable}), host: hostname()}
 	return
 }
 
