@@ -224,6 +224,9 @@ lacks.
   both to this decision.
 - Ids leased, with a process-local stream as the fallback instead of a
   failed write; the lease retried after one minute.
+- Setup that cannot create the lease table fails, as a failed read-surface
+  install does, so a host falls back to the in-memory store rather than
+  run on a table whose ids it cannot lease.
 - The two tag values, 57314 and 53133, in the journal entries' class, and
   the expected cardinality of 2^39 rows.
 - A clause with `SETTINGS` refused rather than merged.
