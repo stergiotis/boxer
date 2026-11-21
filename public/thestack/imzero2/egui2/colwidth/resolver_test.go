@@ -1,6 +1,7 @@
 package colwidth
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 func newResolver(t *testing.T) (r *Resolver, store *statestore.Memory) {
 	t.Helper()
 	store = statestore.NewMemory()
-	r, err := New(store, Opts{AppId: "play"})
+	r, err := New(t.Context(), store, Opts{AppId: "play"})
 	require.NoError(t, err)
 	return
 }
@@ -52,13 +53,13 @@ func settled(t *testing.T, r *Resolver, tag string, cols []Column, defaults []fl
 
 func TestNew_Validation(t *testing.T) {
 	store := statestore.NewMemory()
-	_, err := New(nil, Opts{AppId: "play"})
+	_, err := New(t.Context(), nil, Opts{AppId: "play"})
 	require.Error(t, err)
-	_, err = New(store, Opts{})
+	_, err = New(t.Context(), store, Opts{})
 	require.Error(t, err, "an empty AppId would scope overrides to nothing")
-	_, err = New(store, Opts{AppId: "play", Debounce: -time.Second})
+	_, err = New(t.Context(), store, Opts{AppId: "play", Debounce: -time.Second})
 	require.Error(t, err)
-	_, err = New(store, Opts{AppId: "play", MinPoints: 50, MaxPoints: 10})
+	_, err = New(t.Context(), store, Opts{AppId: "play", MinPoints: 50, MaxPoints: 10})
 	require.Error(t, err, "an inverted clamp range would make every width the max")
 }
 
@@ -141,7 +142,7 @@ func TestResolve_TierPrecedence(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r, store := newResolver(t)
 			for _, row := range tc.write {
-				err := store.WriteColumnWidth(row)
+				err := store.WriteColumnWidth(t.Context(), row)
 				require.NoError(t, err)
 			}
 			require.NoError(t, r.Load())
@@ -156,7 +157,7 @@ func TestResolve_TierPrecedence(t *testing.T) {
 func TestResolve_ShapeTierCrossesTableTags(t *testing.T) {
 	r, store := newResolver(t)
 	cols := []Column{colA, colB}
-	err := store.WriteColumnWidth(statestore.ColumnWidthRow{
+	err := store.WriteColumnWidth(t.Context(), statestore.ColumnWidthRow{
 		AppId: "play", Tier: statestore.ColWidthTierShape,
 		Scope: ShapeHash(cols), ColumnKey: colA.Key(), Points: 77,
 	})
@@ -183,7 +184,7 @@ func TestResolve_RescalesOnFontSizeChange(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r, store := newResolver(t)
-			err := store.WriteColumnWidth(statestore.ColumnWidthRow{
+			err := store.WriteColumnWidth(t.Context(), statestore.ColumnWidthRow{
 				AppId: "play", Tier: statestore.ColWidthTierColumn,
 				ColumnKey: colA.Key(), Points: 100, FontSize: tc.capturedAt,
 			})
@@ -197,9 +198,9 @@ func TestResolve_RescalesOnFontSizeChange(t *testing.T) {
 
 func TestResolve_Clamps(t *testing.T) {
 	store := statestore.NewMemory()
-	r, err := New(store, Opts{AppId: "play", MinPoints: 20, MaxPoints: 200})
+	r, err := New(t.Context(), store, Opts{AppId: "play", MinPoints: 20, MaxPoints: 200})
 	require.NoError(t, err)
-	err = store.WriteColumnWidth(statestore.ColumnWidthRow{
+	err = store.WriteColumnWidth(t.Context(), statestore.ColumnWidthRow{
 		AppId: "play", Tier: statestore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 100000,
 	})
 	require.NoError(t, err)
@@ -221,7 +222,7 @@ func TestEpoch_BumpsOnlyWhenResolvedWidthsChange(t *testing.T) {
 	r.Resolve("tbl", cols, 12, []float64{50})
 	assert.Equal(t, e1, r.Epoch("tbl"), "an unchanged resolve must not bump")
 
-	err := store.WriteColumnWidth(statestore.ColumnWidthRow{
+	err := store.WriteColumnWidth(t.Context(), statestore.ColumnWidthRow{
 		AppId: "play", Tier: statestore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 123,
 	})
 	require.NoError(t, err)
@@ -379,7 +380,7 @@ func TestObserve_DragAfterFirstShowStillCaptures(t *testing.T) {
 	n, err := r.Flush(t0.Add(DefaultDebounce))
 	require.NoError(t, err)
 	assert.Equal(t, 2, n)
-	rows, err := store.ListColumnWidths("play")
+	rows, err := store.ListColumnWidths(t.Context(), "play")
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 	assert.Equal(t, 220.0, rows[0].Points)
@@ -414,7 +415,7 @@ func TestFlush_DebouncesUntilMotionStops(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, n, "one drag lands as one write per tier, not one per frame")
 
-	rows, err := store.ListColumnWidths("play")
+	rows, err := store.ListColumnWidths(t.Context(), "play")
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 	for _, row := range rows {
@@ -431,7 +432,7 @@ func TestFlush_DebouncesUntilMotionStops(t *testing.T) {
 // because one insert failed is worse than writing a second row later.
 func TestFlush_FailureLeavesEntryPending(t *testing.T) {
 	store := &failingStore{Memory: statestore.NewMemory(), fail: true}
-	r, err := New(store, Opts{AppId: "play"})
+	r, err := New(t.Context(), store, Opts{AppId: "play"})
 	require.NoError(t, err)
 	cols := []Column{colA}
 	settled(t, r, "tbl", cols, []float64{50})
@@ -458,7 +459,7 @@ func TestClear_RemovesOverrideAndRestoresDefault(t *testing.T) {
 
 	require.NoError(t, r.Clear("tbl", colA))
 
-	rows, err := store.ListColumnWidths("play")
+	rows, err := store.ListColumnWidths(t.Context(), "play")
 	require.NoError(t, err)
 	assert.Empty(t, rows, "clearing must tombstone the stored rows, not just forget them")
 	assert.Equal(t, 50.0, r.Resolve("tbl", cols, 12, []float64{50})[0])
@@ -479,7 +480,7 @@ func TestClear_DropsPendingCapture(t *testing.T) {
 	n, err := r.Flush(t0.Add(time.Hour))
 	require.NoError(t, err)
 	assert.Zero(t, n)
-	rows, err := store.ListColumnWidths("play")
+	rows, err := store.ListColumnWidths(t.Context(), "play")
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }
@@ -488,7 +489,7 @@ func TestClear_DropsPendingCapture(t *testing.T) {
 // adjustment in favour of the older stored value.
 func TestLoad_KeepsPendingCaptures(t *testing.T) {
 	r, store := newResolver(t)
-	err := store.WriteColumnWidth(statestore.ColumnWidthRow{
+	err := store.WriteColumnWidth(t.Context(), statestore.ColumnWidthRow{
 		AppId: "play", Tier: statestore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 30,
 	})
 	require.NoError(t, err)
@@ -505,7 +506,7 @@ func TestLoad_KeepsPendingCaptures(t *testing.T) {
 
 func TestLoad_IgnoresOtherApps(t *testing.T) {
 	r, store := newResolver(t)
-	err := store.WriteColumnWidth(statestore.ColumnWidthRow{
+	err := store.WriteColumnWidth(t.Context(), statestore.ColumnWidthRow{
 		AppId: "imztop", Tier: statestore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 999,
 	})
 	require.NoError(t, err)
@@ -515,12 +516,12 @@ func TestLoad_IgnoresOtherApps(t *testing.T) {
 
 func TestEvict_BoundsMemoryAndSparesPendingCaptures(t *testing.T) {
 	store := statestore.NewMemory()
-	r, err := New(store, Opts{AppId: "play", MaxEntries: 4})
+	r, err := New(t.Context(), store, Opts{AppId: "play", MaxEntries: 4})
 	require.NoError(t, err)
 
 	// Six stored overrides, oldest first.
 	for i := range 6 {
-		werr := store.WriteColumnWidth(statestore.ColumnWidthRow{
+		werr := store.WriteColumnWidth(t.Context(), statestore.ColumnWidthRow{
 			AppId: "play", Tier: statestore.ColWidthTierColumn,
 			ColumnKey: Column{Name: string(rune('a' + i)), Type: "String"}.Key(),
 			Points:    float64(10 + i),
@@ -545,12 +546,12 @@ type failingStore struct {
 	fail bool
 }
 
-func (inst *failingStore) WriteColumnWidth(row statestore.ColumnWidthRow) (err error) {
+func (inst *failingStore) WriteColumnWidth(ctx context.Context, row statestore.ColumnWidthRow) (err error) {
 	if inst.fail {
 		err = eh.Errorf("synthetic write failure")
 		return
 	}
-	err = inst.Memory.WriteColumnWidth(row)
+	err = inst.Memory.WriteColumnWidth(context.Background(), row)
 	return
 }
 
@@ -565,13 +566,13 @@ func TestClearAll_ResetsEveryColumn(t *testing.T) {
 	r.Observe("tbl", cols, []float64{140, 160}, 12, false, t0)
 	_, err := r.Flush(t0.Add(time.Hour))
 	require.NoError(t, err)
-	rows, err := store.ListColumnWidths("play")
+	rows, err := store.ListColumnWidths(t.Context(), "play")
 	require.NoError(t, err)
 	require.NotEmpty(t, rows)
 
 	require.NoError(t, r.ClearAll("tbl", cols))
 
-	rows, err = store.ListColumnWidths("play")
+	rows, err = store.ListColumnWidths(t.Context(), "play")
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 	assert.Equal(t, []float64{50, 60}, r.Resolve("tbl", cols, 12, []float64{50, 60}))
@@ -581,7 +582,7 @@ func TestClearAll_ResetsEveryColumn(t *testing.T) {
 // one column must not abandon the rest.
 func TestClearAll_ContinuesPastAFailure(t *testing.T) {
 	store := &failingDeleteStore{Memory: statestore.NewMemory(), failFor: colA.Key()}
-	r, err := New(store, Opts{AppId: "play"})
+	r, err := New(t.Context(), store, Opts{AppId: "play"})
 	require.NoError(t, err)
 	cols := []Column{colA, colB}
 	r.Resolve("tbl", cols, 12, []float64{50, 60})
@@ -592,7 +593,7 @@ func TestClearAll_ContinuesPastAFailure(t *testing.T) {
 	err = r.ClearAll("tbl", cols)
 	require.Error(t, err, "the failure must be reported")
 
-	rows, lerr := store.ListColumnWidths("play")
+	rows, lerr := store.ListColumnWidths(t.Context(), "play")
 	require.NoError(t, lerr)
 	for _, row := range rows {
 		assert.Equal(t, colA.Key(), row.ColumnKey,
@@ -611,12 +612,12 @@ type failingDeleteStore struct {
 	failFor string
 }
 
-func (inst *failingDeleteStore) DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error) {
+func (inst *failingDeleteStore) DeleteColumnWidth(ctx context.Context, appId app.AppIdT, tier string, scope string, columnKey string) (err error) {
 	if columnKey == inst.failFor {
 		err = eh.Errorf("synthetic delete failure")
 		return
 	}
-	return inst.Memory.DeleteColumnWidth(appId, tier, scope, columnKey)
+	return inst.Memory.DeleteColumnWidth(context.Background(), appId, tier, scope, columnKey)
 }
 
 var _ StoreI = (*failingDeleteStore)(nil)
@@ -645,7 +646,7 @@ func TestObserve_StaleReportAfterAColumnSetChangeIsNotACapture(t *testing.T) {
 	n, err := r.Flush(t0.Add(2 * DefaultDebounce))
 	require.NoError(t, err)
 	assert.Zero(t, n)
-	rows, err := store.ListColumnWidths("play")
+	rows, err := store.ListColumnWidths(t.Context(), "play")
 	require.NoError(t, err)
 	assert.Empty(t, rows, "and nothing may reach the store")
 }
@@ -703,7 +704,7 @@ func TestObserve_DroppedReportDoesNotSpendTheSettleWindow(t *testing.T) {
 // same column keeps its default, and nothing is written to the column tier.
 func TestInstanceOnly_ADragDoesNotReachAnotherTable(t *testing.T) {
 	store := statestore.NewMemory()
-	r, err := New(store, Opts{AppId: "play", InstanceOnly: true})
+	r, err := New(t.Context(), store, Opts{AppId: "play", InstanceOnly: true})
 	require.NoError(t, err)
 	cols := []Column{colA}
 	settled(t, r, "one", cols, []float64{50})
@@ -714,7 +715,7 @@ func TestInstanceOnly_ADragDoesNotReachAnotherTable(t *testing.T) {
 	assert.Equal(t, 140.0, r.Resolve("one", cols, 12, []float64{50})[0])
 	assert.Equal(t, 50.0, r.Resolve("two", cols, 12, []float64{50})[0])
 
-	require.NoError(t, store.WriteColumnWidth(statestore.ColumnWidthRow{AppId: "play", Tier: statestore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 99}))
+	require.NoError(t, store.WriteColumnWidth(t.Context(), statestore.ColumnWidthRow{AppId: "play", Tier: statestore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 99}))
 	require.NoError(t, r.Load())
 	assert.Equal(t, 50.0, r.Resolve("two", cols, 12, []float64{50})[0], "a stored column-tier row is not read")
 }

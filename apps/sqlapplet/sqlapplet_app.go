@@ -130,7 +130,7 @@ func (inst *appletApp) Mount(ctx app.MountContextI) (err error) {
 	// is waiting for in either case. An embedder still overrides all of
 	// that by binding explicit handles instead (§SD7).
 	binder, bindings := newDatasetFollower(ctx.Bus(), ctx.Log(), inst.def.Datasets)
-	inner, err := NewEmbedded(inst.def, EmbedConfig{
+	inner, err := NewEmbedded(app.ContextOf(ctx), inst.def, EmbedConfig{
 		StampAppId:  string(inst.m.Id),
 		RunId:       ctx.RunId(),
 		InstanceKey: ctx.InstanceKey(),

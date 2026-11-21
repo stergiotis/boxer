@@ -364,7 +364,7 @@ func (inst *App) ensurePlay() {
 		}
 		inst.inner = play.NewLivePlayApp(client, sql, playMaxHistory, nil)
 		// nil storage: the buffer is the notebook's, not a draft play keeps.
-		inst.inner.SetCapabilities(inst.bus, nil, inst.log)
+		inst.inner.SetCapabilities(inst.scope.Tail(nil), inst.bus, nil, inst.log)
 		inst.innerOf = inst.textKey
 		return
 	}

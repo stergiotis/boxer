@@ -106,7 +106,7 @@ func bootHarness(t *testing.T, bus *inprocbus.Inst) (h storeHarness) {
 	t.Helper()
 	h.reg = app.NewRegistry()
 	h.minter = newFixtureMinter()
-	svc, err := appletstore.Start(h.reg, bus, h.minter, zerolog.New(zerolog.NewTestWriter(t)))
+	svc, err := appletstore.Start(t.Context(), h.reg, bus, h.minter, zerolog.New(zerolog.NewTestWriter(t)))
 	require.NoError(t, err)
 	t.Cleanup(svc.Stop)
 	h.svc = svc
@@ -170,11 +170,11 @@ func openDoc(t *testing.T, reg *app.Registry, slug string) (doc []byte) {
 
 func TestStartRefusesMissingParts(t *testing.T) {
 	bus := newMemoryBus(t)
-	_, err := appletstore.Start(nil, bus, newFixtureMinter(), zerolog.Nop())
+	_, err := appletstore.Start(t.Context(), nil, bus, newFixtureMinter(), zerolog.Nop())
 	assert.Error(t, err)
-	_, err = appletstore.Start(app.NewRegistry(), nil, newFixtureMinter(), zerolog.Nop())
+	_, err = appletstore.Start(t.Context(), app.NewRegistry(), nil, newFixtureMinter(), zerolog.Nop())
 	assert.Error(t, err)
-	_, err = appletstore.Start(app.NewRegistry(), bus, nil, zerolog.Nop())
+	_, err = appletstore.Start(t.Context(), app.NewRegistry(), bus, nil, zerolog.Nop())
 	assert.Error(t, err)
 }
 
@@ -193,17 +193,17 @@ func TestSaveMintsAndPersists(t *testing.T) {
 	// The persisted layout: one document per slug and the index, under the
 	// store's alias. A later boot reads exactly these keys.
 	keys := storedKeys(t, bus)
-	got, found, err := keys.Get("applet_my-tables")
+	got, found, err := keys.Get(t.Context(), "applet_my-tables")
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, doc, got)
-	idx, found, err := keys.Get("index")
+	idx, found, err := keys.Get(t.Context(), "index")
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, "my-tables", string(idx))
 
 	require.True(t, saveDoc(t, newCaller(bus), "second", testDoc("Second", "SELECT 2")).OK)
-	idx, _, err = keys.Get("index")
+	idx, _, err = keys.Get(t.Context(), "index")
 	require.NoError(t, err)
 	assert.Equal(t, "my-tables\nsecond", string(idx))
 }
@@ -225,17 +225,17 @@ func TestReloadMintsAtBoot(t *testing.T) {
 func TestBootSkipsWhatNoLongerMints(t *testing.T) {
 	bus := newMemoryBus(t)
 	keys := storedKeys(t, bus)
-	require.NoError(t, keys.Set("applet_good", testDoc("Good", "SELECT 1")))
-	require.NoError(t, keys.Set("applet_broken", testDoc("Broken", "INSERT INTO t VALUES (1)")))
-	require.NoError(t, keys.Set("applet_taken", testDoc("Taken", "SELECT 1")))
-	require.NoError(t, keys.Set("index", []byte("good\nbroken\nmissing\ntaken")))
+	require.NoError(t, keys.Set(t.Context(), "applet_good", testDoc("Good", "SELECT 1")))
+	require.NoError(t, keys.Set(t.Context(), "applet_broken", testDoc("Broken", "INSERT INTO t VALUES (1)")))
+	require.NoError(t, keys.Set(t.Context(), "applet_taken", testDoc("Taken", "SELECT 1")))
+	require.NoError(t, keys.Set(t.Context(), "index", []byte("good\nbroken\nmissing\ntaken")))
 
 	reg := app.NewRegistry()
 	committed := app.Manifest{Id: fixtureIdPrefix + "taken", Display: "Committed", Summary: "Fixture applet for store tests",
 		Topics: []app.TopicT{app.TopicSql}, Kind: app.KindApplet, Surface: app.SurfaceWindowed}
 	require.NoError(t, reg.RegisterFactory(committed, func() (app.AppI, error) { return &fixtureApp{m: committed}, nil }))
 	minter := newFixtureMinter()
-	svc, err := appletstore.Start(reg, bus, minter, zerolog.Nop())
+	svc, err := appletstore.Start(t.Context(), reg, bus, minter, zerolog.Nop())
 	require.NoError(t, err)
 	t.Cleanup(svc.Stop)
 
@@ -295,7 +295,7 @@ func TestSaveRefusals(t *testing.T) {
 
 	mints, _ := h.minter.counts()
 	assert.Zero(t, mints)
-	_, found, err := storedKeys(t, bus).Get("index")
+	_, found, err := storedKeys(t, bus).Get(t.Context(), "index")
 	require.NoError(t, err)
 	assert.False(t, found, "a refused document is never half-saved")
 }

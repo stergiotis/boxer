@@ -70,12 +70,12 @@ func TestColumnWidth_CapabilityPresentWithState(t *testing.T) {
 
 	// Usable, not merely non-nil: a round-trip through the returned store
 	// is what the resolver will do.
-	err := store.WriteColumnWidth(statestore.ColumnWidthRow{
+	err := store.WriteColumnWidth(t.Context(), statestore.ColumnWidthRow{
 		AppId: "test.colwidth", Tier: statestore.ColWidthTierColumn,
 		ColumnKey: "k", Points: 42,
 	})
 	require.NoError(t, err)
-	rows, err := store.ListColumnWidths("test.colwidth")
+	rows, err := store.ListColumnWidths(t.Context(), "test.colwidth")
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, 42.0, rows[0].Points)

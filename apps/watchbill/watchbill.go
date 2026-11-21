@@ -105,6 +105,9 @@ type verbOutcome struct {
 
 // App is the per-window instance.
 type App struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx context.Context
 	ids     *c.WidgetIdStack
 	logger  zerolog.Logger
 	density styletokens.DensityE
@@ -224,8 +227,9 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		Provenance: inspector.Provenance{Subject: stateProvenance, SourceApp: string(manifest.Id)},
 	})
 	inst.storage = ctx.Storage()
+	inst.ioCtx = app.ContextOf(ctx)
 	if inst.storage != nil {
-		if raw, found, gerr := inst.storage.Get(splitKey); gerr == nil && found {
+		if raw, found, gerr := inst.storage.Get(inst.ioCtx, splitKey); gerr == nil && found {
 			if w, ok := decodeSplit(raw); ok {
 				inst.split.Width = w
 			}
@@ -327,7 +331,7 @@ func (inst *App) ensureWidths(ctx app.FrameContextI) {
 	if store == nil {
 		return
 	}
-	res, err := colwidth.New(store, colwidth.Opts{
+	res, err := colwidth.New(app.ContextOf(ctx), store, colwidth.Opts{
 		AppId: ctx.AppId(), InstanceKey: ctx.InstanceKey(),
 		MinPoints: float64(recordtable.DragMinWidth(inst.density)),
 		MaxPoints: float64(recordtable.MaxColumnWidth),
@@ -402,7 +406,7 @@ func (inst *App) storeSplit() {
 	if !changed {
 		return
 	}
-	if err := inst.storage.Set(splitKey, encodeSplit(w)); err != nil {
+	if err := inst.storage.Set(inst.ioCtx, splitKey, encodeSplit(w)); err != nil {
 		inst.logger.Debug().Err(err).Msg("watchbill app: split not stored")
 	}
 }

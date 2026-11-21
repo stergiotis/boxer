@@ -1,6 +1,7 @@
 package persist
 
 import (
+	"context"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -49,7 +50,7 @@ func NewClient(bus app.BusI, appId app.AppIdT) (inst *Client, err error) {
 // no wildcards. A dotted key produces a "malformed subject" error from
 // the service. Use camelCase or snake_case names like "editorFont" or
 // "selected_app" instead.
-func (inst *Client) Get(key string) (value []byte, found bool, err error) {
+func (inst *Client) Get(ctx context.Context, key string) (value []byte, found bool, err error) {
 	subject := SubjectFor(inst.alias, key, OpGet)
 	raw, rerr := inst.bus.Request(subject, nil)
 	if rerr != nil {
@@ -73,7 +74,7 @@ func (inst *Client) Get(key string) (value []byte, found bool, err error) {
 // Set issues runtime.persist.{alias}.{key}.set with value as the payload.
 // Empty values are valid and round-trip; the service treats them as
 // distinct from "key absent" (Get returns found=true, value=[]byte{}).
-func (inst *Client) Set(key string, value []byte) (err error) {
+func (inst *Client) Set(ctx context.Context, key string, value []byte) (err error) {
 	subject := SubjectFor(inst.alias, key, OpSet)
 	raw, rerr := inst.bus.Request(subject, value)
 	if rerr != nil {
@@ -96,7 +97,7 @@ func (inst *Client) Set(key string, value []byte) (err error) {
 // for the same key returns found=false. Deleting a never-set key is not
 // an error in the in-memory backend; CH-backed backends are at liberty
 // to surface a "not found" error if they choose.
-func (inst *Client) Delete(key string) (err error) {
+func (inst *Client) Delete(ctx context.Context, key string) (err error) {
 	subject := SubjectFor(inst.alias, key, OpDelete)
 	raw, rerr := inst.bus.Request(subject, nil)
 	if rerr != nil {

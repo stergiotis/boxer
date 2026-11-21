@@ -78,6 +78,7 @@
 package filepicker
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"math"
@@ -111,9 +112,9 @@ const AppId app.AppIdT = "runtime.filepicker" // designlint:ignore=L12 (a host-o
 //
 // res is nil only when the resolver could not be built. A failed load
 // returns the resolver with the error: the dialog then starts from its
-// defaults and still captures.
-func NewColumnWidths(store colwidth.StoreI) (res *colwidth.Resolver, err error) {
-	res, err = colwidth.New(store, colwidth.Opts{
+// defaults and still captures. ctx is the resolver's lifetime (colwidth.New).
+func NewColumnWidths(ctx context.Context, store colwidth.StoreI) (res *colwidth.Resolver, err error) {
+	res, err = colwidth.New(ctx, store, colwidth.Opts{
 		AppId:     AppId,
 		MinPoints: float64(fsbrowser.MinColumnWidth(styletokens.ActiveDensity())),
 		MaxPoints: float64(fsbrowser.MaxColumnWidth),

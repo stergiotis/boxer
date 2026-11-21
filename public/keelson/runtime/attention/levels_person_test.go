@@ -1,6 +1,7 @@
 package attention
 
 import (
+	"context"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -12,20 +13,26 @@ import (
 
 type memStore map[string][]byte
 
-func (inst memStore) Get(key string) ([]byte, bool, error) { v, ok := inst[key]; return v, ok, nil }
-func (inst memStore) Set(key string, value []byte) error   { inst[key] = value; return nil }
+func (inst memStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	v, ok := inst[key]
+	return v, ok, nil
+}
+func (inst memStore) Set(ctx context.Context, key string, value []byte) error {
+	inst[key] = value
+	return nil
+}
 
 func TestThePersonsTableIsKept(t *testing.T) {
 	store := memStore{}
 	levels := &Levels{}
-	require.NoError(t, AttachPersonStore(levels, store, zerolog.Nop()))
+	require.NoError(t, AttachPersonStore(t.Context(), levels, store, zerolog.Nop()))
 	require.NoError(t, levels.Set(AuthorPerson, "", "", Key{Kind: "reply"}, LevelMessage))
 	require.NoError(t, levels.Set(AuthorPerson, "", "", Key{Kind: KindQuestion}, LevelCritical))
 	require.NoError(t, levels.Set(AuthorApp, "chat", "c1", Key{Kind: "turn"}, LevelHighlight), "a conversation's override")
 
 	again := &Levels{}
 	var trail []Change
-	require.NoError(t, AttachPersonStore(again, store, zerolog.Nop()))
+	require.NoError(t, AttachPersonStore(t.Context(), again, store, zerolog.Nop()))
 	again.SetOnWaitingChange(func(ch Change) { trail = append(trail, ch) })
 	assert.Equal(t, LevelMessage, again.Classify(Event{Kind: "reply"}))
 	assert.Equal(t, LevelCritical, again.Classify(Event{Kind: KindQuestion}))
@@ -34,14 +41,14 @@ func TestThePersonsTableIsKept(t *testing.T) {
 
 	require.NoError(t, again.Clear(AuthorPerson, "", "", Key{Kind: "reply"}))
 	third := &Levels{}
-	require.NoError(t, AttachPersonStore(third, store, zerolog.Nop()))
+	require.NoError(t, AttachPersonStore(t.Context(), third, store, zerolog.Nop()))
 	assert.Equal(t, LevelData, third.Classify(Event{Kind: "reply"}), "a cleared row is gone from what is kept")
 }
 
 func TestAKeptRowBelowTheFloorIsDropped(t *testing.T) {
 	store := memStore{personStoreKey: []byte(`{"v":1,"rows":[{"kind":"question","level":1},{"kind":"reply","level":2},{"kind":"nonsense","level":2}]}`)}
 	levels := &Levels{}
-	require.NoError(t, AttachPersonStore(levels, store, zerolog.Nop()))
+	require.NoError(t, AttachPersonStore(t.Context(), levels, store, zerolog.Nop()))
 	assert.Equal(t, LevelYourTurn, levels.Classify(Event{Kind: KindQuestion}), "a waiting kind kept at data is refused")
 	assert.Equal(t, LevelMessage, levels.Classify(Event{Kind: "reply"}))
 }

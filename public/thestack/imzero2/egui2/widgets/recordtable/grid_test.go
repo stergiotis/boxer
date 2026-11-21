@@ -1,6 +1,7 @@
 package recordtable
 
 import (
+	"context"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -20,16 +21,16 @@ type mapStore struct {
 	rows []statestore.ColumnWidthRow
 }
 
-func (inst *mapStore) ListColumnWidths(appId app.AppIdT) (rows []statestore.ColumnWidthRow, err error) {
+func (inst *mapStore) ListColumnWidths(ctx context.Context, appId app.AppIdT) (rows []statestore.ColumnWidthRow, err error) {
 	return inst.rows, nil
 }
 
-func (inst *mapStore) WriteColumnWidth(row statestore.ColumnWidthRow) (err error) {
+func (inst *mapStore) WriteColumnWidth(ctx context.Context, row statestore.ColumnWidthRow) (err error) {
 	inst.rows = append(inst.rows, row)
 	return
 }
 
-func (inst *mapStore) DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error) {
+func (inst *mapStore) DeleteColumnWidth(ctx context.Context, appId app.AppIdT, tier string, scope string, columnKey string) (err error) {
 	return
 }
 
@@ -66,7 +67,7 @@ func TestRenderGridHeadless(t *testing.T) {
 	assert.Equal(t, int64(-1), res.Clicked)
 	assert.Equal(t, -1, res.SortClicked)
 
-	widths, err := colwidth.New(&mapStore{}, colwidth.Opts{AppId: "org.test.grid", MinPoints: float64(DragMinWidth(0)), MaxPoints: float64(MaxColumnWidth)})
+	widths, err := colwidth.New(t.Context(), &mapStore{}, colwidth.Opts{AppId: "org.test.grid", MinPoints: float64(DragMinWidth(0)), MaxPoints: float64(MaxColumnWidth)})
 	require.NoError(t, err)
 	require.NoError(t, widths.Load())
 	in.Widths = widths
@@ -263,7 +264,7 @@ func TestRenderGridNoRowNumbers(t *testing.T) {
 
 	var st State
 	in.State = &st
-	widths, err := colwidth.New(&mapStore{}, colwidth.Opts{AppId: "org.test.grid"})
+	widths, err := colwidth.New(t.Context(), &mapStore{}, colwidth.Opts{AppId: "org.test.grid"})
 	require.NoError(t, err)
 	in.Widths = widths
 	assert.NoError(t, frame(in).Err, "the reset menu renders on every resizable header")

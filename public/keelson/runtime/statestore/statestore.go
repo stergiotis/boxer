@@ -18,6 +18,7 @@
 package statestore
 
 import (
+	"context"
 	"sort"
 	"time"
 
@@ -139,18 +140,18 @@ func SortColumnWidths(rows []ColumnWidthRow) {
 type WorkingsetStoreI interface {
 	// WriteWorkingset records row as the newest version of (AppId, Name).
 	// The earlier version stays in the trail.
-	WriteWorkingset(row WorkingsetRow) (err error)
+	WriteWorkingset(ctx context.Context, row WorkingsetRow) (err error)
 	// LatestWorkingset returns the live record for (appId, name). A key
 	// never written and a deleted key both answer found=false with no
 	// error. kind is read back as its own column, never from the bytes.
-	LatestWorkingset(appId app.AppIdT, name string) (cfg []byte, kind string, found bool, err error)
+	LatestWorkingset(ctx context.Context, appId app.AppIdT, name string) (cfg []byte, kind string, found bool, err error)
 	// ListWorkingsets returns the live record of every (AppId, Name) —
 	// the set a restore would find, not the write trail — ordered by
 	// [SortWorkingsets].
-	ListWorkingsets() (rows []WorkingsetRow, err error)
+	ListWorkingsets(ctx context.Context) (rows []WorkingsetRow, err error)
 	// DeleteWorkingset makes (appId, name) read as absent until the next
 	// write.
-	DeleteWorkingset(appId app.AppIdT, name string) (err error)
+	DeleteWorkingset(ctx context.Context, appId app.AppIdT, name string) (err error)
 }
 
 // ColumnWidthStoreI is the column-width half of the state store. It is
@@ -162,12 +163,12 @@ type ColumnWidthStoreI interface {
 	// walks three tiers per column and a per-key read would be one
 	// round-trip per column per frame. Ordered by [SortColumnWidths]. A
 	// cleared override is absent, not present-and-zero.
-	ListColumnWidths(appId app.AppIdT) (rows []ColumnWidthRow, err error)
+	ListColumnWidths(ctx context.Context, appId app.AppIdT) (rows []ColumnWidthRow, err error)
 	// WriteColumnWidth records row as the newest version of its key.
-	WriteColumnWidth(row ColumnWidthRow) (err error)
+	WriteColumnWidth(ctx context.Context, row ColumnWidthRow) (err error)
 	// DeleteColumnWidth clears one override. Clearing a key never written
 	// is not an error.
-	DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error)
+	DeleteColumnWidth(ctx context.Context, appId app.AppIdT, tier string, scope string, columnKey string) (err error)
 }
 
 // StoreI is both halves: what a host builds once and hands to the window

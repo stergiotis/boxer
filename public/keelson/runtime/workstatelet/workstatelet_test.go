@@ -226,9 +226,9 @@ func TestStoreSavesMintsAndLoads(t *testing.T) {
 	storage := NewMemoryStorage()
 	reg, cat := app.NewRegistry(), NewCatalog()
 	store := NewStore(reg, cat, storage, zerolog.Nop())
-	store.Load()
+	store.Load(t.Context())
 
-	id, replaced, err := store.Save(deskDoc("my-desk", "My desk", "play", "trailviewer"))
+	id, replaced, err := store.Save(t.Context(), deskDoc("my-desk", "My desk", "play", "trailviewer"))
 	require.NoError(t, err)
 	assert.False(t, replaced)
 	_, ok := reg.LookupManifest(id)
@@ -236,18 +236,18 @@ func TestStoreSavesMintsAndLoads(t *testing.T) {
 	e, _ := cat.Entry(id)
 	assert.Equal(t, OriginStored, e.Origin)
 
-	_, replaced, err = store.Save(deskDoc("my-desk", "My desk", "play"))
+	_, replaced, err = store.Save(t.Context(), deskDoc("my-desk", "My desk", "play"))
 	require.NoError(t, err)
 	assert.True(t, replaced, "saving a stored slug again replaces its document")
 	doc, _ := cat.Lookup(id)
 	assert.Len(t, doc.Windows, 1)
 
-	_, _, err = store.Save(deskDoc("other", "Other", "play"))
+	_, _, err = store.Save(t.Context(), deskDoc("other", "Other", "play"))
 	require.NoError(t, err)
 
 	// The next boot: a fresh registry and catalog over the same storage.
 	reg2, cat2 := app.NewRegistry(), NewCatalog()
-	NewStore(reg2, cat2, storage, zerolog.Nop()).Load()
+	NewStore(reg2, cat2, storage, zerolog.Nop()).Load(t.Context())
 	require.Len(t, cat2.Entries(), 2)
 	doc, ok = cat2.Lookup(AppIdOf("my-desk"))
 	require.True(t, ok)
@@ -261,15 +261,15 @@ func TestStoreCommittedSlugWins(t *testing.T) {
 	require.NoError(t, err)
 
 	store := NewStore(reg, cat, storage, zerolog.Nop())
-	_, _, err = store.Save(deskDoc("desk", "Captured desk", "trailviewer"))
+	_, _, err = store.Save(t.Context(), deskDoc("desk", "Captured desk", "trailviewer"))
 	assert.Error(t, err, "a capture cannot take a committed document's slug")
 	assert.Empty(t, storage.m, "a refused save stores nothing")
 
 	// A stored document whose slug a book took since: the book wins at load.
 	other := NewMemoryStorage()
-	_, _, err = NewStore(app.NewRegistry(), NewCatalog(), other, zerolog.Nop()).Save(deskDoc("desk", "Captured desk", "trailviewer"))
+	_, _, err = NewStore(app.NewRegistry(), NewCatalog(), other, zerolog.Nop()).Save(t.Context(), deskDoc("desk", "Captured desk", "trailviewer"))
 	require.NoError(t, err)
-	NewStore(reg, cat, other, zerolog.Nop()).Load()
+	NewStore(reg, cat, other, zerolog.Nop()).Load(t.Context())
 	doc, _ := cat.Lookup(AppIdOf("desk"))
 	assert.Equal(t, "Committed desk", doc.Title)
 }

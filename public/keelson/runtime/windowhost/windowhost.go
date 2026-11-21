@@ -927,7 +927,7 @@ func (inst *Inst) ReapAll(ctx context.Context, reason string) {
 	// then run in parallel within one shutdown budget (ADR-0322, proposed).
 	cls := make([]closing, 0, len(wins))
 	for _, w := range wins {
-		cls = append(cls, inst.reapWindow(w, reason, "windowhost: unmount on shutdown error"))
+		cls = append(cls, inst.reapWindow(ctx, w, reason, "windowhost: unmount on shutdown error"))
 	}
 	inst.releaseAll(ctx, cls, facts, runId)
 }
@@ -1032,7 +1032,7 @@ func (w *window) unload(logger zerolog.Logger) {
 // be holding: if it is the mounting window its resources are carried to
 // the last release, otherwise its own (unobserved) stop channel and client
 // close now.
-func (inst *Inst) reapWindow(w *window, reason string, unmountMsg string) (cl closing) {
+func (inst *Inst) reapWindow(ctx context.Context, w *window, reason string, unmountMsg string) (cl closing) {
 	cl = closing{w: w, reason: reason}
 	inst.frameTimes.forget(w.key)
 	uc, shared, carried := inst.releaseMount(w)
@@ -1059,7 +1059,7 @@ func (inst *Inst) reapWindow(w *window, reason string, unmountMsg string) (cl cl
 	w.leave()
 	// unmount, under the window's profiler labels
 	w.setLabels()
-	inst.saveWorkingset(w, reason)
+	inst.saveWorkingset(ctx, w, reason)
 	// A panic in one app's Unmount is that app's failed Unmount: the reap
 	// goes on to the other windows (ADR-0386).
 	umErr := ph.Guard(func() error { return w.appInst.Unmount(uc) })
@@ -1251,7 +1251,7 @@ func (inst *Inst) reapClosed() {
 	inst.mu.Unlock()
 
 	for _, w := range reaped {
-		cl := inst.reapWindow(w, defaultStopReason(w), "windowhost: unmount error")
+		cl := inst.reapWindow(inst.ctx, w, defaultStopReason(w), "windowhost: unmount error")
 		if cl.isDrained() {
 			// Nothing to wait for: released now, as before the drain step.
 			inst.drainAndRelease(inst.ctx, inst.ctx, cl, facts, runId)

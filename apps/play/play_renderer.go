@@ -138,6 +138,9 @@ const (
 )
 
 type PlayApp struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx context.Context
 	ids    *c.WidgetIdStack
 	graph  *queryGraph
 	client *Client
@@ -973,10 +976,12 @@ type PlayApp struct {
 
 // SetCapabilities is the host-side seam for wiring the runtime's M2
 // capabilities (ADR-0026). Called once from PlayLauncher.Mount with
-// ctx.Bus() and ctx.Storage(). Either argument may be nil — the
+// ctx.Bus() and ctx.Storage(), and ioCtx, the ctx their calls run under
+// (app.ContextOf the mount context). Either of bus and storage may be nil — the
 // "Load .sql" button stays hidden when bus is nil; persist save/
 // restore is skipped when storage is nil.
-func (inst *PlayApp) SetCapabilities(bus app.BusI, storage app.StorageI, logger zerolog.Logger) {
+func (inst *PlayApp) SetCapabilities(ioCtx context.Context, bus app.BusI, storage app.StorageI, logger zerolog.Logger) {
+	inst.ioCtx = ioCtx
 	inst.bus = bus
 	inst.storage = storage
 	inst.logger = logger
@@ -1020,7 +1025,7 @@ func (inst *PlayApp) RestorePersistedSql() {
 	if inst.storage == nil {
 		return
 	}
-	value, found, err := inst.storage.Get(persistKeyLastSql)
+	value, found, err := inst.storage.Get(inst.ioCtx, persistKeyLastSql)
 	if err != nil {
 		inst.logger.Debug().Err(err).Msg("play: persist restore failed (continuing with default sql)")
 		return
@@ -1041,7 +1046,7 @@ func (inst *PlayApp) RestorePersistedTimelineBandsSql() {
 	if inst.storage == nil {
 		return
 	}
-	value, found, err := inst.storage.Get(persistKeyTimelineBandsSql)
+	value, found, err := inst.storage.Get(inst.ioCtx, persistKeyTimelineBandsSql)
 	if err != nil {
 		inst.logger.Debug().Err(err).Msg("play: persist restore (bands) failed")
 		return

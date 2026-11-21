@@ -28,7 +28,7 @@ func newStoreHarness(t *testing.T) (reg *app.Registry, bus *inprocbus.Inst, svc 
 	require.NoError(t, err)
 	t.Cleanup(func() { ps.Close() })
 	reg = app.NewRegistry()
-	svc, err = appletstore.Start(reg, bus, NewStoreMinter(), logger)
+	svc, err = appletstore.Start(t.Context(), reg, bus, NewStoreMinter(), logger)
 	require.NoError(t, err)
 	t.Cleanup(svc.Stop)
 	caller = bus.NewClient("test.author", []app.SubjectFilter{
@@ -82,7 +82,7 @@ func TestStoreReloadMintsAtBoot(t *testing.T) {
 	// minter over the same bus + persist backend (O4-D3).
 	svc.Stop()
 	reg2 := app.NewRegistry()
-	svc2, err := appletstore.Start(reg2, bus, NewStoreMinter(), zerolog.Nop())
+	svc2, err := appletstore.Start(t.Context(), reg2, bus, NewStoreMinter(), zerolog.Nop())
 	require.NoError(t, err)
 	t.Cleanup(svc2.Stop)
 	m, ok := reg2.LookupManifest(app.AppIdT(appletIdPrefix + "reloaded"))

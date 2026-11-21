@@ -1076,7 +1076,7 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	var dialogWidths *colwidth.Resolver
 	if rt.State != nil {
 		var werr error
-		dialogWidths, werr = filepicker.NewColumnWidths(rt.State)
+		dialogWidths, werr = filepicker.NewColumnWidths(rt.ctx, rt.State)
 		if werr != nil {
 			logger.Warn().Err(werr).Bool("usable", dialogWidths != nil).Msg("hostboot: file dialog column widths: stored widths unavailable")
 		}
@@ -1259,7 +1259,7 @@ func (rt *Runtime) bootAgent() {
 	// §SD4); loaded before the trail is attached, since loading is not the
 	// person's change.
 	if rt.persistStore != nil {
-		if perr := attention.AttachPersonStore(cfg.Attention.Levels, personStore{backend: rt.persistStore}, logger); perr != nil {
+		if perr := attention.AttachPersonStore(rt.ctx, cfg.Attention.Levels, personStore{backend: rt.persistStore}, logger); perr != nil {
 			logger.Warn().Err(perr).Msg("attention: the person's table of levels is not kept; the defaults stand and changes last until the host stops")
 		}
 	}
@@ -1376,12 +1376,12 @@ type personStore struct{ backend persist.StorageBackendI }
 
 var attentionRef = persist.StorageRef{Alias: persist.AliasOf(attention.ServiceAppId), AppId: attention.ServiceAppId}
 
-func (inst personStore) Get(key string) ([]byte, bool, error) {
-	return inst.backend.Get(attentionRef, key)
+func (inst personStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	return inst.backend.Get(ctx, attentionRef, key)
 }
 
-func (inst personStore) Set(key string, value []byte) error {
-	return inst.backend.Set(attentionRef, key, value)
+func (inst personStore) Set(ctx context.Context, key string, value []byte) error {
+	return inst.backend.Set(ctx, attentionRef, key, value)
 }
 
 // unattendedStatus is the status bar's unattended segment: absent from a
@@ -1540,7 +1540,7 @@ func (rt *Runtime) bootWorkstateletStore(host *windowhost.Inst, reg *app.Registr
 		store = workstatelet.NewStore(reg, rt.workstatelets(), workstatelet.NewMemoryStorage(), logger)
 	} else {
 		var err error
-		store, err = workstatelet.StartStore(reg, rt.workstatelets(), rt.Bus, logger)
+		store, err = workstatelet.StartStore(rt.ctx, reg, rt.workstatelets(), rt.Bus, logger)
 		if err != nil {
 			logger.Warn().Err(err).Msg("hostboot: workstatelet store unavailable; the desktop cannot be saved as a workstatelet")
 			return
@@ -1572,7 +1572,7 @@ func (rt *Runtime) bootWorkstateletStore(host *windowhost.Inst, reg *app.Registr
 				// The persist round trip stays off the render goroutine,
 				// which is where the capture is handed over.
 				go func() {
-					id, replaced, storeErr := store.Save(doc)
+					id, replaced, storeErr := store.Save(rt.ctx, doc)
 					switch {
 					case storeErr != nil:
 						logger.Warn().Err(storeErr).Str("slug", slug).Msg("hostboot: workstatelet not saved")
@@ -1854,6 +1854,12 @@ func selectPersistBackend(ctx context.Context, cfg chstore.Config, isChStore boo
 	backend = persist.NewMemoryBackend()
 	label = "mem"
 	return
+}
+
+// Context is the runtime's lifetime: Boot's ctx. A hook that starts
+// something of its own (AfterHost) hands it what it runs under.
+func (rt *Runtime) Context() (ctx context.Context) {
+	return rt.ctx
 }
 
 // OnClose registers fn to run at Close, after the window host is reaped and

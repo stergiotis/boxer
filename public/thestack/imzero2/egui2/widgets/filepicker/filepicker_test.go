@@ -774,14 +774,14 @@ func TestWithShowHiddenFilesOption(t *testing.T) {
 func TestColumnWidths(t *testing.T) {
 	t.Run("resolver-is-keyed-to-the-dialog-and-loads", func(t *testing.T) {
 		store := statestore.NewMemory()
-		err := store.WriteColumnWidth(statestore.ColumnWidthRow{
+		err := store.WriteColumnWidth(t.Context(), statestore.ColumnWidthRow{
 			AppId: AppId, Tier: statestore.ColWidthTierColumn,
 			ColumnKey: "k", Points: 123,
 		})
 		if err != nil {
 			t.Fatalf("seed: %v", err)
 		}
-		res, err := NewColumnWidths(store)
+		res, err := NewColumnWidths(t.Context(), store)
 		if err != nil || res == nil {
 			t.Fatalf("NewColumnWidths: res %v, err %v", res, err)
 		}
@@ -790,7 +790,7 @@ func TestColumnWidths(t *testing.T) {
 		}
 	})
 	t.Run("option-and-setter", func(t *testing.T) {
-		res, err := NewColumnWidths(statestore.NewMemory())
+		res, err := NewColumnWidths(t.Context(), statestore.NewMemory())
 		if err != nil {
 			t.Fatalf("NewColumnWidths: %v", err)
 		}

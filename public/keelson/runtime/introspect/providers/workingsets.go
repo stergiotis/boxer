@@ -8,6 +8,7 @@
 package providers
 
 import (
+	"context"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -53,7 +54,7 @@ func (p workingsetsProvider) Snapshot(proj introspect.Projection) (arrow.RecordB
 	var rows []statestore.WorkingsetRow
 	if p.state != nil {
 		var err error
-		rows, err = p.state.ListWorkingsets()
+		rows, err = p.state.ListWorkingsets(context.TODO())
 		if err != nil {
 			return nil, err
 		}

@@ -1,6 +1,7 @@
 package fsbrowser
 
 import (
+	"context"
 	"slices"
 	"testing"
 	"time"
@@ -20,7 +21,7 @@ type memWidthStore struct {
 	rows []statestore.ColumnWidthRow
 }
 
-func (m *memWidthStore) ListColumnWidths(appId app.AppIdT) (rows []statestore.ColumnWidthRow, err error) {
+func (m *memWidthStore) ListColumnWidths(ctx context.Context, appId app.AppIdT) (rows []statestore.ColumnWidthRow, err error) {
 	for _, r := range m.rows {
 		if r.AppId == appId {
 			rows = append(rows, r)
@@ -29,12 +30,12 @@ func (m *memWidthStore) ListColumnWidths(appId app.AppIdT) (rows []statestore.Co
 	return
 }
 
-func (m *memWidthStore) WriteColumnWidth(row statestore.ColumnWidthRow) (err error) {
+func (m *memWidthStore) WriteColumnWidth(ctx context.Context, row statestore.ColumnWidthRow) (err error) {
 	m.rows = append(m.rows, row)
 	return nil
 }
 
-func (m *memWidthStore) DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error) {
+func (m *memWidthStore) DeleteColumnWidth(ctx context.Context, appId app.AppIdT, tier string, scope string, columnKey string) (err error) {
 	kept := m.rows[:0]
 	for _, r := range m.rows {
 		if r.AppId == appId && r.Tier == tier && r.Scope == scope && r.ColumnKey == columnKey {
@@ -81,7 +82,7 @@ func TestPlanWidthsWithoutAResolverIsTheDefaults(t *testing.T) {
 
 func TestPlanWidthsResolvesAndObserves(t *testing.T) {
 	store := &memWidthStore{}
-	res, err := colwidth.New(store, colwidth.Opts{AppId: "test/app", MinPoints: 30, MaxPoints: 1200})
+	res, err := colwidth.New(t.Context(), store, colwidth.Opts{AppId: "test/app", MinPoints: 30, MaxPoints: 1200})
 	require.NoError(t, err)
 	require.NoError(t, res.Load())
 	var st State
@@ -108,7 +109,7 @@ func TestPlanWidthsResolvesAndObserves(t *testing.T) {
 	assert.Equal(t, epoch0, plan2.epoch, "the table already shows the reader's drag, so no re-apply is due")
 
 	// A fresh resolver over the same store sees it too: that is persistence.
-	res2, err := colwidth.New(store, colwidth.Opts{AppId: "test/app", MinPoints: 30, MaxPoints: 1200})
+	res2, err := colwidth.New(t.Context(), store, colwidth.Opts{AppId: "test/app", MinPoints: 30, MaxPoints: 1200})
 	require.NoError(t, err)
 	require.NoError(t, res2.Load())
 	var st2 State
@@ -129,7 +130,7 @@ func farFuture() time.Time { return time.Now().Add(time.Hour) }
 func TestFillWidthGivesTheNameColumnWhatTheOthersLeave(t *testing.T) {
 	density := styletokens.ActiveDensity()
 	store := &memWidthStore{}
-	res, err := colwidth.New(store, colwidth.Opts{AppId: "test/app", MinPoints: 30, MaxPoints: 1200})
+	res, err := colwidth.New(t.Context(), store, colwidth.Opts{AppId: "test/app", MinPoints: 30, MaxPoints: 1200})
 	require.NoError(t, err)
 	require.NoError(t, res.Load())
 	var st State

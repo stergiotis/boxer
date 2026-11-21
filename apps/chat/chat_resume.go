@@ -133,7 +133,7 @@ func (inst *App) resumeRun(id string) {
 			}
 		}
 		if storage != nil {
-			if v, found, serr := storage.Get(titleStorePrefix + id); serr == nil && found {
+			if v, found, serr := storage.Get(ctx, titleStorePrefix + id); serr == nil && found {
 				r.storedTitle = cleanConvTitle(string(v))
 			}
 		}

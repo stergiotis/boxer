@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -49,11 +50,11 @@ func TestWorkingsetsTableRendersRecord(t *testing.T) {
 // carries every declared column.
 func TestWorkingsetsProviderReadsStore(t *testing.T) {
 	store := statestore.NewMemory()
-	err := store.WriteWorkingset(statestore.WorkingsetRow{
+	err := store.WriteWorkingset(t.Context(), statestore.WorkingsetRow{
 		AppId: "play", Name: "default", Kind: "playLaunch", Config: []byte("sql"),
 	})
 	require.NoError(t, err)
-	err = store.WriteWorkingset(statestore.WorkingsetRow{
+	err = store.WriteWorkingset(t.Context(), statestore.WorkingsetRow{
 		AppId: "imztop", Name: "default", Kind: "imztopLaunch",
 	})
 	require.NoError(t, err)
@@ -96,7 +97,7 @@ type failingWorkingsetStore struct {
 	*statestore.Memory
 }
 
-func (failingWorkingsetStore) ListWorkingsets() (rows []statestore.WorkingsetRow, err error) {
+func (failingWorkingsetStore) ListWorkingsets(ctx context.Context) (rows []statestore.WorkingsetRow, err error) {
 	err = eh.Errorf("workingsets: transport is down")
 	return
 }

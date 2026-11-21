@@ -98,7 +98,7 @@ func TestTheRostersTitleReachesTheStore(t *testing.T) {
 	inst := titled(scope, clientOver(injected))
 	inst.storeTitle()
 	require.Eventually(t, func() bool {
-		v, found, _ := backend.Get(persist.StorageRef{Alias: alias}, titleStorePrefix+inst.conv.id)
+		v, found, _ := backend.Get(t.Context(), persist.StorageRef{Alias: alias}, titleStorePrefix+inst.conv.id)
 		return found && string(v) == inst.conv.title
 	}, 5*time.Second, 5*time.Millisecond)
 	scope.Retire()
@@ -109,6 +109,6 @@ func TestTheRostersTitleReachesTheStore(t *testing.T) {
 	refused.storeTitle()
 	refused.scope.Retire()
 	<-refused.scope.Done()
-	_, found, _ := backend.Get(persist.StorageRef{Alias: alias}, titleStorePrefix+refused.conv.id)
+	_, found, _ := backend.Get(t.Context(), persist.StorageRef{Alias: alias}, titleStorePrefix+refused.conv.id)
 	assert.False(t, found, "without the injected cap nothing reaches the store")
 }

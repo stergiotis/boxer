@@ -1,6 +1,7 @@
 package appstate
 
 import (
+	"context"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,9 +24,9 @@ import (
 // durable store every kind of app state lives on (ADR-0105 D3a and its
 // Update of 2026-08-15).
 type StoreI interface {
-	LiveEntries(appId app.AppIdT) (entries []persist.StateEntry, err error)
-	EntryAt(entityId string) (e persist.StateEntry, found bool, err error)
-	DeleteEntity(entityId string) (err error)
+	LiveEntries(ctx context.Context, appId app.AppIdT) (entries []persist.StateEntry, err error)
+	EntryAt(ctx context.Context, entityId string) (e persist.StateEntry, found bool, err error)
+	DeleteEntity(ctx context.Context, entityId string) (err error)
 }
 
 var _ StoreI = (*persist.StoreBackend)(nil)
@@ -34,7 +35,7 @@ var _ StoreI = (*persist.StoreBackend)(nil)
 // forget through one is a single round trip to the store, whatever the app
 // kept; through a plain StoreI it is one per entry.
 type BatchDeleterI interface {
-	DeleteEntities(entityIds []string) (err error)
+	DeleteEntities(ctx context.Context, entityIds []string) (err error)
 }
 
 var _ BatchDeleterI = (*persist.StoreBackend)(nil)
@@ -102,9 +103,9 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	var reply appstatereply.AppStateReply
 	switch op {
 	case appstaterequest.OpDelete:
-		reply = inst.opDelete(req)
+		reply = inst.opDelete(msg.Context(), req)
 	case appstaterequest.OpForget:
-		reply = inst.opForget(app.AppIdT(req.AppId))
+		reply = inst.opForget(msg.Context(), app.AppIdT(req.AppId))
 	default:
 		inst.refuse(msg.Reply, "appstate: unknown op: "+op)
 		return
@@ -124,7 +125,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 // Either way the entry must be live and belong to the named app — a delete
 // that addresses nothing, or someone else's entry, is refused rather than
 // appending a tombstone to a key that was never there.
-func (inst *Service) opDelete(req appstaterequest.AppStateRequest) (reply appstatereply.AppStateReply) {
+func (inst *Service) opDelete(ctx context.Context, req appstaterequest.AppStateRequest) (reply appstatereply.AppStateReply) {
 	entityId := req.EntityId
 	if req.Kind != persiststore.KindUnknown {
 		id, err := persiststore.EntityIdOf(req.Kind, req.AppId, req.Key)
@@ -136,7 +137,7 @@ func (inst *Service) opDelete(req appstaterequest.AppStateRequest) (reply appsta
 	if entityId == "" {
 		return refusalOf("appstate: a delete of an unknown kind names the entity by its store key")
 	}
-	e, found, err := inst.store.EntryAt(entityId)
+	e, found, err := inst.store.EntryAt(ctx, entityId)
 	if err != nil {
 		return refusalOf(err.Error())
 	}
@@ -147,7 +148,7 @@ func (inst *Service) opDelete(req appstaterequest.AppStateRequest) (reply appsta
 		return refusalOf("appstate: the entry at " + entityId + " is " + e.Kind + " of " + string(e.AppId) + ", not " + req.Kind + " of " + req.AppId)
 	}
 	o := outcomes{}
-	o.record(e.Kind, inst.store.DeleteEntity(entityId))
+	o.record(e.Kind, inst.store.DeleteEntity(ctx, entityId))
 	return o.reply()
 }
 
@@ -159,18 +160,18 @@ func (inst *Service) opDelete(req appstaterequest.AppStateRequest) (reply appsta
 // second read of what is still live, not assumed whole. Otherwise every
 // entry is attempted on its own, and the first failure stops none of the
 // rest.
-func (inst *Service) opForget(appId app.AppIdT) (reply appstatereply.AppStateReply) {
-	entries, err := inst.store.LiveEntries(appId)
+func (inst *Service) opForget(ctx context.Context, appId app.AppIdT) (reply appstatereply.AppStateReply) {
+	entries, err := inst.store.LiveEntries(ctx, appId)
 	if err != nil {
 		return refusalOf(err.Error())
 	}
 	o := outcomes{}
 	if bd, ok := inst.store.(BatchDeleterI); ok && len(entries) > 0 {
-		inst.forgetInOneWrite(bd, appId, entries, &o)
+		inst.forgetInOneWrite(ctx, bd, appId, entries, &o)
 		return o.reply()
 	}
 	for _, e := range entries {
-		o.record(e.Kind, inst.store.DeleteEntity(e.EntityId))
+		o.record(e.Kind, inst.store.DeleteEntity(ctx, e.EntityId))
 	}
 	return o.reply()
 }
@@ -178,19 +179,19 @@ func (inst *Service) opForget(appId app.AppIdT) (reply appstatereply.AppStateRep
 // forgetInOneWrite deletes entries through bd. When the write fails, the
 // entries still live afterwards are the failures and the rest were
 // cleared; when that read fails too, none is counted as cleared.
-func (inst *Service) forgetInOneWrite(bd BatchDeleterI, appId app.AppIdT, entries []persist.StateEntry, o *outcomes) {
+func (inst *Service) forgetInOneWrite(ctx context.Context, bd BatchDeleterI, appId app.AppIdT, entries []persist.StateEntry, o *outcomes) {
 	ids := make([]string, 0, len(entries))
 	for _, e := range entries {
 		ids = append(ids, e.EntityId)
 	}
-	err := bd.DeleteEntities(ids)
+	err := bd.DeleteEntities(ctx, ids)
 	if err == nil {
 		for _, e := range entries {
 			o.record(e.Kind, nil)
 		}
 		return
 	}
-	left, lerr := inst.store.LiveEntries(appId)
+	left, lerr := inst.store.LiveEntries(ctx, appId)
 	still := make(map[string]bool, len(left))
 	for _, e := range left {
 		still[e.EntityId] = true

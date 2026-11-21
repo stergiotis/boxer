@@ -62,11 +62,11 @@ func TestAppStateBookQueriesExecute(t *testing.T) {
 	t.Cleanup(backend.Close)
 
 	past := time.Now().UTC().Add(-time.Minute)
-	require.NoError(t, backend.Set(persist.StorageRef{Alias: "play", AppId: "example/play", InstanceKey: 2}, "tabs", []byte("hello")))
-	require.NoError(t, backend.WriteWorkingset(statestore.WorkingsetRow{
+	require.NoError(t, backend.Set(t.Context(), persist.StorageRef{Alias: "play", AppId: "example/play", InstanceKey: 2}, "tabs", []byte("hello")))
+	require.NoError(t, backend.WriteWorkingset(t.Context(), statestore.WorkingsetRow{
 		AppId: "example/tally", Name: "default", Kind: "tallyLaunch", Config: []byte("cfg"), Reason: "user-close", Ts: past,
 	}))
-	require.NoError(t, backend.WriteColumnWidth(statestore.ColumnWidthRow{
+	require.NoError(t, backend.WriteColumnWidth(t.Context(), statestore.ColumnWidthRow{
 		AppId: "example/play", Tier: statestore.ColWidthTierInstance, Scope: "master/table",
 		ColumnKey: "ab12", Points: 90, FontSize: 12, Ts: past,
 	}))

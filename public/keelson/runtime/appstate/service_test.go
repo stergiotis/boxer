@@ -54,12 +54,12 @@ const playId app.AppIdT = "github.com/example/play"
 func seed(t *testing.T, b *persist.StoreBackend) {
 	t.Helper()
 	ref := persist.StorageRef{Alias: "play", AppId: playId}
-	require.NoError(t, b.Set(ref, "tabs", []byte("x")))
-	require.NoError(t, b.Set(ref, "font", []byte("y")))
+	require.NoError(t, b.Set(t.Context(), ref, "tabs", []byte("x")))
+	require.NoError(t, b.Set(t.Context(), ref, "font", []byte("y")))
 	past := time.Now().UTC().Add(-time.Minute)
-	require.NoError(t, b.WriteWorkingset(statestore.WorkingsetRow{AppId: playId, Name: "default", Kind: "playLaunch", Config: []byte("c"), Ts: past}))
-	require.NoError(t, b.WriteColumnWidth(statestore.ColumnWidthRow{AppId: playId, Tier: "instance", Scope: "master/table", ColumnKey: "ab12", Points: 90, FontSize: 12, Ts: past}))
-	require.NoError(t, b.WriteColumnWidth(statestore.ColumnWidthRow{AppId: "github.com/example/tally", Tier: "column", ColumnKey: "cd34", Points: 50, FontSize: 12, Ts: past}))
+	require.NoError(t, b.WriteWorkingset(t.Context(), statestore.WorkingsetRow{AppId: playId, Name: "default", Kind: "playLaunch", Config: []byte("c"), Ts: past}))
+	require.NoError(t, b.WriteColumnWidth(t.Context(), statestore.ColumnWidthRow{AppId: playId, Tier: "instance", Scope: "master/table", ColumnKey: "ab12", Points: 90, FontSize: 12, Ts: past}))
+	require.NoError(t, b.WriteColumnWidth(t.Context(), statestore.ColumnWidthRow{AppId: "github.com/example/tally", Tier: "column", ColumnKey: "cd34", Points: 50, FontSize: 12, Ts: past}))
 }
 
 // TestDeleteClearsOneEntryAndTheOwnerSeesItGone: a delete named as
@@ -75,14 +75,14 @@ func TestDeleteClearsOneEntryAndTheOwnerSeesItGone(t *testing.T) {
 	require.True(t, res.Ok, res.Reason)
 	assert.Equal(t, []Outcome{{Kind: persiststore.KindColumnWidth, Cleared: 1}}, res.Outcomes)
 
-	rows, err := b.ListColumnWidths(playId)
+	rows, err := b.ListColumnWidths(t.Context(), playId)
 	require.NoError(t, err)
 	assert.Empty(t, rows, "the resolver's read must see the clear")
 
 	res, err = client.Delete(playId, persiststore.KindPersist, "tabs", "")
 	require.NoError(t, err)
 	require.True(t, res.Ok, res.Reason)
-	_, found, err := b.Get(persist.StorageRef{Alias: "play", AppId: playId}, "tabs")
+	_, found, err := b.Get(t.Context(), persist.StorageRef{Alias: "play", AppId: playId}, "tabs")
 	require.NoError(t, err)
 	assert.False(t, found, "the app's own Get must read the key as absent")
 }
@@ -108,7 +108,7 @@ func TestDeleteRefusesWhatIsNotThere(t *testing.T) {
 		assert.NotEmpty(t, res.Reason, c.name)
 		assert.Empty(t, res.Outcomes, c.name)
 	}
-	entries, err := b.LiveEntries("github.com/example/tally")
+	entries, err := b.LiveEntries(t.Context(), "github.com/example/tally")
 	require.NoError(t, err)
 	assert.Len(t, entries, 1, "tally's width must survive a delete that named play")
 }
@@ -137,7 +137,7 @@ func TestDeleteAnUnknownKindByItsStoreKey(t *testing.T) {
 	res, err := client.Delete(playId, persiststore.KindUnknown, "", id)
 	require.NoError(t, err)
 	require.True(t, res.Ok, res.Reason)
-	_, found, err := b.EntryAt(id)
+	_, found, err := b.EntryAt(t.Context(), id)
 	require.NoError(t, err)
 	assert.False(t, found)
 }
@@ -158,10 +158,10 @@ func TestForgetClearsEveryKindOfOneApp(t *testing.T) {
 		{Kind: persiststore.KindWorkingset, Cleared: 1},
 	}, res.Outcomes)
 
-	left, err := b.LiveEntries(playId)
+	left, err := b.LiveEntries(t.Context(), playId)
 	require.NoError(t, err)
 	assert.Empty(t, left)
-	other, err := b.LiveEntries("github.com/example/tally")
+	other, err := b.LiveEntries(t.Context(), "github.com/example/tally")
 	require.NoError(t, err)
 	assert.Len(t, other, 1, "forget must not reach another app")
 }
@@ -173,13 +173,13 @@ type failingStore struct {
 	deleted []string
 }
 
-func (inst *failingStore) LiveEntries(appId app.AppIdT) ([]persist.StateEntry, error) {
+func (inst *failingStore) LiveEntries(ctx context.Context, appId app.AppIdT) ([]persist.StateEntry, error) {
 	return inst.entries, nil
 }
-func (inst *failingStore) EntryAt(entityId string) (persist.StateEntry, bool, error) {
+func (inst *failingStore) EntryAt(ctx context.Context, entityId string) (persist.StateEntry, bool, error) {
 	return persist.StateEntry{}, false, nil
 }
-func (inst *failingStore) DeleteEntity(entityId string) error {
+func (inst *failingStore) DeleteEntity(ctx context.Context, entityId string) error {
 	if entityId == inst.failOn {
 		return errors.New("synthetic delete failure")
 	}
@@ -217,7 +217,7 @@ type batchStore struct {
 	batches [][]string
 }
 
-func (inst *batchStore) DeleteEntities(entityIds []string) error {
+func (inst *batchStore) DeleteEntities(ctx context.Context, entityIds []string) error {
 	inst.batches = append(inst.batches, entityIds)
 	return errors.New("synthetic batch failure")
 }

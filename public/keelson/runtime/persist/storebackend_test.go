@@ -43,21 +43,21 @@ func TestStoreBackend_GetSetDelete_RoundTrip(t *testing.T) {
 	b := newStoreBackend(t)
 	ref := aliasRef("play")
 
-	value, found, err := b.Get(ref, "tabs")
+	value, found, err := b.Get(t.Context(), ref, "tabs")
 	require.NoError(t, err)
 	assert.False(t, found)
 	assert.Nil(t, value)
 
-	require.NoError(t, b.Set(ref, "tabs", []byte("hello")))
+	require.NoError(t, b.Set(t.Context(), ref, "tabs", []byte("hello")))
 
-	got, found, err := b.Get(ref, "tabs")
+	got, found, err := b.Get(t.Context(), ref, "tabs")
 	require.NoError(t, err)
 	assert.True(t, found)
 	assert.Equal(t, []byte("hello"), got)
 
-	require.NoError(t, b.Delete(ref, "tabs"))
+	require.NoError(t, b.Delete(t.Context(), ref, "tabs"))
 
-	_, found, err = b.Get(ref, "tabs")
+	_, found, err = b.Get(t.Context(), ref, "tabs")
 	require.NoError(t, err)
 	assert.False(t, found)
 }
@@ -69,11 +69,11 @@ func TestStoreBackend_SetAfterDelete_Resurrects(t *testing.T) {
 	b := newStoreBackend(t)
 	ref := aliasRef("play")
 
-	require.NoError(t, b.Set(ref, "tabs", []byte("v1")))
-	require.NoError(t, b.Delete(ref, "tabs"))
-	require.NoError(t, b.Set(ref, "tabs", []byte("v2")))
+	require.NoError(t, b.Set(t.Context(), ref, "tabs", []byte("v1")))
+	require.NoError(t, b.Delete(t.Context(), ref, "tabs"))
+	require.NoError(t, b.Set(t.Context(), ref, "tabs", []byte("v2")))
 
-	got, found, err := b.Get(ref, "tabs")
+	got, found, err := b.Get(t.Context(), ref, "tabs")
 	require.NoError(t, err)
 	assert.True(t, found)
 	assert.Equal(t, "v2", string(got))
@@ -81,7 +81,7 @@ func TestStoreBackend_SetAfterDelete_Resurrects(t *testing.T) {
 
 func TestStoreBackend_DeleteAbsentKey(t *testing.T) {
 	b := newStoreBackend(t)
-	require.NoError(t, b.Delete(aliasRef("play"), "never-written"))
+	require.NoError(t, b.Delete(t.Context(), aliasRef("play"), "never-written"))
 }
 
 // An empty value is a value: found=true with a zero-length slice, distinct
@@ -91,9 +91,9 @@ func TestStoreBackend_EmptyValue_RoundTrips(t *testing.T) {
 	b := newStoreBackend(t)
 	ref := aliasRef("play")
 
-	require.NoError(t, b.Set(ref, "tabs", []byte{}))
+	require.NoError(t, b.Set(t.Context(), ref, "tabs", []byte{}))
 
-	got, found, err := b.Get(ref, "tabs")
+	got, found, err := b.Get(t.Context(), ref, "tabs")
 	require.NoError(t, err)
 	assert.True(t, found)
 	assert.Empty(t, got)
@@ -101,12 +101,12 @@ func TestStoreBackend_EmptyValue_RoundTrips(t *testing.T) {
 
 func TestStoreBackend_AliasSeparation(t *testing.T) {
 	b := newStoreBackend(t)
-	require.NoError(t, b.Set(aliasRef("play"), "tabs", []byte("p")))
-	require.NoError(t, b.Set(aliasRef("imztop"), "tabs", []byte("i")))
+	require.NoError(t, b.Set(t.Context(), aliasRef("play"), "tabs", []byte("p")))
+	require.NoError(t, b.Set(t.Context(), aliasRef("imztop"), "tabs", []byte("i")))
 
-	got, _, _ := b.Get(aliasRef("play"), "tabs")
+	got, _, _ := b.Get(t.Context(), aliasRef("play"), "tabs")
 	assert.Equal(t, "p", string(got))
-	got, _, _ = b.Get(aliasRef("imztop"), "tabs")
+	got, _, _ = b.Get(t.Context(), aliasRef("imztop"), "tabs")
 	assert.Equal(t, "i", string(got))
 }
 
@@ -118,16 +118,16 @@ func TestStoreBackend_KeysOnAttributedAppId(t *testing.T) {
 	b := newStoreBackend(t)
 	adopted := StorageRef{Alias: "factsplay", AppId: app.AppIdT("elle/factsplay")}
 
-	require.NoError(t, b.Set(adopted, "tabs", []byte("adopted")))
+	require.NoError(t, b.Set(t.Context(), adopted, "tabs", []byte("adopted")))
 
 	// Same alias, no attribution: StateAppId falls back to the alias, which
 	// is a different key — the two must not collide.
-	got, found, err := b.Get(StorageRef{Alias: "factsplay"}, "tabs")
+	got, found, err := b.Get(t.Context(), StorageRef{Alias: "factsplay"}, "tabs")
 	require.NoError(t, err)
 	assert.False(t, found, "unattributed ref must not read the adopted app's row")
 	assert.Nil(t, got)
 
-	got, found, err = b.Get(adopted, "tabs")
+	got, found, err = b.Get(t.Context(), adopted, "tabs")
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, "adopted", string(got))
@@ -139,9 +139,9 @@ func TestStoreBackend_UnattributedRef_ReadsBackItsOwnWrite(t *testing.T) {
 	b := newStoreBackend(t)
 	ref := StorageRef{Alias: "solo"}
 
-	require.NoError(t, b.Set(ref, "k", []byte("v")))
+	require.NoError(t, b.Set(t.Context(), ref, "k", []byte("v")))
 
-	got, found, err := b.Get(ref, "k")
+	got, found, err := b.Get(t.Context(), ref, "k")
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, "v", string(got))
@@ -155,11 +155,11 @@ func TestStoreBackend_SurvivesReopen(t *testing.T) {
 	ref := aliasRef("play")
 
 	b := openStoreBackendAt(t, location)
-	require.NoError(t, b.Set(ref, "tabs", []byte("durable")))
+	require.NoError(t, b.Set(t.Context(), ref, "tabs", []byte("durable")))
 	b.Close()
 
 	reopened := openStoreBackendAt(t, location)
-	got, found, err := reopened.Get(ref, "tabs")
+	got, found, err := reopened.Get(t.Context(), ref, "tabs")
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, "durable", string(got))
@@ -173,12 +173,12 @@ func TestStoreBackend_DeleteSurvivesReopen(t *testing.T) {
 	ref := aliasRef("play")
 
 	b := openStoreBackendAt(t, location)
-	require.NoError(t, b.Set(ref, "tabs", []byte("v1")))
-	require.NoError(t, b.Delete(ref, "tabs"))
+	require.NoError(t, b.Set(t.Context(), ref, "tabs", []byte("v1")))
+	require.NoError(t, b.Delete(t.Context(), ref, "tabs"))
 	b.Close()
 
 	reopened := openStoreBackendAt(t, location)
-	_, found, err := reopened.Get(ref, "tabs")
+	_, found, err := reopened.Get(t.Context(), ref, "tabs")
 	require.NoError(t, err)
 	assert.False(t, found)
 }

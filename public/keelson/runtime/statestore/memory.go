@@ -1,6 +1,7 @@
 package statestore
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -45,7 +46,7 @@ func cloneBytes(b []byte) []byte {
 
 // WriteWorkingset appends row. The config bytes are copied so the
 // composing app can recycle its buffer.
-func (inst *Memory) WriteWorkingset(row WorkingsetRow) (err error) {
+func (inst *Memory) WriteWorkingset(ctx context.Context, row WorkingsetRow) (err error) {
 	if row.Ts.IsZero() {
 		row.Ts = time.Now().UTC()
 	}
@@ -58,7 +59,7 @@ func (inst *Memory) WriteWorkingset(row WorkingsetRow) (err error) {
 
 // LatestWorkingset scans the trail in reverse so the most recent write for
 // (appId, name) wins; a tombstone reached first reads back as not-found.
-func (inst *Memory) LatestWorkingset(appId app.AppIdT, name string) (cfg []byte, kind string, found bool, err error) {
+func (inst *Memory) LatestWorkingset(ctx context.Context, appId app.AppIdT, name string) (cfg []byte, kind string, found bool, err error) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	for i := len(inst.workingsets) - 1; i >= 0; i-- {
@@ -85,7 +86,7 @@ func (inst *Memory) LatestWorkingset(appId app.AppIdT, name string) (cfg []byte,
 // entry is a tombstone is skipped but still consumed, which is what keeps
 // a deleted record from being resurrected by the write that preceded its
 // tombstone.
-func (inst *Memory) ListWorkingsets() (rows []WorkingsetRow, err error) {
+func (inst *Memory) ListWorkingsets(ctx context.Context) (rows []WorkingsetRow, err error) {
 	type wsKey struct {
 		appId app.AppIdT
 		name  string
@@ -114,7 +115,7 @@ func (inst *Memory) ListWorkingsets() (rows []WorkingsetRow, err error) {
 
 // DeleteWorkingset appends a tombstone for (appId, name), so history stays
 // in the trail.
-func (inst *Memory) DeleteWorkingset(appId app.AppIdT, name string) (err error) {
+func (inst *Memory) DeleteWorkingset(ctx context.Context, appId app.AppIdT, name string) (err error) {
 	inst.mu.Lock()
 	inst.workingsets = append(inst.workingsets, memoryEntry[WorkingsetRow]{
 		row:       WorkingsetRow{AppId: appId, Name: name, Ts: time.Now().UTC()},
@@ -141,7 +142,7 @@ func (inst *Memory) Workingsets() (rows []WorkingsetRow) {
 }
 
 // WriteColumnWidth appends one override to the trail.
-func (inst *Memory) WriteColumnWidth(row ColumnWidthRow) (err error) {
+func (inst *Memory) WriteColumnWidth(ctx context.Context, row ColumnWidthRow) (err error) {
 	if row.Ts.IsZero() {
 		row.Ts = time.Now().UTC()
 	}
@@ -155,7 +156,7 @@ func (inst *Memory) WriteColumnWidth(row ColumnWidthRow) (err error) {
 // appId. The scan runs in reverse and keeps the first sighting of each
 // key, so a tombstone reached first suppresses the key entirely rather
 // than letting an older surviving write show through.
-func (inst *Memory) ListColumnWidths(appId app.AppIdT) (rows []ColumnWidthRow, err error) {
+func (inst *Memory) ListColumnWidths(ctx context.Context, appId app.AppIdT) (rows []ColumnWidthRow, err error) {
 	rows = []ColumnWidthRow{}
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
@@ -180,7 +181,7 @@ func (inst *Memory) ListColumnWidths(appId app.AppIdT) (rows []ColumnWidthRow, e
 }
 
 // DeleteColumnWidth appends a tombstone for one override key.
-func (inst *Memory) DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error) {
+func (inst *Memory) DeleteColumnWidth(ctx context.Context, appId app.AppIdT, tier string, scope string, columnKey string) (err error) {
 	inst.mu.Lock()
 	inst.colWidths = append(inst.colWidths, memoryEntry[ColumnWidthRow]{
 		row: ColumnWidthRow{

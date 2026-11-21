@@ -184,6 +184,9 @@ var plotMinH = implot.MinBoxHeight(false, true, true, 1)
 
 // App is the per-window writingstylescope instance.
 type App struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx context.Context
 	// ids is the per-instance WidgetIdStack. The host pre-pushes a
 	// window-unique salt onto it before every Frame() call (ADR-0026 §SD9,
 	// windowhost.renderWindowBody), so every widget id the app derives is
@@ -341,6 +344,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.tasks = task.ForApp(ctx)
 	inst.scope = app.LifetimeOf(ctx)
 	inst.storage = ctx.Storage()
+	inst.ioCtx = app.ContextOf(ctx)
 	inst.phaseChip = fsmview.New(inst.ids, "analysis-phase", inst.phaseMachine, fsmview.Options[phaseE]{
 		Title:      "Analysis phase",
 		Tethered:   true,
@@ -427,13 +431,13 @@ func (inst *App) restoreDrafts() {
 	if inst.storage == nil {
 		return
 	}
-	if raw, found, err := inst.storage.Get(keyDocA); err == nil && found {
+	if raw, found, err := inst.storage.Get(inst.ioCtx, keyDocA); err == nil && found {
 		inst.docA = string(raw)
 	}
-	if raw, found, err := inst.storage.Get(keyDocB); err == nil && found {
+	if raw, found, err := inst.storage.Get(inst.ioCtx, keyDocB); err == nil && found {
 		inst.docB = string(raw)
 	}
-	if raw, found, err := inst.storage.Get(keyFloor); err == nil && found {
+	if raw, found, err := inst.storage.Get(inst.ioCtx, keyFloor); err == nil && found {
 		if f, perr := strconv.ParseFloat(string(raw), 64); perr == nil {
 			inst.minSectionBytes = float64(clampFloor(f))
 		}
@@ -469,7 +473,7 @@ func (inst *App) persistDrafts(in sweepInputs) {
 		if w.same {
 			continue
 		}
-		if err := inst.storage.Set(w.key, []byte(w.value)); err != nil {
+		if err := inst.storage.Set(inst.ioCtx, w.key, []byte(w.value)); err != nil {
 			inst.logger.Debug().Err(err).Str("key", w.key).Msg("writingstylescope: draft not stored")
 			return
 		}

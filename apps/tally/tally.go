@@ -332,7 +332,7 @@ func (inst *App) ensureColWidths(ctx app.FrameContextI) {
 	if store == nil {
 		return
 	}
-	res, err := colwidth.New(store, colwidth.Opts{
+	res, err := colwidth.New(app.ContextOf(ctx), store, colwidth.Opts{
 		AppId:       ctx.AppId(),
 		InstanceKey: ctx.InstanceKey(),
 		MinPoints:   float64(fsbrowser.MinColumnWidth(inst.density)),

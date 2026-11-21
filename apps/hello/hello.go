@@ -16,6 +16,9 @@ import (
 // App is one window: the name typed into it and the number of greetings,
 // which outlives the window through the app's storage.
 type App struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx context.Context
 	ids       *c.WidgetIdStack
 	log       zerolog.Logger
 	storage   app.StorageI
@@ -46,7 +49,8 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.log = ctx.Log()
 	inst.storage = ctx.Storage()
-	if raw, found, gErr := inst.storage.Get(GreetingsKey); gErr == nil && found {
+	inst.ioCtx = app.ContextOf(ctx)
+	if raw, found, gErr := inst.storage.Get(inst.ioCtx, GreetingsKey); gErr == nil && found {
 		if n, pErr := strconv.ParseUint(string(raw), 10, 64); pErr == nil {
 			inst.greetings.Store(n)
 		}
@@ -90,7 +94,7 @@ func (inst *App) greet() {
 		inst.storeMu.Lock()
 		defer inst.storeMu.Unlock()
 		n := inst.greetings.Load()
-		if sErr := inst.storage.Set(GreetingsKey, []byte(strconv.FormatUint(n, 10))); sErr != nil {
+		if sErr := inst.storage.Set(inst.ioCtx, GreetingsKey, []byte(strconv.FormatUint(n, 10))); sErr != nil {
 			inst.log.Debug().Err(sErr).Msg("hello: count not stored")
 		}
 	})

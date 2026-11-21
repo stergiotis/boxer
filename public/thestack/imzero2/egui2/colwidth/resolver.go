@@ -1,6 +1,7 @@
 package colwidth
 
 import (
+	"context"
 	"slices"
 	"sort"
 	"time"
@@ -121,6 +122,10 @@ type colState struct {
 // single app instance and driven from its render loop, the same
 // single-threaded discipline every other imzero2 widget state follows.
 type Resolver struct {
+	// ctx is New's: the resolver's lifetime, which its reads and writes of
+	// the store run under — it is driven from a render loop, which has no
+	// ctx of its own to hand each call.
+	ctx    context.Context
 	store  StoreI
 	opts   Opts
 	byKey  map[statestore.ColumnWidthKey]*entry
@@ -129,8 +134,9 @@ type Resolver struct {
 
 // New constructs a Resolver. It does not read the store — call Load once
 // storage is available, which for an app is after Mount rather than at
-// construction.
-func New(store StoreI, opts Opts) (inst *Resolver, err error) {
+// construction. ctx is the resolver's lifetime — for an app,
+// app.ContextOf(mountCtx) — and every store call runs under it.
+func New(ctx context.Context, store StoreI, opts Opts) (inst *Resolver, err error) {
 	if store == nil {
 		err = eh.Errorf("colwidth: New: nil store")
 		return
@@ -154,6 +160,7 @@ func New(store StoreI, opts Opts) (inst *Resolver, err error) {
 		return
 	}
 	inst = &Resolver{
+		ctx:    ctx,
 		store:  store,
 		opts:   opts,
 		byKey:  make(map[statestore.ColumnWidthKey]*entry, 32),
@@ -165,7 +172,7 @@ func New(store StoreI, opts Opts) (inst *Resolver, err error) {
 // Load reads the app's override set. Pending unwritten captures are kept:
 // a Load racing a drag must not silently discard the user's adjustment.
 func (inst *Resolver) Load() (err error) {
-	rows, err := inst.store.ListColumnWidths(inst.opts.AppId)
+	rows, err := inst.store.ListColumnWidths(inst.ctx, inst.opts.AppId)
 	if err != nil {
 		err = eh.Errorf("colwidth: load: %w", err)
 		return
@@ -406,7 +413,7 @@ func (inst *Resolver) Flush(now time.Time) (written int, err error) {
 		if !e.dirty || now.Sub(e.changedAt) < inst.opts.Debounce {
 			continue
 		}
-		werr := inst.store.WriteColumnWidth(statestore.ColumnWidthRow{
+		werr := inst.store.WriteColumnWidth(inst.ctx, statestore.ColumnWidthRow{
 			AppId:       inst.opts.AppId,
 			InstanceKey: inst.opts.InstanceKey,
 			Tier:        k.Tier,
@@ -440,7 +447,7 @@ func (inst *Resolver) Clear(tableTag string, col Column) (err error) {
 	key := col.Key()
 	for _, k := range inst.writtenKeys(tableTag, key) {
 		delete(inst.byKey, k)
-		if derr := inst.store.DeleteColumnWidth(inst.opts.AppId, k.Tier, k.Scope, k.ColumnKey); derr != nil {
+		if derr := inst.store.DeleteColumnWidth(inst.ctx, inst.opts.AppId, k.Tier, k.Scope, k.ColumnKey); derr != nil {
 			err = eb.Build().Str("tier", k.Tier).Str("columnKey", k.ColumnKey).Errorf("colwidth: clear failed: %w", derr)
 			return
 		}

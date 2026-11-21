@@ -1,6 +1,7 @@
 package attention
 
 import (
+	"context"
 	"encoding/json"
 	"slices"
 
@@ -16,10 +17,10 @@ import (
 // as long as the host that holds it.
 
 // PersonStoreI is where the host keeps the person's table: one value under
-// one key.
+// one key. Both calls are round trips under the ctx they are given.
 type PersonStoreI interface {
-	Get(key string) (value []byte, found bool, err error)
-	Set(key string, value []byte) (err error)
+	Get(ctx context.Context, key string) (value []byte, found bool, err error)
+	Set(ctx context.Context, key string, value []byte) (err error)
 }
 
 // personStoreKey is the key the table is kept under.
@@ -34,12 +35,14 @@ type wirePersonTable struct {
 // on every change of it. A kept row the table now refuses — a kind it no
 // longer knows, a level across the kind's scale — is dropped and logged:
 // the floor holds for what was kept too (§SD2). Load before AttachTrail:
-// loading is not the person's change, and the trail is not told of it.
-func AttachPersonStore(levels *Levels, store PersonStoreI, log zerolog.Logger) (err error) {
+// loading is not the person's change, and the trail is not told of it. ctx
+// is the attachment's lifetime: the load and every later write run under
+// it.
+func AttachPersonStore(ctx context.Context, levels *Levels, store PersonStoreI, log zerolog.Logger) (err error) {
 	if levels == nil || store == nil {
 		return eh.Errorf("nil levels or store")
 	}
-	b, found, err := store.Get(personStoreKey)
+	b, found, err := store.Get(ctx, personStoreKey)
 	if err != nil {
 		return eh.Errorf("read the person's table: %w", err)
 	}
@@ -75,7 +78,7 @@ func AttachPersonStore(levels *Levels, store PersonStoreI, log zerolog.Logger) (
 		})
 		v, jerr := json.Marshal(wirePersonTable{V: wireVersion, Rows: rows})
 		if jerr == nil {
-			jerr = store.Set(personStoreKey, v)
+			jerr = store.Set(ctx, personStoreKey, v)
 		}
 		if jerr != nil {
 			log.Warn().Err(jerr).Msg("attention: the person's table of levels was not kept; it holds until the host stops")

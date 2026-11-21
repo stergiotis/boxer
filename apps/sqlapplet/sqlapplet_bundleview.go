@@ -318,7 +318,7 @@ func (inst *BundleView) apply(res adhocdata.BundleResult) {
 			inst.revision, inst.digest = res.Revision, res.DocumentDigest
 			return
 		}
-		inner, eErr := NewEmbedded(def, EmbedConfig{StampAppId: inst.cfg.StampAppId, RunId: inst.cfg.RunId,
+		inner, eErr := NewEmbedded(inst.cfg.Lifetime.Tail(nil), def, EmbedConfig{StampAppId: inst.cfg.StampAppId, RunId: inst.cfg.RunId,
 			InstanceKey: inst.cfg.InstanceKey, Bus: inst.cfg.Bus, Log: inst.cfg.Log, Rules: inst.cfg.Rules})
 		if eErr != nil {
 			inst.failed = "the embedded play could not be built: " + eErr.Error()

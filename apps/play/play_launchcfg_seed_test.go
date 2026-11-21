@@ -1,6 +1,7 @@
 package play
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -19,15 +20,15 @@ type mapStorage map[string][]byte
 
 var _ app.StorageI = mapStorage{}
 
-func (m mapStorage) Get(key string) (value []byte, found bool, err error) {
+func (m mapStorage) Get(ctx context.Context, key string) (value []byte, found bool, err error) {
 	value, found = m[key]
 	return
 }
-func (m mapStorage) Set(key string, value []byte) (err error) {
+func (m mapStorage) Set(ctx context.Context, key string, value []byte) (err error) {
 	m[key] = value
 	return
 }
-func (m mapStorage) Delete(key string) (err error) {
+func (m mapStorage) Delete(ctx context.Context, key string) (err error) {
 	delete(m, key)
 	return
 }

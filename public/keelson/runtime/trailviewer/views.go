@@ -73,8 +73,8 @@ func decodeViews(b []byte) (views []SavedView, err error) {
 }
 
 // loadViews reads the list; none stored is an empty list.
-func loadViews(st app.StorageI) (views []SavedView, err error) {
-	b, found, err := st.Get(viewsKey)
+func loadViews(ctx context.Context, st app.StorageI) (views []SavedView, err error) {
+	b, found, err := st.Get(ctx, viewsKey)
 	if err != nil || !found || len(b) == 0 {
 		return
 	}
@@ -82,12 +82,12 @@ func loadViews(st app.StorageI) (views []SavedView, err error) {
 }
 
 // storeViews writes the list whole.
-func storeViews(st app.StorageI, views []SavedView) (err error) {
+func storeViews(ctx context.Context, st app.StorageI, views []SavedView) (err error) {
 	b, err := encodeViews(views)
 	if err != nil {
 		return
 	}
-	return st.Set(viewsKey, b)
+	return st.Set(ctx, viewsKey, b)
 }
 
 // withView is views with v in place of the view of its name, or appended.
@@ -218,7 +218,7 @@ func (inst *App) tickViews() {
 		st := vs.store
 		vs.runner.Start(nil, bgjob.Spec{Kind: "trailviewer.views", Title: "Trail viewer saved views"},
 			func(ctx context.Context) (out *[]SavedView, err error) {
-				views, err := loadViews(st)
+				views, err := loadViews(ctx, st)
 				if err != nil {
 					return
 				}
@@ -251,7 +251,7 @@ func (inst *App) writeViews(list []SavedView, note string) (err error) {
 	vs.err, vs.note, vs.writing = nil, note, list
 	vs.runner.Start(nil, bgjob.Spec{Kind: "trailviewer.views", Title: "Trail viewer saved views"},
 		func(ctx context.Context) (out *[]SavedView, err error) {
-			if err = storeViews(st, list); err != nil {
+			if err = storeViews(ctx, st, list); err != nil {
 				return
 			}
 			return &list, nil

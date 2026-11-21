@@ -139,17 +139,17 @@ func TestEmbedded_storageAndPeersAreUnderThePanesKey(t *testing.T) {
 	inner := &mapStorage{}
 	ctx := embedMountContext{MountContextI: app.NewStaticMountContext(embedHost, zerolog.Nop(), inner, nil, nil), prefix: storagePrefixOf("notes")}
 	s := ctx.Storage()
-	require.NoError(t, s.Set(titleStorePrefix+"c1", []byte("t")))
+	require.NoError(t, s.Set(t.Context(), titleStorePrefix+"c1", []byte("t")))
 	key := storagePrefixOf("notes") + titleStorePrefix + "c1"
-	got, found, _ := inner.Get(key)
+	got, found, _ := inner.Get(t.Context(), key)
 	require.True(t, found)
 	assert.Equal(t, "t", string(got))
 	assert.True(t, strings.HasPrefix(key, EmbedPersistedKeys("notes")[0]), "the host declares what the pane writes")
-	v, found, _ := s.Get(titleStorePrefix + "c1")
+	v, found, _ := s.Get(t.Context(), titleStorePrefix + "c1")
 	assert.True(t, found)
 	assert.Equal(t, "t", string(v))
-	require.NoError(t, s.Delete(titleStorePrefix+"c1"))
-	_, found, _ = inner.Get(key)
+	require.NoError(t, s.Delete(t.Context(), titleStorePrefix+"c1"))
+	_, found, _ = inner.Get(t.Context(), key)
 	assert.False(t, found)
 
 	assert.Equal(t, "7", peerKeyOf("7", ""))
@@ -188,8 +188,8 @@ func TestPane_mountsOnTheHostsContext(t *testing.T) {
 	assert.Equal(t, uint64(7), inst.window)
 	assert.Equal(t, 0, ctx.Ids().Depth(), "the pane's scope is closed after Mount")
 	require.NotNil(t, inst.storage)
-	require.NoError(t, inst.storage.Set("k", []byte("v")))
-	_, found, _ := inner.Get(storagePrefixOf("notes") + "k")
+	require.NoError(t, inst.storage.Set(t.Context(), "k", []byte("v")))
+	_, found, _ := inner.Get(t.Context(), storagePrefixOf("notes") + "k")
 	assert.True(t, found)
 	assert.Nil(t, inst.simpleStore, "a pane's look is its document's")
 	assert.Equal(t, string(embedHost)+"#notes", pane.Identity())

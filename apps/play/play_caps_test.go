@@ -65,7 +65,7 @@ func setupPlayWithCapsTimeout(t *testing.T, busTimeout time.Duration) (inst *Pla
 
 	graph := newLiveQueryGraph(nil, memory.NewGoAllocator(), 10)
 	inst = NewPlayApp(nil, graph, "-- initial", nil)
-	inst.SetCapabilities(busC, storage, zerolog.Nop())
+	inst.SetCapabilities(t.Context(), busC, storage, zerolog.Nop())
 
 	fsSvc = fs
 	cleanup = func() {
@@ -138,10 +138,10 @@ func TestPlayApp_RestorePersistedSql_ReadsALegacyValue(t *testing.T) {
 	// left it and asserts a fresh app still finds it.
 	inst, _, cleanup := setupPlayWithCaps(t)
 	defer cleanup()
-	require.NoError(t, inst.storage.Set(persistKeyLastSql, []byte("SELECT 1 AS persisted")))
+	require.NoError(t, inst.storage.Set(t.Context(), persistKeyLastSql, []byte("SELECT 1 AS persisted")))
 
 	inst2 := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "-- default", nil)
-	inst2.SetCapabilities(inst.bus, inst.storage, zerolog.Nop())
+	inst2.SetCapabilities(t.Context(), inst.bus, inst.storage, zerolog.Nop())
 	inst2.RestorePersistedSql()
 	assert.Equal(t, "SELECT 1 AS persisted", inst2.sql,
 		"Restore must replace default with the persisted value")

@@ -189,7 +189,7 @@ func (inst *App) storeTitle() {
 	inst.storedTitle[conv.id] = conv.title
 	storage, key, title := inst.storage, titleStorePrefix+conv.id, conv.title
 	inst.offFrame(func(context.Context) {
-		if err := storage.Set(key, []byte(title)); err != nil {
+		if err := storage.Set(inst.ioCtx, key, []byte(title)); err != nil {
 			inst.log.Debug().Err(err).Msg("chat: keep the conversation's title for the roster")
 		}
 	})
@@ -229,7 +229,7 @@ func (inst *App) listRoster() {
 		}
 		if storage != nil {
 			for _, r := range runs {
-				if b, found, gerr := storage.Get(titleStorePrefix + r.Conversation); gerr == nil && found {
+				if b, found, gerr := storage.Get(ctx, titleStorePrefix + r.Conversation); gerr == nil && found {
 					x.titles[r.Conversation] = string(b)
 				}
 			}

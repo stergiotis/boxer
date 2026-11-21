@@ -804,7 +804,7 @@ func (inst *PlayApp) ensureColWidthRes(ctx app.FrameContextI) {
 	if store == nil {
 		return
 	}
-	res, err := colwidth.New(store, colwidth.Opts{
+	res, err := colwidth.New(app.ContextOf(ctx), store, colwidth.Opts{
 		// The mount context's id, never a composed one: ADR-0382 §SD5 makes
 		// this the keying identity, the app whose window the person sees.
 		AppId: ctx.AppId(),

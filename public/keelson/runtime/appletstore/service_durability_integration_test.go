@@ -194,11 +194,11 @@ func TestStoreRowsCarryTheWritingWindow_LiveCH(t *testing.T) {
 	// trail keeps both, attributed.
 	ref := persist.StorageRef{Alias: "play", AppId: "github.com/example/play"}
 	ref.InstanceKey = 4
-	require.NoError(t, backend.Set(ref, "editorFont", []byte("mono-13")))
+	require.NoError(t, backend.Set(ctx, ref, "editorFont", []byte("mono-13")))
 	ref.InstanceKey = 11
-	require.NoError(t, backend.Set(ref, "editorFont", []byte("mono-15")))
+	require.NoError(t, backend.Set(ctx, ref, "editorFont", []byte("mono-15")))
 
-	value, found, err := backend.Get(ref, "editorFont")
+	value, found, err := backend.Get(ctx, ref, "editorFont")
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, "mono-15", string(value), "the key stays app-scoped and latest-wins")

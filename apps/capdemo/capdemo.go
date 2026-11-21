@@ -92,6 +92,9 @@ var clipboardDoc = markdown.Parse([]byte("" +
 // handed over and renders the sections; Unmount releases the watch
 // subscription.
 type App struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx context.Context
 	// ids is the per-instance WidgetIdStack. The host pre-pushes a
 	// window-unique salt onto it before every Frame() call (ADR-0026
 	// §SD9, windowhost.renderWindowBody), so every widget id the app
@@ -175,6 +178,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
 	inst.storage = ctx.Storage()
+	inst.ioCtx = app.ContextOf(ctx)
 	inst.scope = app.LifetimeOf(ctx)
 	return
 }
@@ -451,7 +455,7 @@ func (inst *App) runPersistSet(value string) {
 		inst.setPersistStatus("no storage wired — persist needs the app runtime", badge.ToneWarning)
 		return
 	}
-	err := inst.storage.Set(scratchpadKey, []byte(value))
+	err := inst.storage.Set(inst.ioCtx, scratchpadKey, []byte(value))
 	if err != nil {
 		inst.setPersistStatus("set failed: "+err.Error(), badge.ToneError)
 		return
@@ -468,7 +472,7 @@ func (inst *App) runPersistGet() {
 		inst.setPersistStatus("no storage wired — persist needs the app runtime", badge.ToneWarning)
 		return
 	}
-	value, found, err := inst.storage.Get(scratchpadKey)
+	value, found, err := inst.storage.Get(inst.ioCtx, scratchpadKey)
 	if err != nil {
 		inst.setPersistStatus("get failed: "+err.Error(), badge.ToneError)
 		return
@@ -490,7 +494,7 @@ func (inst *App) runPersistDelete() {
 		inst.setPersistStatus("no storage wired — persist needs the app runtime", badge.ToneWarning)
 		return
 	}
-	err := inst.storage.Delete(scratchpadKey)
+	err := inst.storage.Delete(inst.ioCtx, scratchpadKey)
 	if err != nil {
 		inst.setPersistStatus("delete failed: "+err.Error(), badge.ToneError)
 		return

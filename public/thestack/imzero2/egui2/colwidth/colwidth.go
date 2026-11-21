@@ -17,6 +17,7 @@
 package colwidth
 
 import (
+	"context"
 	"sort"
 	"strings"
 
@@ -87,9 +88,9 @@ func ShapeHash(cols []Column) (hash string) {
 // [statestore.ColumnWidthStoreI], so the host's state store satisfies it
 // structurally and no adapter is needed; a test can supply a map instead.
 type StoreI interface {
-	ListColumnWidths(appId app.AppIdT) (rows []statestore.ColumnWidthRow, err error)
-	WriteColumnWidth(row statestore.ColumnWidthRow) (err error)
-	DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error)
+	ListColumnWidths(ctx context.Context, appId app.AppIdT) (rows []statestore.ColumnWidthRow, err error)
+	WriteColumnWidth(ctx context.Context, row statestore.ColumnWidthRow) (err error)
+	DeleteColumnWidth(ctx context.Context, appId app.AppIdT, tier string, scope string, columnKey string) (err error)
 }
 
 // HostI is the optional frame-context capability a host with a state store
@@ -110,7 +111,7 @@ type StoreI interface {
 //	var res *colwidth.Resolver
 //	if h, ok := ctx.(colwidth.HostI); ok {
 //		if st := h.ColumnWidthStore(); st != nil {
-//			res, _ = colwidth.New(st, colwidth.Opts{AppId: ctx.AppId()})
+//			res, _ = colwidth.New(app.ContextOf(ctx), st, colwidth.Opts{AppId: ctx.AppId()})
 //		}
 //	}
 //

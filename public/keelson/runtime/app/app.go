@@ -210,6 +210,24 @@ func LifetimeOf(ctx MountContextI) (s *lifetime.Scope) {
 	return
 }
 
+// ContextOf is the context an app instance does its I/O under — persist,
+// bus requests, store reads — when no call of its own carries one: the
+// tail context of its lifetime scope, which outlives the work context's
+// Retire and ends when the host abandons the instance at the end of its
+// drain. So a save in Unmount, after the instance has left, still runs, and
+// nothing outlives the instance. Work that should stop the moment the
+// instance leaves uses LifetimeOf(ctx).Ctx() instead.
+//
+// A mount context without a lifetime scope — a test's, a CLI bootstrap's —
+// has no end, and neither has the context returned for it. Call it once,
+// in Mount, and keep the result: each call wraps a new context.
+func ContextOf(mc MountContextI) (ctx context.Context) {
+	if s := LifetimeOf(mc); s != nil {
+		return s.Tail(nil)
+	}
+	return context.Background() //boxer:lint disable=CS020 reason="a mount context without a lifetime scope has no end; this is its root"
+}
+
 // MountValuesI is an optional capability of a MountContextI: values the
 // host hands every app it mounts, keyed as context.Context's are, so a
 // package this one cannot import — the cell declaration (package cell) —
@@ -378,8 +396,11 @@ func (inst *Msg) WithContext(ctx context.Context) (out *Msg) {
 // StorageI is the forward declaration of the CH+leeway-backed cold-state
 // store described by ADR-0026 §SD6. The implementation lands in M2; M1
 // hosts hand back a NoopStorage.
+//
+// Every call is a round trip and takes the ctx it runs under; an app with
+// none of its own passes ContextOf(mountCtx).
 type StorageI interface {
-	Get(key string) (value []byte, found bool, err error)
-	Set(key string, value []byte) (err error)
-	Delete(key string) (err error)
+	Get(ctx context.Context, key string) (value []byte, found bool, err error)
+	Set(ctx context.Context, key string, value []byte) (err error)
+	Delete(ctx context.Context, key string) (err error)
 }

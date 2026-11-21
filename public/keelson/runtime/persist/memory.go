@@ -1,6 +1,7 @@
 package persist
 
 import (
+	"context"
 	"sync"
 )
 
@@ -32,7 +33,7 @@ func NewMemoryBackend() (b *MemoryBackend) {
 	return
 }
 
-func (inst *MemoryBackend) Get(ref StorageRef, key string) (value []byte, found bool, err error) {
+func (inst *MemoryBackend) Get(ctx context.Context, ref StorageRef, key string) (value []byte, found bool, err error) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	v, ok := inst.data[memoryKey{Alias: ref.Alias, Key: key}]
@@ -45,7 +46,7 @@ func (inst *MemoryBackend) Get(ref StorageRef, key string) (value []byte, found 
 	return
 }
 
-func (inst *MemoryBackend) Set(ref StorageRef, key string, value []byte) (err error) {
+func (inst *MemoryBackend) Set(ctx context.Context, ref StorageRef, key string, value []byte) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	stored := make([]byte, len(value))
@@ -54,7 +55,7 @@ func (inst *MemoryBackend) Set(ref StorageRef, key string, value []byte) (err er
 	return
 }
 
-func (inst *MemoryBackend) Delete(ref StorageRef, key string) (err error) {
+func (inst *MemoryBackend) Delete(ctx context.Context, ref StorageRef, key string) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	delete(inst.data, memoryKey{Alias: ref.Alias, Key: key})

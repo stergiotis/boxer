@@ -1,6 +1,7 @@
 package hello
 
 import (
+	"context"
 	"strconv"
 	"testing"
 
@@ -14,12 +15,15 @@ import (
 
 type memStorage struct{ m map[string][]byte }
 
-func (s *memStorage) Get(key string) (value []byte, found bool, err error) {
+func (s *memStorage) Get(ctx context.Context, key string) (value []byte, found bool, err error) {
 	value, found = s.m[key]
 	return
 }
-func (s *memStorage) Set(key string, value []byte) (err error) { s.m[key] = value; return }
-func (s *memStorage) Delete(key string) (err error)            { delete(s.m, key); return }
+func (s *memStorage) Set(ctx context.Context, key string, value []byte) (err error) {
+	s.m[key] = value
+	return
+}
+func (s *memStorage) Delete(ctx context.Context, key string) (err error) { delete(s.m, key); return }
 
 func TestManifestRegisters(t *testing.T) {
 	require.NoError(t, manifest.Validate())
@@ -39,7 +43,7 @@ func TestGreetingsSurviveTheWindow(t *testing.T) {
 	a.greet()
 	a.greet()
 	require.NoError(t, a.Unmount(ctx)) // retires the window's scope and waits for the writes
-	stored, found, _ := st.Get(GreetingsKey)
+	stored, found, _ := st.Get(t.Context(), GreetingsKey)
 	require.True(t, found)
 	assert.Equal(t, strconv.Itoa(43), string(stored))
 }

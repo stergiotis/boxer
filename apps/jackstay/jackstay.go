@@ -233,6 +233,9 @@ type preflightResult struct {
 
 // App is the per-window instance.
 type App struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx context.Context
 	ids    *c.WidgetIdStack
 	logger zerolog.Logger
 	store  app.StorageI
@@ -383,6 +386,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		AutoAnchor: true,
 	})
 	inst.store = ctx.Storage()
+	inst.ioCtx = app.ContextOf(ctx)
 	inst.bus = ctx.Bus()
 	inst.files = fsbroker.NewAppDataClient(inst.bus)
 	inst.tasks = task.ForApp(ctx)
@@ -675,7 +679,7 @@ func (inst *App) loadRecent() {
 	if inst.store == nil {
 		return
 	}
-	data, found, err := inst.store.Get(recentKey)
+	data, found, err := inst.store.Get(inst.ioCtx, recentKey)
 	if err != nil || !found {
 		return
 	}
@@ -726,7 +730,7 @@ func (inst *App) storeRecent() {
 		return
 	}
 	if data, err := json.Marshal(inst.recent); err == nil {
-		if serr := inst.store.Set(recentKey, data); serr != nil {
+		if serr := inst.store.Set(inst.ioCtx, recentKey, data); serr != nil {
 			inst.logger.Debug().Err(serr).Msg("jackstay: recent plans not persisted")
 		}
 	}

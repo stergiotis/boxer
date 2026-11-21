@@ -53,10 +53,10 @@ func TestClient_SetGetRoundTrip(t *testing.T) {
 	_, cli, cleanup := newClientSetup(t, "github.com/example/test.app")
 	defer cleanup()
 
-	err := cli.Set("editorFont", []byte("Iosevka 14"))
+	err := cli.Set(t.Context(), "editorFont", []byte("Iosevka 14"))
 	require.NoError(t, err)
 
-	got, found, err := cli.Get("editorFont")
+	got, found, err := cli.Get(t.Context(), "editorFont")
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, []byte("Iosevka 14"), got)
@@ -66,7 +66,7 @@ func TestClient_GetMissingKey_FoundFalse(t *testing.T) {
 	_, cli, cleanup := newClientSetup(t, "github.com/example/test.app")
 	defer cleanup()
 
-	_, found, err := cli.Get("neverSet")
+	_, found, err := cli.Get(t.Context(), "neverSet")
 	require.NoError(t, err)
 	assert.False(t, found, "missing key must return found=false, not an error")
 }
@@ -75,9 +75,9 @@ func TestClient_DeleteThenGet_FoundFalse(t *testing.T) {
 	_, cli, cleanup := newClientSetup(t, "github.com/example/test.app")
 	defer cleanup()
 
-	require.NoError(t, cli.Set("x", []byte("v")))
-	require.NoError(t, cli.Delete("x"))
-	_, found, err := cli.Get("x")
+	require.NoError(t, cli.Set(t.Context(), "x", []byte("v")))
+	require.NoError(t, cli.Delete(t.Context(), "x"))
+	_, found, err := cli.Get(t.Context(), "x")
 	require.NoError(t, err)
 	assert.False(t, found)
 }
@@ -89,8 +89,8 @@ func TestClient_EmptyValueRoundTrip(t *testing.T) {
 	_, cli, cleanup := newClientSetup(t, "github.com/example/test.app")
 	defer cleanup()
 
-	require.NoError(t, cli.Set("empty", []byte{}))
-	got, found, err := cli.Get("empty")
+	require.NoError(t, cli.Set(t.Context(), "empty", []byte{}))
+	got, found, err := cli.Get(t.Context(), "empty")
 	require.NoError(t, err)
 	require.True(t, found, "empty-value set must distinguish from never-set")
 	assert.Empty(t, got)
@@ -113,7 +113,7 @@ func TestClient_PermissionDenied_NoCap(t *testing.T) {
 	cli, err := persist.NewClient(busC, "github.com/example/nocaps")
 	require.NoError(t, err)
 
-	err = cli.Set("any.key", []byte("v"))
+	err = cli.Set(t.Context(), "any.key", []byte("v"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "permission")
 }

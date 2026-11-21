@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/zeebo/xxh3"
@@ -191,14 +192,14 @@ type prefixedStorage struct {
 	prefix string
 }
 
-func (inst prefixedStorage) Get(key string) (value []byte, found bool, err error) {
-	return inst.inner.Get(inst.prefix + key)
+func (inst prefixedStorage) Get(ctx context.Context, key string) (value []byte, found bool, err error) {
+	return inst.inner.Get(ctx, inst.prefix+key)
 }
-func (inst prefixedStorage) Set(key string, value []byte) (err error) {
-	return inst.inner.Set(inst.prefix+key, value)
+func (inst prefixedStorage) Set(ctx context.Context, key string, value []byte) (err error) {
+	return inst.inner.Set(ctx, inst.prefix+key, value)
 }
-func (inst prefixedStorage) Delete(key string) (err error) {
-	return inst.inner.Delete(inst.prefix + key)
+func (inst prefixedStorage) Delete(ctx context.Context, key string) (err error) {
+	return inst.inner.Delete(ctx, inst.prefix+key)
 }
 
 // paneKey is the key the window's runs are kept under, empty for a window

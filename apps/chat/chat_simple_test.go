@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"testing"
@@ -31,7 +32,7 @@ func simpleRig(t *testing.T) (storage app.StorageI, stored func() (string, bool)
 	storage, err = persist.NewClient(bus.NewClient(ManifestId, caps), ManifestId)
 	require.NoError(t, err)
 	stored = func() (string, bool) {
-		v, found, _ := backend.Get(persist.StorageRef{Alias: alias}, simpleViewKey)
+		v, found, _ := backend.Get(t.Context(), persist.StorageRef{Alias: alias}, simpleViewKey)
 		return string(v), found
 	}
 	return
@@ -81,7 +82,7 @@ func TestTheSimpleViewIsRememberedForTheNextWindow(t *testing.T) {
 // A tick made before the store answers is newer than what the store holds.
 func TestATickBeforeTheStoreAnswersStands(t *testing.T) {
 	storage, stored := simpleRig(t)
-	require.NoError(t, storage.Set(simpleViewKey, []byte(simpleViewOff)))
+	require.NoError(t, storage.Set(t.Context(), simpleViewKey, []byte(simpleViewOff)))
 	inst := newApp()
 	inst.simpleStore = storage
 	inst.loadSimpleView()
@@ -117,7 +118,7 @@ type failingReads struct {
 	app.StorageI
 }
 
-func (failingReads) Get(string) ([]byte, bool, error) {
+func (failingReads) Get(context.Context, string) ([]byte, bool, error) {
 	return nil, false, errors.New("the store did not answer")
 }
 

@@ -1,6 +1,7 @@
 package persist
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -159,7 +160,7 @@ func TestService_AliasMismatch_LoggedButProceeds(t *testing.T) {
 	require.NoError(t, err)
 	// The subject's alias is "play", so the value lands under "play"
 	// regardless of the actual sender's identity (M4 NKey would enforce).
-	got, found, _ := mem.Get(aliasRef("play"), "tabs")
+	got, found, _ := mem.Get(t.Context(), aliasRef("play"), "tabs")
 	assert.True(t, found)
 	assert.Equal(t, "x", string(got))
 }
@@ -186,17 +187,17 @@ func (inst *refRecorder) Last() (ref StorageRef) {
 	return
 }
 
-func (inst *refRecorder) Get(ref StorageRef, key string) (value []byte, found bool, err error) {
+func (inst *refRecorder) Get(ctx context.Context, ref StorageRef, key string) (value []byte, found bool, err error) {
 	inst.record(ref)
 	return
 }
 
-func (inst *refRecorder) Set(ref StorageRef, key string, value []byte) (err error) {
+func (inst *refRecorder) Set(ctx context.Context, ref StorageRef, key string, value []byte) (err error) {
 	inst.record(ref)
 	return
 }
 
-func (inst *refRecorder) Delete(ref StorageRef, key string) (err error) {
+func (inst *refRecorder) Delete(ctx context.Context, ref StorageRef, key string) (err error) {
 	inst.record(ref)
 	return
 }

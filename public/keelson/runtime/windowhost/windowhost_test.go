@@ -474,20 +474,20 @@ func TestSetBus_PersistStorageEndToEnd(t *testing.T) {
 	storage := w.mountCtx.Storage()
 	require.NotNil(t, storage, "MountCtx.Storage() must be a real persist.Client when bus is set")
 
-	require.NoError(t, storage.Set("selectedTab", []byte("editor")))
-	got, found, err := storage.Get("selectedTab")
+	require.NoError(t, storage.Set(t.Context(), "selectedTab", []byte("editor")))
+	got, found, err := storage.Get(t.Context(), "selectedTab")
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, []byte("editor"), got)
 
 	// Missing key returns found=false, no error.
-	_, found, err = storage.Get("neverSet")
+	_, found, err = storage.Get(t.Context(), "neverSet")
 	require.NoError(t, err)
 	assert.False(t, found)
 
 	// Delete then Get → found=false.
-	require.NoError(t, storage.Delete("selectedTab"))
-	_, found, err = storage.Get("selectedTab")
+	require.NoError(t, storage.Delete(t.Context(), "selectedTab"))
+	_, found, err = storage.Get(t.Context(), "selectedTab")
 	require.NoError(t, err)
 	assert.False(t, found)
 }
@@ -519,7 +519,7 @@ func TestSetBus_PersistWithoutPersistedKeys_PermissionDenied(t *testing.T) {
 
 	storage := w.mountCtx.Storage()
 	require.NotNil(t, storage)
-	err = storage.Set("anyKey", []byte("v"))
+	err = storage.Set(t.Context(), "anyKey", []byte("v"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "permission")
 }

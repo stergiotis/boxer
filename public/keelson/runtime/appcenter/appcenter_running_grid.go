@@ -98,7 +98,7 @@ func (inst *App) ensureWidths(ctx app.FrameContextI) {
 	if store == nil {
 		return
 	}
-	res, err := colwidth.New(store, colwidth.Opts{
+	res, err := colwidth.New(app.ContextOf(ctx), store, colwidth.Opts{
 		AppId: ctx.AppId(), InstanceKey: ctx.InstanceKey(),
 		MinPoints: float64(recordtable.DragMinWidth(inst.density)),
 		MaxPoints: float64(recordtable.MaxColumnWidth),

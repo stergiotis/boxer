@@ -18,25 +18,25 @@ func aliasRef(alias string) (ref StorageRef) {
 func TestMemoryBackend_GetSetDelete_RoundTrip(t *testing.T) {
 	b := NewMemoryBackend()
 
-	value, found, err := b.Get(aliasRef("play"), "tabs")
+	value, found, err := b.Get(t.Context(), aliasRef("play"), "tabs")
 	require.NoError(t, err)
 	assert.False(t, found)
 	assert.Nil(t, value)
 
-	err = b.Set(aliasRef("play"), "tabs", []byte("hello"))
+	err = b.Set(t.Context(), aliasRef("play"), "tabs", []byte("hello"))
 	require.NoError(t, err)
 	assert.Equal(t, 1, b.Len())
 
-	got, found, err := b.Get(aliasRef("play"), "tabs")
+	got, found, err := b.Get(t.Context(), aliasRef("play"), "tabs")
 	require.NoError(t, err)
 	assert.True(t, found)
 	assert.Equal(t, []byte("hello"), got)
 
-	err = b.Delete(aliasRef("play"), "tabs")
+	err = b.Delete(t.Context(), aliasRef("play"), "tabs")
 	require.NoError(t, err)
 	assert.Equal(t, 0, b.Len())
 
-	_, found, err = b.Get(aliasRef("play"), "tabs")
+	_, found, err = b.Get(t.Context(), aliasRef("play"), "tabs")
 	require.NoError(t, err)
 	assert.False(t, found)
 }
@@ -44,34 +44,34 @@ func TestMemoryBackend_GetSetDelete_RoundTrip(t *testing.T) {
 func TestMemoryBackend_DefensiveCopyOnGet(t *testing.T) {
 	b := NewMemoryBackend()
 	stored := []byte("hello")
-	err := b.Set(aliasRef("play"), "tabs", stored)
+	err := b.Set(t.Context(), aliasRef("play"), "tabs", stored)
 	require.NoError(t, err)
 
-	got, _, _ := b.Get(aliasRef("play"), "tabs")
+	got, _, _ := b.Get(t.Context(), aliasRef("play"), "tabs")
 	got[0] = 'X'
 	// Re-fetch: should still be "hello", not "Xello".
-	again, _, _ := b.Get(aliasRef("play"), "tabs")
+	again, _, _ := b.Get(t.Context(), aliasRef("play"), "tabs")
 	assert.Equal(t, "hello", string(again))
 }
 
 func TestMemoryBackend_DefensiveCopyOnSet(t *testing.T) {
 	b := NewMemoryBackend()
 	source := []byte("hello")
-	err := b.Set(aliasRef("play"), "tabs", source)
+	err := b.Set(t.Context(), aliasRef("play"), "tabs", source)
 	require.NoError(t, err)
 	source[0] = 'X'
-	got, _, _ := b.Get(aliasRef("play"), "tabs")
+	got, _, _ := b.Get(t.Context(), aliasRef("play"), "tabs")
 	assert.Equal(t, "hello", string(got))
 }
 
 func TestMemoryBackend_AliasSeparation(t *testing.T) {
 	b := NewMemoryBackend()
-	require.NoError(t, b.Set(aliasRef("play"), "tabs", []byte("p")))
-	require.NoError(t, b.Set(aliasRef("imztop"), "tabs", []byte("i")))
+	require.NoError(t, b.Set(t.Context(), aliasRef("play"), "tabs", []byte("p")))
+	require.NoError(t, b.Set(t.Context(), aliasRef("imztop"), "tabs", []byte("i")))
 
-	got, _, _ := b.Get(aliasRef("play"), "tabs")
+	got, _, _ := b.Get(t.Context(), aliasRef("play"), "tabs")
 	assert.Equal(t, "p", string(got))
-	got, _, _ = b.Get(aliasRef("imztop"), "tabs")
+	got, _, _ = b.Get(t.Context(), aliasRef("imztop"), "tabs")
 	assert.Equal(t, "i", string(got))
 	assert.Equal(t, 2, b.Len())
 }

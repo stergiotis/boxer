@@ -494,7 +494,7 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		}
 		inner.SetDockSplits(ds)
 	}
-	inner.SetCapabilities(ctx.Bus(), ctx.Storage(), ctx.Log())
+	inner.SetCapabilities(app.ContextOf(ctx), ctx.Bus(), ctx.Storage(), ctx.Log())
 	if launch == nil {
 		// Legacy read bridge (ADR-0148 §SD8), one release: only a window
 		// that received no config at all consults the persist keys. A

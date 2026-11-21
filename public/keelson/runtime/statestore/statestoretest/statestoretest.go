@@ -56,9 +56,9 @@ func ws(appId string, name string, kind string, cfg string, ts time.Time) states
 
 func workingsetLatestWins(t *testing.T, s statestore.StoreI) {
 	t0 := past()
-	require.NoError(t, s.WriteWorkingset(ws("play", "default", "playLaunch", "v1", t0)))
-	require.NoError(t, s.WriteWorkingset(ws("play", "default", "playLaunch", "v2", t0.Add(time.Second))))
-	cfg, kind, found, err := s.LatestWorkingset("play", "default")
+	require.NoError(t, s.WriteWorkingset(t.Context(), ws("play", "default", "playLaunch", "v1", t0)))
+	require.NoError(t, s.WriteWorkingset(t.Context(), ws("play", "default", "playLaunch", "v2", t0.Add(time.Second))))
+	cfg, kind, found, err := s.LatestWorkingset(t.Context(), "play", "default")
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, "v2", string(cfg))
@@ -66,7 +66,7 @@ func workingsetLatestWins(t *testing.T, s statestore.StoreI) {
 }
 
 func workingsetMissing(t *testing.T, s statestore.StoreI) {
-	cfg, kind, found, err := s.LatestWorkingset("play", "default")
+	cfg, kind, found, err := s.LatestWorkingset(t.Context(), "play", "default")
 	require.NoError(t, err, "a missing record is found=false, not an error")
 	assert.False(t, found)
 	assert.Nil(t, cfg)
@@ -75,14 +75,14 @@ func workingsetMissing(t *testing.T, s statestore.StoreI) {
 
 func workingsetDeleteTombstones(t *testing.T, s statestore.StoreI) {
 	t0 := past()
-	require.NoError(t, s.WriteWorkingset(ws("play", "default", "k", "v1", t0)))
-	require.NoError(t, s.DeleteWorkingset("play", "default"))
-	_, _, found, err := s.LatestWorkingset("play", "default")
+	require.NoError(t, s.WriteWorkingset(t.Context(), ws("play", "default", "k", "v1", t0)))
+	require.NoError(t, s.DeleteWorkingset(t.Context(), "play", "default"))
+	_, _, found, err := s.LatestWorkingset(t.Context(), "play", "default")
 	require.NoError(t, err)
 	assert.False(t, found, "a deleted record must read as absent, not fall back to the write before it")
 
-	require.NoError(t, s.WriteWorkingset(ws("play", "default", "k", "v3", time.Now().UTC())))
-	cfg, _, found, err := s.LatestWorkingset("play", "default")
+	require.NoError(t, s.WriteWorkingset(t.Context(), ws("play", "default", "k", "v3", time.Now().UTC())))
+	cfg, _, found, err := s.LatestWorkingset(t.Context(), "play", "default")
 	require.NoError(t, err)
 	require.True(t, found, "a write after the delete is live again")
 	assert.Equal(t, "v3", string(cfg))
@@ -90,15 +90,15 @@ func workingsetDeleteTombstones(t *testing.T, s statestore.StoreI) {
 
 func workingsetIsolation(t *testing.T, s statestore.StoreI) {
 	t0 := past()
-	require.NoError(t, s.WriteWorkingset(ws("play", "default", "k", "play-default", t0)))
-	require.NoError(t, s.WriteWorkingset(ws("play", "other", "k", "play-other", t0)))
-	require.NoError(t, s.WriteWorkingset(ws("tally", "default", "k", "tally-default", t0)))
+	require.NoError(t, s.WriteWorkingset(t.Context(), ws("play", "default", "k", "play-default", t0)))
+	require.NoError(t, s.WriteWorkingset(t.Context(), ws("play", "other", "k", "play-other", t0)))
+	require.NoError(t, s.WriteWorkingset(t.Context(), ws("tally", "default", "k", "tally-default", t0)))
 	for _, c := range []struct{ app, name, want string }{
 		{"play", "default", "play-default"},
 		{"play", "other", "play-other"},
 		{"tally", "default", "tally-default"},
 	} {
-		cfg, _, found, err := s.LatestWorkingset(app.AppIdT(c.app), c.name)
+		cfg, _, found, err := s.LatestWorkingset(t.Context(), app.AppIdT(c.app), c.name)
 		require.NoError(t, err)
 		require.True(t, found, "%s/%s", c.app, c.name)
 		assert.Equal(t, c.want, string(cfg))
@@ -110,17 +110,17 @@ func workingsetIsolation(t *testing.T, s statestore.StoreI) {
 // name "c") apart from (app "a", name "b/c").
 func workingsetNestedAppIds(t *testing.T, s statestore.StoreI) {
 	t0 := past()
-	require.NoError(t, s.WriteWorkingset(ws("x/a", "b", "k", "nested-app", t0)))
-	require.NoError(t, s.WriteWorkingset(ws("x", "a/b", "k", "nested-name", t0)))
-	cfg, _, found, err := s.LatestWorkingset("x/a", "b")
+	require.NoError(t, s.WriteWorkingset(t.Context(), ws("x/a", "b", "k", "nested-app", t0)))
+	require.NoError(t, s.WriteWorkingset(t.Context(), ws("x", "a/b", "k", "nested-name", t0)))
+	cfg, _, found, err := s.LatestWorkingset(t.Context(), "x/a", "b")
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, "nested-app", string(cfg))
-	cfg, _, found, err = s.LatestWorkingset("x", "a/b")
+	cfg, _, found, err = s.LatestWorkingset(t.Context(), "x", "a/b")
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, "nested-name", string(cfg))
-	rows, err := s.ListWorkingsets()
+	rows, err := s.ListWorkingsets(t.Context())
 	require.NoError(t, err)
 	assert.Len(t, rows, 2)
 }
@@ -129,13 +129,13 @@ func workingsetListLatestPerKey(t *testing.T, s statestore.StoreI) {
 	t0 := past()
 	row := ws("play", "default", "playLaunch", "v1", t0)
 	row.RunId, row.TileKey, row.Reason = "run-1", 7, "user-close"
-	require.NoError(t, s.WriteWorkingset(row))
+	require.NoError(t, s.WriteWorkingset(t.Context(), row))
 	row = ws("play", "default", "playLaunch", "v2", t0.Add(time.Second))
 	row.RunId, row.TileKey, row.Reason = "run-2", 9, "shutdown"
-	require.NoError(t, s.WriteWorkingset(row))
-	require.NoError(t, s.WriteWorkingset(ws("imztop", "default", "imztopLaunch", "i1", t0)))
+	require.NoError(t, s.WriteWorkingset(t.Context(), row))
+	require.NoError(t, s.WriteWorkingset(t.Context(), ws("imztop", "default", "imztopLaunch", "i1", t0)))
 
-	rows, err := s.ListWorkingsets()
+	rows, err := s.ListWorkingsets(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 2, "one row per (app, name), not per write")
 	assert.Equal(t, app.AppIdT("imztop"), rows[0].AppId, "ordered by app id")
@@ -151,17 +151,17 @@ func workingsetListLatestPerKey(t *testing.T, s statestore.StoreI) {
 }
 
 func workingsetListEmpty(t *testing.T, s statestore.StoreI) {
-	rows, err := s.ListWorkingsets()
+	rows, err := s.ListWorkingsets(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }
 
 func workingsetListTombstone(t *testing.T, s statestore.StoreI) {
 	t0 := past()
-	require.NoError(t, s.WriteWorkingset(ws("play", "default", "k", "v1", t0)))
-	require.NoError(t, s.WriteWorkingset(ws("tally", "default", "k", "t1", t0)))
-	require.NoError(t, s.DeleteWorkingset("play", "default"))
-	rows, err := s.ListWorkingsets()
+	require.NoError(t, s.WriteWorkingset(t.Context(), ws("play", "default", "k", "v1", t0)))
+	require.NoError(t, s.WriteWorkingset(t.Context(), ws("tally", "default", "k", "t1", t0)))
+	require.NoError(t, s.DeleteWorkingset(t.Context(), "play", "default"))
+	rows, err := s.ListWorkingsets(t.Context())
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "a key whose newest row is a tombstone is absent from the list")
 	assert.Equal(t, app.AppIdT("tally"), rows[0].AppId)
@@ -171,14 +171,14 @@ func workingsetDefensiveCopy(t *testing.T, s statestore.StoreI) {
 	buf := []byte("original")
 	row := ws("play", "default", "k", "", time.Now().UTC())
 	row.Config = buf
-	require.NoError(t, s.WriteWorkingset(row))
+	require.NoError(t, s.WriteWorkingset(t.Context(), row))
 	copy(buf, "CLOBBERD")
-	cfg, _, found, err := s.LatestWorkingset("play", "default")
+	cfg, _, found, err := s.LatestWorkingset(t.Context(), "play", "default")
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, "original", string(cfg), "the store must not alias the caller's buffer")
 	cfg[0] = 'X'
-	again, _, _, err := s.LatestWorkingset("play", "default")
+	again, _, _, err := s.LatestWorkingset(t.Context(), "play", "default")
 	require.NoError(t, err)
 	assert.Equal(t, "original", string(again), "nor hand out its own")
 }
@@ -195,9 +195,9 @@ func colWidthLatestPerKey(t *testing.T, s statestore.StoreI) {
 		cw("play", statestore.ColWidthTierColumn, "", "k1", 90, t0),
 		cw("imztop", statestore.ColWidthTierColumn, "", "k1", 50, t0),
 	} {
-		require.NoError(t, s.WriteColumnWidth(row))
+		require.NoError(t, s.WriteColumnWidth(t.Context(), row))
 	}
-	rows, err := s.ListColumnWidths("play")
+	rows, err := s.ListColumnWidths(t.Context(), "play")
 	require.NoError(t, err)
 	require.Len(t, rows, 2, "one row per key, not per write")
 	// SortColumnWidths orders by tier: "column" precedes "instance".
@@ -211,9 +211,9 @@ func colWidthLatestPerKey(t *testing.T, s statestore.StoreI) {
 // entry for the same column key are different overrides.
 func colWidthTierIdentity(t *testing.T, s statestore.StoreI) {
 	t0 := past()
-	require.NoError(t, s.WriteColumnWidth(cw("play", statestore.ColWidthTierInstance, "t", "k", 10, t0)))
-	require.NoError(t, s.WriteColumnWidth(cw("play", statestore.ColWidthTierColumn, "", "k", 20, t0)))
-	rows, err := s.ListColumnWidths("play")
+	require.NoError(t, s.WriteColumnWidth(t.Context(), cw("play", statestore.ColWidthTierInstance, "t", "k", 10, t0)))
+	require.NoError(t, s.WriteColumnWidth(t.Context(), cw("play", statestore.ColWidthTierColumn, "", "k", 20, t0)))
+	rows, err := s.ListColumnWidths(t.Context(), "play")
 	require.NoError(t, err)
 	assert.Len(t, rows, 2)
 }
@@ -222,29 +222,29 @@ func colWidthTierIdentity(t *testing.T, s statestore.StoreI) {
 // surviving write show through, and a write after the clear is live.
 func colWidthDeleteThenWrite(t *testing.T, s statestore.StoreI) {
 	t0 := past()
-	require.NoError(t, s.WriteColumnWidth(cw("play", statestore.ColWidthTierColumn, "", "k", 10, t0)))
-	require.NoError(t, s.WriteColumnWidth(cw("play", statestore.ColWidthTierColumn, "", "k", 20, t0.Add(time.Millisecond))))
-	require.NoError(t, s.DeleteColumnWidth("play", statestore.ColWidthTierColumn, "", "k"))
-	rows, err := s.ListColumnWidths("play")
+	require.NoError(t, s.WriteColumnWidth(t.Context(), cw("play", statestore.ColWidthTierColumn, "", "k", 10, t0)))
+	require.NoError(t, s.WriteColumnWidth(t.Context(), cw("play", statestore.ColWidthTierColumn, "", "k", 20, t0.Add(time.Millisecond))))
+	require.NoError(t, s.DeleteColumnWidth(t.Context(), "play", statestore.ColWidthTierColumn, "", "k"))
+	rows, err := s.ListColumnWidths(t.Context(), "play")
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a cleared override must not fall back to an older write")
 
-	require.NoError(t, s.WriteColumnWidth(cw("play", statestore.ColWidthTierColumn, "", "k", 30, time.Now().UTC())))
-	rows, err = s.ListColumnWidths("play")
+	require.NoError(t, s.WriteColumnWidth(t.Context(), cw("play", statestore.ColWidthTierColumn, "", "k", 30, time.Now().UTC())))
+	rows, err = s.ListColumnWidths(t.Context(), "play")
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, 30.0, rows[0].Points)
 }
 
 func colWidthDeleteAbsent(t *testing.T, s statestore.StoreI) {
-	require.NoError(t, s.DeleteColumnWidth("play", statestore.ColWidthTierColumn, "", "never-written"))
-	rows, err := s.ListColumnWidths("play")
+	require.NoError(t, s.DeleteColumnWidth(t.Context(), "play", statestore.ColWidthTierColumn, "", "never-written"))
+	rows, err := s.ListColumnWidths(t.Context(), "play")
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }
 
 func colWidthUnknownApp(t *testing.T, s statestore.StoreI) {
-	rows, err := s.ListColumnWidths("nobody")
+	rows, err := s.ListColumnWidths(t.Context(), "nobody")
 	require.NoError(t, err)
 	assert.NotNil(t, rows, "an empty answer is an empty slice, not nil")
 	assert.Empty(t, rows)
@@ -253,9 +253,9 @@ func colWidthUnknownApp(t *testing.T, s statestore.StoreI) {
 // An app's overrides must not include those of an app nested under its id.
 func colWidthNestedAppIds(t *testing.T, s statestore.StoreI) {
 	t0 := past()
-	require.NoError(t, s.WriteColumnWidth(cw("x", statestore.ColWidthTierColumn, "", "k", 10, t0)))
-	require.NoError(t, s.WriteColumnWidth(cw("x/child", statestore.ColWidthTierColumn, "", "k", 20, t0)))
-	rows, err := s.ListColumnWidths("x")
+	require.NoError(t, s.WriteColumnWidth(t.Context(), cw("x", statestore.ColWidthTierColumn, "", "k", 10, t0)))
+	require.NoError(t, s.WriteColumnWidth(t.Context(), cw("x/child", statestore.ColWidthTierColumn, "", "k", 20, t0)))
+	rows, err := s.ListColumnWidths(t.Context(), "x")
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, 10.0, rows[0].Points)
@@ -267,8 +267,8 @@ func colWidthRoundTrip(t *testing.T, s statestore.StoreI) {
 		AppId: "play", InstanceKey: 42, Tier: statestore.ColWidthTierInstance,
 		Scope: "master/table", ColumnKey: "0123abcd", Points: 137.5, FontSize: 13.25, Ts: t0,
 	}
-	require.NoError(t, s.WriteColumnWidth(want))
-	rows, err := s.ListColumnWidths("play")
+	require.NoError(t, s.WriteColumnWidth(t.Context(), want))
+	rows, err := s.ListColumnWidths(t.Context(), "play")
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	got := rows[0]

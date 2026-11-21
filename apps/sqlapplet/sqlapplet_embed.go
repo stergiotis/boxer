@@ -1,6 +1,7 @@
 package sqlapplet
 
 import (
+	"context"
 	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/apps/play"
@@ -56,7 +57,7 @@ type EmbedConfig struct {
 // applet-definition invariant holds under embedding (ADR-0132 §SD8,
 // ADR-0134 §SD7). Instance-id salting is per-PlayApp automatically
 // (NewPlayApp), so embedded instances do not collide.
-func NewEmbedded(def *AppletDef, cfg EmbedConfig) (inner *play.PlayApp, err error) {
+func NewEmbedded(ctx context.Context, def *AppletDef, cfg EmbedConfig) (inner *play.PlayApp, err error) {
 	// A def minted from a committed book is classified here, on its first
 	// open, rather than at startup (see AppletDef.Class). Everything below
 	// reads the class, so this comes first.
@@ -107,7 +108,7 @@ func NewEmbedded(def *AppletDef, cfg EmbedConfig) (inner *play.PlayApp, err erro
 	}
 	// nil storage: an applet's buffer is its committed definition — nothing
 	// to persist or restore (play's persist paths no-op on nil).
-	inner.SetCapabilities(cfg.Bus, nil, cfg.Log)
+	inner.SetCapabilities(ctx, cfg.Bus, nil, cfg.Log)
 	return inner, nil
 }
 

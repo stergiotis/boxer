@@ -115,10 +115,15 @@ func (inst *Scope) Ctx() (ctx context.Context) {
 
 // Tail is ctx's values under the scope's tail context: it does not end when
 // ctx or the work context does, only at Abandon or once the scope is done.
-// A nil ctx stands for context.Background.
+// A nil ctx stands for context.Background. On a nil scope — a host that
+// does not drain — the tail never ends: it is ctx without its
+// cancellation.
 func (inst *Scope) Tail(ctx context.Context) (tail context.Context) {
 	if ctx == nil {
-		ctx = context.Background()
+		ctx = context.Background() //boxer:lint disable=CS020 reason="documented root: a nil ctx stands for Background"
+	}
+	if inst == nil {
+		return context.WithoutCancel(ctx)
 	}
 	return tailCtx{Context: context.WithoutCancel(ctx), tail: inst.tail}
 }

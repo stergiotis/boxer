@@ -32,11 +32,11 @@ func TestNoopBus_Request_Errors(t *testing.T) {
 
 func TestNoopStorage_All_Error(t *testing.T) {
 	var s StorageI = &NoopStorage{}
-	_, _, err := s.Get("foo")
+	_, _, err := s.Get(t.Context(), "foo")
 	require.Error(t, err)
-	err = s.Set("foo", []byte("bar"))
+	err = s.Set(t.Context(), "foo", []byte("bar"))
 	require.Error(t, err)
-	err = s.Delete("foo")
+	err = s.Delete(t.Context(), "foo")
 	require.Error(t, err)
 }
 

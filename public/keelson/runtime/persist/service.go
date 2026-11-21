@@ -1,6 +1,7 @@
 package persist
 
 import (
+	"context"
 	"strings"
 
 	"github.com/rs/zerolog"
@@ -97,18 +98,18 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	}
 	switch op {
 	case OpGet:
-		inst.handleGet(msg.Reply, ref, key)
+		inst.handleGet(msg.Context(), msg.Reply, ref, key)
 	case OpSet:
-		inst.handleSet(msg.Reply, ref, key, msg.Payload)
+		inst.handleSet(msg.Context(), msg.Reply, ref, key, msg.Payload)
 	case OpDelete:
-		inst.handleDelete(msg.Reply, ref, key)
+		inst.handleDelete(msg.Context(), msg.Reply, ref, key)
 	default:
 		inst.replyError(msg.Reply, "unknown op: "+op)
 	}
 }
 
-func (inst *Service) handleGet(replySubject string, ref StorageRef, key string) {
-	value, found, err := inst.backend.Get(ref, key)
+func (inst *Service) handleGet(ctx context.Context, replySubject string, ref StorageRef, key string) {
+	value, found, err := inst.backend.Get(ctx, ref, key)
 	if err != nil {
 		inst.replyError(replySubject, err.Error())
 		return
@@ -116,8 +117,8 @@ func (inst *Service) handleGet(replySubject string, ref StorageRef, key string) 
 	inst.reply(replySubject, PersistReply{Found: found, Value: value})
 }
 
-func (inst *Service) handleSet(replySubject string, ref StorageRef, key string, value []byte) {
-	err := inst.backend.Set(ref, key, value)
+func (inst *Service) handleSet(ctx context.Context, replySubject string, ref StorageRef, key string, value []byte) {
+	err := inst.backend.Set(ctx, ref, key, value)
 	if err != nil {
 		inst.replyError(replySubject, err.Error())
 		return
@@ -125,8 +126,8 @@ func (inst *Service) handleSet(replySubject string, ref StorageRef, key string, 
 	inst.reply(replySubject, PersistReply{})
 }
 
-func (inst *Service) handleDelete(replySubject string, ref StorageRef, key string) {
-	err := inst.backend.Delete(ref, key)
+func (inst *Service) handleDelete(ctx context.Context, replySubject string, ref StorageRef, key string) {
+	err := inst.backend.Delete(ctx, ref, key)
 	if err != nil {
 		inst.replyError(replySubject, err.Error())
 		return

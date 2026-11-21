@@ -48,7 +48,7 @@ func (inst *App) loadSimpleView() {
 	storage := inst.simpleStore
 	// Not a task: nothing the person would want listed or stopped.
 	inst.simpleJob.Start(nil, bgjob.Spec{Kind: "chat-simple-view", Title: "the view setting"}, func(context.Context) (on *bool, err error) {
-		v, found, err := storage.Get(simpleViewKey)
+		v, found, err := storage.Get(inst.ioCtx, simpleViewKey)
 		if err != nil {
 			return
 		}
@@ -90,7 +90,7 @@ func (inst *App) syncSimpleView() {
 	}
 	started := inst.offFrame(func(context.Context) {
 		defer inst.simpleWriting.Store(false)
-		if err := storage.Set(simpleViewKey, []byte(value)); err != nil {
+		if err := storage.Set(inst.ioCtx, simpleViewKey, []byte(value)); err != nil {
 			inst.log.Debug().Err(err).Msg("chat: keep the simple view setting")
 		}
 	})

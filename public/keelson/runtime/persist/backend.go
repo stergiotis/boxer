@@ -16,6 +16,8 @@
 package persist
 
 import (
+	"context"
+
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
 
@@ -70,11 +72,12 @@ func (inst StorageRef) StateAppId() (id app.AppIdT) {
 // identity alongside it for backends that record provenance.
 //
 // All methods are expected to be safe for concurrent use. Errors propagate
-// to the requester as PersistReply.Error.
+// to the requester as PersistReply.Error. Each call runs under ctx — the
+// service passes the request's (app.Msg.Context) — and ends when it does.
 type StorageBackendI interface {
-	Get(ref StorageRef, key string) (value []byte, found bool, err error)
-	Set(ref StorageRef, key string, value []byte) (err error)
-	Delete(ref StorageRef, key string) (err error)
+	Get(ctx context.Context, ref StorageRef, key string) (value []byte, found bool, err error)
+	Set(ctx context.Context, ref StorageRef, key string, value []byte) (err error)
+	Delete(ctx context.Context, ref StorageRef, key string) (err error)
 }
 
 // Convenience: a backend that knows the AppId of every call (when the caller

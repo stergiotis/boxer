@@ -90,16 +90,16 @@ func TestAppStateProviderReadsTheStore(t *testing.T) {
 	t.Cleanup(backend.Close)
 
 	play := persist.StorageRef{Alias: "play", AppId: "github.com/example/play", InstanceKey: 3}
-	require.NoError(t, backend.Set(play, "tabs", []byte("v1")))
-	require.NoError(t, backend.Set(play, "tabs", []byte("v2-longer")))
-	require.NoError(t, backend.Set(play, "gone", []byte("x")))
-	require.NoError(t, backend.Delete(play, "gone"))
+	require.NoError(t, backend.Set(t.Context(), play, "tabs", []byte("v1")))
+	require.NoError(t, backend.Set(t.Context(), play, "tabs", []byte("v2-longer")))
+	require.NoError(t, backend.Set(t.Context(), play, "gone", []byte("x")))
+	require.NoError(t, backend.Delete(t.Context(), play, "gone"))
 	past := time.Now().UTC().Add(-time.Minute)
-	require.NoError(t, backend.WriteWorkingset(statestore.WorkingsetRow{
+	require.NoError(t, backend.WriteWorkingset(t.Context(), statestore.WorkingsetRow{
 		AppId: "github.com/example/tally", Name: "default", Kind: "tallyLaunch",
 		Config: []byte("cfg"), TileKey: 5, Reason: "shutdown", Ts: past,
 	}))
-	require.NoError(t, backend.WriteColumnWidth(statestore.ColumnWidthRow{
+	require.NoError(t, backend.WriteColumnWidth(t.Context(), statestore.ColumnWidthRow{
 		AppId: "github.com/example/play", InstanceKey: 3, Tier: statestore.ColWidthTierColumn,
 		ColumnKey: "ab12", Points: 90, FontSize: 12, Ts: past,
 	}))

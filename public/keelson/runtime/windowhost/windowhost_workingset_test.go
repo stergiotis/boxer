@@ -138,7 +138,7 @@ func TestWorkingset_DirtyCloseWritesRow(t *testing.T) {
 	assert.Equal(t, "run-xyz", rows[0].RunId)
 	assert.Equal(t, "user-close", rows[0].Reason, "the stop reason is the save provenance")
 
-	cfg, kind, found, err := facts.LatestWorkingset("test.ws", WorkingsetDefaultName)
+	cfg, kind, found, err := facts.LatestWorkingset(t.Context(), "test.ws", WorkingsetDefaultName)
 	require.NoError(t, err)
 	assert.True(t, found)
 	assert.Equal(t, testCfgBytes, cfg)
@@ -365,7 +365,7 @@ func TestWorkingset_NoFactsStoreSkipsCompose(t *testing.T) {
 // restores it.
 func seedWorkingset(t *testing.T, facts testStores, id app.AppIdT, cfg []byte) {
 	t.Helper()
-	err := facts.WriteWorkingset(statestore.WorkingsetRow{
+	err := facts.WriteWorkingset(t.Context(), statestore.WorkingsetRow{
 		RunId: "run-prev", AppId: id, Name: WorkingsetDefaultName,
 		Kind: testCfgKind, Config: cfg, TileKey: 1, Reason: "user-close",
 	})
@@ -433,7 +433,7 @@ func TestRestore_KindMismatchDegradesToPlain(t *testing.T) {
 	// The app's launch kind moved since the record was written.
 	a := &wsApp{manifest: mkWorkingsetManifest("test.ws")}
 	h, facts := newWorkingsetHost(t, a)
-	err := facts.WriteWorkingset(statestore.WorkingsetRow{
+	err := facts.WriteWorkingset(t.Context(), statestore.WorkingsetRow{
 		AppId: "test.ws", Name: WorkingsetDefaultName,
 		Kind: "someOtherKind", Config: testCfgBytes,
 	})
@@ -462,7 +462,7 @@ func TestRestore_TombstonedRecordOpensPlain(t *testing.T) {
 	a := &wsApp{manifest: mkWorkingsetManifest("test.ws")}
 	h, facts := newWorkingsetHost(t, a)
 	seedWorkingset(t, facts, "test.ws", testCfgBytes)
-	require.NoError(t, facts.DeleteWorkingset("test.ws", WorkingsetDefaultName))
+	require.NoError(t, facts.DeleteWorkingset(t.Context(), "test.ws", WorkingsetDefaultName))
 
 	_, err := h.Open("test.ws")
 	require.NoError(t, err)

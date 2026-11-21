@@ -306,7 +306,7 @@ func TestColumnWidthsPersist(t *testing.T) {
 	store := statestore.NewMemory()
 	appId := app.AppIdT(manifest.Id)
 	minW, maxW := float64(recordtable.DragMinWidth(0)), float64(recordtable.MaxColumnWidth)
-	res, err := colwidth.New(store, colwidth.Opts{AppId: appId, MinPoints: minW, MaxPoints: maxW, Debounce: time.Millisecond})
+	res, err := colwidth.New(t.Context(), store, colwidth.Opts{AppId: appId, MinPoints: minW, MaxPoints: maxW, Debounce: time.Millisecond})
 	require.NoError(t, err)
 	require.NoError(t, res.Load())
 	cols := recordtable.WidthColumns(jobsSchema, jobGridColumns(nil), "", true)
@@ -339,7 +339,7 @@ func TestColumnWidthsPersist(t *testing.T) {
 	_, err = res.Flush(now.Add(20 * time.Second))
 	require.NoError(t, err)
 
-	again, err := colwidth.New(store, colwidth.Opts{AppId: appId, MinPoints: minW, MaxPoints: maxW})
+	again, err := colwidth.New(t.Context(), store, colwidth.Opts{AppId: appId, MinPoints: minW, MaxPoints: maxW})
 	require.NoError(t, err)
 	require.NoError(t, again.Load())
 	got = again.Resolve(jobsTableTag, cols, 0, defaults)

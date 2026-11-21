@@ -34,10 +34,13 @@ func stateEntryOf(ent *persiststore.PersistEntity) (e StateEntry) {
 
 // LiveEntries returns every live entry appId owns, of every kind — one live
 // scan of the Owner component every state row carries.
-func (inst *StoreBackend) LiveEntries(appId app.AppIdT) (entries []StateEntry, err error) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	for ent, serr := range inst.st.ScanLiveOwner(context.Background(), recordstore.ScanOpts{}) {
+func (inst *StoreBackend) LiveEntries(ctx context.Context, appId app.AppIdT) (entries []StateEntry, err error) {
+	ctx, release, err := inst.lock(ctx)
+	if err != nil {
+		return
+	}
+	defer release()
+	for ent, serr := range inst.st.ScanLiveOwner(ctx, recordstore.ScanOpts{}) {
 		if serr != nil {
 			err = eb.Build().Str("appId", string(appId)).Errorf("persist: live entries: %w", serr)
 			entries = nil
@@ -52,11 +55,12 @@ func (inst *StoreBackend) LiveEntries(appId app.AppIdT) (entries []StateEntry, e
 
 // EntryAt reads the live entry at entityId through the cache view. A key
 // never written and a deleted key both answer found=false.
-func (inst *StoreBackend) EntryAt(entityId string) (e StateEntry, found bool, err error) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	ctx, cancel := context.WithTimeout(context.Background(), CallTimeout)
-	defer cancel()
+func (inst *StoreBackend) EntryAt(ctx context.Context, entityId string) (e StateEntry, found bool, err error) {
+	ctx, release, err := inst.lock(ctx)
+	if err != nil {
+		return
+	}
+	defer release()
 	ent, found, err := inst.pc.GetFetch(ctx, entityId)
 	if err != nil {
 		err = eb.Build().Str("entityId", entityId).Errorf("persist: entry at: %w", err)
@@ -74,10 +78,13 @@ func (inst *StoreBackend) EntryAt(entityId string) (e StateEntry, found bool, er
 // DeleteEntity tombstones the entry at entityId. Like every mutating call
 // here it is on disk, or never happened, when it returns; the attached cache
 // view sees the tombstone at once, so the owning app's next read is absent.
-func (inst *StoreBackend) DeleteEntity(entityId string) (err error) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	err = inst.landLocked(inst.st.Delete(entityId, time.Now().UTC()))
+func (inst *StoreBackend) DeleteEntity(ctx context.Context, entityId string) (err error) {
+	ctx, release, err := inst.lock(ctx)
+	if err != nil {
+		return
+	}
+	defer release()
+	err = inst.landLocked(ctx, inst.st.Delete(entityId, time.Now().UTC()))
 	if err != nil {
 		err = eb.Build().Str("entityId", entityId).Errorf("persist: delete entity: %w", err)
 	}
@@ -90,12 +97,15 @@ func (inst *StoreBackend) DeleteEntity(entityId string) (err error) {
 // app kept. On an error the pending rows are discarded; which tombstones
 // landed is not promised either way, and a caller that must say so reads
 // the live entries again.
-func (inst *StoreBackend) DeleteEntities(entityIds []string) (err error) {
+func (inst *StoreBackend) DeleteEntities(ctx context.Context, entityIds []string) (err error) {
 	if len(entityIds) == 0 {
 		return
 	}
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
+	ctx, release, err := inst.lock(ctx)
+	if err != nil {
+		return
+	}
+	defer release()
 	now := time.Now().UTC()
 	for _, id := range entityIds {
 		err = inst.st.Delete(id, now)
@@ -105,7 +115,7 @@ func (inst *StoreBackend) DeleteEntities(entityIds []string) (err error) {
 			return
 		}
 	}
-	err = inst.flushLocked()
+	err = inst.flushLocked(ctx)
 	if err != nil {
 		err = eb.Build().Int("entities", len(entityIds)).Errorf("persist: delete entities: %w", err)
 	}

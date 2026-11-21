@@ -43,22 +43,25 @@ func cloneBytes(b []byte) []byte {
 // landLocked finishes a mutating call: a failed commit discards the frame's
 // rows, a successful one flushes them. Either way the operation is on disk
 // or never happened when this returns.
-func (inst *StoreBackend) landLocked(commitErr error) (err error) {
+func (inst *StoreBackend) landLocked(ctx context.Context, commitErr error) (err error) {
 	if commitErr != nil {
 		inst.st.DiscardPending()
 		return commitErr
 	}
-	return inst.flushLocked()
+	return inst.flushLocked(ctx)
 }
 
 // WriteWorkingset records row as the newest version of (AppId, Name). The
 // window that wrote it and its run ride on the row's Owner component; a
 // row without a run id is stamped with this process's.
-func (inst *StoreBackend) WriteWorkingset(row statestore.WorkingsetRow) (err error) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
+func (inst *StoreBackend) WriteWorkingset(ctx context.Context, row statestore.WorkingsetRow) (err error) {
+	ctx, release, err := inst.lock(ctx)
+	if err != nil {
+		return
+	}
+	defer release()
 	id := persiststore.WorkingsetKey(string(row.AppId), row.Name)
-	err = inst.landLocked(inst.st.Begin(id, orderOf(row.Ts)).
+	err = inst.landLocked(ctx, inst.st.Begin(id, orderOf(row.Ts)).
 		AddOwner(inst.owner(id, row.AppId, row.RunId, row.TileKey)).
 		// Cloned: the builder's write-through mirror holds this slice, so
 		// the caller recycling its buffer would change what a later
@@ -74,11 +77,12 @@ func (inst *StoreBackend) WriteWorkingset(row statestore.WorkingsetRow) (err err
 // LatestWorkingset returns the live record for (appId, name), through the
 // cache view. A key never written and a deleted key both answer
 // found=false with no error.
-func (inst *StoreBackend) LatestWorkingset(appId app.AppIdT, name string) (cfg []byte, kind string, found bool, err error) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	ctx, cancel := context.WithTimeout(context.Background(), CallTimeout)
-	defer cancel()
+func (inst *StoreBackend) LatestWorkingset(ctx context.Context, appId app.AppIdT, name string) (cfg []byte, kind string, found bool, err error) {
+	ctx, release, err := inst.lock(ctx)
+	if err != nil {
+		return
+	}
+	defer release()
 	ent, found, err := inst.pc.GetFetch(ctx, persiststore.WorkingsetKey(string(appId), name))
 	if err != nil {
 		err = eb.Build().Str("appId", string(appId)).Str("name", name).Errorf("persist: latest workingset: %w", err)
@@ -103,11 +107,14 @@ func (inst *StoreBackend) LatestWorkingset(appId app.AppIdT, name string) (cfg [
 
 // ListWorkingsets returns the live record of every (AppId, Name) the table
 // holds, ordered by statestore.SortWorkingsets.
-func (inst *StoreBackend) ListWorkingsets() (rows []statestore.WorkingsetRow, err error) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
+func (inst *StoreBackend) ListWorkingsets(ctx context.Context) (rows []statestore.WorkingsetRow, err error) {
+	ctx, release, err := inst.lock(ctx)
+	if err != nil {
+		return
+	}
+	defer release()
 	rows = []statestore.WorkingsetRow{}
-	for ent, serr := range inst.st.ScanLiveWorkingset(context.Background(), recordstore.ScanOpts{KeyPrefix: persiststore.WorkingsetKeyPrefix}) {
+	for ent, serr := range inst.st.ScanLiveWorkingset(ctx, recordstore.ScanOpts{KeyPrefix: persiststore.WorkingsetKeyPrefix}) {
 		if serr != nil {
 			err = eb.Build().Errorf("persist: list workingsets: %w", serr)
 			rows = nil
@@ -136,10 +143,13 @@ func (inst *StoreBackend) ListWorkingsets() (rows []statestore.WorkingsetRow, er
 
 // DeleteWorkingset appends a tombstone for (appId, name); the record reads
 // as absent until the next write, and its history stays in the trail.
-func (inst *StoreBackend) DeleteWorkingset(appId app.AppIdT, name string) (err error) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	err = inst.landLocked(inst.st.Delete(persiststore.WorkingsetKey(string(appId), name), time.Now().UTC()))
+func (inst *StoreBackend) DeleteWorkingset(ctx context.Context, appId app.AppIdT, name string) (err error) {
+	ctx, release, err := inst.lock(ctx)
+	if err != nil {
+		return
+	}
+	defer release()
+	err = inst.landLocked(ctx, inst.st.Delete(persiststore.WorkingsetKey(string(appId), name), time.Now().UTC()))
 	if err != nil {
 		err = eb.Build().Str("appId", string(appId)).Str("name", name).Errorf("persist: delete workingset: %w", err)
 	}
@@ -149,11 +159,14 @@ func (inst *StoreBackend) DeleteWorkingset(appId app.AppIdT, name string) (err e
 // WriteColumnWidth records row as the newest version of its override key.
 // The capturing window rides on Owner.InstanceKey and the run is this
 // process's.
-func (inst *StoreBackend) WriteColumnWidth(row statestore.ColumnWidthRow) (err error) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
+func (inst *StoreBackend) WriteColumnWidth(ctx context.Context, row statestore.ColumnWidthRow) (err error) {
+	ctx, release, err := inst.lock(ctx)
+	if err != nil {
+		return
+	}
+	defer release()
 	id := persiststore.ColumnWidthKey(string(row.AppId), row.Tier, row.Scope, row.ColumnKey)
-	err = inst.landLocked(inst.st.Begin(id, orderOf(row.Ts)).
+	err = inst.landLocked(ctx, inst.st.Begin(id, orderOf(row.Ts)).
 		AddOwner(inst.owner(id, row.AppId, "", row.InstanceKey)).
 		AddColumnWidth(persiststore.ColumnWidth{
 			ID: id, Tier: row.Tier, Scope: row.Scope, ColumnKey: row.ColumnKey,
@@ -170,11 +183,14 @@ func (inst *StoreBackend) WriteColumnWidth(row statestore.ColumnWidthRow) (err e
 // appId — one key-range read over that app's column-width prefix, which
 // by construction excludes every other app, including ones nested under
 // appId's import path.
-func (inst *StoreBackend) ListColumnWidths(appId app.AppIdT) (rows []statestore.ColumnWidthRow, err error) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
+func (inst *StoreBackend) ListColumnWidths(ctx context.Context, appId app.AppIdT) (rows []statestore.ColumnWidthRow, err error) {
+	ctx, release, err := inst.lock(ctx)
+	if err != nil {
+		return
+	}
+	defer release()
 	rows = []statestore.ColumnWidthRow{}
-	for ent, serr := range inst.st.ScanLiveColumnWidth(context.Background(), recordstore.ScanOpts{KeyPrefix: persiststore.ColumnWidthAppPrefix(string(appId))}) {
+	for ent, serr := range inst.st.ScanLiveColumnWidth(ctx, recordstore.ScanOpts{KeyPrefix: persiststore.ColumnWidthAppPrefix(string(appId))}) {
 		if serr != nil {
 			err = eb.Build().Str("appId", string(appId)).Errorf("persist: list column widths: %w", serr)
 			rows = nil
@@ -204,10 +220,13 @@ func (inst *StoreBackend) ListColumnWidths(appId app.AppIdT) (rows []statestore.
 // DeleteColumnWidth tombstones one override key. Clearing a key never
 // written is not an error; the tombstone becomes the newest row of a key
 // that had none.
-func (inst *StoreBackend) DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	err = inst.landLocked(inst.st.Delete(persiststore.ColumnWidthKey(string(appId), tier, scope, columnKey), time.Now().UTC()))
+func (inst *StoreBackend) DeleteColumnWidth(ctx context.Context, appId app.AppIdT, tier string, scope string, columnKey string) (err error) {
+	ctx, release, err := inst.lock(ctx)
+	if err != nil {
+		return
+	}
+	defer release()
+	err = inst.landLocked(ctx, inst.st.Delete(persiststore.ColumnWidthKey(string(appId), tier, scope, columnKey), time.Now().UTC()))
 	if err != nil {
 		err = eb.Build().Str("appId", string(appId)).Str("tier", tier).Str("columnKey", columnKey).Errorf("persist: delete column width: %w", err)
 	}

@@ -1,6 +1,7 @@
 package workstatelet
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"sync"
@@ -46,7 +47,7 @@ type Store struct {
 // StartStore builds the store over the runtime persist facility on bus and
 // mints what is stored. Call it after the books are minted into reg: the
 // collision rule reads the registry.
-func StartStore(reg *app.Registry, cat *Catalog, bus *inprocbus.Inst, logger zerolog.Logger) (inst *Store, err error) {
+func StartStore(ctx context.Context, reg *app.Registry, cat *Catalog, bus *inprocbus.Inst, logger zerolog.Logger) (inst *Store, err error) {
 	if reg == nil || cat == nil || bus == nil {
 		err = eb.Build().Bool("reg", reg != nil).Bool("catalog", cat != nil).Bool("bus", bus != nil).
 			Errorf("the store needs a registry, a catalog and a bus")
@@ -62,7 +63,7 @@ func StartStore(reg *app.Registry, cat *Catalog, bus *inprocbus.Inst, logger zer
 		return
 	}
 	inst = NewStore(reg, cat, storage, logger)
-	inst.Load()
+	inst.Load(ctx)
 	return
 }
 
@@ -75,8 +76,8 @@ func NewStore(reg *app.Registry, cat *Catalog, storage app.StorageI, logger zero
 // Load parses and mints every stored document, best-effort per document: one
 // that no longer parses, or whose slug a committed document took meanwhile,
 // is skipped with a warning.
-func (inst *Store) Load() {
-	raw, found, err := inst.storage.Get(storeIndexKey)
+func (inst *Store) Load(ctx context.Context) {
+	raw, found, err := inst.storage.Get(ctx, storeIndexKey)
 	if err != nil {
 		inst.log.Warn().Err(err).Msg("workstatelet: store index unreadable; stored documents skipped")
 		return
@@ -88,7 +89,7 @@ func (inst *Store) Load() {
 		if slug == "" {
 			continue
 		}
-		src, docFound, gerr := inst.storage.Get(storeKeyPrefix + slug)
+		src, docFound, gerr := inst.storage.Get(ctx, storeKeyPrefix+slug)
 		if gerr != nil || !docFound {
 			inst.log.Warn().Err(gerr).Str("slug", slug).Msg("workstatelet: indexed document is not stored; skipped")
 			continue
@@ -115,7 +116,7 @@ func (inst *Store) Load() {
 // Save composes doc, persists it under its slug and mints it, or replaces
 // the document a stored slug opens. A slug a committed document holds is
 // refused. replaced reports which of the two happened.
-func (inst *Store) Save(doc Doc) (id app.AppIdT, replaced bool, err error) {
+func (inst *Store) Save(ctx context.Context, doc Doc) (id app.AppIdT, replaced bool, err error) {
 	composed, err := Compose(doc)
 	if err != nil {
 		return
@@ -135,11 +136,11 @@ func (inst *Store) Save(doc Doc) (id app.AppIdT, replaced bool, err error) {
 		err = eb.Build().Str("slug", parsed.Slug).Errorf("slug is taken by a committed workstatelet")
 		return
 	}
-	if err = inst.storage.Set(storeKeyPrefix+parsed.Slug, parsed.Source); err != nil {
+	if err = inst.storage.Set(ctx, storeKeyPrefix+parsed.Slug, parsed.Source); err != nil {
 		err = eb.Build().Str("slug", parsed.Slug).Errorf("persist document: %w", err)
 		return
 	}
-	if err = inst.updateIndexLocked(parsed.Slug); err != nil {
+	if err = inst.updateIndexLocked(ctx, parsed.Slug); err != nil {
 		err = eb.Build().Str("slug", parsed.Slug).Errorf("persist index: %w", err)
 		return
 	}
@@ -157,8 +158,8 @@ func (inst *Store) Save(doc Doc) (id app.AppIdT, replaced bool, err error) {
 // updateIndexLocked adds slug to the persisted index. The index is rebuilt
 // from what is stored rather than from this boot's minted set, so a document
 // skipped at Load stays listed and is not orphaned by the next save.
-func (inst *Store) updateIndexLocked(slug string) (err error) {
-	raw, _, err := inst.storage.Get(storeIndexKey)
+func (inst *Store) updateIndexLocked(ctx context.Context, slug string) (err error) {
+	raw, _, err := inst.storage.Get(ctx, storeIndexKey)
 	if err != nil {
 		return
 	}
@@ -173,7 +174,7 @@ func (inst *Store) updateIndexLocked(slug string) (err error) {
 	}
 	slugs = append(slugs, slug)
 	slices.Sort(slugs)
-	err = inst.storage.Set(storeIndexKey, []byte(strings.Join(slugs, "\n")))
+	err = inst.storage.Set(ctx, storeIndexKey, []byte(strings.Join(slugs, "\n")))
 	return
 }
 
@@ -192,7 +193,7 @@ func NewMemoryStorage() (inst *MemoryStorage) {
 	return &MemoryStorage{m: make(map[string][]byte, 4)}
 }
 
-func (inst *MemoryStorage) Get(key string) (value []byte, found bool, err error) {
+func (inst *MemoryStorage) Get(ctx context.Context, key string) (value []byte, found bool, err error) {
 	inst.mu.Lock()
 	v, found := inst.m[key]
 	inst.mu.Unlock()
@@ -200,14 +201,14 @@ func (inst *MemoryStorage) Get(key string) (value []byte, found bool, err error)
 	return
 }
 
-func (inst *MemoryStorage) Set(key string, value []byte) (err error) {
+func (inst *MemoryStorage) Set(ctx context.Context, key string, value []byte) (err error) {
 	inst.mu.Lock()
 	inst.m[key] = slices.Clone(value)
 	inst.mu.Unlock()
 	return
 }
 
-func (inst *MemoryStorage) Delete(key string) (err error) {
+func (inst *MemoryStorage) Delete(ctx context.Context, key string) (err error) {
 	inst.mu.Lock()
 	delete(inst.m, key)
 	inst.mu.Unlock()

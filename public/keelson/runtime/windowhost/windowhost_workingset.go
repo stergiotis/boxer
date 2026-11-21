@@ -1,6 +1,7 @@
 package windowhost
 
 import (
+	"context"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
@@ -48,7 +49,7 @@ func (inst *Inst) restoreWorkingset(m app.Manifest) (cfg []byte) {
 	if state == nil {
 		return
 	}
-	stored, kind, found, err := state.LatestWorkingset(m.Id, WorkingsetDefaultName)
+	stored, kind, found, err := state.LatestWorkingset(inst.ctx, m.Id, WorkingsetDefaultName)
 	if err != nil {
 		inst.logger.Debug().Err(err).Str("id", string(m.Id)).
 			Msg("windowhost: workingset lookup failed; opening plainly")
@@ -94,7 +95,7 @@ func (inst *Inst) restoreWorkingset(m app.Manifest) (cfg []byte) {
 // an ephemeral seed cannot poison what the next plain open inherits.
 // There is deliberately no byte comparison against the stored record — a
 // composed config carrying its own timestamp is never byte-equal anyway.
-func (inst *Inst) saveWorkingset(w *window, reason string) {
+func (inst *Inst) saveWorkingset(ctx context.Context, w *window, reason string) {
 	if !w.manifest.Workingset {
 		return
 	}
@@ -149,7 +150,7 @@ func (inst *Inst) saveWorkingset(w *window, reason string) {
 			Msg("windowhost: composed workingset refused by kindcheck; skipping the save")
 		return
 	}
-	wErr := state.WriteWorkingset(statestore.WorkingsetRow{
+	wErr := state.WriteWorkingset(ctx, statestore.WorkingsetRow{
 		RunId:   runId,
 		AppId:   w.manifest.Id,
 		Name:    WorkingsetDefaultName,

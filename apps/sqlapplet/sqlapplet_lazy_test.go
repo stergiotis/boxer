@@ -43,17 +43,17 @@ func TestMintDefersClassification(t *testing.T) {
 	assert.Equal(t, analysis.QuerySecurityMutating, reader.Class, "pending reads as the conservative class")
 
 	cfg := EmbedConfig{Log: zerolog.Nop(), EndpointURL: "http://example.invalid/query"}
-	pa, err := NewEmbedded(reader, cfg)
+	pa, err := NewEmbedded(t.Context(), reader, cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { pa.Close() })
 	assert.Equal(t, analysis.QuerySecurityRead, reader.Class)
 	assert.True(t, pa.AutoRun, "a read-class applet still runs on open")
 
 	broken := mintedDef(t, reg, "broken")
-	_, err = NewEmbedded(broken, cfg)
+	_, err = NewEmbedded(t.Context(), broken, cfg)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not parse")
-	_, again := NewEmbedded(broken, cfg)
+	_, again := NewEmbedded(t.Context(), broken, cfg)
 	assert.Equal(t, err, again, "the classification error is computed once and kept")
 }
 

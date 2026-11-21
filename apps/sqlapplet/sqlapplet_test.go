@@ -308,7 +308,7 @@ func TestNewEmbedded(t *testing.T) {
 		Class:    analysis.QuerySecurityRead,
 		Datasets: []string{"items"},
 	}
-	pa, err := NewEmbedded(def, EmbedConfig{
+	pa, err := NewEmbedded(t.Context(), def, EmbedConfig{
 		StampAppId:  "embedder#demo",
 		RunId:       "run1",
 		Log:         zerolog.Nop(),
@@ -320,7 +320,7 @@ func TestNewEmbedded(t *testing.T) {
 	t.Cleanup(func() { pa.Close() })
 
 	// A malformed binding is rejected.
-	_, err = NewEmbedded(def, EmbedConfig{
+	_, err = NewEmbedded(t.Context(), def, EmbedConfig{
 		Log:         zerolog.Nop(),
 		EndpointURL: "http://example.invalid/query",
 		Bindings:    map[string]string{"items": "bad-handle"},

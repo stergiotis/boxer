@@ -75,10 +75,10 @@ func TestStoreBackend_ACallAgainstAHungServerIsBounded(t *testing.T) {
 	exec.hang.Store(true)
 	ref := StorageRef{Alias: "a", AppId: "test.app"}
 	t0 := time.Now()
-	err = b.Set(ref, "k", []byte("v"))
+	err = b.Set(t.Context(), ref, "k", []byte("v"))
 	require.Error(t, err)
 	assert.Less(t, time.Since(t0), CallTimeout+5*time.Second)
 
 	exec.hang.Store(false)
-	require.NoError(t, b.Set(ref, "k", []byte("w")), "the backend answers again once the server does")
+	require.NoError(t, b.Set(t.Context(), ref, "k", []byte("w")), "the backend answers again once the server does")
 }

@@ -1,6 +1,7 @@
 package appletstore
 
 import (
+	"context"
 	"regexp"
 	"slices"
 	"strings"
@@ -91,7 +92,8 @@ type Service struct {
 // and subscribes the save endpoint. Call it once at startup, after the
 // committed books are minted into reg: the collision rule ("curation
 // outranks runtime state", O4-D3) reads the registry as the source of truth.
-func Start(reg *app.Registry, bus *inprocbus.Inst, minter MinterI, logger zerolog.Logger) (svc *Service, err error) {
+// ctx bounds the load of the stored corpus.
+func Start(ctx context.Context, reg *app.Registry, bus *inprocbus.Inst, minter MinterI, logger zerolog.Logger) (svc *Service, err error) {
 	if reg == nil || bus == nil || minter == nil {
 		err = eb.Build().Bool("reg", reg != nil).Bool("bus", bus != nil).Bool("minter", minter != nil).
 			Errorf("appletstore: Start needs a registry, a bus and a minter")
@@ -118,7 +120,7 @@ func Start(reg *app.Registry, bus *inprocbus.Inst, minter MinterI, logger zerolo
 		busClient: busClient,
 		stored:    make(map[string]struct{}, 4),
 	}
-	svc.loadStored()
+	svc.loadStored(ctx)
 	unsub, subErr := busClient.Subscribe(SubjectSave, svc.handleSave)
 	if subErr != nil {
 		err = eh.Errorf("appletstore: Start: subscribe: %w", subErr)
@@ -160,8 +162,8 @@ func (inst *Service) mint(def Definition) (err error) {
 // best-effort per document. A stored document that no longer parses, or
 // whose slug a committed applet took meanwhile, is skipped with a warning.
 // Boot never blocks on runtime state.
-func (inst *Service) loadStored() {
-	raw, found, err := inst.storage.Get(indexKey)
+func (inst *Service) loadStored(ctx context.Context) {
+	raw, found, err := inst.storage.Get(ctx, indexKey)
 	if err != nil || !found || len(raw) == 0 {
 		if err != nil {
 			inst.log.Warn().Err(err).Msg("appletstore: store index unreadable; stored applets skipped")
@@ -172,7 +174,7 @@ func (inst *Service) loadStored() {
 		if slug == "" {
 			continue
 		}
-		doc, docFound, gerr := inst.storage.Get(keyPrefix + slug)
+		doc, docFound, gerr := inst.storage.Get(ctx, keyPrefix+slug)
 		if gerr != nil || !docFound {
 			inst.log.Warn().Err(gerr).Str("slug", slug).Msg("appletstore: indexed applet has no stored document; skipped")
 			continue
@@ -237,11 +239,11 @@ func (inst *Service) handleSave(msg *app.Msg) {
 		reply(SaveReply{Error: "slug " + def.Slug + " collides with a committed applet"})
 		return
 	}
-	if err = inst.storage.Set(keyPrefix+def.Slug, req.Doc); err != nil {
+	if err = inst.storage.Set(msg.Context(), keyPrefix+def.Slug, req.Doc); err != nil {
 		reply(SaveReply{Error: "persist document: " + err.Error()})
 		return
 	}
-	if err = inst.updateIndex(def.Slug); err != nil {
+	if err = inst.updateIndex(msg.Context(), def.Slug); err != nil {
 		reply(SaveReply{Error: "persist index: " + err.Error()})
 		return
 	}
@@ -261,8 +263,8 @@ func (inst *Service) handleSave(msg *app.Msg) {
 }
 
 // updateIndex appends slug to the stored-slug index if absent.
-func (inst *Service) updateIndex(slug string) (err error) {
-	raw, _, err := inst.storage.Get(indexKey)
+func (inst *Service) updateIndex(ctx context.Context, slug string) (err error) {
+	raw, _, err := inst.storage.Get(ctx, indexKey)
 	if err != nil {
 		return
 	}
@@ -272,7 +274,7 @@ func (inst *Service) updateIndex(slug string) (err error) {
 	}
 	slugs = append(slugs, slug)
 	joined := strings.TrimSpace(strings.Join(slugs, "\n"))
-	err = inst.storage.Set(indexKey, []byte(joined))
+	err = inst.storage.Set(ctx, indexKey, []byte(joined))
 	return
 }
 

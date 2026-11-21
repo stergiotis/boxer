@@ -1,6 +1,7 @@
 package trailviewer
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -360,13 +361,13 @@ type fakeStorage struct {
 	m  map[string][]byte
 }
 
-func (inst *fakeStorage) Get(key string) ([]byte, bool, error) {
+func (inst *fakeStorage) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	v, ok := inst.m[key]
 	return v, ok, nil
 }
-func (inst *fakeStorage) Set(key string, value []byte) error {
+func (inst *fakeStorage) Set(ctx context.Context, key string, value []byte) error {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if inst.m == nil {
@@ -375,7 +376,7 @@ func (inst *fakeStorage) Set(key string, value []byte) error {
 	inst.m[key] = value
 	return nil
 }
-func (inst *fakeStorage) Delete(key string) error {
+func (inst *fakeStorage) Delete(ctx context.Context, key string) error {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	delete(inst.m, key)
@@ -405,7 +406,7 @@ func TestASavedViewRoundTrips(t *testing.T) {
 	settle(inst)
 	require.NoError(t, inst.views.err)
 	assert.Equal(t, []string{"my task"}, inst.views.names())
-	stored, err := loadViews(st)
+	stored, err := loadViews(t.Context(), st)
 	require.NoError(t, err)
 	require.Len(t, stored, 1)
 	assert.Equal(t, "6h0m0s", stored[0].Last)
@@ -415,7 +416,7 @@ func TestASavedViewRoundTrips(t *testing.T) {
 	inst.applyTab(TabSeries)
 	require.NoError(t, inst.saveView("my task"))
 	settle(inst)
-	stored, _ = loadViews(st)
+	stored, _ = loadViews(t.Context(), st)
 	require.Len(t, stored, 1)
 	assert.Equal(t, "series", stored[0].Tab)
 
@@ -433,7 +434,7 @@ func TestASavedViewRoundTrips(t *testing.T) {
 
 	require.NoError(t, inst.writeViews(withoutView(inst.views.list, "my task"), "deleted"))
 	settle(inst)
-	stored, _ = loadViews(st)
+	stored, _ = loadViews(t.Context(), st)
 	assert.Empty(t, stored)
 }
 

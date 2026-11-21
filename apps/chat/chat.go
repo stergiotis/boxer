@@ -39,6 +39,9 @@ import (
 
 // App is one chat window.
 type App struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx context.Context
 	ids *c.WidgetIdStack
 	cli *llm.Client
 
@@ -320,6 +323,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	cli := llm.NewClient(bus)
 	inst.cli, inst.bus = cli, bus
 	inst.storage = ctx.Storage()
+	inst.ioCtx = app.ContextOf(ctx)
 	inst.simpleStore = simpleStoreFor(inst.storage, inst.preset != nil, topo.Self())
 	inst.loadSimpleView()
 	inst.startLevels()

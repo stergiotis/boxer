@@ -200,6 +200,9 @@ var viewModes = []struct {
 
 // App is the per-window mdedit instance.
 type App struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx context.Context
 	// ids is the per-instance WidgetIdStack. The host pre-pushes a
 	// window-unique salt onto it before every Frame() call (ADR-0026 §SD9,
 	// windowhost.renderWindowBody), so every id derived from it is unique
@@ -550,6 +553,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
 	inst.store = ctx.Storage()
+	inst.ioCtx = app.ContextOf(ctx)
 	inst.tasks = task.ForApp(ctx)
 	inst.scope = app.LifetimeOf(ctx)
 	inst.origin = mddocfacts.Origin{Run: ctx.RunId(), App: string(manifest.Id), Instance: ctx.InstanceKey()}
@@ -664,7 +668,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	for i := 0; i < 100 && inst.persistInFlight(); i++ {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if serr := inst.store.Set(docKey, []byte(inst.src)); serr != nil {
+	if serr := inst.store.Set(inst.ioCtx, docKey, []byte(inst.src)); serr != nil {
 		inst.logger.Warn().Err(serr).Msg("mdedit: final persist failed")
 	}
 	return
@@ -1485,7 +1489,7 @@ func (inst *App) autosave() {
 	inst.lastPersistAt = now
 	snapshot, store := inst.src, inst.store
 	started := inst.spawn(func(context.Context) {
-		err := store.Set(docKey, []byte(snapshot))
+		err := store.Set(inst.ioCtx, docKey, []byte(snapshot))
 		inst.mu.Lock()
 		inst.persisting = false
 		inst.persistDone = true
@@ -1506,7 +1510,7 @@ func (inst *App) restore() {
 	var value []byte
 	var found bool
 	err := task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: "mdedit.restore", Title: "restore the document"}, func() (err error) {
-		value, found, err = inst.store.Get(docKey)
+		value, found, err = inst.store.Get(inst.ioCtx, docKey)
 		return
 	})
 	if err != nil {

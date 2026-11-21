@@ -390,7 +390,7 @@ func TestAResumeRestoresTheSettings(t *testing.T) {
 func waitForStoredTitle(t *testing.T, storage app.StorageI, conversation string, title string) {
 	t.Helper()
 	require.Eventually(t, func() bool {
-		v, found, _ := storage.Get(titleStorePrefix + conversation)
+		v, found, _ := storage.Get(t.Context(), titleStorePrefix + conversation)
 		return found && string(v) == title
 	}, 5*time.Second, 5*time.Millisecond)
 }
@@ -401,14 +401,14 @@ type mapStorage struct {
 	m  map[string][]byte
 }
 
-func (inst *mapStorage) Get(key string) (value []byte, found bool, err error) {
+func (inst *mapStorage) Get(ctx context.Context, key string) (value []byte, found bool, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	value, found = inst.m[key]
 	return
 }
 
-func (inst *mapStorage) Set(key string, value []byte) (err error) {
+func (inst *mapStorage) Set(ctx context.Context, key string, value []byte) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if inst.m == nil {
@@ -418,7 +418,7 @@ func (inst *mapStorage) Set(key string, value []byte) (err error) {
 	return
 }
 
-func (inst *mapStorage) Delete(key string) (err error) {
+func (inst *mapStorage) Delete(ctx context.Context, key string) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	delete(inst.m, key)

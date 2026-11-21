@@ -196,7 +196,7 @@ func Run(ctx gocontext.Context, cfg *application.Config, opts RunOptions) (err e
 // applet store on the bus, the play host's passes, components and SQL
 // vocabulary, and the Go-dependency introspection tables.
 func registerHostExtras(rt *hostboot.Runtime) (err error) {
-	appletStore, storeErr := appletstore.Start(runtimeapp.DefaultRegistry, rt.Bus, sqlapplet.NewStoreMinter(), log.Logger)
+	appletStore, storeErr := appletstore.Start(rt.Context(), runtimeapp.DefaultRegistry, rt.Bus, sqlapplet.NewStoreMinter(), log.Logger)
 	if storeErr != nil {
 		log.Warn().Err(storeErr).Msg("appletstore: applet store unavailable")
 	} else {

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -41,17 +42,17 @@ type NoopStorage struct{}
 
 var _ StorageI = (*NoopStorage)(nil)
 
-func (inst *NoopStorage) Get(key string) (value []byte, found bool, err error) {
+func (inst *NoopStorage) Get(ctx context.Context, key string) (value []byte, found bool, err error) {
 	err = eb.Build().Str("key", key).Errorf("noopstorage: storage not available in M1")
 	return
 }
 
-func (inst *NoopStorage) Set(key string, value []byte) (err error) {
+func (inst *NoopStorage) Set(ctx context.Context, key string, value []byte) (err error) {
 	err = eb.Build().Str("key", key).Errorf("noopstorage: storage not available in M1")
 	return
 }
 
-func (inst *NoopStorage) Delete(key string) (err error) {
+func (inst *NoopStorage) Delete(ctx context.Context, key string) (err error) {
 	err = eb.Build().Str("key", key).Errorf("noopstorage: storage not available in M1")
 	return
 }

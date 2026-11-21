@@ -1,6 +1,7 @@
 package servicedemo
 
 import (
+	"context"
 	"strconv"
 	"testing"
 	"time"
@@ -15,12 +16,15 @@ import (
 
 type memStorage struct{ m map[string][]byte }
 
-func (s *memStorage) Get(key string) (value []byte, found bool, err error) {
+func (s *memStorage) Get(ctx context.Context, key string) (value []byte, found bool, err error) {
 	value, found = s.m[key]
 	return
 }
-func (s *memStorage) Set(key string, value []byte) (err error) { s.m[key] = value; return }
-func (s *memStorage) Delete(key string) (err error)            { delete(s.m, key); return }
+func (s *memStorage) Set(ctx context.Context, key string, value []byte) (err error) {
+	s.m[key] = value
+	return
+}
+func (s *memStorage) Delete(ctx context.Context, key string) (err error) { delete(s.m, key); return }
 
 func TestManifestIsAHeadlessApp(t *testing.T) {
 	require.NoError(t, manifest.Validate())
@@ -46,7 +50,7 @@ func TestTicksResumeFromStorageAndStopOnCancel(t *testing.T) {
 		t.Fatal("ticker did not stop on Cancel")
 	}
 	n := a.Ticks()
-	stored, found, _ := st.Get(TickKey)
+	stored, found, _ := st.Get(t.Context(), TickKey)
 	require.True(t, found)
 	assert.Equal(t, strconv.FormatUint(n, 10), string(stored))
 	require.NoError(t, a.Unmount(ctx))

@@ -57,7 +57,7 @@ func (f *fakeOpenBus) Request(subject string, payload []byte) (reply []byte, err
 func newOpenTestApp(t *testing.T, bus *fakeOpenBus) (inst *PlayApp) {
 	t.Helper()
 	inst = NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "SELECT 1", nil)
-	inst.SetCapabilities(bus, nil, zerolog.Nop())
+	inst.SetCapabilities(t.Context(), bus, nil, zerolog.Nop())
 	return
 }
 
@@ -101,7 +101,7 @@ func TestRequestOpenPlayground_ResolvesDatasetAliases(t *testing.T) {
 	bus := &fakeOpenBus{reply: launchreply.LaunchReply{WindowKey: 3}}
 	client := NewClient(ClientConfig{URL: "http://example.invalid"}, nil)
 	inst := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 4), "", nil)
-	inst.SetCapabilities(bus, nil, zerolog.Nop())
+	inst.SetCapabilities(t.Context(), bus, nil, zerolog.Nop())
 	require.NoError(t, inst.BindDataset("items", "adhoc_deadbeef01234567"))
 
 	inst.requestOpenPlayground(launchcfg.PlayLaunch{
@@ -269,7 +269,7 @@ func TestRequestOpenTally_DoesNotRewriteDatasetAliases(t *testing.T) {
 	bus := &fakeOpenBus{reply: launchreply.LaunchReply{WindowKey: 12}}
 	client := NewClient(ClientConfig{URL: "http://example.invalid"}, nil)
 	inst := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 4), "", nil)
-	inst.SetCapabilities(bus, nil, zerolog.Nop())
+	inst.SetCapabilities(t.Context(), bus, nil, zerolog.Nop())
 	require.NoError(t, inst.BindDataset("items", "adhoc_deadbeef01234567"))
 
 	inst.requestOpenTally(tallylaunch.TallyLaunch{Sql: "SELECT * FROM keelson('items')"})

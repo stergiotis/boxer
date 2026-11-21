@@ -57,7 +57,7 @@ func (inst *App) Manifest() (m app.Manifest) { return manifest }
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.log = ctx.Log()
 	start := uint64(0)
-	if raw, found, gErr := ctx.Storage().Get(TickKey); gErr == nil && found {
+	if raw, found, gErr := ctx.Storage().Get(app.ContextOf(ctx), TickKey); gErr == nil && found {
 		if n, pErr := strconv.ParseUint(string(raw), 10, 64); pErr == nil {
 			start = n
 		}
@@ -77,7 +77,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 			case <-t.C:
 				n++
 				inst.set(n)
-				if sErr := ctx.Storage().Set(TickKey, []byte(strconv.FormatUint(n, 10))); sErr != nil {
+				if sErr := ctx.Storage().Set(c, TickKey, []byte(strconv.FormatUint(n, 10))); sErr != nil {
 					inst.log.Debug().Err(sErr).Msg("servicedemo: tick not stored")
 				}
 			}

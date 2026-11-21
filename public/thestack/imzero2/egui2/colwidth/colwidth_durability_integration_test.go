@@ -75,7 +75,7 @@ func testClock() (capturedAt, flushedAt time.Time) {
 
 func newResolver(t *testing.T, store colwidth.StoreI) *colwidth.Resolver {
 	t.Helper()
-	r, err := colwidth.New(store, colwidth.Opts{AppId: "play"})
+	r, err := colwidth.New(t.Context(), store, colwidth.Opts{AppId: "play"})
 	require.NoError(t, err)
 	require.NoError(t, r.Load())
 	return r
@@ -225,7 +225,7 @@ func TestOverridesDoNotCrossApps_LiveCH(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, written, "play's override must exist before another app can fail to see it")
 
-	other, err := colwidth.New(reopen(t), colwidth.Opts{AppId: "imztop"})
+	other, err := colwidth.New(t.Context(), reopen(t), colwidth.Opts{AppId: "imztop"})
 	require.NoError(t, err)
 	require.NoError(t, other.Load())
 	assert.InDelta(t, 80.0, other.Resolve("attr-results", cols, 12, []float64{80})[0], 1e-6,

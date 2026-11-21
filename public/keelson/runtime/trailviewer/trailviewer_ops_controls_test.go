@@ -420,7 +420,7 @@ func TestSavedViewCommands(t *testing.T) {
 	v, err := query[struct{}, View](t, inst, opGetView, struct{}{})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"my task"}, v.SavedViews)
-	stored, err := loadViews(st)
+	stored, err := loadViews(t.Context(), st)
 	require.NoError(t, err)
 	require.Len(t, stored, 1)
 	assert.Equal(t, "tree", stored[0].Tab)
@@ -441,7 +441,7 @@ func TestSavedViewCommands(t *testing.T) {
 	settle()
 	require.NoError(t, inst.views.err)
 	assert.Empty(t, inst.views.names())
-	stored, _ = loadViews(st)
+	stored, _ = loadViews(t.Context(), st)
 	assert.Empty(t, stored)
 	assert.Equal(t, "", inst.Operations().ResourceValue(resViews))
 }

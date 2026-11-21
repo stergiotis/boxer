@@ -305,7 +305,7 @@ func TestPprofBookQueriesExecute(t *testing.T) {
 	t.Cleanup(binder.Close)
 	// Any instance will do as the bind target — the binder's contract is
 	// with the play instance's dataset ops, not with this buffer's aliases.
-	inner, err := NewEmbedded(pprofDefsBySlug(t)["profile-top"], EmbedConfig{
+	inner, err := NewEmbedded(t.Context(), pprofDefsBySlug(t)["profile-top"], EmbedConfig{
 		StampAppId: "test.rebind", Bus: appletBus, Log: logger, EndpointURL: srv.BaseURL() + "/query",
 	})
 	require.NoError(t, err)

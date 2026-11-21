@@ -2,7 +2,6 @@ package persist
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -54,22 +53,23 @@ import (
 // # Concurrency
 //
 // A generated store is single-goroutine (ADR-0100) and StorageBackendI
-// promises concurrent safety, so one mutex serializes every method —
-// the mutex-guarded wrapper ADR-0105 D4 names as the alternative to a
-// single owner goroutine. The mutex is held across the round trip, so one
-// slow call holds every app's persist calls behind it; CallTimeout bounds
-// how long.
+// promises concurrent safety, so one lock serializes every method — the
+// guarded wrapper ADR-0105 D4 names as the alternative to a single owner
+// goroutine. The lock is held across the round trip, so one slow call
+// holds the calls behind it; each of them waits at most until its own ctx
+// ends (the lock is taken under ctx), and the round trip itself ends with
+// the caller's ctx, bounded by CallTimeout when that ctx has no deadline.
 //
-// deferred: taking the round trip out of the mutex. The store's buffers
-// and its write-through cache are what the mutex guards, and both belong
+// deferred: taking the round trip out of the lock. The store's buffers
+// and its write-through cache are what the lock guards, and both belong
 // to the one generated store, so it needs a store per call in flight with
-// per-key ordering kept outside them, or an owner goroutine. Until then
-// CallTimeout is the stopgap; the verbs take a context once the store
-// interfaces carry one.
+// per-key ordering kept outside them, or an owner goroutine.
 type StoreBackend struct {
-	mu sync.Mutex
-	st *persiststore.PersistStore
-	pc *persiststore.PersistCache[struct{}]
+	// sem is the lock: a one-slot semaphore, so a waiter can give up when
+	// its ctx ends.
+	sem chan struct{}
+	st  *persiststore.PersistStore
+	pc  *persiststore.PersistCache[struct{}]
 	// runId stamps every written row with the process that wrote it
 	// (ADR-0191 §SD5). Read once at open rather than per write: it is
 	// process-wide and cannot change. Empty on a host that never called
@@ -122,8 +122,9 @@ func OpenStoreBackendAt(ctx context.Context, exec recordstore.ExecutorI, alloc m
 		return
 	}
 	inst = &StoreBackend{
-		st: st,
-		pc: persiststore.NewPersistCache[struct{}](st, persiststore.PersistCacheConfig{}),
+		sem: make(chan struct{}, 1),
+		st:  st,
+		pc:  persiststore.NewPersistCache[struct{}](st, persiststore.PersistCacheConfig{}),
 	}
 	if ri, riErr := runinfo.Get(); riErr == nil {
 		inst.runId = ri.RunId
@@ -131,13 +132,35 @@ func OpenStoreBackendAt(ctx context.Context, exec recordstore.ExecutorI, alloc m
 	return
 }
 
-// CallTimeout bounds one round trip of Get, Set or Delete. It stays below
+// CallTimeout bounds one round trip whose ctx carries no deadline. It stays below
 // the window host's shutdown drain (windowhost.DefaultShutdownDrain), so an
 // Unmount that saves state against a server that stopped answering fails
 // within the drain instead of holding the shutdown, and below the bus's
 // default request timeout, so the requester gets the store's error rather
 // than a timeout of its own.
 const CallTimeout = 3 * time.Second
+
+// lock takes the backend's lock under ctx: it fails with ctx's error when
+// ctx ends first. The returned ctx is ctx bounded by CallTimeout when it
+// has no deadline; release unlocks and cancels it.
+func (inst *StoreBackend) lock(ctx context.Context) (bounded context.Context, release func(), err error) {
+	select {
+	case inst.sem <- struct{}{}:
+	case <-ctx.Done():
+		err = eh.Errorf("persist: waiting for the store: %w", context.Cause(ctx))
+		return
+	}
+	cancel := context.CancelFunc(func() {})
+	bounded = ctx
+	if _, has := ctx.Deadline(); !has {
+		bounded, cancel = context.WithTimeout(ctx, CallTimeout)
+	}
+	release = func() {
+		cancel()
+		<-inst.sem
+	}
+	return
+}
 
 // stateKey is the entity key: the app identity and the app's own key,
 // under the persist-state kind prefix (persiststore.StateKey). The app id
@@ -156,11 +179,12 @@ func stateKey(ref StorageRef, key string) (id string) {
 // The read goes through the cache view: a Set writes through at Commit,
 // so the next Get for that key is answered without a round-trip, which
 // is what makes a write-then-read pair cheap.
-func (inst *StoreBackend) Get(ref StorageRef, key string) (value []byte, found bool, err error) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	ctx, cancel := context.WithTimeout(context.Background(), CallTimeout)
-	defer cancel()
+func (inst *StoreBackend) Get(ctx context.Context, ref StorageRef, key string) (value []byte, found bool, err error) {
+	ctx, release, err := inst.lock(ctx)
+	if err != nil {
+		return
+	}
+	defer release()
 	ent, found, err := inst.pc.GetFetch(ctx, stateKey(ref, key))
 	if err != nil {
 		err = eb.Build().Str("alias", ref.Alias).Str("key", key).Errorf("persist: store get failed: %w", err)
@@ -185,9 +209,12 @@ func (inst *StoreBackend) Get(ref StorageRef, key string) (value []byte, found b
 
 // Set appends a new version. Append-only: the previous row stays, and
 // the newest one wins the state view.
-func (inst *StoreBackend) Set(ref StorageRef, key string, value []byte) (err error) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
+func (inst *StoreBackend) Set(ctx context.Context, ref StorageRef, key string, value []byte) (err error) {
+	ctx, release, err := inst.lock(ctx)
+	if err != nil {
+		return
+	}
+	defer release()
 	id := stateKey(ref, key)
 	err = inst.st.Begin(id, time.Now().UTC()).
 		AddOwner(inst.owner(id, ref.StateAppId(), "", ref.InstanceKey)).
@@ -198,7 +225,7 @@ func (inst *StoreBackend) Set(ref StorageRef, key string, value []byte) (err err
 		err = eb.Build().Str("alias", ref.Alias).Str("key", key).Errorf("persist: store set failed: %w", err)
 		return
 	}
-	err = inst.flushLocked()
+	err = inst.flushLocked(ctx)
 	if err != nil {
 		err = eb.Build().Str("alias", ref.Alias).Str("key", key).Errorf("persist: store set failed: %w", err)
 	}
@@ -221,16 +248,19 @@ func (inst *StoreBackend) owner(id string, appId app.AppIdT, runId string, insta
 // Delete appends a tombstone. Deleting a never-written key is not an
 // error, matching MemoryBackend and the facts-backed predecessor; the
 // tombstone simply becomes the newest row for a key that had none.
-func (inst *StoreBackend) Delete(ref StorageRef, key string) (err error) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
+func (inst *StoreBackend) Delete(ctx context.Context, ref StorageRef, key string) (err error) {
+	ctx, release, err := inst.lock(ctx)
+	if err != nil {
+		return
+	}
+	defer release()
 	err = inst.st.Delete(stateKey(ref, key), time.Now().UTC())
 	if err != nil {
 		inst.st.DiscardPending()
 		err = eb.Build().Str("alias", ref.Alias).Str("key", key).Errorf("persist: store delete failed: %w", err)
 		return
 	}
-	err = inst.flushLocked()
+	err = inst.flushLocked(ctx)
 	if err != nil {
 		err = eb.Build().Str("alias", ref.Alias).Str("key", key).Errorf("persist: store delete failed: %w", err)
 	}
@@ -240,10 +270,8 @@ func (inst *StoreBackend) Delete(ref StorageRef, key string) (err error) {
 // flushLocked makes the operation's rows durable, discarding them on
 // failure so a failed operation cannot ship behind a later one. The
 // cache is invalidated on that path too: its write-through entry is
-// pinned on a row that will never exist.
-func (inst *StoreBackend) flushLocked() (err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), CallTimeout)
-	defer cancel()
+// pinned on a row that will never exist. ctx is the lock's.
+func (inst *StoreBackend) flushLocked(ctx context.Context) (err error) {
 	_, err = inst.st.Flush(ctx)
 	if err != nil {
 		inst.st.DiscardPending()
@@ -254,7 +282,7 @@ func (inst *StoreBackend) flushLocked() (err error) {
 
 // Close releases the store's buffers. The backend is unusable after it.
 func (inst *StoreBackend) Close() {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
+	inst.sem <- struct{}{}
+	defer func() { <-inst.sem }()
 	inst.st.Close()
 }

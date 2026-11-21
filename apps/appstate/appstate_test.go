@@ -173,10 +173,10 @@ func mounted(t *testing.T) (a *App, b *persist.StoreBackend) {
 	require.NoError(t, err)
 	t.Cleanup(b.Close)
 	ref := persist.StorageRef{Alias: "play", AppId: playId}
-	require.NoError(t, b.Set(ref, "tabs", []byte("x")))
+	require.NoError(t, b.Set(t.Context(), ref, "tabs", []byte("x")))
 	past := time.Now().UTC().Add(-time.Minute)
-	require.NoError(t, b.WriteColumnWidth(statestore.ColumnWidthRow{AppId: playId, Tier: "column", ColumnKey: "k", Points: 90, FontSize: 12, Ts: past}))
-	require.NoError(t, b.WriteWorkingset(statestore.WorkingsetRow{AppId: tallyId, Name: "default", Kind: "tallyLaunch", Config: []byte("c"), Ts: past}))
+	require.NoError(t, b.WriteColumnWidth(t.Context(), statestore.ColumnWidthRow{AppId: playId, Tier: "column", ColumnKey: "k", Points: 90, FontSize: 12, Ts: past}))
+	require.NoError(t, b.WriteWorkingset(t.Context(), statestore.WorkingsetRow{AppId: tallyId, Name: "default", Kind: "tallyLaunch", Config: []byte("c"), Ts: past}))
 
 	bus := inprocbus.NewInst(zerolog.Nop())
 	svc, err := as.NewService(bus, zerolog.Nop(), b)
@@ -244,7 +244,7 @@ func TestForgetWaitsForItsConfirmation(t *testing.T) {
 	s = a.eventuallyListed(t, 1)
 	assert.Equal(t, tallyId, s.rows.AppId[0], "forget reaches one app only")
 	assert.Contains(t, s.lastNote, "forgot play")
-	left, err := b.LiveEntries(playId)
+	left, err := b.LiveEntries(t.Context(), playId)
 	require.NoError(t, err)
 	assert.Empty(t, left)
 }
@@ -264,7 +264,7 @@ func TestDeleteOneEntry(t *testing.T) {
 	a.deleteEntry(width)
 	s = a.eventuallyListed(t, 2)
 	assert.Contains(t, s.lastNote, "cleared column_width")
-	rows, err := b.ListColumnWidths(playId)
+	rows, err := b.ListColumnWidths(t.Context(), playId)
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }

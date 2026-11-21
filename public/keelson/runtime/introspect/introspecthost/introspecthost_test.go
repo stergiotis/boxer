@@ -72,7 +72,7 @@ func TestStart_RegistersWorkingsetsFromState(t *testing.T) {
 	introspect.SetLocalQueryEndpoint("")
 
 	state := statestore.NewMemory()
-	err := state.WriteWorkingset(statestore.WorkingsetRow{
+	err := state.WriteWorkingset(t.Context(), statestore.WorkingsetRow{
 		AppId: "play", Name: "default", Kind: "playLaunch", Config: []byte("SELECT 1"),
 	})
 	if err != nil {
