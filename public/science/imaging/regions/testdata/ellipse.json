@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "region": {
+    "id": "cell-3",
+    "label": "cell",
+    "note": "",
+    "origin": "segmenter v2",
+    "frame": {
+      "kind": "physical",
+      "units": [
+        "um",
+        "um"
+      ]
+    },
+    "anchor": [],
+    "shape": {
+      "kind": "ellipse",
+      "centre": [
+        12.3,
+        -4.06
+      ],
+      "radii": [
+        3.5,
+        2.25
+      ],
+      "angle": 0.1
+    }
+  }
+}

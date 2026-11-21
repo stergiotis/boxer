@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "region": {
+    "id": "Vh3kT0",
+    "label": "star",
+    "note": "brightest in the field",
+    "origin": "person",
+    "frame": {
+      "kind": "celestial",
+      "code": "ICRS"
+    },
+    "anchor": [],
+    "shape": {
+      "kind": "point",
+      "at": [
+        150.0125,
+        2.21
+      ]
+    }
+  }
+}

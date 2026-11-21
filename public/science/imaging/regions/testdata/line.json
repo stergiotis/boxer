@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "region": {
+    "id": "transect-1",
+    "label": "transect",
+    "note": "",
+    "origin": "regions test",
+    "frame": {
+      "kind": "pixel"
+    },
+    "anchor": [],
+    "shape": {
+      "kind": "line",
+      "from": [
+        0.5,
+        10
+      ],
+      "to": [
+        120.25,
+        3
+      ]
+    }
+  }
+}

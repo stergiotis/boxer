@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "region": {
+    "id": "plot-7",
+    "label": "plot 7",
+    "note": "rotated with the field",
+    "origin": "person",
+    "frame": {
+      "kind": "reference-system",
+      "code": "EPSG:32632"
+    },
+    "anchor": [
+      {
+        "axis": "time",
+        "position": 2
+      },
+      {
+        "axis": "time",
+        "position": 0
+      }
+    ],
+    "shape": {
+      "kind": "rectangle",
+      "centre": [
+        500400,
+        5199600
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "angle": -12.5
+    }
+  }
+}
