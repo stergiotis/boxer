@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // Reconcile makes the pipeline objects match this process's
@@ -27,10 +28,19 @@ import (
 // the resolved pull URL. It is also callable on its own for a
 // dry-run-style setup against a scratch database.
 func (s *Service) Reconcile(ctx context.Context) (err error) {
+	// The view appends on the server, where no insert transform runs: with
+	// the facts stored in a deployment's own table its rows would land in a
+	// relation that does not keep them, or fail there. It is not installed
+	// (ADR-0402 §SD5; the capture under a transform is deferred).
+	factsCfg := chstore.Config{Database: s.cfg.Database, Table: s.cfg.Table}
+	if chstore.WriteTransformed(factsCfg) {
+		err = eb.Build().Str("table", s.FactsTable()).Errorf("queryrunsvc: reconcile: the query-run view is not installed: %w", recordstore.ErrTransformedTable)
+		return
+	}
 	// chstore's own setup — the table and the read surface its reads need —
 	// run through this service's client so it carries the reconcile tag like
 	// everything else the service sends.
-	stmts, err := chstore.SetupStatements(chstore.Config{Database: s.cfg.Database, Table: s.cfg.Table}, "")
+	stmts, err := chstore.SetupStatements(factsCfg, "")
 	if err != nil {
 		err = eh.Errorf("queryrunsvc: reconcile: %w", err)
 		return
