@@ -52,6 +52,23 @@ func TestAdditiveSectionsAreAddedInOrder(t *testing.T) {
 	assert.Equal(t, "ALTER TABLE `boxer`.`persiststate` MODIFY COMMENT '"+c.Stamp+"'", p.Statements[21])
 }
 
+// A relation judged by its columns only (ADR-0402 §SD4) gets no statement:
+// a missing column is refused with the reason, not added to a view.
+func TestColumnsOnlyRelationGetsNoStatement(t *testing.T) {
+	beforeDDL, before := fixture(t, "persiststate_before.sql")
+	_, after := fixture(t, "persiststate_after.sql")
+	c := contract("carrier.facts_view", after)
+	c.ColumnsOnly = true
+	p := Derive(c, recordstore.TableFacts{Exists: true, Engine: "View", CreateQuery: beforeDDL, Columns: live(before)})
+	assert.Equal(t, recordstore.SchemaVerdictMigratable, p.Verdict.Verdict)
+	assert.True(t, p.IsRefused())
+	assert.Empty(t, p.Statements)
+
+	ok := Derive(c, recordstore.TableFacts{Exists: true, Engine: "View", Columns: live(after)})
+	assert.False(t, ok.IsRefused())
+	assert.Empty(t, ok.Statements, "no window, no stamp")
+}
+
 // The aspects v2 codec flip renamed every column, the key columns among
 // them: ClickHouse renames no key column, so the plan is refused.
 func TestAspectRenameOfAKeyColumnIsRefused(t *testing.T) {

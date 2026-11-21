@@ -108,6 +108,12 @@ type TableContract struct {
 	// LayoutRecipe is where a note on a differing layout points: the
 	// doc/migration recipe that copies the table into the declared layout.
 	LayoutRecipe string
+	// ColumnsOnly judges Table as a relation the store reads but does not
+	// own (ADR-0402 §SD4) — a view over a deployment's own table, a Merge
+	// over storage tables: by its columns' names and types alone. Its stamp,
+	// layout and deduplication window are not looked at, since a view has
+	// none of them, and a plan proposes no statement for it.
+	ColumnsOnly bool
 }
 
 // ColumnRename is a column present under a name that differs from the
@@ -340,6 +346,9 @@ func JudgeFacts(c TableContract, facts TableFacts) (v SchemaVerdict) {
 	v = JudgeColumns(c.Columns, facts.Columns)
 	v.Kind, v.Table = c.Kind, c.Table
 	v.Engine = facts.Engine
+	if c.ColumnsOnly {
+		return
+	}
 	v.Stamp = facts.Comment
 	v.DedupWindow = strings.Contains(facts.CreateQuery, DedupWindowSetting)
 	v.Age = stampAge(c, facts.Comment, v)

@@ -43,6 +43,15 @@ func (inst Plan) IsRefused() bool { return len(inst.Refused) > 0 }
 func Derive(c recordstore.TableContract, facts recordstore.TableFacts) (p Plan) {
 	p.Verdict = recordstore.JudgeFacts(c, facts)
 	v := p.Verdict
+	if c.ColumnsOnly {
+		// A relation judged by its columns is not boxer's to change
+		// (ADR-0402 §SD4): a view or a deployment's storage gets no
+		// statement, whatever its verdict.
+		if !v.IsOk() {
+			p.Refused = append(p.Refused, "the relation is read, not owned: it returns the facts columns from storage this build does not manage, so bringing it in line is a change to that storage or its view; see "+MigrationDocs)
+		}
+		return
+	}
 	switch v.Verdict {
 	case recordstore.SchemaVerdictAbsent:
 		p.Refused = append(p.Refused, "the table does not exist; the store that owns it creates it when it starts")
