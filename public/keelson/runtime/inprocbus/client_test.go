@@ -24,7 +24,7 @@ func TestClient_PublishDeniedWithoutCap(t *testing.T) {
 func TestClient_PublishAllowedByCap(t *testing.T) {
 	inst := newInst(t)
 	bus := inst.NewClient("test.app", []app.SubjectFilter{
-		{Pattern: "fs.>", Direction: app.CapDirectionPub},
+		{Pattern: "runtime.fs.>", Direction: app.CapDirectionPub},
 	})
 	err := bus.Publish("runtime.fs.dialog.read", []byte("x"))
 	require.NoError(t, err)
@@ -80,7 +80,7 @@ func TestClient_UnstampedClientPublishesZero(t *testing.T) {
 func TestClient_SubscribeDeniedWithoutCap(t *testing.T) {
 	inst := newInst(t)
 	bus := inst.NewClient("test.app", []app.SubjectFilter{
-		{Pattern: "ch.>", Direction: app.CapDirectionPub},
+		{Pattern: "runtime.ch.>", Direction: app.CapDirectionPub},
 	})
 	_, err := bus.Subscribe("ch.query.boxer", func(msg *app.Msg) {})
 	require.Error(t, err)
@@ -229,7 +229,7 @@ func TestInst_AuditSink_RecordsRequestDenied(t *testing.T) {
 	inst.SetAuditSink(sink)
 
 	bus := inst.NewClient("test.app", []app.SubjectFilter{
-		{Pattern: "fs.>", Direction: app.CapDirectionPub},
+		{Pattern: "runtime.fs.>", Direction: app.CapDirectionPub},
 	})
 	_, err := bus.Request(t.Context(), "ch.query.boxer", nil)
 	require.Error(t, err)
@@ -357,7 +357,7 @@ func TestClient_SubscribeInbox(t *testing.T) {
 		{Pattern: InboxPrefix + ">", Direction: app.CapDirectionPub},
 	})
 	other := inst.NewClient("other.app", []app.SubjectFilter{
-		{Pattern: "fs.>", Direction: app.CapDirectionBoth},
+		{Pattern: "runtime.fs.>", Direction: app.CapDirectionBoth},
 	})
 	var got []string
 	inbox, unsub, err := requester.SubscribeInbox(func(msg *app.Msg) { got = append(got, string(msg.Payload)) })

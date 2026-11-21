@@ -149,7 +149,7 @@ func (inst *Counters) Reset() {
 // classify a concrete subject string. Same intent, different shape.
 func classify(subject string) (capId CapId) {
 	switch {
-	case strings.HasPrefix(subject, "fs."):
+	case strings.HasPrefix(subject, "runtime.fs."):
 		capId = CapFs
 	case strings.HasPrefix(subject, "runtime.persist."):
 		capId = CapPersist
@@ -169,7 +169,7 @@ func classify(subject string) (capId CapId) {
 		capId = CapAgent
 	case strings.HasPrefix(subject, "runtime.task."):
 		capId = CapTask
-	case strings.HasPrefix(subject, "watchbill."):
+	case strings.HasPrefix(subject, "runtime.watchbill."):
 		capId = CapWatchbill
 	case strings.HasPrefix(subject, "runtime.facts."):
 		// Reserved — no subject lands here today (factsstore writes

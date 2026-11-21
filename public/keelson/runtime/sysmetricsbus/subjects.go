@@ -7,10 +7,10 @@ import (
 )
 
 // SubjectRoot is the top-level subject family for the metric plane
-// (ADR-0090 SD1). The full taxonomy is sysmetrics.{host}.{domain}; P2
+// (ADR-0090 SD1). The full taxonomy is runtime.sysmetrics.{host}.{domain}; P2
 // uses the {host}.bundle leaf (see BundleSubject) until the per-domain
 // split lands.
-const SubjectRoot = "sysmetrics"
+const SubjectRoot = "runtime.sysmetrics"
 
 // SubjectWildcard matches every metric subject. Used as the cap pattern
 // for the producer (publish) and consumer (subscribe).
@@ -22,11 +22,11 @@ const SubjectWildcard = SubjectRoot + ".>"
 const ServiceAppId app.AppIdT = "runtime.sysmetrics"
 
 // BundleSubject returns the P2 whole-bundle subject for a host token:
-// "sysmetrics.{host}.bundle". An empty token falls back to "local".
+// "runtime.sysmetrics.{host}.bundle". An empty token falls back to "local".
 //
 // P2 carries the entire BundleSnapshot on this one subject to land the
 // producer/consumer bisection first; ADR-0090 SD1's per-domain subjects
-// (sysmetrics.{host}.{domain}) are the planned follow-up.
+// (runtime.sysmetrics.{host}.{domain}) are the planned follow-up.
 func BundleSubject(hostToken string) (subject string) {
 	if hostToken == "" {
 		hostToken = "local"
@@ -36,7 +36,7 @@ func BundleSubject(hostToken string) (subject string) {
 }
 
 // BundleSubjectWildcard matches every host's whole-bundle subject
-// (sysmetrics.*.bundle). A consumer that wants any one box's metrics off a
+// (runtime.sysmetrics.*.bundle). A consumer that wants any one box's metrics off a
 // shared bus subscribes here; on a single-box deployment it resolves to the
 // one scraper.
 func BundleSubjectWildcard() (subject string) {
@@ -45,7 +45,7 @@ func BundleSubjectWildcard() (subject string) {
 }
 
 // ParseBundleSubjectHost extracts the {host} token from a whole-bundle
-// subject ("sysmetrics.{host}.bundle"). ok is false for any other
+// subject ("runtime.sysmetrics.{host}.bundle"). ok is false for any other
 // subject shape. The inverse of [BundleSubject]; consumers that fan in
 // several boxes (the ADR-0126 latest-holder) key their state by it.
 func ParseBundleSubjectHost(subject string) (host string, ok bool) {

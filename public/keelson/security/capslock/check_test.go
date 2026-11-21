@@ -19,14 +19,14 @@ import (
 
 func TestCapRequirements_FilesNeedsFsCap(t *testing.T) {
 	prefixes, hardFail, alwaysOK := capRequirements("CAPABILITY_FILES")
-	assert.Equal(t, []string{"fs."}, prefixes)
+	assert.Equal(t, []string{"runtime.fs."}, prefixes)
 	assert.False(t, hardFail)
 	assert.False(t, alwaysOK)
 }
 
 func TestCapRequirements_NetworkAcceptsMultiplePrefixes(t *testing.T) {
 	prefixes, _, _ := capRequirements("CAPABILITY_NETWORK")
-	assert.ElementsMatch(t, []string{"nats.", "ch.", "kafka.", "net."}, prefixes)
+	assert.ElementsMatch(t, []string{"runtime.ch.", "runtime.net."}, prefixes)
 }
 
 func TestCapRequirements_RuntimeAlwaysAllowed(t *testing.T) {
@@ -104,7 +104,7 @@ func TestCapRequirements_RefinedReadSystemState(t *testing.T) {
 	}
 	// The unrefined remainder keeps the sysmetrics requirement.
 	prefixes, hardFail, alwaysOK := capRequirements(capReadSystemState)
-	assert.Equal(t, []string{"sysmetrics."}, prefixes)
+	assert.Equal(t, []string{"runtime.sysmetrics."}, prefixes)
 	assert.False(t, hardFail)
 	assert.False(t, alwaysOK)
 }
@@ -157,7 +157,7 @@ func TestNormaliseCapability_FeedsTheTable(t *testing.T) {
 	assert.True(t, hardFail, "raw library name is unknown to the table (hence normalisation)")
 	prefixes, hardFail, _ := capRequirements(normaliseCapability("FILES"))
 	assert.False(t, hardFail)
-	assert.Equal(t, []string{"fs."}, prefixes)
+	assert.Equal(t, []string{"runtime.fs."}, prefixes)
 }
 
 // --- own-capability aggregation ------------------------------------------

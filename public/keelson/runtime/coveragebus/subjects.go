@@ -10,7 +10,7 @@ import (
 )
 
 // SubjectRoot is the top-level subject family of the coverage plane.
-const SubjectRoot = "coverage"
+const SubjectRoot = "runtime.coverage"
 
 // SubjectWildcard matches every coverage subject; the cap pattern for the
 // producer (publish) and consumers (subscribe).
@@ -22,7 +22,7 @@ const SubjectWildcard = SubjectRoot + ".>"
 const ServiceAppId app.AppIdT = "runtime.coverage"
 
 // SampleSubject returns the per-host update subject
-// ("coverage.{host}.sample"). An empty token falls back to "local". Host
+// ("runtime.coverage.{host}.sample"). An empty token falls back to "local". Host
 // tokens follow the metric plane's rule — callers pass
 // sysmetricsbus.DefaultHostToken() or an equally sanitised token.
 func SampleSubject(hostToken string) (subject string) {
@@ -34,7 +34,7 @@ func SampleSubject(hostToken string) (subject string) {
 }
 
 // SampleSubjectWildcard matches every host's update subject
-// (coverage.*.sample).
+// (runtime.coverage.*.sample).
 func SampleSubjectWildcard() (subject string) {
 	subject = SubjectRoot + ".*.sample"
 	return

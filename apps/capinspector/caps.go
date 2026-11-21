@@ -216,7 +216,7 @@ var Registry = map[CapId]CapSpec{
 	},
 	CapFs: {
 		Id:            CapFs,
-		Display:       "fs.* Powerbox",
+		Display:       "runtime.fs.* Powerbox",
 		SubjectFamily: "runtime.fs.dialog.{read|write|bundle|watch}, runtime.fs.handle.{uuid}.{read|close|watch|unwatch|event}",
 		Description: "User-mediated filesystem access. Apps publish " +
 			"runtime.fs.dialog.read to request a file pick; fsbroker.Service queues " +
@@ -232,7 +232,7 @@ var Registry = map[CapId]CapSpec{
 			"forward-slash relpath under the watch root.",
 		Backend: "runtime/fsbroker (inotify primary, poller fallback for inotify-blind FS) + runtime/fsbroker/pickerbridge",
 		AppFilter: func(f app.SubjectFilter) bool {
-			return strings.HasPrefix(f.Pattern, "fs.")
+			return strings.HasPrefix(f.Pattern, "runtime.fs.")
 		},
 		// One Powerbox impl today; the inotify/poller dichotomy lives
 		// *inside* fsbroker as a per-watch strategy choice, not as
@@ -325,7 +325,7 @@ var Registry = map[CapId]CapSpec{
 			"and nothing else: the table is the truth.",
 		Backend: "runtime/watchbill + runtime/watchbill/watchbillstore + runtime/watchbill/watchbillpresence",
 		AppFilter: func(f app.SubjectFilter) bool {
-			return strings.HasPrefix(f.Pattern, "watchbill.")
+			return strings.HasPrefix(f.Pattern, "runtime.watchbill.")
 		},
 		// The worker is the service; the store is the table it writes,
 		// with the memory double beside it; presence is the worker's

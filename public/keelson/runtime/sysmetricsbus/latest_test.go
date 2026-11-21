@@ -19,13 +19,13 @@ func TestParseBundleSubjectHost(t *testing.T) {
 		want   string
 		wantOk bool
 	}{
-		{"sysmetrics.demo-box-1.bundle", "demo-box-1", true},
-		{"sysmetrics.local.bundle", "local", true},
-		{"sysmetrics..bundle", "", false},    // empty host token
-		{"sysmetrics.a.b.bundle", "", false}, // deeper hierarchy
-		{"sysmetrics.a.cpu", "", false},      // not the bundle leaf
-		{"othermetrics.a.bundle", "", false}, // wrong root
-		{"sysmetrics.bundle", "", false},     // no host token
+		{"runtime.sysmetrics.demo-box-1.bundle", "demo-box-1", true},
+		{"runtime.sysmetrics.local.bundle", "local", true},
+		{"runtime.sysmetrics..bundle", "", false},    // empty host token
+		{"runtime.sysmetrics.a.b.bundle", "", false}, // deeper hierarchy
+		{"runtime.sysmetrics.a.cpu", "", false},      // not the bundle leaf
+		{"othermetrics.a.bundle", "", false},         // wrong root
+		{"runtime.sysmetrics.bundle", "", false},     // no host token
 	}
 	for _, tc := range cases {
 		host, ok := sysmetricsbus.ParseBundleSubjectHost(tc.in)

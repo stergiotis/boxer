@@ -36,7 +36,7 @@ corroborate.
 | `keelson.topology_edges` | both | one directed edge: `edge_kind`, `src_key`, `dst_key`, `host`, `origin`, `source` |
 
 Node keys are `kind:name` strings (`component:caddy`, `proc:4711`,
-`sock:tcp/127.0.0.1:8123`, `app:imztop`, `subject:sysmetrics.>`,
+`sock:tcp/127.0.0.1:8123`, `app:imztop`, `subject:runtime.sysmetrics.>`,
 `host:demo-box-1`); both halves emit identical keys, which is what makes
 drift a single-table query. Reach the tables from `apps/play` (or any
 in-process consumer) via the `keelson('…')` macro, or from an external
@@ -142,7 +142,7 @@ The declared bus graph, from the manifest caps:
 SELECT edge_kind, src_key
 FROM keelson('topology_edges')
 WHERE edge_kind IN ('app-pub', 'app-sub')
-  AND dst_key = 'subject:sysmetrics.>'
+  AND dst_key = 'subject:runtime.sysmetrics.>'
 ```
 
 Edge patterns are the manifests' filter strings verbatim; overlap

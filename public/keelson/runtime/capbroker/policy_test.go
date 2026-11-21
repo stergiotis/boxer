@@ -12,7 +12,7 @@ func TestAutoApprovePolicy_AlwaysGrants(t *testing.T) {
 	p := &AutoApprovePolicy{}
 	cases := []GrantRequest{
 		{AppId: "a", SubjectFilter: app.SubjectFilter{Pattern: "x", Direction: app.CapDirectionPub}},
-		{AppId: "b", SubjectFilter: app.SubjectFilter{Pattern: "fs.>", Direction: app.CapDirectionBoth}},
+		{AppId: "b", SubjectFilter: app.SubjectFilter{Pattern: "runtime.fs.>", Direction: app.CapDirectionBoth}},
 	}
 	for _, req := range cases {
 		d := p.Decide(req)

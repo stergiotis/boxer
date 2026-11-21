@@ -36,7 +36,7 @@ func TestSubjectAllowed_SubOnly(t *testing.T) {
 func TestSubjectAllowed_FirstMatchingCapWins(t *testing.T) {
 	caps := []app.SubjectFilter{
 		{Pattern: "runtime.fs.dialog.write", Direction: app.CapDirectionPub},
-		{Pattern: "fs.>", Direction: app.CapDirectionPub},
+		{Pattern: "runtime.fs.>", Direction: app.CapDirectionPub},
 	}
 	assert.True(t, SubjectAllowed(caps, "runtime.fs.dialog.read", app.CapDirectionPub))
 }

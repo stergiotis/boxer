@@ -53,7 +53,7 @@ var manifest = app.Manifest{
 			Reason:    "subscribe to system metrics (CPU/mem/disk/net/proc/...)",
 		},
 		// Replay (ADR-0197 §SD7). This entry names an outbound reach, not a bus
-		// route: nothing publishes on `ch.server.read.*`, and the host mints a
+		// route: nothing publishes on `runtime.ch.server.read.*`, and the host mints a
 		// client for it that imztop never uses. The only `ch.` subject family
 		// that is routed is `runtime.ch.local.exec.*`, which fronts clickhouse-local
 		// (ADR-0028), not the server holding `boxer.facts`.
@@ -66,7 +66,7 @@ var manifest = app.Manifest{
 		// imztop connect to" should find the answer here rather than in a call
 		// graph.
 		{
-			Pattern:   "ch.server.read.boxer.facts",
+			Pattern:   "runtime.ch.server.read.boxer.facts",
 			Direction: app.CapDirectionPub,
 			Reason:    "read stored system-metrics history for replay (ADR-0197)",
 		},

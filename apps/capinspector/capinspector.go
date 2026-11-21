@@ -297,7 +297,7 @@ func diagramCapLabel(capId CapId) (s string) {
 	case CapBus:
 		s = "Subject router"
 	case CapFs:
-		s = "fs.* Powerbox"
+		s = "runtime.fs.*"
 	case CapPersist:
 		s = "Persist state"
 	case CapTask:

@@ -27,7 +27,7 @@ func (inst *countingSampler) Close() (err error) { return }
 // once without publishing; continued demand samples and publishes.
 func TestProducer_DemandGatesSampling(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
-	const subject = "sysmetrics.test.bundle"
+	const subject = "runtime.sysmetrics.test.bundle"
 	pub := bus.NewClient("test.pub", []app.SubjectFilter{{Pattern: subject, Direction: app.CapDirectionPub}})
 	sub := bus.NewClient("test.sub", []app.SubjectFilter{{Pattern: subject, Direction: app.CapDirectionSub}})
 	var published atomic.Int32
@@ -69,7 +69,7 @@ func TestProducer_DemandGatesSampling(t *testing.T) {
 // producer constructed without a probe.
 func TestProducer_NoDemandProbeSamplesEveryTick(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
-	const subject = "sysmetrics.test.bundle"
+	const subject = "runtime.sysmetrics.test.bundle"
 	pub := bus.NewClient("test.pub", []app.SubjectFilter{{Pattern: subject, Direction: app.CapDirectionPub}})
 	sampler := &countingSampler{}
 	p, err := NewProducer(ProducerOptions{

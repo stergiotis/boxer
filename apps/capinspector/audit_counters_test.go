@@ -10,14 +10,14 @@ import (
 
 func TestClassify_Subjects(t *testing.T) {
 	cases := map[string]CapId{
-		"runtime.fs.dialog.read":                  CapFs,
-		"runtime.fs.handle.abc.read":              CapFs,
-		"runtime.persist.play.editor.set": CapPersist,
-		"runtime.facts.read":              CapFacts,
-		"runtime.heartbeat.tick":          CapRun,
-		"runtime.run.start":               CapRun,
-		"runtime.ch.local.exec.regex_explorer":    "",
-		"":                                "",
+		"runtime.fs.dialog.read":               CapFs,
+		"runtime.fs.handle.abc.read":           CapFs,
+		"runtime.persist.play.editor.set":      CapPersist,
+		"runtime.facts.read":                   CapFacts,
+		"runtime.heartbeat.tick":               CapRun,
+		"runtime.run.start":                    CapRun,
+		"runtime.ch.local.exec.regex_explorer": "",
+		"":                                     "",
 	}
 	for subj, want := range cases {
 		got := classify(subj)

@@ -217,7 +217,7 @@ func TestAnEmbeddedPaneRunsUnderItsHostsName(t *testing.T) {
 
 	var dials, publishes int
 	for _, cp := range EmbedCaps() {
-		if cp.Pattern == "ch.server.read.records" {
+		if cp.Pattern == "runtime.ch.server.read.records" {
 			dials++
 		}
 		if cp.Pattern == ladingpublish.Subject(mountTag) {

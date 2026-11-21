@@ -10,7 +10,7 @@
 // producer/consumer split can land first:
 //
 //   - SD1 per-domain subjects. P2 publishes the whole BundleSnapshot on a
-//     single subject (BundleSubject). The sysmetrics.{host}.{domain}
+//     single subject (BundleSubject). The runtime.sysmetrics.{host}.{domain}
 //     fan-out — granular subscription, per-domain grants — comes later.
 //   - SD3 leeway-facts codec — deferred in P2, then abandoned. P2 shipped
 //     CBORCodec (fxamacker/cbor, already a dependency — no new dep) as the

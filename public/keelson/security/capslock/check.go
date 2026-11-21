@@ -385,7 +385,7 @@ var processSelfFuncs = map[string]struct{}{
 // which bans them outright outside public/config/env (ADR-0009) — a stricter
 // rule than any subject filter, and one that applies to the whole tree rather
 // than to apps. Deferring keeps §SD10 from issuing the wrong remedy: "declare a
-// sysmetrics.* subject" is not the fix for reading an env var, "declare it in
+// runtime.sysmetrics.* subject" is not the fix for reading an env var, "declare it in
 // public/config/env" is.
 //
 // These cannot reach the gate today: apps read configuration through
@@ -526,9 +526,9 @@ func evaluate(appId string, capName string, declared []app.SubjectFilter) (f Fin
 func capRequirements(capName string) (prefixes []string, hardFail bool, alwaysOK bool) {
 	switch capName {
 	case "CAPABILITY_FILES":
-		prefixes = []string{"fs."}
+		prefixes = []string{"runtime.fs."}
 	case "CAPABILITY_NETWORK":
-		prefixes = []string{"nats.", "ch.", "kafka.", "net."}
+		prefixes = []string{"runtime.ch.", "runtime.net."}
 	case capReadProcessSelf, capReadEnv:
 		// Refined out of READ_SYSTEM_STATE by [refineCapability]; the reasons
 		// are on processSelfFuncs and envFuncs.
@@ -540,7 +540,7 @@ func capRequirements(capName string) (prefixes []string, hardFail bool, alwaysOK
 		// through the sysmetrics packages, a non-stdlib hop, so its access is
 		// transitive and invisible here. The row stands for an app that reads
 		// the machine directly.
-		prefixes = []string{"sysmetrics."}
+		prefixes = []string{"runtime.sysmetrics."}
 	case "CAPABILITY_RUNTIME", "CAPABILITY_SAFE", "CAPABILITY_UNSPECIFIED":
 		alwaysOK = true
 	case "CAPABILITY_OPERATING_SYSTEM", "CAPABILITY_EXEC",

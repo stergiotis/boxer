@@ -14,7 +14,7 @@ func fixtureInput() topo.Input {
 		Manifests: []app.Manifest{{
 			Id: "imztop",
 			Caps: []app.SubjectFilter{
-				{Pattern: "sysmetrics.>", Direction: app.CapDirectionSub},
+				{Pattern: "runtime.sysmetrics.>", Direction: app.CapDirectionSub},
 				{Pattern: "runtime.clipboard.write", Direction: app.CapDirectionBoth},
 			},
 		}},
@@ -70,7 +70,7 @@ func TestAssembleNodes(t *testing.T) {
 		{Kind: topo.NodeKindSock, Key: "sock:tcp/127.0.0.1:8089", Host: "box-a", Origin: topo.OriginObserved, Source: topo.SourceProc},
 		{Kind: topo.NodeKindSock, Key: "sock:unix//run/orphan.sock", Host: "box-a", Origin: topo.OriginObserved, Source: topo.SourceProc},
 		{Kind: topo.NodeKindApp, Key: "app:imztop", Origin: topo.OriginDeclared, Source: topo.SourceManifest},
-		{Kind: topo.NodeKindSubject, Key: "subject:sysmetrics.>", Origin: topo.OriginDeclared, Source: topo.SourceManifest},
+		{Kind: topo.NodeKindSubject, Key: "subject:runtime.sysmetrics.>", Origin: topo.OriginDeclared, Source: topo.SourceManifest},
 	} {
 		if !hasNode(nodes, want) {
 			t.Errorf("missing node %+v", want)
@@ -91,7 +91,7 @@ func TestAssembleEdges(t *testing.T) {
 		// Declared registry dependency (caddy needs the carrier).
 		{Kind: topo.EdgeKindComponentNeeds, SrcKey: topo.ComponentKey(topo.Caddy.Token), DstKey: topo.ComponentKey(topo.ImZero2Demo.Token), Origin: topo.OriginDeclared, Source: topo.SourceRegistry},
 		// Sub-only cap yields exactly app-sub; Both yields both.
-		{Kind: topo.EdgeKindAppSub, SrcKey: "app:imztop", DstKey: "subject:sysmetrics.>", Origin: topo.OriginDeclared, Source: topo.SourceManifest},
+		{Kind: topo.EdgeKindAppSub, SrcKey: "app:imztop", DstKey: "subject:runtime.sysmetrics.>", Origin: topo.OriginDeclared, Source: topo.SourceManifest},
 		{Kind: topo.EdgeKindAppPub, SrcKey: "app:imztop", DstKey: "subject:runtime.clipboard.write", Origin: topo.OriginDeclared, Source: topo.SourceManifest},
 		{Kind: topo.EdgeKindAppSub, SrcKey: "app:imztop", DstKey: "subject:runtime.clipboard.write", Origin: topo.OriginDeclared, Source: topo.SourceManifest},
 		// The carrier stamps its apps (observed: depends on the runtime mark).
@@ -109,7 +109,7 @@ func TestAssembleEdges(t *testing.T) {
 	// Sub-only must not fabricate a pub edge; an unattributed socket
 	// must not fabricate a listens edge.
 	for _, absent := range []topo.Edge{
-		{Kind: topo.EdgeKindAppPub, SrcKey: "app:imztop", DstKey: "subject:sysmetrics.>", Origin: topo.OriginDeclared, Source: topo.SourceManifest},
+		{Kind: topo.EdgeKindAppPub, SrcKey: "app:imztop", DstKey: "subject:runtime.sysmetrics.>", Origin: topo.OriginDeclared, Source: topo.SourceManifest},
 		{Kind: topo.EdgeKindProcListens, SrcKey: "proc:0", DstKey: "sock:unix//run/orphan.sock", Host: "box-a", Origin: topo.OriginObserved, Source: topo.SourceProc},
 	} {
 		if hasEdge(edges, absent) {

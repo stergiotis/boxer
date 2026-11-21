@@ -19,7 +19,7 @@ import (
 // like imztop can stay pure subscribers (ADR-0090). Callers supply the
 // transport via bus: the standalone sysmetricsd command passes a natsbus
 // client; co-located contexts (the carousel host, the screenshot tour, tests)
-// pass an inprocbus client minted with a sysmetrics.> publish cap. hostToken
+// pass an inprocbus client minted with a runtime.sysmetrics.> publish cap. hostToken
 // scopes the subject (BundleSubject); interval ≤ 0 uses
 // sysmetricsbus.DefaultInterval.
 //

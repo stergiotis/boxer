@@ -89,7 +89,7 @@ func TestClient_PublishSubscribe(t *testing.T) {
 	t.Cleanup(func() { _ = sub.Close() })
 
 	got := make(chan []byte, 1)
-	unsub, err := sub.Subscribe("sysmetrics.demo.bundle", func(m *app.Msg) {
+	unsub, err := sub.Subscribe("runtime.sysmetrics.demo.bundle", func(m *app.Msg) {
 		select {
 		case got <- m.Payload:
 		default:
@@ -99,7 +99,7 @@ func TestClient_PublishSubscribe(t *testing.T) {
 	t.Cleanup(unsub)
 	require.NoError(t, sub.Flush()) // SUB visible before we publish
 
-	require.NoError(t, pub.Publish("sysmetrics.demo.bundle", []byte("hello")))
+	require.NoError(t, pub.Publish("runtime.sysmetrics.demo.bundle", []byte("hello")))
 	select {
 	case payload := <-got:
 		require.Equal(t, []byte("hello"), payload)

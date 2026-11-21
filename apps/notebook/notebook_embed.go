@@ -190,8 +190,8 @@ func (inst *EmbeddedPane) SetRecordings(r notebookview.RecordingsI) { inst.pane.
 func EmbedCaps() (caps []app.SubjectFilter) {
 	return append(slices.Clone(task.ProducerCaps()),
 		// A declaration, not a route: nothing publishes on
-		// `ch.server.read.*`. It says what the host's process dials on the
+		// `runtime.ch.server.read.*`. It says what the host's process dials on the
 		// pane's behalf, where a reviewer looks for it (ADR-0026 §SD10).
-		app.SubjectFilter{Pattern: "ch.server.read.records", Direction: app.CapDirectionPub,
+		app.SubjectFilter{Pattern: "runtime.ch.server.read.records", Direction: app.CapDirectionPub,
 			Reason: "notebook pane: a live reading runs each record's statement on the server the environment names, read-only (ADR-0380 §SD3)"})
 }

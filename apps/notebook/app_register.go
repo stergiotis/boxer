@@ -77,11 +77,11 @@ var manifest = app.Manifest{
 		app.SubjectFilter{Pattern: audioout.SubjectOpen, Direction: app.CapDirectionPub,
 			Reason: "notebook: play a recording the notebook holds"},
 		// The two below are declarations, not routes: nothing publishes on
-		// `ch.server.read.*`. They say what this process dials from the
+		// `runtime.ch.server.read.*`. They say what this process dials from the
 		// window's own code, where a reviewer looks for it (ADR-0026 §SD10).
-		app.SubjectFilter{Pattern: "ch.server.read.lading", Direction: app.CapDirectionPub,
+		app.SubjectFilter{Pattern: "runtime.ch.server.read.lading", Direction: app.CapDirectionPub,
 			Reason: "notebook: open a notebook and the stored results beside it from a lading snapshot"},
-		app.SubjectFilter{Pattern: "ch.server.read.records", Direction: app.CapDirectionPub,
+		app.SubjectFilter{Pattern: "runtime.ch.server.read.records", Direction: app.CapDirectionPub,
 			Reason: "notebook: collection runs each record's statement once on the server the environment names (ADR-0371 §SD10), and a live reading runs them read-only (ADR-0380 §SD3)"},
 	),
 	SurfaceHints: app.SurfaceHints{

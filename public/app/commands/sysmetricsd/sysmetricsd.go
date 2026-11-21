@@ -44,7 +44,7 @@ func NewCliCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "host",
-				Usage: "host token for the sysmetrics.{host}.bundle subject (default: sanitised hostname)",
+				Usage: "host token for the runtime.sysmetrics.{host}.bundle subject (default: sanitised hostname)",
 			},
 			&cli.DurationFlag{
 				Name:  "interval",

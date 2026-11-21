@@ -42,6 +42,8 @@ import (
 
 // Subject taxonomy implemented by this service (ADR-0026 §SD3).
 const (
+	// SubjectRoot is the broker's subject family; it serves all of it.
+	SubjectRoot         = "runtime.fs."
 	SubjectDialogRead   = "runtime.fs.dialog.read"
 	SubjectDialogWrite  = "runtime.fs.dialog.write"
 	SubjectDialogBundle = "runtime.fs.dialog.bundle"
@@ -227,11 +229,11 @@ func NewService(inst *inprocbus.Inst, log zerolog.Logger) (s *Service, err error
 		opSlots:      make(chan struct{}, MaxInflightOps),
 	}
 	s.busClient = inst.NewClient(ServiceAppId, []app.SubjectFilter{
-		{Pattern: "fs.>", Direction: app.CapDirectionBoth, Reason: "fs Powerbox serves all fs subjects"},
+		{Pattern: SubjectRoot + ">", Direction: app.CapDirectionBoth, Reason: "fs Powerbox serves all fs subjects"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "fs replies to inboxes"},
 		{Pattern: app.SubjectInstanceClosed, Direction: app.CapDirectionSub, Reason: "fs drops the pending dialogs of a closed instance"},
 	})
-	s.unsub, err = s.busClient.Subscribe("fs.>", s.handleRequest)
+	s.unsub, err = s.busClient.Subscribe(SubjectRoot+">", s.handleRequest)
 	if err != nil {
 		err = eh.Errorf("fsbroker: subscribe: %w", err)
 		return
