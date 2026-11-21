@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,7 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
-	"github.com/stergiotis/boxer/public/science/imaging/samples"
+	"github.com/stergiotis/boxer/public/science/imaging/regions"
 	"github.com/stergiotis/boxer/public/science/imaging/tiles"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
@@ -34,9 +35,11 @@ import (
 // Hover help. The texts are constants beside the render code so a scene can
 // read them and the help book can quote them (keelson-app A5).
 const (
-	tipOpen = "Open a PNG or JPEG file. The system file picker chooses it: this app never sees your filesystem, only the one file you pick, which is read once."
+	tipOpen = "Open a PNG, JPEG, TIFF, FITS, NPY or NPZ file. The system file picker chooses it: this app never sees your filesystem, only the one file you pick, which is read once, whole — a file larger than the picker's read limit (64 MiB unless the host raises it) is refused."
 
-	tipSample = "Open a synthetic image made from its own coordinates — nothing measured — to try the controls on."
+	tipSample = "Open a synthetic image made from its own coordinates — nothing measured — to try the controls on; bands is a stack of three times and four bands."
+
+	tipPlacement = "Where the pixels are, as the file states it. Coordinates in a reference system are given as that system defines them, labelled with its code and not converted; on the sky they are decimal degrees. The readout under the image gives the pointer's coordinates."
 
 	tipFit = "Show the whole image. Smaller than it is, the image is drawn from means of blocks of samples; the line under it says so."
 
@@ -52,7 +55,7 @@ const (
 
 	tipLimitsData = "Limits at the smallest and largest value of the plane shown. One extreme sample is enough to set them."
 
-	tipLimitsNominal = "Limits at the range the sample kind can hold: 0 to 255 or 0 to 65535."
+	tipLimitsNominal = "Limits at the range the sample kind can hold: 0 to 255, 0 to 65535, −32768 to 32767 or the signed 32-bit range. A float plane has none."
 
 	tipLimitsPercentile = "Limits at two percentiles of the plane shown, counted over the whole plane, so a few extreme samples cannot pull them wide. Samples outside the limits are drawn at the ends of the colour map; they are not changed."
 
@@ -113,12 +116,45 @@ type App struct {
 	// once it is known, unless the person changed it meanwhile.
 	arriving      atomic.Pointer[tiles.Store]
 	prev          *tiles.Store
+	prevStk       *stackView
+	prevShown     string
 	openRecipe    display.Recipe
 	openErr       string
 	openNote      string
 	openGen       uint64
 	landedGen     uint64
 	sampleCallGen uint64
+
+	// images are the window's images — the one opened and the results of
+	// operations — and shownId the one pic is (ADR-0400 §M2); nextResult
+	// numbers the results.
+	images     []imageEntry
+	shownId    string
+	nextResult int
+	// resultsCap replaces maxResultBytes when above zero; a test sets it.
+	resultsCap int64
+
+	// stk is the stack the image opened is a selection of, with that
+	// selection; nil when the image is no stack's (ADR-0398 §M6). want is
+	// the selection asked for, which the store shown follows: selectJob takes
+	// it off the frame, selBusy says it is in flight, and selectNote and
+	// selectErr say what the last one kept of the view or why it failed.
+	// stackGen counts the stacks opened. lastTriple is the last three bands
+	// chosen of this stack; posSlider holds the position sliders' bound
+	// values, one per axis.
+	stk        *stackView
+	want       selection
+	stackGen   uint64
+	selectJob  bgjob.Keyed[*selected]
+	selBusy    bool
+	selectNote string
+	selectErr  string
+	lastTriple []int
+	posSlider  []float64
+	// compAsk is a composite asked for whose bands the stack's selection
+	// shown does not hold yet: it is shown when the selection that does
+	// lands (ADR-0401 §M2).
+	compAsk *compositeAsk
 
 	// measure recomputes the marked region's statistics when the image or
 	// the region changes (W2); measured, measureErr and measuring are this
@@ -147,6 +183,10 @@ type App struct {
 	// with the recipe before the boxes are drawn, and set from it only by
 	// syncChecks, after something else changed the recipe.
 	invert, flag, selecting, smooth bool
+	// linkedBox and layerShownBox are the composite's Linked box and each
+	// layer's shown box.
+	linkedBox     bool
+	layerShownBox [display.MaxLayers]bool
 	// param is the transfer function's parameter as the slider holds it:
 	// the recipe's, or the function's default when the recipe gives none.
 	param float64
@@ -165,14 +205,85 @@ type App struct {
 	// route their commands as the person (ADR-0269 §SD8); nil outside a
 	// frame.
 	frameCtx app.FrameContextI
+
+	// The window's regions (ADR-0399 §M2, imagescope_regions.go): the list,
+	// its revision, the one selected and the next label's number.
+	regs      []regionEntry
+	regRev    uint64
+	selRegion string
+	regLabels int
+	// The tool in hand and what a gesture with it holds between frames:
+	// the polygon being clicked, the shape a drag would add, whether a drag
+	// moves the region selected, the pointer, a region a hit region
+	// reported clicked, and the last refusal or note.
+	tool          toolE
+	polyDraft     []regions.Point
+	dragPreview   *regions.Shape
+	moving        bool
+	hoverAt       imageview.PixelPoint
+	hoverOk       bool
+	pendingSelect string
+	regionNote    string
+	edit          regionEdit
+	// drawCache keeps each region's drawing until its key changes; the
+	// scratch slices hold one projected polyline at a time.
+	drawCache          map[string]*drawnRegion
+	scratchX, scratchY []float32
+	// The figures and the profile, each computed as a task; the call
+	// generations settle measure_region.
+	regMeasures  map[string]*regionMeasure
+	measureArea  bool
+	regionJob    bgjob.Runner[measureBatch]
+	regionJobErr string
+	// regionBatch is the regions the last measurement of regions took, in
+	// order, and regionNotDrawn how many it left out as not drawn on the
+	// image shown: what measure_regions settles with.
+	regionBatch                   []string
+	regionNotDrawn                int
+	regionCallGen, regionLanded   uint64
+	regionActive, profileActive   bool
+	profile                       *regionProfile
+	profileErr                    string
+	profileJob                    bgjob.Runner[regionProfile]
+	profileCallGen, profileLanded uint64
+	// The regions table and the profile table, rebuilt when what they
+	// show changes.
+	regTable        arrow.RecordBatch
+	regTableIds     []string
+	regTableKey     string
+	regCols         []recordtable.Column
+	regGrid         recordtable.State
+	profileTable    arrow.RecordBatch
+	profileTableFor *regionProfile
+	profileCols     []recordtable.Column
+	profileGrid     recordtable.State
+	// The regions' handovers and documents: one publisher per dataset, the
+	// outcome of each kind of request, and a document read off the frame.
+	regionsPub, profilePub                         *adhocdata.Publisher
+	regionsOut, profileOut, documentOut, recordOut outcome
+	loadedDoc                                      atomic.Pointer[loadedDocument]
+
+	// The run of an operation (ADR-0400 §M2, imagescope_run.go): the job,
+	// the store it fills, what was shown before it, the call generations
+	// that settle run_operation, its outcome and the last result's id.
+	runJob                bgjob.Runner[ranResult]
+	runArriving           atomic.Pointer[tiles.Store]
+	runPrevShown          string
+	runCallGen, runLanded uint64
+	runActive             bool
+	runErr, runNote       string
+	lastResult            string
+	panel                 panelState
 }
 
 var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
 	inst = &App{
-		logger: log.Logger,
-		pub:    adhocdata.NewWindowPublisher(datasetAlias),
+		logger:     log.Logger,
+		pub:        adhocdata.NewWindowPublisher(datasetAlias),
+		regionsPub: adhocdata.NewWindowPublisher(regionsAlias),
+		profilePub: adhocdata.NewWindowPublisher(profileAlias),
 	}
 	inst.bindIds(c.NewWidgetIdStack())
 	inst.phaseMachine = newPhaseMachine()
@@ -196,7 +307,13 @@ func (inst *App) bindIds(ids *c.WidgetIdStack) {
 				i, _ := old.Plane()
 				_ = inst.viewer.SetPlane(i)
 			}
-			_ = inst.viewer.SetRecipe(old.Recipe())
+			if layers, ok := old.Composite(); ok {
+				hand, _ := old.LayerInHand()
+				_ = inst.viewer.SetComposite(layers, old.CompositeLinked())
+				_ = inst.viewer.SetLayerInHand(hand)
+			} else {
+				_ = inst.viewer.SetRecipe(old.Recipe())
+			}
 			if r, ok := old.Region(); ok {
 				inst.viewer.SetRegion(r)
 			}
@@ -220,6 +337,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.bus = ctx.Bus()
 	inst.scope = ctx.Lifetime()
 	inst.measure.Configure(inst.tasks, measureKind, measureTitle)
+	inst.selectJob.Configure(inst.tasks, selectKind, selectTitle)
 	inst.phaseChip = fsmview.New(inst.ids, "image-phase", inst.phaseMachine, fsmview.Options[phaseE]{
 		Title:      "Image phase",
 		Tethered:   true,
@@ -252,11 +370,18 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.open.Invalidate()
 	inst.measure.Close()
+	inst.selectJob.Close()
+	inst.regionJob.Invalidate()
+	inst.profileJob.Invalidate()
+	inst.runJob.Invalidate()
 	inst.viewer.Close()
-	if inst.statsRec != nil {
-		inst.statsRec.Release()
-		inst.statsRec, inst.statsFor = nil, nil
+	for _, rec := range []*arrow.RecordBatch{&inst.statsRec, &inst.regTable, &inst.profileTable} {
+		if *rec != nil {
+			(*rec).Release()
+			*rec = nil
+		}
 	}
+	inst.statsFor, inst.profileTableFor = nil, nil
 	return
 }
 
@@ -276,8 +401,17 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 // of the frame, so every pane below reads one stable value.
 func (inst *App) takeResults() {
 	inst.takeOpen()
+	inst.demandSelection()
 	inst.demandMeasurement()
+	inst.takeRegionJobs()
+	inst.takeRun()
+	inst.takeLoadedDocument()
+	inst.pruneDrawCache()
 }
+
+// sidePanelWidth is the side panel's starting width: room for the regions'
+// fields and table and the operations' fields.
+const sidePanelWidth = 380
 
 func (inst *App) renderBody() {
 	for range c.PanelTopInside(inst.ids.PrepareStr("controls")).Resizable(false).KeepIter() {
@@ -287,13 +421,39 @@ func (inst *App) renderBody() {
 		for range c.PanelBottomInside(inst.ids.PrepareStr("measure")).Resizable(false).KeepIter() {
 			inst.renderMeasurePane()
 		}
+		for range c.PanelRightInside(inst.ids.PrepareStr("side")).Resizable(true).DefaultSize(sidePanelWidth).KeepIter() {
+			inst.renderSidePanel()
+		}
 	}
 	for range c.PanelCentralInside().KeepIter() {
 		if inst.pic == nil {
 			inst.renderEmpty()
 			continue
 		}
-		inst.viewer.RenderFill(640, 480)
+		inst.renderViewer(func() imageview.Events { return inst.viewer.RenderFill(640, 480) })
+	}
+}
+
+// renderViewer draws the image with the regions over it and applies what
+// the person did on it.
+func (inst *App) renderViewer(render func() imageview.Events) {
+	inst.prepareViewer()
+	inst.handleViewerEvents(render())
+	if inst.gestureUnderWay() {
+		c.RequestRepaint()
+	}
+}
+
+// renderSidePanel is the side panel: the regions, and the operations on
+// the window's images, each under a fold that starts open.
+func (inst *App) renderSidePanel() {
+	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+		for range c.CollapsingHeader(inst.ids.PrepareStr("regions-fold"), c.WidgetText().Text("Regions").Keep()).DefaultOpen(true).KeepIter() {
+			inst.renderRegionsPane()
+		}
+		for range c.CollapsingHeader(inst.ids.PrepareStr("operations-fold"), c.WidgetText().Text("Operations").Keep()).DefaultOpen(true).KeepIter() {
+			inst.renderOperationsPane()
+		}
 	}
 }
 
@@ -308,6 +468,9 @@ func (inst *App) renderStatusRow() {
 			c.Label(inst.phaseLine()).Send()
 		}
 		bgjobrow.Render(bgjobrow.Input{Ids: inst.ids, ScopeKey: "open-row", Job: &inst.open, Note: "opening…", Cancel: true, Inline: true})
+		if inst.selBusy {
+			bgjobrow.Render(bgjobrow.Input{Ids: inst.ids, ScopeKey: "select-row", Job: &inst.selectJob, Note: "taking the selection…", Cancel: true, Inline: true})
+		}
 		// The viewer's own work, as rows of the same kind (W4). A cancelled
 		// level build leaves the view reducing the tiles it needs one by one.
 		bgjobrow.Render(bgjobrow.Input{Ids: inst.ids, ScopeKey: "levels-row", Job: inst.viewer.LevelJob(), Note: "building levels…", Cancel: true, Inline: true})
@@ -320,6 +483,15 @@ func (inst *App) renderStatusRow() {
 			c.Label(inst.openNote).Send()
 		}
 	}
+	// What the last selection change kept of the view, on a line of its own:
+	// it is a sentence, and the row above is full.
+	switch {
+	case inst.selectErr != "":
+		badge.New(inst.ids.PrepareStr("select-err"), inst.selectErr).
+			Tone(badge.ToneError).Variant(badge.VariantSoft).Send()
+	case inst.selectNote != "" && !inst.selBusy:
+		c.Label(inst.selectNote).Send()
+	}
 	if inst.seedErr != "" {
 		c.Label(inst.seedErr).Send()
 	}
@@ -331,8 +503,27 @@ func (inst *App) renderStatusRow() {
 	if inst.pic == nil {
 		return
 	}
-	for i, note := range sourceNotes(inst.pic.Provenance()) {
-		badge.New(inst.ids.PrepareSeq(uint64(i)), note).Tone(badge.ToneWarning).Variant(badge.VariantSoft).Send()
+	for i, note := range storeNotes(inst.pic) {
+		badge.New(inst.ids.PrepareSeq(uint64(i)), note).Tone(noteTone(inst.pic, note)).Variant(badge.VariantSoft).Send()
+	}
+	inst.renderPlacement()
+}
+
+// renderPlacement says where the pixels are, for an image with a placement
+// (ADR-0398 §SD4): the frame, a pixel's size in it and the statement it came
+// from, and, in warning badges, what the file declared that is not applied.
+// An image without one says nothing.
+func (inst *App) renderPlacement() {
+	p := inst.pic.Placement()
+	if p.IsZero() {
+		return
+	}
+	metric(imageview.DescribePlacement(p), tipPlacement)
+	for range c.IdScope(inst.ids.PrepareStr("unapplied")) {
+		for i, u := range p.Unapplied {
+			badge.New(inst.ids.PrepareSeq(uint64(i)), "declared and not applied: "+u).
+				Tone(badge.ToneWarning).Variant(badge.VariantSoft).Send()
+		}
 	}
 }
 
@@ -375,22 +566,44 @@ func (inst *App) renderControls() {
 	if !have {
 		return
 	}
+	inst.renderToolRow()
+	inst.renderImagesRow()
+	inst.renderStackControls()
 	recipe := inst.viewer.Recipe()
 	plane, single := inst.viewer.Plane()
 	for range c.Horizontal().KeepIter() {
 		c.Label("Show").Selectable(false).Send()
+		composite := inst.viewer.IsComposite()
 		for range c.IdScope(inst.ids.PrepareStr("plane")) {
-			if inst.button("stored", planeAsStored, tipAsStored, !single) {
+			if inst.button("stored", planeAsStored, tipAsStored, !single && !composite) {
 				inst.viewGesture(opSetPlane, SetPlaneArgs{Plane: planeAsStored}, func() error { return inst.setPlane(planeAsStored) })
 			}
-			for i, name := range inst.pic.Model().PlaneNames() {
+			labels := inst.pic.PlaneLabels()
+			for i, name := range labels {
 				// A greyscale image's one plane is the image as stored.
 				if !inst.pic.Model().IsColor() && !inst.pic.Model().HasAlpha() {
 					break
 				}
-				if inst.button(name, name, tipPlane, single && plane == i) {
+				if stk := inst.stackShown(); stk != nil && stk.shown.composite && slices.Index(labels, name) != i {
+					// A band a composite's image repeats to fill its colour
+					// model is one plane to show.
+					continue
+				}
+				key := name
+				if slices.Index(labels, name) != i {
+					// Two planes of one band, as a composite can take: the
+					// second button needs an id of its own.
+					key = name + "#" + strconv.Itoa(i)
+				}
+				if inst.button(key, name, tipPlane, single && plane == i) {
 					inst.viewGesture(opSetPlane, SetPlaneArgs{Plane: name}, func() error { return inst.setPlane(name) })
 				}
+			}
+			// A stack's bands are composited from the Bands row; an image
+			// that is no stack's, of its planes here (ADR-0401 §M2).
+			if inst.stackShown() == nil && inst.pic.Model().PlaneCount() > 1 &&
+				inst.button(planeComposite, planeComposite, tipComposite, composite) && !composite {
+				inst.compositeGesture(inst.defaultComposite())
 			}
 		}
 		c.Label("Limits").Selectable(false).Send()
@@ -402,7 +615,10 @@ func (inst *App) renderControls() {
 			if inst.button("nominal", "nominal", tipLimitsNominal, src == display.LimitsSourceNominal) {
 				inst.recipeGesture(func(a *SetRecipeArgs) { a.Limits = limitsNominal })
 			}
-			if inst.viewer.IsSinglePlane() {
+			if inst.viewer.IsSinglePlane() || inst.viewer.IsComposite() {
+				if inst.button(limitsZScale, limitsZScale, tipLimitsZ, src == display.LimitsSourceZScale) {
+					inst.recipeGesture(func(a *SetRecipeArgs) { a.Limits, a.ZScaleContrast, a.ZScaleSamples = limitsZScale, 0, 0 })
+				}
 				for _, pct := range percentileChoices {
 					current := src == display.LimitsSourcePercentile && recipe.Limits.PercentLo == pct[0] && recipe.Limits.PercentHi == pct[1]
 					label := fmt.Sprintf("%g–%g %%", pct[0], pct[1])
@@ -412,6 +628,9 @@ func (inst *App) renderControls() {
 				}
 			}
 		}
+	}
+	if inst.viewer.IsComposite() {
+		inst.renderCompositeRow()
 	}
 	for range c.HoverText(tipAdvanced).KeepIter() {
 		for range c.CollapsingHeader(inst.ids.PrepareStr("advanced"),
@@ -476,7 +695,7 @@ func (inst *App) renderSampleButtons() {
 	for range c.Horizontal().KeepIter() {
 		c.Label("Sample").Selectable(false).Send()
 		for range c.IdScope(inst.ids.PrepareStr("sample")) {
-			for _, name := range samples.Names() {
+			for _, name := range sampleNames() {
 				if inst.button(name, name, tipSample, false) && !inst.open.Running() {
 					gestureOr(inst, opOpenSample, OpenSampleArgs{Name: name}, func() { inst.openSample(name, image.Rectangle{}) })
 				}
@@ -495,7 +714,7 @@ func (inst *App) renderEmpty() {
 	case inst.bus == nil:
 		c.Label("No image. There is no bus on this host, so a file cannot be opened here; a sample can.").Send()
 	default:
-		c.Label("No image. Open a PNG or JPEG file with Open…, or start from a sample.").Send()
+		c.Label("No image. Open a PNG, JPEG, TIFF, FITS, NPY or NPZ file with Open…, or start from a sample.").Send()
 	}
 	inst.renderSampleButtons()
 }
@@ -523,7 +742,7 @@ func (inst *App) renderMeasurePane() {
 // where the number is (F3).
 const (
 	tipSamples = "Valid samples counted in the region."
-	tipInvalid = "Samples left out as invalid: NaN in a float plane. Every other figure is over the valid samples only."
+	tipInvalid = "Samples left out as invalid: NaN in a float plane, and the stored value the planes declare invalid. Every other figure is over the valid samples only."
 	tipSd      = "Standard deviation over the region's samples as the whole population (divisor n). It describes the region and estimates nothing beyond it."
 	tipMedian  = "50th percentile, nearest rank: the smallest sample with at least half of the samples at or below it."
 	tipP01     = "1st percentile, nearest rank."
@@ -645,6 +864,11 @@ func (inst *App) syncChecks() {
 	r := inst.viewer.Recipe()
 	inst.invert, inst.flag = r.Invert, r.FlagClipped
 	inst.param = effectiveParam(r)
+	inst.linkedBox = inst.viewer.CompositeLinked()
+	layers, _ := inst.viewer.Composite()
+	for i := range inst.layerShownBox {
+		inst.layerShownBox[i] = i < len(layers) && !layers[i].Hidden
+	}
 }
 
 // effectiveParam is the transfer parameter a recipe is mapped with.
@@ -703,4 +927,8 @@ func refusalText(err error) (s string) {
 var (
 	_ bgjobrow.JobI = (*bgjob.Runner[opened])(nil)
 	_ bgjobrow.JobI = (*bgjob.Keyed[*measurement])(nil)
+	_ bgjobrow.JobI = (*bgjob.Keyed[*selected])(nil)
+	_ bgjobrow.JobI = (*bgjob.Runner[measureBatch])(nil)
+	_ bgjobrow.JobI = (*bgjob.Runner[regionProfile])(nil)
+	_ bgjobrow.JobI = (*bgjob.Runner[ranResult])(nil)
 )

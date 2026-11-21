@@ -85,7 +85,7 @@ Every Sensitive variable `NAME` has a companion `NAME_FILE`, listed as a path: i
 | Name | Type | Default | CLI flag | Sensitive | Description |
 |------|------|---------|----------|-----------|-------------|
 | `BOXER_IMAGESCOPE_REGION` | string | — | — |  | a region to mark on the image BOXER_IMAGESCOPE_SAMPLE opens, as four integers: column, row, width, height in pixels, separated by commas; for scenes and demos |
-| `BOXER_IMAGESCOPE_SAMPLE` | string | — | — |  | the synthetic sample image a new imagescope window opens on: field, colour, small, float or scaled; for scenes and demos |
+| `BOXER_IMAGESCOPE_SAMPLE` | string | — | — |  | the synthetic sample a new imagescope window opens on: the image field, colour, small, float, scaled, elevation, double or counts, or the stack bands; for scenes and demos |
 
 ## boxer-lading (3)
 

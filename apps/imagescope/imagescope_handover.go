@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/science/imaging"
 	"github.com/stergiotis/boxer/public/science/imaging/tiles"
 )
@@ -62,11 +63,14 @@ func handoverRegion(pic *tiles.Store, region image.Rectangle) (r image.Rectangle
 // pixelsArrow renders the samples of a region of an image — read out of it,
 // its top left pixel at at — as an Arrow IPC stream: one row per pixel in
 // row-major order, its column and row in the image, and one column per
-// plane holding the stored sample in the plane's own kind. Rows and bytes
-// are proportional to the region's pixels, which the caller has bounded.
+// plane, named as columnNames names it, holding the stored sample in the
+// plane's own kind; an invalid sample is stored as it is, and the query the
+// play window opens with leaves it out. Rows and bytes are proportional to
+// the region's pixels, which the caller has bounded. A sample kind without
+// an Arrow column here is refused by name.
 func pixelsArrow(img imaging.Image, at image.Point) (stream []byte, rows int64, err error) {
 	rect := image.Rect(at.X, at.Y, at.X+img.Width(), at.Y+img.Height())
-	names := img.Model().PlaneNames()
+	names := columnNames(img.PlaneLabels())
 	fields := []arrow.Field{
 		{Name: "col", Type: arrow.PrimitiveTypes.Uint32},
 		{Name: "row", Type: arrow.PrimitiveTypes.Uint32},
@@ -77,8 +81,16 @@ func pixelsArrow(img imaging.Image, at image.Point) (stream []byte, rows int64, 
 		sampleType = arrow.PrimitiveTypes.Uint8
 	case imaging.SampleKindU16:
 		sampleType = arrow.PrimitiveTypes.Uint16
-	default:
+	case imaging.SampleKindI16:
+		sampleType = arrow.PrimitiveTypes.Int16
+	case imaging.SampleKindI32:
+		sampleType = arrow.PrimitiveTypes.Int32
+	case imaging.SampleKindF32:
 		sampleType = arrow.PrimitiveTypes.Float32
+	case imaging.SampleKindF64:
+		sampleType = arrow.PrimitiveTypes.Float64
+	default:
+		return nil, 0, eb.Build().Stringer("kind", img.Kind()).Errorf("no column type for samples of this kind")
 	}
 	for _, n := range names {
 		fields = append(fields, arrow.Field{Name: n, Type: sampleType})
@@ -104,8 +116,14 @@ func pixelsArrow(img imaging.Image, at image.Point) (stream []byte, rows int64, 
 				b.AppendValues(p.U8()[lo:hi], nil)
 			case *array.Uint16Builder:
 				b.AppendValues(p.U16()[lo:hi], nil)
+			case *array.Int16Builder:
+				b.AppendValues(p.I16()[lo:hi], nil)
+			case *array.Int32Builder:
+				b.AppendValues(p.I32()[lo:hi], nil)
 			case *array.Float32Builder:
 				b.AppendValues(p.F32()[lo:hi], nil)
+			case *array.Float64Builder:
+				b.AppendValues(p.F64()[lo:hi], nil)
 			}
 		}
 	}
@@ -115,32 +133,81 @@ func pixelsArrow(img imaging.Image, at image.Point) (stream []byte, rows int64, 
 	return stream, int64(n), err
 }
 
+// columnNames are the pixel columns' names: the planes' labels, each made
+// unique — a composite can take one band twice — and kept apart from col and
+// row by a numbered suffix.
+func columnNames(labels []string) []string {
+	out := make([]string, len(labels))
+	seen := map[string]bool{"col": true, "row": true}
+	for i, l := range labels {
+		name := l
+		for k := 2; seen[name]; k++ {
+			name = l + "_" + strconv.Itoa(k)
+		}
+		seen[name] = true
+		out[i] = name
+	}
+	return out
+}
+
+// quoteIdent writes a column name as a ClickHouse identifier: bare when it
+// is one, otherwise in backquotes, a backquote or a backslash in it escaped.
+func quoteIdent(name string) string {
+	bare := name != ""
+	for i, r := range name {
+		if !(r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || i > 0 && r >= '0' && r <= '9') {
+			bare = false
+			break
+		}
+	}
+	if bare {
+		return name
+	}
+	return "`" + strings.NewReplacer("\\", "\\\\", "`", "\\`").Replace(name) + "`"
+}
+
 // handoverSql is the buffer the opened play window is seeded with: the
 // statistics table, one row per plane, computed by ClickHouse from the
 // pixels, in values as the window's table is. The dataset holds stored
-// samples, so a plane's value transform is written into the query, and a
-// float plane's invalid samples — NaN, which an aggregate would carry into
-// its result — are left out as the window leaves them out. The percentile
-// columns of the window's table are nearest-rank percentiles, a rule
-// ClickHouse's quantile functions do not all share, so only the median —
-// quantileExactLow's lower median — is restated here.
+// samples, so a plane's value transform is written into the query, and
+// invalid samples — NaN in a float plane, which an aggregate would carry
+// into its result, and the stored value the planes declare invalid — are
+// left out as the window leaves them out. The percentile columns of the
+// window's table are nearest-rank percentiles, a rule ClickHouse's quantile
+// functions do not all share, so only the median — quantileExactLow's lower
+// median — is restated here.
 func handoverSql(alias string, pic *tiles.Store) (sql string) {
 	var b strings.Builder
 	b.WriteString("-- Pixels of the region marked in imagescope, one row per pixel: col, row and a\n")
 	b.WriteString("-- column per plane holding the stored sample. This restates the window's table.\n")
-	for i, p := range pic.Model().PlaneNames() {
+	inv, hasInv := pic.Invalid()
+	if hasInv {
+		fmt.Fprintf(&b, "-- The stored value %s marks no measurement in every plane but alpha.\n", formatStored(inv, pic.Kind()))
+	}
+	labels := pic.PlaneLabels()
+	names := columnNames(labels)
+	alpha := pic.Model().HasAlpha()
+	for i, name := range names {
 		if i > 0 {
 			b.WriteString("UNION ALL\n")
 		}
+		p := quoteIdent(name)
 		v := p
 		if t := pic.Transform(i); !t.IsIdentity() {
 			v = fmt.Sprintf("(%s * %s + %s)", p, strconv.FormatFloat(t.Scale, 'g', -1, 64), strconv.FormatFloat(t.Offset, 'g', -1, 64))
 		}
 		fmt.Fprintf(&b, "SELECT '%[1]s' AS plane, count() AS samples, min(%[2]s) AS min, max(%[2]s) AS max,\n"+
 			"       avg(%[2]s) AS mean, stddevPop(%[2]s) AS sd, quantileExactLow(0.5)(%[2]s) AS median\n"+
-			"FROM keelson('%[3]s')\n", p, v, alias)
-		if pic.Kind() == imaging.SampleKindF32 {
-			fmt.Fprintf(&b, "WHERE NOT isNaN(%s)\n", p)
+			"FROM keelson('%[3]s')\n", strings.ReplaceAll(labels[i], "'", "''"), v, alias)
+		var where []string
+		if pic.Kind().IsFloat() {
+			where = append(where, "NOT isNaN("+p+")")
+		}
+		if hasInv && !(alpha && i == len(names)-1) {
+			where = append(where, p+" != "+formatStored(inv, pic.Kind()))
+		}
+		if len(where) > 0 {
+			b.WriteString("WHERE " + strings.Join(where, " AND ") + "\n")
 		}
 	}
 	return b.String()

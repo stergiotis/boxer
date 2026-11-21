@@ -188,19 +188,47 @@ func TestTheImageMachineIsMounted(t *testing.T) {
 func TestOperationsCatalogRegisters(t *testing.T) {
 	m, ok := app.LookupManifest(manifest.Id)
 	require.True(t, ok)
-	for _, name := range []string{opGetView, opReadPixels, opMeasure, opOpenSample, opSetRecipe, opSetPlane, opSetRegion, opSetZoom, opSendToPlay} {
+	// The decided set, pinned: an operation added or dropped is a change to
+	// this list, the help book and the ADR that decides it together —
+	// ADR-0398 §M6 for the stack's, ADR-0399 §M2 for the regions',
+	// ADR-0400 §M2 for the operations' and the images', ADR-0401 §M2 for
+	// the composite's.
+	decided := []string{opGetView, opReadPixels, opMeasure, opOpenSample, opSetRecipe, opSetPlane, opSetRegion, opSetZoom, opSendToPlay,
+		opGetAxis, opSetPosition, opSetBands, opToWorld, opToPixel,
+		opListRegions, opGetRegion, opAddRegion, opUpdateRegion, opRemoveRegion, opSelectRegion, opMeasureRegion, opProfileRegion,
+		opGetRegionsDocument, opSetRegionsDocument, opSendRegionsToPlay, opSendProfileToPlay,
+		opListOperators, opPlanOperation, opRunOperation, opCancelOperation, opListImages, opShowImage, opDropImage, opGetRecord,
+		opSetComposite, opSetLayer, opMeasureRegions}
+	for _, name := range decided {
 		spec, found := m.Operations.Lookup(name)
 		require.True(t, found, name)
 		assert.True(t, spec.Agents, name)
 		assert.NotEmpty(t, spec.Summary, name)
 	}
-	spec, _ := m.Operations.Lookup(opSendToPlay)
-	assert.Equal(t, app.OperationEffectConsequential, spec.Effect, "publishing writes outside the app")
-	spec, _ = m.Operations.Lookup(opOpenSample)
-	assert.True(t, spec.Async, "open_sample settles when the image is shown")
-	for _, name := range []string{opSetRecipe, opSetPlane, opSetRegion, opSetZoom} {
+	var declared []string
+	for _, spec := range m.Operations.Operations {
+		if spec.Name != "image_state" && spec.Name != "image_machine" {
+			declared = append(declared, spec.Name)
+		}
+	}
+	assert.ElementsMatch(t, decided, declared, "the catalog is the decided set, the machine's two queries aside")
+	for _, name := range []string{opSendToPlay, opSendRegionsToPlay, opSendProfileToPlay} {
+		spec, _ := m.Operations.Lookup(name)
+		assert.Equal(t, app.OperationEffectConsequential, spec.Effect, "%s: publishing writes outside the app", name)
+	}
+	var spec app.OperationSpec
+	for _, name := range []string{opOpenSample, opSetPosition, opSetBands, opMeasureRegion, opRunOperation, opSetComposite, opSetLayer, opMeasureRegions} {
+		spec, _ = m.Operations.Lookup(name)
+		assert.True(t, spec.Async, "%s settles when the image is shown", name)
+	}
+	for _, name := range []string{opSetRecipe, opSetPlane, opSetRegion, opSetZoom, opSetPosition, opSetBands, opSetComposite, opSetLayer} {
 		spec, _ = m.Operations.Lookup(name)
 		assert.Equal(t, app.OperationEffectView, spec.Effect, name)
+	}
+	for _, name := range []string{opGetAxis, opToWorld, opToPixel, opListRegions, opGetRegion, opProfileRegion, opGetRegionsDocument,
+		opListOperators, opPlanOperation, opListImages, opGetRecord} {
+		spec, _ = m.Operations.Lookup(name)
+		assert.Equal(t, app.OperationClassQuery, spec.Class, name)
 	}
 }
 
@@ -265,7 +293,7 @@ func TestSetRecipeSetsTheWholeRecipeAndNeverToggles(t *testing.T) {
 	assert.Equal(t, "manual limits need Hi above Lo", refusal(t, command(t, inst, opSetRecipe, bad)))
 	bad = args
 	bad.Limits = "auto"
-	assert.Equal(t, "limits are data, nominal, percentile or manual", refusal(t, command(t, inst, opSetRecipe, bad)))
+	assert.Equal(t, "limits are data, nominal, percentile, zscale or manual", refusal(t, command(t, inst, opSetRecipe, bad)))
 	assert.Equal(t, before, inst.viewer.Recipe(), "a refused command changes nothing")
 
 	args.Limits, args.PercentLo, args.PercentHi = limitsPercentile, 1, 99

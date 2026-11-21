@@ -945,7 +945,7 @@
     {
       "name": "BOXER_IMAGESCOPE_SAMPLE",
       "type": "string",
-      "description": "the synthetic sample image a new imagescope window opens on: field, colour, small, float or scaled; for scenes and demos",
+      "description": "the synthetic sample a new imagescope window opens on: the image field, colour, small, float, scaled, elevation, double or counts, or the stack bands; for scenes and demos",
       "category": "boxer-imagescope",
       "sensitive": false,
       "origin": {
