@@ -28,7 +28,9 @@ type imageViewDemoState struct {
 	// flag are compared with the recipe before the boxes are drawn and never
 	// overwritten from it while a toggle may be pending.
 	invert, flag, smooth bool
-	problem              string
+	// linked is the composite's link as its check box holds it.
+	linked  bool
+	problem string
 }
 
 type imageViewDemoImage struct {
@@ -47,6 +49,7 @@ func newImageViewDemoState(ids *c.WidgetIdStack) *imageViewDemoState {
 	st := &imageViewDemoState{v: imageview.New(ids, "imageview-demo", imageview.Options{})}
 	for _, im := range []struct{ label, name string }{
 		{"field 16-bit", samples.NameField}, {"colour + alpha", samples.NameColour}, {"small 8-bit", samples.NameSmall},
+		{"elevation signed 16-bit", samples.NameElevation},
 	} {
 		if img, err := samples.ByName(im.name); err == nil {
 			st.images = append(st.images, imageViewDemoImage{im.label, img})
@@ -107,14 +110,15 @@ func demoImageView(ids *c.WidgetIdStack, st *imageViewDemoState) {
 	}
 	for range c.HorizontalTop().KeepIter() {
 		c.Label("Show").Selectable(false).Send()
-		if imageViewDemoButton(ids, "plane", 99, "as stored", !single) {
+		comp := st.v.IsComposite()
+		if imageViewDemoButton(ids, "plane", 99, "as stored", !single && !comp) {
 			st.problem = ""
 			if err := st.v.SetAsStored(); err != nil {
 				st.problem = err.Error()
 			}
 			st.syncChecks()
 		}
-		for i, name := range img.Model().PlaneNames() {
+		for i, name := range img.PlaneLabels() {
 			if imageViewDemoButton(ids, "plane", uint64(i), name, single && plane == i) {
 				st.problem = ""
 				if err := st.v.SetPlane(i); err != nil {
@@ -123,8 +127,23 @@ func demoImageView(ids *c.WidgetIdStack, st *imageViewDemoState) {
 				st.syncChecks()
 			}
 		}
+		// A colour image's red, green and blue as a composite (ADR-0401):
+		// linked over the range of their data.
+		if img.Model().IsColor() && imageViewDemoButton(ids, "plane", 98, "composite", comp) {
+			st.problem = ""
+			if err := st.v.SetComposite(imageViewDemoComposite(img), true); err != nil {
+				st.problem = err.Error()
+			}
+			st.linked = true
+			st.syncChecks()
+		}
 		c.Label("Limits").Selectable(false).Send()
-		shown := img.Plane(max(plane, 0))
+		shownIdx := max(plane, 0)
+		if layers, ok := st.v.Composite(); ok {
+			hand, _ := st.v.LayerInHand()
+			shownIdx = layers[hand].Plane
+		}
+		shown := img.Plane(shownIdx)
 		if imageViewDemoButton(ids, "limits", 0, "data", recipe.Limits.Source == display.LimitsSourceData) {
 			if l, ok := display.DataLimits(shown); ok {
 				st.set(func(r *display.Recipe) { r.Limits = l })
@@ -135,11 +154,12 @@ func demoImageView(ids *c.WidgetIdStack, st *imageViewDemoState) {
 				st.set(func(r *display.Recipe) { r.Limits = l })
 			}
 		}
+		measured := single || comp || !img.Model().IsColor()
 		for i, pct := range imageViewDemoPercentiles {
 			current := recipe.Limits.Source == display.LimitsSourcePercentile &&
 				recipe.Limits.PercentLo == pct[0] && recipe.Limits.PercentHi == pct[1]
 			label := fmt.Sprintf("%g–%g %%", pct[0], pct[1])
-			if single || !img.Model().IsColor() {
+			if measured {
 				if imageViewDemoButton(ids, "percentile", uint64(i), label, current) {
 					st.problem = ""
 					st.set(func(r *display.Recipe) {
@@ -148,6 +168,12 @@ func demoImageView(ids *c.WidgetIdStack, st *imageViewDemoState) {
 				}
 			}
 		}
+		if measured && imageViewDemoButton(ids, "limits", 2, "zscale", recipe.Limits.Source == display.LimitsSourceZScale) {
+			st.set(func(r *display.Recipe) { r.Limits = display.Limits{Source: display.LimitsSourceZScale} })
+		}
+	}
+	if layers, ok := st.v.Composite(); ok {
+		st.renderCompositeRow(ids, img, layers)
 	}
 	for range c.HorizontalTop().KeepIter() {
 		c.Label("Transfer").Selectable(false).Send()
@@ -192,13 +218,64 @@ func demoImageView(ids *c.WidgetIdStack, st *imageViewDemoState) {
 	}
 }
 
+// imageViewDemoComposite is a colour image's red, green and blue planes as
+// a linked composite over the range of their data together.
+func imageViewDemoComposite(img imaging.Image) []imageview.CompositeLayer {
+	recipe := display.DefaultPlaneRecipe(img.Plane(0))
+	for i := 1; i < 3; i++ {
+		if l, ok := display.DataLimits(img.Plane(i)); ok {
+			recipe.Limits.Lo, recipe.Limits.Hi = min(recipe.Limits.Lo, l.Lo), max(recipe.Limits.Hi, l.Hi)
+		}
+	}
+	colours := display.DefaultLayerColors(3)
+	layers := make([]imageview.CompositeLayer, 3)
+	for i := range layers {
+		layers[i] = imageview.CompositeLayer{Plane: i, Layer: display.Layer{Recipe: recipe, Color: colours[i]}}
+	}
+	return layers
+}
+
+// renderCompositeRow is the composite's controls: the layer in hand, each
+// layer's visibility, and the link.
+func (st *imageViewDemoState) renderCompositeRow(ids *c.WidgetIdStack, img imaging.Image, layers []imageview.CompositeLayer) {
+	hand, _ := st.v.LayerInHand()
+	for range c.HorizontalTop().KeepIter() {
+		c.Label("Layers").Selectable(false).Send()
+		for i, l := range layers {
+			label := img.PlaneLabels()[l.Plane] + " in " + l.Color.String()
+			if l.Hidden {
+				label += " (hidden)"
+			}
+			if imageViewDemoButton(ids, "layer", uint64(i), label, i == hand) {
+				st.problem = ""
+				if i == hand {
+					// A second click on the layer in hand shows or hides it.
+					l.Hidden = !l.Hidden
+					if err := st.v.SetLayer(i, l); err != nil {
+						st.problem = err.Error()
+					}
+				} else if err := st.v.SetLayerInHand(i); err != nil {
+					st.problem = err.Error()
+				}
+				st.syncChecks()
+			}
+		}
+		if st.linked != st.v.CompositeLinked() {
+			if err := st.v.SetCompositeLinked(st.linked); err != nil {
+				st.problem = err.Error()
+			}
+		}
+		c.Checkbox(ids.PrepareStr("linked"), st.linked, "linked").SendRespVal(&st.linked)
+	}
+}
+
 func init() {
 	registry.Register(registry.Demo{
 		Name: "imageview", Category: "Graphics & canvas", Title: icons.IconFileImage + " imageview (samples and a recipe)",
 		Stage:       [2]float32{1024, 800},
 		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNonDeterministic,
 		Kind:        registry.DemoKindUX,
-		Description: "The image viewer of ADR-0373: an image is planes of samples kept at their own bit depth, and what is shown is those planes through a recipe — limits, a transfer function, and for a single plane a colour map — mapped in Go for the tiles in view. A colour image opens as stored; any one plane can be shown by itself instead. The readout under the image is read from the samples, not from what was drawn, so it does not change with the recipe. Under a single plane is its histogram, counted over the whole plane, with the two limits as handles to drag; a percentile stretch sets them where a few extreme samples cannot pull them wide. Shown smaller than it is, the image is drawn from means of blocks of samples, and the readout says so. Pan by dragging, zoom with the wheel. Tiles arrive from worker goroutines, so a capture taken at once can show the image partly drawn.",
+		Description: "The image viewer of ADR-0373: an image is planes of samples kept at their own bit depth, and what is shown is those planes through a recipe — limits, a transfer function, and for a single plane a colour map — mapped in Go for the tiles in view. A colour image opens as stored; any one plane can be shown by itself instead. The readout under the image is read from the samples, not from what was drawn, so it does not change with the recipe. Under a single plane is its histogram, counted over the whole plane, with the two limits as handles to drag; a percentile stretch sets them where a few extreme samples cannot pull them wide, and zscale finds them around the bulk of the values from a sample of a thousand. A colour image can also be shown as a composite of its planes (ADR-0401): a layer per plane in red, green and blue, linked under one recipe or, unlinked, each under its own — which the viewer then states beside the image — with the histogram and the limits of the layer in hand. Shown smaller than it is, the image is drawn from means of blocks of samples, and the readout says so. Pan by dragging, zoom with the wheel. Tiles arrive from worker goroutines, so a capture taken at once can show the image partly drawn.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			return newImageViewDemoState(ids)
 		},

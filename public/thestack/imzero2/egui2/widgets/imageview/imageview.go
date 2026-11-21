@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -33,6 +34,10 @@ type Options struct {
 	// HideReadout leaves out the line under the image that names the pixel
 	// under the pointer; Events still carry it.
 	HideReadout bool
+	// HideFrameCoordinates leaves the frame coordinates of the pointer out
+	// of the readout line of an image that has a placement; Events and
+	// [Viewer.HoverFrame] still carry them.
+	HideFrameCoordinates bool
 	// HideHistogram leaves out the strip under a single-plane view that
 	// shows the plane's histogram and the two limits as handles to drag.
 	HideHistogram bool
@@ -59,6 +64,20 @@ type Options struct {
 	// the host lists, can cancel, and drains when the window closes. In a
 	// keelson app it is task.ForApp(ctx); nil runs the work untracked.
 	Tasks task.TaskApiI
+	// DragGestures makes a drag on the image a gesture the host reads
+	// instead of a pan: while it is under way [Events.DragFrom] and
+	// [Events.DragTo] say where it began and where the pointer is, and when
+	// it is released [Events.DragEnded] carries both ends — what a host
+	// draws a line, a box or an ellipse from, or moves a mark by. It marks
+	// no region, even while [Viewer.SetSelecting] is on. The wheel still
+	// zooms. The viewer reads it every frame (ADR-0399 §M2).
+	DragGestures bool
+}
+
+// PixelPoint is a point of the image in continuous pixel coordinates: pixel
+// (col, row) covers [col, col+1) × [row, row+1), row 0 at the top.
+type PixelPoint struct {
+	X, Y float64
 }
 
 // Kinds of the viewer's background tasks.
@@ -67,6 +86,8 @@ const (
 	levelsTitle    = "build an image's reduced levels"
 	histogramKind  = "imageview.histogram"
 	histogramTitle = "count a plane's histogram"
+	zscaleKind     = "imageview.zscale"
+	zscaleTitle    = "sample a plane for zscale limits"
 )
 
 // JobI is one of the viewer's background jobs as the standard job row
@@ -79,8 +100,9 @@ type JobI interface {
 // Readout is one pixel of the image as its samples have it, each plane in
 // the model's plane order: the stored sample, and the value it stands for
 // through the plane's value transform — the same number unless the plane has
-// one. Valid is false for an invalid sample of a float plane. Planes is 0
-// when the pixel's samples are not at hand: a source's tile not loaded yet.
+// one. Valid is false for an invalid sample: NaN in a float plane, or the
+// value the planes declare invalid (ADR-0398 §SD2). Planes is 0 when the
+// pixel's samples are not at hand: a source's tile not loaded yet.
 type Readout struct {
 	Col, Row int
 	Planes   int
@@ -95,6 +117,11 @@ type Events struct {
 	// Hover is the pixel under the pointer.
 	Hover   Readout
 	HoverOk bool
+	// HoverFrame is where the pointer is in the frame of the image's
+	// placement (ADR-0398 §SD4), at its continuous pixel position;
+	// HoverFrameOk is false for an image without a placement.
+	HoverFrame   FramePosition
+	HoverFrameOk bool
 	// Clicked is the pixel a click landed on.
 	Clicked   Readout
 	ClickedOk bool
@@ -119,6 +146,20 @@ type Events struct {
 	// Err is set when the viewer could not draw what it was asked to and
 	// drew a message in its place.
 	Err error
+
+	// HoverAt is where the pointer is, in continuous pixel coordinates,
+	// when HoverOk; ClickedAt is where the click landed, when ClickedOk.
+	// Neither is clipped to the image.
+	HoverAt   PixelPoint
+	ClickedAt PixelPoint
+	// DragFrom and DragTo are where a drag began and where it stands this
+	// frame, in continuous pixel coordinates, when DragOk; they are
+	// reported while Selecting and under [Options.DragGestures].
+	DragFrom, DragTo PixelPoint
+	// DragEnded reports a drag released this frame under
+	// [Options.DragGestures], from DragEndFrom to DragEndTo.
+	DragEnded              bool
+	DragEndFrom, DragEndTo PixelPoint
 }
 
 const (
@@ -126,8 +167,10 @@ const (
 	// powers of two.
 	minZoom = -8
 	maxZoom = 6
-	// asStored is the plane index meaning "the image as stored".
-	asStored = -1
+	// asStored is the plane index meaning "the image as stored", and
+	// asComposite the one meaning a composite of layers.
+	asStored    = -1
+	asComposite = -2
 	// uploadBudgetBytes is how much tile data one frame ships to the host
 	// (ADR-0373 §SD6, §SD11): about what the image upload-cost trial found a
 	// headless host to take within a 30 Hz frame.
@@ -169,7 +212,14 @@ type Viewer struct {
 	fitPending bool
 	hover      Readout
 	hoverOk    bool
-	selecting  bool
+	// hoverFrame is the pointer's position in the placement's frame.
+	hoverFrame   FramePosition
+	hoverFrameOk bool
+	selecting    bool
+	// dragFromMax says, per axis, whether a drag began at the larger end of
+	// the box it draws; kept from frame to frame for the frames on which the
+	// pointer is off the canvas.
+	dragFromMax [2]bool
 	// pendingView and pendingShow hold a SetView or a Reveal asked for before
 	// the view could take it.
 	pendingView *pendingView
@@ -185,12 +235,19 @@ type Viewer struct {
 	// there is none.
 	region image.Rectangle
 
+	// comp is the composite shown while plane is asComposite (ADR-0401
+	// §SD1); recipe is then the recipe of its layer in hand.
+	comp compositeView
 	// hists holds the histograms counted for the image shown, by plane.
-	hists             map[int]*stats.Histogram
-	pendingPercentile bool
-	percentLo         float64
-	percentHi         float64
-	drag              limitDrag
+	hists map[int]*stats.Histogram
+	// pending is limits asked for that are found from the data off the
+	// frame — percentiles, zscale — and the limits in force stand in for
+	// until they land. zscaleJob samples a source's values for zscale, and
+	// zscales keeps what it found, by plane and parameters.
+	pending   []limitsWant
+	zscaleJob bgjob.Keyed[*zscaleFound]
+	zscales   map[zscaleKey]zscaleFound
+	drag      limitDrag
 	// Scratch of the histogram strip, reused across frames.
 	histBars                       []uint64
 	histBarsFor                    histBarsKey
@@ -207,7 +264,7 @@ func New(ids *c.WidgetIdStack, scopeKey string, opts Options) *Viewer {
 	}
 	inst := &Viewer{
 		Opts: opts, ids: ids, key: scopeKey, src: &tileSource{}, plane: asStored,
-		hists: make(map[int]*stats.Histogram, 4),
+		hists: make(map[int]*stats.Histogram, 4), zscales: make(map[zscaleKey]zscaleFound, 4),
 	}
 	inst.m = portolan.New(ids, "view", portolan.Options{
 		WheelPans:         opts.WheelScrolls,
@@ -261,6 +318,7 @@ func boundsFor(width, height int) portolan.LatLngBounds {
 func (inst *Viewer) Close() {
 	inst.dropWork()
 	inst.histJob.Close()
+	inst.zscaleJob.Close()
 	inst.m.Close()
 }
 
@@ -269,8 +327,10 @@ func (inst *Viewer) Close() {
 func (inst *Viewer) dropWork() {
 	inst.levelJob.Invalidate()
 	inst.histJob.Invalidate()
+	inst.zscaleJob.Invalidate()
 	clear(inst.hists)
-	inst.pendingPercentile = false
+	clear(inst.zscales)
+	inst.pending = nil
 	inst.drag = limitDrag{}
 }
 
@@ -300,7 +360,7 @@ func (inst *Viewer) adoptLevels() {
 	}
 	inst.pyramid = pyramid
 	inst.source = &imageSource{img: inst.img, pyramid: pyramid}
-	_ = inst.publish(inst.plane, inst.recipe)
+	_ = inst.republish()
 }
 
 // LevelJob is the build of the image's reduced levels. Cancelled, the view
@@ -337,18 +397,30 @@ func (inst *Viewer) SourceInfo() SourceInfo { return inst.info }
 
 // SetImage shows an image in memory, as stored and under its default recipe,
 // and fits it to the view on the next frame; its reduced levels are built in
-// the background. The zero image shows nothing.
-func (inst *Viewer) SetImage(img imaging.Image) {
+// the background. The zero image shows nothing. To replace the image shown
+// and keep the view, give [Viewer.SetSource] an [ImageSource].
+func (inst *Viewer) SetImage(img imaging.Image) { inst.setImage(img, false) }
+
+// ImageSource is an image in memory as a source: [Viewer.SetSource] shows it
+// as [Viewer.SetImage] does — its reduced levels built in the background,
+// its histogram counted from its planes — and, with keepView, without
+// moving the view, as when one plane of a stack replaces another of the
+// same size.
+func ImageSource(img imaging.Image) SourceI { return &imageSource{img: img} }
+
+// setImage is SetImage, keeping the view when asked to.
+func (inst *Viewer) setImage(img imaging.Image, keepView bool) {
 	inst.dropWork()
 	inst.img, inst.pyramid = img, nil
 	if img.IsZero() {
 		inst.clearSource()
 		return
 	}
-	inst.useSource(&imageSource{img: img}, false)
+	inst.useSource(&imageSource{img: img}, keepView)
 	if err := inst.publish(asStored, display.DefaultRecipe(img)); err != nil {
 		// A default recipe always validates; an image this package cannot
-		// map (a float colour image) is shown as its first plane instead.
+		// map as colour (one of a binned kind: signed 32-bit or float) is
+		// shown as its first plane instead.
 		_ = inst.publish(0, display.DefaultPlaneRecipe(img.Plane(0)))
 	}
 	inst.showSource()
@@ -365,7 +437,8 @@ func (inst *Viewer) SetImage(img imaging.Image) {
 //
 // What needs every sample at hand — the histogram, percentile limits, the
 // readout of a pixel whose tile is not loaded — is offered for an image in
-// memory and not for a source.
+// memory, an [ImageSource] included, and for a source that counts it
+// ([HistogramSourceI]).
 func (inst *Viewer) SetSource(src SourceI, keepView bool) error {
 	if src == nil {
 		inst.dropWork()
@@ -376,6 +449,10 @@ func (inst *Viewer) SetSource(src SourceI, keepView bool) error {
 	info := src.Info()
 	if err := info.Validate(); err != nil {
 		return err
+	}
+	if is, ok := src.(*imageSource); ok {
+		inst.setImage(is.img, keepView)
+		return nil
 	}
 	inst.dropWork()
 	inst.img, inst.pyramid = imaging.Image{}, nil
@@ -398,7 +475,7 @@ func (inst *Viewer) Invalidate() {
 	}
 	inst.gen++
 	inst.src.cache.clear()
-	_ = inst.publish(inst.plane, inst.recipe)
+	_ = inst.republish()
 	inst.m.InvalidateTiles()
 }
 
@@ -410,8 +487,8 @@ func (inst *Viewer) useSource(src SourceI, keepView bool) {
 	inst.gen++
 	inst.src.cache.clear()
 	inst.region = image.Rectangle{}
-	inst.plane = asStored
-	inst.hoverOk = false
+	inst.plane, inst.comp = asStored, compositeView{}
+	inst.hoverOk, inst.hoverFrameOk = false, false
 	inst.fitPending = !keepView || !inst.m.View().Loaded()
 	inst.pendingView, inst.pendingShow = nil, nil
 }
@@ -431,8 +508,8 @@ func (inst *Viewer) clearSource() {
 	inst.gen++
 	inst.src.cache.clear()
 	inst.region = image.Rectangle{}
-	inst.plane = asStored
-	inst.hoverOk, inst.fitPending = false, false
+	inst.plane, inst.comp = asStored, compositeView{}
+	inst.hoverOk, inst.hoverFrameOk, inst.fitPending = false, false, false
 	inst.src.cur.Store(nil)
 	inst.m.SetSource(sourceFor(SourceInfo{}))
 }
@@ -459,79 +536,14 @@ func defaultRecipeFor(src SourceI, info SourceInfo, plane int) display.Recipe {
 	return display.Recipe{Limits: display.Limits{Lo: 0, Hi: 1, Source: display.LimitsSourceManual}}
 }
 
-// Recipe is the recipe the image is shown through.
+// Recipe is the recipe the image is shown through; of a composite, the
+// recipe of its layer in hand ([Viewer.LayerInHand]).
 func (inst *Viewer) Recipe() display.Recipe { return inst.recipe }
 
-// SetRecipe shows the image through another recipe. One that cannot be
-// compiled — limits that are not a range, a palette this package does not
-// have — is refused and the view stays as it was.
-//
-// Limits whose Source is [display.LimitsSourcePercentile] are computed here
-// from PercentLo and PercentHi; their Lo and Hi are not read. They need the
-// histogram of the plane shown, which is counted off the frame: when it is
-// ready the limits are set at once, and otherwise the rest of the recipe is
-// applied at once and the limits by the Render that finds the histogram
-// counted, [Viewer.LimitsPending] reporting true meanwhile. Percentile
-// limits are refused for a colour composite, whose limits are not a property
-// of one plane, and when the two percentiles fall on one value. A later
-// recipe of any other kind replaces a percentile stretch still pending.
-func (inst *Viewer) SetRecipe(recipe display.Recipe) error {
-	if inst.info.IsZero() {
-		return eb.Build().Errorf("no image to show a recipe on")
-	}
-	if recipe.Limits.Source != display.LimitsSourcePercentile {
-		inst.pendingPercentile = false
-		return inst.applyRecipe(recipe)
-	}
-	lo, hi := recipe.Limits.PercentLo, recipe.Limits.PercentHi
-	if !inst.singlePlane() {
-		return eb.Build().Errorf("percentile limits apply to a single plane; show one first")
-	}
-	if !inst.histogramAvailable() {
-		return eb.Build().Errorf("percentile limits need every sample at hand, which a source does not offer; set the limits")
-	}
-	if !(lo >= 0 && lo < hi && hi <= 100) {
-		return eb.Build().Float64("lo", lo).Float64("hi", hi).Errorf("percentiles must be an ascending pair within 0 and 100")
-	}
-	if h, ok := inst.Histogram(); ok {
-		limits, ok := display.PercentileLimits(h, lo, hi)
-		if !ok {
-			return eb.Build().Float64("lo", lo).Float64("hi", hi).Errorf("the two percentiles fall on one value; there is no range between them")
-		}
-		inst.pendingPercentile = false
-		recipe.Limits = limits
-		return inst.applyRecipe(recipe)
-	}
-	// Until the histogram is counted the limits in force stay.
-	recipe.Limits = inst.recipe.Limits
-	if err := inst.applyRecipe(recipe); err != nil {
-		return err
-	}
-	inst.pendingPercentile, inst.percentLo, inst.percentHi = true, lo, hi
-	return nil
-}
-
-// LimitsPending reports whether percentile limits asked for through
-// [Viewer.SetRecipe] wait for the histogram they are computed from; until
-// they land, [Viewer.Recipe] carries the limits in force.
-func (inst *Viewer) LimitsPending() bool { return inst.pendingPercentile }
-
-// applyRecipe compiles a recipe with resolved limits and shows it.
-func (inst *Viewer) applyRecipe(recipe display.Recipe) error {
-	if recipe == inst.recipe {
-		return nil
-	}
-	if err := inst.publish(inst.plane, recipe); err != nil {
-		return err
-	}
-	inst.m.InvalidateTiles()
-	return nil
-}
-
 // Plane reports what is shown: the index of the single plane, or ok false
-// for the image as stored.
+// for the image as stored and for a composite ([Viewer.IsComposite]).
 func (inst *Viewer) Plane() (index int, ok bool) {
-	return inst.plane, inst.plane != asStored
+	return inst.plane, inst.plane >= 0
 }
 
 // SetPlane shows one plane of the image by itself, through a colour map,
@@ -553,7 +565,7 @@ func (inst *Viewer) SetPlane(index int) error {
 		return err
 	}
 	// A stretch asked for on another plane is not carried over to this one.
-	inst.pendingPercentile, inst.drag = false, limitDrag{}
+	inst.pending, inst.drag = nil, limitDrag{}
 	inst.m.InvalidateTiles()
 	return nil
 }
@@ -568,51 +580,76 @@ func (inst *Viewer) SetAsStored() error {
 	if !inst.img.IsZero() {
 		recipe = display.DefaultRecipe(inst.img)
 	}
-	recipe.Palette = inst.recipe.Palette
+	if inst.plane != asComposite {
+		recipe.Palette = inst.recipe.Palette
+	}
 	if err := inst.publish(asStored, recipe); err != nil {
 		return err
 	}
-	inst.pendingPercentile, inst.drag = false, limitDrag{}
+	inst.pending, inst.drag = nil, limitDrag{}
 	inst.m.InvalidateTiles()
 	return nil
 }
 
 // IsSinglePlane reports whether what is shown is one plane through a colour
 // map — a plane picked out of a colour image, or a greyscale image — and not
-// a colour composite. It is when there is a histogram, a colour bar and a
-// choice of colour map.
+// a colour image as stored or a composite. It is when there is a histogram,
+// a colour bar and a choice of colour map.
 func (inst *Viewer) IsSinglePlane() bool { return inst.singlePlane() }
 
 // singlePlane is IsSinglePlane.
 func (inst *Viewer) singlePlane() bool {
-	return !inst.info.IsZero() && (inst.plane != asStored || !inst.info.Model.IsColor())
+	return !inst.info.IsZero() && (inst.plane >= 0 || (inst.plane == asStored && !inst.info.Model.IsColor()))
 }
 
-// publish compiles a recipe for a view of the image and, when that works,
-// makes it what the workers map with. The viewer's own fields change only on
-// success.
+// measurable reports whether what is shown has one plane whose values the
+// limits are found from and the histogram is of: the single plane shown, or
+// a composite's layer in hand.
+func (inst *Viewer) measurable() bool {
+	return inst.singlePlane() || (inst.plane == asComposite && !inst.info.IsZero())
+}
+
+// newShown is what the workers map with for a view of the source, without
+// its mappers.
+func (inst *Viewer) newShown(plane int) *shown {
+	limit := inst.Opts.SampleCacheBytes
+	if limit <= 0 {
+		limit = DefaultSampleCacheBytes
+	}
+	return &shown{source: inst.source, info: inst.info, gen: inst.gen, plane: plane, checker: checkerColours(), cacheBytes: limit}
+}
+
+// publish compiles a recipe for a view of the image — as stored or one
+// plane — and, when that works, makes it what the workers map with. The
+// viewer's own fields change only on success.
 func (inst *Viewer) publish(plane int, recipe display.Recipe) error {
 	palette, ok := paletteFor(recipe.Palette)
 	if !ok {
 		return eb.Build().Str("palette", recipe.Palette).Strs("known", PaletteNames()).Errorf("no colour map of that name")
 	}
-	limit := inst.Opts.SampleCacheBytes
-	if limit <= 0 {
-		limit = DefaultSampleCacheBytes
-	}
-	sh := &shown{source: inst.source, info: inst.info, gen: inst.gen, plane: plane, checker: checkerColours(), cacheBytes: limit}
+	sh := inst.newShown(plane)
 	var err error
 	if plane == asStored && inst.info.Model.IsColor() {
-		sh.colours, err = display.CompileColor(recipe, inst.info.Kind, inst.info.Transform(0))
+		sh.colours, err = display.CompileColorFor(recipe, inst.info.spec(0))
 	} else {
-		sh.planes, err = display.CompilePlane(recipe, inst.info.Kind, inst.info.Transform(max(plane, 0)), palette)
+		sh.planes, err = display.CompilePlaneFor(recipe, inst.info.spec(max(plane, 0)), palette)
 	}
 	if err != nil {
 		return err
 	}
 	inst.plane, inst.recipe, inst.palette = plane, recipe, palette
+	inst.comp = compositeView{}
 	inst.src.cur.Store(sh)
 	return nil
+}
+
+// republish compiles what is shown again, for a source that changed under
+// it.
+func (inst *Viewer) republish() error {
+	if inst.plane == asComposite {
+		return inst.publishComposite(inst.comp.layers, inst.comp.linked, inst.comp.inHand)
+	}
+	return inst.publish(inst.plane, inst.recipe)
 }
 
 // Magnification is how many screen pixels one image pixel takes: 1 at full
@@ -673,6 +710,11 @@ func (inst *Viewer) readoutAt(ll portolan.LatLng) (r Readout, ok bool) {
 	r.Planes = samples.PlaneCount()
 	for i := range r.Planes {
 		r.Stored[i], r.Valid[i] = samples.Plane(i).StoredAt(at.X, at.Y)
+		if inst.info.declares(i) && r.Stored[i] == inst.info.Invalid {
+			// A source may describe its invalid value without its tiles
+			// declaring it.
+			r.Valid[i] = false
+		}
 		r.Values[i] = inst.info.Transform(i).Apply(r.Stored[i])
 	}
 	return r, true
@@ -853,6 +895,27 @@ func (inst *Viewer) pixelsIn(box portolan.LatLngBounds) image.Rectangle {
 	return pixelsOf(box, inst.info)
 }
 
+// dragEnds is where a drag began and where it stands, from the box it
+// draws: the box spans the two, and the pointer is at the end that moves,
+// so the start is the corner across from it. With the pointer off the
+// canvas the corner the drag began at last is kept.
+func (inst *Viewer) dragEnds(box portolan.LatLngBounds, ptr portolan.LatLng, ptrOk bool) (from, to PixelPoint) {
+	x0, x1 := box.SouthWest.Lng, box.NorthEast.Lng
+	y0, y1 := -box.NorthEast.Lat, -box.SouthWest.Lat
+	if ptrOk {
+		px, py := ptr.Lng, -ptr.Lat
+		inst.dragFromMax = [2]bool{math.Abs(px-x0) < math.Abs(px-x1), math.Abs(py-y0) < math.Abs(py-y1)}
+	}
+	from, to = PixelPoint{X: x0, Y: y0}, PixelPoint{X: x1, Y: y1}
+	if inst.dragFromMax[0] {
+		from.X, to.X = x1, x0
+	}
+	if inst.dragFromMax[1] {
+		from.Y, to.Y = y1, y0
+	}
+	return
+}
+
 // paintRegion outlines the marked region over the image, on the pixels'
 // outer edges.
 func (inst *Viewer) paintRegion(p portolan.Projector) {
@@ -897,17 +960,22 @@ func (inst *Viewer) Render(w, h float32) (ev Events) {
 		if !inst.Opts.HideReadout {
 			readoutH = readoutHeight + layoutGap
 		}
-		histH := float32(0)
+		histH, legendH := float32(0), float32(0)
 		// A histogram counts every sample: an image in memory has them at
-		// hand, and a source may count them itself.
-		if inst.singlePlane() && !inst.Opts.HideHistogram && inst.histogramAvailable() {
+		// hand, and a source may count them itself. Of a composite it is
+		// the layer in hand's.
+		if inst.measurable() && !inst.Opts.HideHistogram && inst.histogramAvailable() {
 			histH = histogramHeight + layoutGap
 			inst.wantHistogram()
 		}
-		cw, ch := max(w-barW, fallbackCanvas), max(h-readoutH-histH, fallbackCanvas)
+		if inst.plane == asComposite {
+			legendH = inst.legendRows() + layoutGap
+		}
+		cw, ch := max(w-barW, fallbackCanvas), max(h-readoutH-histH-legendH, fallbackCanvas)
 
 		inst.m.SetNearestTiles(!inst.Opts.Smooth)
 		inst.m.SetWheelPans(inst.Opts.WheelScrolls)
+		inst.m.SetBoxSelect(inst.selecting || inst.Opts.DragGestures)
 		inst.m.SetHostKeys(inst.Opts.Keys)
 		// The view needs its size before it can fit, centre or show anything.
 		inst.m.View().SetSize(portolan.Pt(float64(cw), float64(ch)))
@@ -925,23 +993,39 @@ func (inst *Viewer) Render(w, h float32) (ev Events) {
 			}
 		}
 		inst.hover, inst.hoverOk = Readout{}, false
-		if ll, ok := inst.m.Hover(); ok {
-			inst.hover, inst.hoverOk = inst.readoutAt(ll)
+		inst.hoverFrame, inst.hoverFrameOk = FramePosition{}, false
+		ptr, ptrOk := inst.m.Hover()
+		if ptrOk {
+			inst.hover, inst.hoverOk = inst.readoutAt(ptr)
+			if inst.hoverOk {
+				inst.hoverFrame, inst.hoverFrameOk = FramePositionAt(inst.info.Placement, ptr.Lng, -ptr.Lat)
+				ev.HoverAt = PixelPoint{X: ptr.Lng, Y: -ptr.Lat}
+			}
 		}
 		ev.Hover, ev.HoverOk = inst.hover, inst.hoverOk
+		ev.HoverFrame, ev.HoverFrameOk = inst.hoverFrame, inst.hoverFrameOk
 		if mev.ClickedOk {
 			ev.Clicked, ev.ClickedOk = inst.readoutAt(mev.Clicked)
+			ev.ClickedAt = PixelPoint{X: mev.Clicked.Lng, Y: -mev.Clicked.Lat}
 		}
 		ev.ViewChanged = mev.ViewEvents.Any()
 		ev.Keys = mev.Keys
-		if mev.BoxingOk && inst.selecting {
+		gestures := inst.Opts.DragGestures
+		if mev.BoxingOk && (inst.selecting || gestures) {
 			ev.Drag = inst.pixelsIn(mev.Boxing)
-			ev.DragOk = !ev.Drag.Empty()
+			ev.DragFrom, ev.DragTo = inst.dragEnds(mev.Boxing, ptr, ptrOk)
+			ev.DragOk = gestures || !ev.Drag.Empty()
 		}
 		if mev.SelectedOk {
-			if r := inst.pixelsIn(mev.Selected); !r.Empty() && r != inst.region {
+			if gestures {
+				ev.DragEnded = true
+				ev.DragEndFrom, ev.DragEndTo = inst.dragEnds(mev.Selected, ptr, ptrOk)
+			} else if r := inst.pixelsIn(mev.Selected); !r.Empty() && r != inst.region {
 				inst.region, ev.RegionChanged = r, true
 			}
+		}
+		if legendH > 0 {
+			inst.renderLegend()
 		}
 		if histH > 0 {
 			ev.LimitsChanged = inst.renderHistogram(cw)
@@ -953,18 +1037,34 @@ func (inst *Viewer) Render(w, h float32) (ev Events) {
 	return
 }
 
-// readoutText is the line under the image: where the pointer is, what the
-// samples there are, and how large a pixel is drawn.
+// HoverFrame is where the pointer was in the frame of the image's placement
+// at the last Render, at its continuous pixel position; ok is false when the
+// pointer was not over the image or the image has no placement.
+func (inst *Viewer) HoverFrame() (pos FramePosition, ok bool) {
+	return inst.hoverFrame, inst.hoverFrameOk
+}
+
+// readoutText is the line under the image: where the pointer is — as a pixel
+// and, for an image with a placement, in its frame — what the samples there
+// are, and how large a pixel is drawn.
 func (inst *Viewer) readoutText() string {
 	var b strings.Builder
 	if inst.hoverOk {
 		fmt.Fprintf(&b, "x %d  y %d   ", inst.hover.Col, inst.hover.Row)
-		names := inst.info.Model.PlaneNames()
+		if inst.hoverFrameOk && !inst.Opts.HideFrameCoordinates {
+			b.WriteString(inst.hoverFrame.Text())
+			b.WriteString("   ")
+		}
+		named := 0
 		for i := range inst.hover.Planes {
-			if i > 0 {
+			if !inst.readsPlane(i) {
+				continue
+			}
+			if named > 0 {
 				b.WriteString("  ")
 			}
-			b.WriteString(names[i])
+			named++
+			b.WriteString(inst.info.PlaneLabel(i))
 			b.WriteByte(' ')
 			switch {
 			case !inst.hover.Valid[i]:
@@ -989,9 +1089,24 @@ func (inst *Viewer) readoutText() string {
 	return b.String()
 }
 
+// readsPlane reports whether the readout names plane i: every plane, but
+// of a composite only the planes of its shown layers.
+func (inst *Viewer) readsPlane(i int) bool {
+	if inst.plane != asComposite {
+		return true
+	}
+	return slices.ContainsFunc(inst.comp.layers, func(l CompositeLayer) bool { return l.Plane == i && !l.Hidden })
+}
+
+// formatSample writes a stored sample as the kind holds it: an integer
+// whole, a 32-bit float to six significant digits, which is what it has, and
+// a 64-bit float in the fewest digits that read back as it.
 func formatSample(v float64, kind imaging.SampleKindE) string {
-	if kind.IsInteger() {
-		return fmt.Sprintf("%d", int64(v))
+	switch {
+	case kind.IsInteger():
+		return strconv.FormatInt(int64(v), 10)
+	case kind == imaging.SampleKindF64:
+		return strconv.FormatFloat(v, 'g', -1, 64)
 	}
 	return fmt.Sprintf("%.6g", v)
 }

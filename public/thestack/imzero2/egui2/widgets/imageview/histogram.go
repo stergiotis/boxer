@@ -36,15 +36,23 @@ type limitDrag struct {
 	pressPx float32
 }
 
-// shownPlaneIndex is the plane a single-plane view shows.
-func (inst *Viewer) shownPlaneIndex() int { return max(inst.plane, 0) }
+// shownPlaneIndex is the plane whose values the limits are found from and
+// the histogram strip shows: the single plane shown, or a composite's layer
+// in hand.
+func (inst *Viewer) shownPlaneIndex() int {
+	if inst.plane == asComposite && len(inst.comp.layers) > 0 {
+		return inst.comp.layers[inst.comp.inHand].Plane
+	}
+	return max(inst.plane, 0)
+}
 
-// Histogram is the histogram of the plane a single-plane view shows, over
-// the whole plane. ok is false for a colour composite, and until the count
-// is done: it runs on a goroutine, which the first call starts, and a later
-// Render takes over its result.
+// Histogram is the histogram of the plane a single-plane view shows — of a
+// composite, of its layer in hand's plane — over the whole plane. ok is
+// false for a colour image as stored, and until the count is done: it runs
+// on a goroutine, which the first call starts, and a later Render takes
+// over its result.
 func (inst *Viewer) Histogram() (h stats.Histogram, ok bool) {
-	if !inst.singlePlane() {
+	if !inst.measurable() {
 		return h, false
 	}
 	if p := inst.hists[inst.shownPlaneIndex()]; p != nil {
@@ -70,13 +78,29 @@ func (inst *Viewer) histogramAvailable() bool {
 	return ok
 }
 
-// wantHistogram asks for the shown plane's histogram: it is counted as a
+// histogramWanted is the plane whose histogram is to be counted next: the
+// first a percentile stretch waits for, else the plane the strip shows; ok
+// is false when none is wanted. One count runs at a time, so one plane is
+// demanded per frame — two demanded in turn would cancel each other.
+func (inst *Viewer) histogramWanted() (plane int, ok bool) {
+	for _, w := range inst.pending {
+		if w.ask.Source == display.LimitsSourcePercentile && inst.hists[w.plane] == nil {
+			return w.plane, true
+		}
+	}
+	if !inst.measurable() {
+		return 0, false
+	}
+	return inst.shownPlaneIndex(), inst.hists[inst.shownPlaneIndex()] == nil
+}
+
+// wantHistogram asks for the histogram wanted next: it is counted as a
 // background job unless it is counted already, and kept once it lands.
 // Counting is linear in the plane's samples and is not interrupted once
 // begun; a superseded count's result is dropped.
 func (inst *Viewer) wantHistogram() {
-	idx := inst.shownPlaneIndex()
-	if inst.hists[idx] != nil || !inst.histogramAvailable() {
+	idx, ok := inst.histogramWanted()
+	if !ok || !inst.histogramAvailable() {
 		return
 	}
 	// The count runs off the frame, which may replace or clear the source
@@ -100,41 +124,16 @@ func (inst *Viewer) wantHistogram() {
 	}
 }
 
-// adoptHistograms takes over a count of the shown plane that has landed,
-// and applies a percentile stretch that was waiting for it.
+// adoptHistograms takes over a count that has landed, and applies limits
+// that were waiting for it or for a zscale sample.
 func (inst *Viewer) adoptHistograms() {
-	if inst.singlePlane() {
-		idx := inst.shownPlaneIndex()
-		if inst.hists[idx] == nil {
-			// A question, not an order: nothing starts here.
-			if val, done, err, busy := inst.histJob.Demand(inst.histogramKey(idx), nil); done && !busy && err == nil && val != nil {
-				inst.hists[idx] = val
-			}
+	if idx, ok := inst.histogramWanted(); ok {
+		// A question, not an order: nothing starts here.
+		if val, done, err, busy := inst.histJob.Demand(inst.histogramKey(idx), nil); done && !busy && err == nil && val != nil {
+			inst.hists[idx] = val
 		}
 	}
-	inst.applyPendingPercentile()
-}
-
-// applyPendingPercentile sets percentile limits that waited for the
-// histogram, once it is counted. Percentiles that fall on one value leave the
-// limits in force: the call that asked has returned, so there is no one to
-// refuse.
-func (inst *Viewer) applyPendingPercentile() {
-	if !inst.pendingPercentile || !inst.singlePlane() {
-		return
-	}
-	p := inst.hists[inst.shownPlaneIndex()]
-	if p == nil {
-		return
-	}
-	inst.pendingPercentile = false
-	limits, ok := display.PercentileLimits(*p, inst.percentLo, inst.percentHi)
-	if !ok {
-		return
-	}
-	recipe := inst.recipe
-	recipe.Limits = limits
-	_ = inst.applyRecipe(recipe)
+	inst.resolvePending()
 }
 
 // histogramAxis is the range of values the strip spans: the plane's data
@@ -220,6 +219,11 @@ func (inst *Viewer) renderHistogram(w float32) (changed bool) {
 	text := color.Hex(styletokens.NeutralTextSecondary.AsHex())
 	c.PaintText(3, 2, 0, 0, formatValue(axisLo), barFontSize, text).Send()
 	c.PaintText(w-3, 2, 2, 0, formatValue(axisHi), barFontSize, text).Send()
+	// What the limits clip, once the histogram says (ADR-0401 §SD8); of a
+	// composite, named by the layer in hand's plane.
+	if line, ok := inst.clippedLine(); ok {
+		c.PaintText(w/2, 2, 1, 0, line, barFontSize, text).Send()
+	}
 
 	// The handles' regions go last so they win the hit test; the upper one
 	// after the lower, so where they overlap the upper limit is the one

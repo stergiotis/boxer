@@ -8,6 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/science/imaging"
+	"github.com/stergiotis/boxer/public/science/imaging/display"
 	"github.com/stergiotis/boxer/public/science/imaging/levels"
 )
 
@@ -51,10 +52,47 @@ type SourceInfo struct {
 	Resident bool
 	// Provenance is where the samples come from.
 	Provenance imaging.Provenance
+	// HasInvalid declares Invalid, a stored value, invalid in every colour
+	// plane, as [imaging.Plane.WithInvalid] does (ADR-0398 §SD2): it is
+	// drawn as an invalid sample is, named invalid in the readout and left
+	// out of a histogram the viewer counts. Alpha declares none. A tile
+	// whose planes declare another value is refused when it is drawn.
+	Invalid    float64
+	HasInvalid bool
+	// PlaneLabels names the planes in the model's order, as
+	// [imaging.Image.PlaneLabels] does — the bands of a stack an image was
+	// taken from; nil takes the colour model's plane names.
+	PlaneLabels []string
+	// Placement is where the pixels are (ADR-0398 §SD4); the zero placement
+	// when nothing says so.
+	Placement imaging.Placement
 }
 
 // IsZero reports whether the info describes nothing.
 func (inst SourceInfo) IsZero() bool { return inst.Width == 0 && inst.Height == 0 }
+
+// PlaneLabel is what plane i is called: its label, or the colour model's
+// name for it; empty for a plane the model does not have.
+func (inst SourceInfo) PlaneLabel(i int) string {
+	if i >= 0 && i < len(inst.PlaneLabels) {
+		return inst.PlaneLabels[i]
+	}
+	if names := inst.Model.PlaneNames(); i >= 0 && i < len(names) {
+		return names[i]
+	}
+	return ""
+}
+
+// declares reports whether plane i declares the invalid value: a colour
+// plane does, alpha does not.
+func (inst SourceInfo) declares(i int) bool {
+	return inst.HasInvalid && !(inst.Model.HasAlpha() && i == inst.Model.PlaneCount()-1)
+}
+
+// spec is what plane i is mapped as.
+func (inst SourceInfo) spec(i int) display.PlaneSpec {
+	return display.PlaneSpec{Kind: inst.Kind, Transform: inst.Transform(i), Invalid: inst.Invalid, HasInvalid: inst.declares(i)}
+}
 
 // Transform is plane i's value transform.
 func (inst SourceInfo) Transform(i int) imaging.ValueTransform {
@@ -82,8 +120,13 @@ func (inst SourceInfo) Validate() error {
 		return eb.Build().Int("transforms", len(inst.Transforms)).Int("planes", inst.Model.PlaneCount()).Errorf("more value transforms than planes")
 	case inst.Reduced < 0 || inst.Reduced > maxSourceLevels || inst.Magnified < 0 || inst.Magnified > maxZoom:
 		return eb.Build().Int("reduced", inst.Reduced).Int("magnified", inst.Magnified).Errorf("source declares levels out of range")
+	case inst.PlaneLabels != nil && len(inst.PlaneLabels) != inst.Model.PlaneCount():
+		return eb.Build().Int("labels", len(inst.PlaneLabels)).Int("planes", inst.Model.PlaneCount()).Errorf("source needs one plane label per plane, or none")
 	}
-	return nil
+	if err := inst.spec(0).Validate(); err != nil {
+		return err
+	}
+	return inst.Placement.Validate()
 }
 
 // TileData is a tile's samples: Region is where in Samples the tile's
@@ -145,10 +188,12 @@ func (inst *imageSource) Info() SourceInfo {
 	for i := range tr {
 		tr[i] = inst.img.Plane(i).Transform()
 	}
+	inv, hasInv := inst.img.Plane(0).Invalid()
 	return SourceInfo{
 		Width: inst.img.Width(), Height: inst.img.Height(), Model: inst.img.Model(), Kind: inst.img.Kind(),
 		Transforms: tr, Reduced: levels.CountFor(inst.img.Width(), inst.img.Height(), levels.Options{}),
 		Resident: true, Provenance: inst.img.Provenance(),
+		Invalid: inv, HasInvalid: hasInv, PlaneLabels: inst.img.PlaneLabels(), Placement: inst.img.Placement(),
 	}
 }
 
@@ -205,14 +250,7 @@ type cacheEntry struct {
 // tileBytes is what a tile's samples cost: the region's cells, its planes,
 // the sample kind's size.
 func tileBytes(d TileData) int64 {
-	per := int64(1)
-	switch d.Samples.Kind() {
-	case imaging.SampleKindU16:
-		per = 2
-	case imaging.SampleKindF32:
-		per = 4
-	}
-	return int64(d.Region.Dx()) * int64(d.Region.Dy()) * int64(d.Samples.PlaneCount()) * per
+	return int64(d.Region.Dx()) * int64(d.Region.Dy()) * int64(d.Samples.PlaneCount()) * int64(d.Samples.Kind().Bytes())
 }
 
 func (inst *sampleCache) get(key cacheKey) (d TileData, ok bool) {

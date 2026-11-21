@@ -51,8 +51,10 @@ func (inst *storeSource) Info() SourceInfo {
 	for i := range tr {
 		tr[i] = s.Transform(i)
 	}
+	inv, hasInv := s.Invalid()
 	return SourceInfo{Width: s.Width(), Height: s.Height(), Model: s.Model(), Kind: s.Kind(), Transforms: tr,
-		Reduced: s.Reduced(), Resident: true, Provenance: s.Provenance()}
+		Reduced: s.Reduced(), Resident: true, Provenance: s.Provenance(),
+		Invalid: inv, HasInvalid: hasInv, PlaneLabels: s.PlaneLabels(), Placement: s.Placement()}
 }
 
 func (inst *storeSource) Tile(ctx context.Context, level, col, row int) (d TileData, err error) {

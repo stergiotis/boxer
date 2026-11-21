@@ -22,17 +22,21 @@ const checkerSize = 8
 
 // shown is everything a worker needs to map a tile, fixed at the moment the
 // viewer published it: the source and what it said about itself, the
-// generation its cached tiles are filed under, which plane or the image as
-// stored, and the mappers compiled from the recipe. It is never modified
-// once stored.
+// generation its cached tiles are filed under, which plane, the image as
+// stored or a composite, and the mappers compiled from the recipe or the
+// layers. It is never modified once stored.
 type shown struct {
 	source  SourceI
 	info    SourceInfo
 	gen     uint64
-	plane   int // the single plane shown, or asStored
+	plane   int // the single plane shown, asStored or asComposite
 	planes  *display.PlaneMapper
 	colours *display.ColorMapper
-	checker [2]uint32
+	// composite maps a composite's layers, layerPlanes being the plane of
+	// each layer in layer order (ADR-0401 §SD1).
+	composite   *display.CompositeMapper
+	layerPlanes []int
+	checker     [2]uint32
 	// cacheBytes bounds the sample cache for this source.
 	cacheBytes int64
 }
@@ -82,6 +86,12 @@ func (inst *tileSource) TilePixels(ctx context.Context, coords portolan.TileCoor
 	}
 	from, region := d.Samples, d.Region
 	switch {
+	case sh.composite != nil:
+		layers := make([]imaging.Plane, len(sh.layerPlanes))
+		for k, p := range sh.layerPlanes {
+			layers[k] = from.Plane(p)
+		}
+		err = sh.composite.Map(dst, layers, region)
 	case sh.colours != nil:
 		err = sh.colours.Map(dst, from, region)
 	case sh.plane == asStored:
