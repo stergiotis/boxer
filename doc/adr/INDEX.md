@@ -409,3 +409,4 @@ withdrawn, deferred — is described in the
 | [0395](./0395-io-takes-a-context.md) | I/O takes a context: the store, persist, bus-request and trail interfaces | proposed | 2026-11-20 |  |
 | [0396](./0396-the-app-contract-a-host-promises.md) | The app contract a host promises: identity, registration, context capabilities, subjects | proposed | 2026-11-21 |  |
 | [0397](./0397-the-facts-tables-partition-key-row-id-and-engine-clause.md) | The facts table's partition key, row id and engine clause | proposed | 2026-11-20 |  |
+| [0402](./0402-facts-stored-in-a-deployments-own-table-one-read-table-setting-and-a-facts-table-the-deployment-provisions.md) | Facts stored in a deployment's own table — one read-table setting, and a facts table the deployment provisions | proposed | 2026-11-21 |  |
