@@ -27,7 +27,7 @@ const AppId app.AppIdT = "runtime.moderator"
 
 // SubjectSignal carries every signal the moderator raises, for a console
 // to follow. Publish only.
-const SubjectSignal = "moderator.event.signal"
+const SubjectSignal = "runtime.moderator.event.signal"
 
 // TableSignals is keelson('moderator_signals'): the windows the moderator
 // watches and their level.

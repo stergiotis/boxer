@@ -11,7 +11,7 @@ import (
 
 const wireVersion uint8 = 1
 
-// wireSignal is the payload on moderator.event.signal.
+// wireSignal is the payload on runtime.moderator.event.signal.
 type wireSignal struct {
 	V        uint8    `json:"v"`
 	Kind     string   `json:"kind"`
@@ -29,7 +29,7 @@ func wireOfSignal(s Signal) (w wireSignal) {
 		Level: s.Level.String(), Detail: s.Detail, Evidence: s.Evidence, AtUnixMs: s.At.UnixMilli()}
 }
 
-// SignalEvent is a moderator.event.signal as a reader sees it.
+// SignalEvent is a runtime.moderator.event.signal as a reader sees it.
 type SignalEvent struct {
 	Kind     string
 	Window   Window
@@ -40,7 +40,7 @@ type SignalEvent struct {
 	At       time.Time
 }
 
-// DecodeSignalEvent reads a moderator.event.signal payload.
+// DecodeSignalEvent reads a runtime.moderator.event.signal payload.
 func DecodeSignalEvent(payload []byte) (e SignalEvent, err error) {
 	w, err := buscodec.Decode[wireSignal](payload)
 	if err != nil {
