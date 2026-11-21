@@ -67,6 +67,14 @@ func TestAQuestionAnsweredInTheHostsCard(t *testing.T) {
 		done <- r
 	}()
 	require.Eventually(t, func() bool { return a.current() != nil }, time.Second, 5*time.Millisecond, "the window shows it too")
+	// The card is posted off the asking goroutine, and posting resets the
+	// fake's answer to waiting: deciding before the post lands would be
+	// overwritten, and the question would wait for ever.
+	require.Eventually(t, func() bool {
+		q.mu.Lock()
+		defer q.mu.Unlock()
+		return len(q.posted) == 1
+	}, time.Second, 5*time.Millisecond, "the host has the card")
 	q.decide(attention.Answer{Phase: attention.PhaseAnswered, Choices: [][]int{{1}}})
 	r := <-done
 	require.Len(t, r.Answers, 1)
