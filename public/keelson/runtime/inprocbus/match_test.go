@@ -23,14 +23,14 @@ func TestMatch_StarOneToken(t *testing.T) {
 }
 
 func TestMatch_GtRestOfSubject(t *testing.T) {
-	assert.True(t, Match("fs.>", "runtime.fs.dialog.read"))
-	assert.True(t, Match("fs.>", "runtime.fs.handle.uuid.read"))
+	assert.True(t, Match("fs.>", "fs.dialog.read"))
+	assert.True(t, Match("fs.>", "fs.handle.uuid.read"))
 	assert.False(t, Match("fs.>", "fs"))            // > requires at least one trailing token
 	assert.False(t, Match("fs.>", "kafka.produce")) // wrong prefix
 }
 
 func TestMatch_GtAlone(t *testing.T) {
-	assert.True(t, Match(">", "runtime.fs.dialog.read"))
+	assert.True(t, Match(">", "fs.dialog.read"))
 	assert.True(t, Match(">", "x"))
 	assert.False(t, Match(">", "")) // empty subject never matches
 }
@@ -50,7 +50,7 @@ func TestMatch_EmptyInputs(t *testing.T) {
 
 func TestValidatePattern_OK(t *testing.T) {
 	cases := []string{
-		"runtime.fs.dialog.read",
+		"fs.dialog.read",
 		"fs.>",
 		"app.*.event.>",
 		"ch.query.boxer",
@@ -81,7 +81,7 @@ func TestValidatePattern_Reject(t *testing.T) {
 
 func TestValidateSubject_OK(t *testing.T) {
 	cases := []string{
-		"runtime.fs.dialog.read",
+		"fs.dialog.read",
 		"a.b.c.d.e",
 		"single",
 	}

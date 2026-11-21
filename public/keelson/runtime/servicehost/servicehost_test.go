@@ -68,7 +68,7 @@ func (inst *recorder) Mount(ctx app.MountContextI) (err error) {
 	inst.cfgSeen = ctx.LaunchConfig()
 	inst.reasonSeen = ctx.LaunchReason()
 	inst.keySeen = ctx.InstanceKey()
-	_, _ = ctx.Bus().Subscribe("t.evt", func(msg *app.Msg) {})
+	_, _ = ctx.Bus().Subscribe("app.t.evt", func(msg *app.Msg) {})
 	if inst.tail {
 		ctx.Lifetime().Go(func(c context.Context) { <-inst.release })
 	}
@@ -91,7 +91,7 @@ func (inst *recorder) Unmount(ctx app.MountContextI) (err error) {
 		inst.cancelledBefore = true
 	default:
 	}
-	inst.publishErr = ctx.Bus().Publish("t.bye", nil)
+	inst.publishErr = ctx.Bus().Publish("app.t.bye", nil)
 	if inst.unmountPanics {
 		panic("unmount boom")
 	}
@@ -103,7 +103,7 @@ func (inst *recorder) Unmount(ctx app.MountContextI) (err error) {
 func headless(id app.AppIdT) (m app.Manifest) {
 	m = app.Manifest{
 		Id: id, Version: "0.1.0", Display: string(id), Summary: "fixture", Topics: []app.TopicT{app.TopicRuntime},
-		Surface: app.SurfaceHeadless, Caps: []app.SubjectFilter{{Pattern: "t.>", Direction: app.CapDirectionBoth}},
+		Surface: app.SurfaceHeadless, Caps: []app.SubjectFilter{{Pattern: "app.t.*", Direction: app.CapDirectionBoth}},
 	}
 	return
 }
@@ -354,9 +354,9 @@ func TestPatternsOverlap(t *testing.T) {
 	}{
 		{"runtime.fs.dialog.read", "runtime.fs.dialog.read", true},
 		{"runtime.fs.dialog.read", "runtime.fs.dialog.write", false},
-		{"runtime.fs.dialog.read", "fs.>", true},
-		{"fs.>", "runtime.fs.dialog.read", true},
-		{"fs.*.read", "runtime.fs.dialog.>", true},
+		{"runtime.fs.dialog.read", "runtime.fs.>", true},
+		{"runtime.fs.>", "runtime.fs.dialog.read", true},
+		{"runtime.fs.*.read", "runtime.fs.dialog.>", true},
 		{"runtime.fs.dialog", "runtime.fs.dialog.read", false},
 		{"runtime.task.>", "runtime.task.*.cancel", true},
 		{"", "fs.>", false},

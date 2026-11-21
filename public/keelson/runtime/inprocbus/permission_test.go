@@ -21,8 +21,8 @@ func TestSubjectAllowed_BothCoversBoth(t *testing.T) {
 	caps := []app.SubjectFilter{
 		{Pattern: "fs.>", Direction: app.CapDirectionBoth},
 	}
-	assert.True(t, SubjectAllowed(caps, "runtime.fs.dialog.read", app.CapDirectionPub))
-	assert.True(t, SubjectAllowed(caps, "runtime.fs.handle.abc.read", app.CapDirectionSub))
+	assert.True(t, SubjectAllowed(caps, "fs.dialog.read", app.CapDirectionPub))
+	assert.True(t, SubjectAllowed(caps, "fs.handle.abc.read", app.CapDirectionSub))
 }
 
 func TestSubjectAllowed_SubOnly(t *testing.T) {
@@ -35,10 +35,10 @@ func TestSubjectAllowed_SubOnly(t *testing.T) {
 
 func TestSubjectAllowed_FirstMatchingCapWins(t *testing.T) {
 	caps := []app.SubjectFilter{
-		{Pattern: "runtime.fs.dialog.write", Direction: app.CapDirectionPub},
-		{Pattern: "runtime.fs.>", Direction: app.CapDirectionPub},
+		{Pattern: "fs.dialog.write", Direction: app.CapDirectionPub},
+		{Pattern: "fs.>", Direction: app.CapDirectionPub},
 	}
-	assert.True(t, SubjectAllowed(caps, "runtime.fs.dialog.read", app.CapDirectionPub))
+	assert.True(t, SubjectAllowed(caps, "fs.dialog.read", app.CapDirectionPub))
 }
 
 func TestSubjectAllowed_EmptyCapsAlwaysDeny(t *testing.T) {

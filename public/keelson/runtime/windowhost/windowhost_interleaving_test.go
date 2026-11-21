@@ -112,7 +112,7 @@ func newEffWorld(t *testing.T) (w *effWorld) {
 	require.NoError(t, err)
 	w.svc = svc
 	appReg := app.NewRegistry()
-	caps := []app.SubjectFilter{{Pattern: "app.t.>", Direction: app.CapDirectionBoth}}
+	caps := []app.SubjectFilter{{Pattern: "app.t.*", Direction: app.CapDirectionBoth}}
 	fm := mkManifest(effFactoryId)
 	fm.Caps = caps
 	require.NoError(t, appReg.RegisterFactory(fm, func() (a app.AppI, err error) {

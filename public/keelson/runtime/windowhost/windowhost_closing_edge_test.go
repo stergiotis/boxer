@@ -36,7 +36,7 @@ func (inst *edgeApp) Manifest() (m app.Manifest) { return inst.manifest }
 func (inst *edgeApp) Mount(ctx app.MountContextI) (err error) {
 	inst.mountCtx = ctx
 	// A subscription the app never releases — the host must.
-	_, err = ctx.Bus().Subscribe("t.evt", func(msg *app.Msg) {})
+	_, err = ctx.Bus().Subscribe("app.t.evt", func(msg *app.Msg) {})
 	inst.subscribed = err == nil
 	return
 }
@@ -48,13 +48,13 @@ func (inst *edgeApp) Unmount(ctx app.MountContextI) (err error) {
 		inst.cancelledBefore = true
 	default:
 	}
-	inst.publishErr = ctx.Bus().Publish("t.bye", nil)
+	inst.publishErr = ctx.Bus().Publish("app.t.bye", nil)
 	return
 }
 
 func edgeManifest(id app.AppIdT) (m app.Manifest) {
 	m = mkManifest(id)
-	m.Caps = []app.SubjectFilter{{Pattern: "t.>", Direction: app.CapDirectionBoth}}
+	m.Caps = []app.SubjectFilter{{Pattern: "app.t.*", Direction: app.CapDirectionBoth}}
 	return
 }
 
@@ -113,7 +113,7 @@ func TestClosingEdge_LeaveUnmountUnload_FactoryApp(t *testing.T) {
 	assert.True(t, made.cancelledBefore, "leave: Cancel() fires before Unmount")
 	assert.NoError(t, made.publishErr, "unmount: the bus is still usable inside Unmount")
 	assert.Empty(t, bus.Subscriptions(), "unload: the host released the subscription the app forgot")
-	err = made.mountCtx.Bus().Publish("t.late", nil)
+	err = made.mountCtx.Bus().Publish("app.t.late", nil)
 	require.Error(t, err, "a goroutine outliving Unmount sees a closed client")
 	assert.True(t, errors.Is(err, inprocbus.ErrClosed))
 	_, ok := bus.ClientByAppId("test.edge")

@@ -32,25 +32,25 @@ func TestInst_PublishSubscribe_Delivers(t *testing.T) {
 	inst := newInst(t)
 	bus := inst.NewClient("test.app", fullCaps())
 	var got atomic.Pointer[app.Msg]
-	unsub, err := bus.Subscribe("runtime.fs.dialog.read", func(msg *app.Msg) {
+	unsub, err := bus.Subscribe("fs.dialog.read", func(msg *app.Msg) {
 		got.Store(msg)
 	})
 	require.NoError(t, err)
 	defer unsub()
 
-	err = bus.Publish("runtime.fs.dialog.read", []byte("hello"))
+	err = bus.Publish("fs.dialog.read", []byte("hello"))
 	require.NoError(t, err)
 
 	m := got.Load()
 	require.NotNil(t, m)
-	assert.Equal(t, "runtime.fs.dialog.read", m.Subject)
+	assert.Equal(t, "fs.dialog.read", m.Subject)
 	assert.Equal(t, []byte("hello"), m.Payload)
 }
 
 func TestInst_HasSubscriberFollowsSubscriptions(t *testing.T) {
 	inst := newInst(t)
 	bus := inst.NewClient("test.app", fullCaps())
-	const subject = "runtime.sysmetrics.host-a.bundle"
+	const subject = "sysmetrics.host-a.bundle"
 	assert.False(t, inst.HasSubscriber(subject))
 
 	unsubLit, err := bus.Subscribe(subject, func(*app.Msg) {})
@@ -59,10 +59,10 @@ func TestInst_HasSubscriberFollowsSubscriptions(t *testing.T) {
 	unsubLit()
 	assert.False(t, inst.HasSubscriber(subject))
 
-	unsubWild, err := bus.Subscribe("runtime.sysmetrics.>", func(*app.Msg) {})
+	unsubWild, err := bus.Subscribe("sysmetrics.>", func(*app.Msg) {})
 	require.NoError(t, err)
 	assert.True(t, inst.HasSubscriber(subject))
-	assert.False(t, inst.HasSubscriber("runtime.coverage.host-a.bundle"))
+	assert.False(t, inst.HasSubscriber("coverage.host-a.bundle"))
 	unsubWild()
 	assert.False(t, inst.HasSubscriber(subject))
 }
@@ -71,14 +71,14 @@ func TestInst_PublishMatchesWildcards(t *testing.T) {
 	inst := newInst(t)
 	bus := inst.NewClient("test.app", fullCaps())
 	var hits atomic.Int32
-	unsub, err := bus.Subscribe("runtime.fs.>", func(msg *app.Msg) {
+	unsub, err := bus.Subscribe("fs.>", func(msg *app.Msg) {
 		hits.Add(1)
 	})
 	require.NoError(t, err)
 	defer unsub()
 
-	require.NoError(t, bus.Publish("runtime.fs.dialog.read", nil))
-	require.NoError(t, bus.Publish("runtime.fs.handle.abc.read", nil))
+	require.NoError(t, bus.Publish("fs.dialog.read", nil))
+	require.NoError(t, bus.Publish("fs.handle.abc.read", nil))
 	require.NoError(t, bus.Publish("kafka.produce.topic", nil)) // no match
 
 	assert.Equal(t, int32(2), hits.Load())
@@ -87,14 +87,14 @@ func TestInst_PublishMatchesWildcards(t *testing.T) {
 func TestInst_PublishNoSubscribers_NoError(t *testing.T) {
 	inst := newInst(t)
 	bus := inst.NewClient("test.app", fullCaps())
-	err := bus.Publish("runtime.fs.dialog.read", []byte("x"))
+	err := bus.Publish("fs.dialog.read", []byte("x"))
 	require.NoError(t, err)
 }
 
 func TestInst_PublishInvalidSubject_Errors(t *testing.T) {
 	inst := newInst(t)
 	bus := inst.NewClient("test.app", fullCaps())
-	err := bus.Publish("runtime.fs.>", nil) // wildcard in subject is invalid
+	err := bus.Publish("fs.>", nil) // wildcard in subject is invalid
 	require.Error(t, err)
 }
 
@@ -105,7 +105,7 @@ func TestInst_MultipleSubscribersAllReceive(t *testing.T) {
 	unsubA, err := bus.Subscribe("ch.query.boxer", func(msg *app.Msg) { a.Add(1) })
 	require.NoError(t, err)
 	defer unsubA()
-	unsubB, err := bus.Subscribe("runtime.ch.>", func(msg *app.Msg) { b.Add(1) })
+	unsubB, err := bus.Subscribe("ch.>", func(msg *app.Msg) { b.Add(1) })
 	require.NoError(t, err)
 	defer unsubB()
 

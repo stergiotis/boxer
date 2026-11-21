@@ -483,13 +483,12 @@ func (inst *Service) queuePending(msg *app.Msg, op string) {
 }
 
 func (inst *Service) handleHandleOp(msg *app.Msg) {
-	parts := strings.Split(msg.Subject, ".")
-	if len(parts) != 4 || parts[0] != "fs" || parts[1] != "handle" {
+	rest, isHandle := strings.CutPrefix(msg.Subject, HandleSubjectPrefix)
+	uuid, op, twoTokens := strings.Cut(rest, ".")
+	if !isHandle || !twoTokens || uuid == "" || op == "" || strings.Contains(op, ".") {
 		inst.replyError(msg.Reply, "malformed handle subject: "+msg.Subject)
 		return
 	}
-	uuid := parts[2]
-	op := parts[3]
 	inst.mu.Lock()
 	h, ok := inst.handles[uuid]
 	inst.mu.Unlock()

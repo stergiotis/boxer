@@ -331,7 +331,7 @@ func TestEvaluate_Ok_FilesWithFsCap(t *testing.T) {
 
 func TestEvaluate_MissingCap_FilesWithoutFsCap(t *testing.T) {
 	f := evaluate("some.app", "CAPABILITY_FILES", []app.SubjectFilter{
-		{Pattern: "ch.query.boxer", Direction: app.CapDirectionPub},
+		{Pattern: "runtime.ch.server.read.boxer", Direction: app.CapDirectionPub},
 	})
 	assert.Equal(t, StatusMissingCap, f.Status)
 	assert.Contains(t, f.Reason, "fs.")
@@ -339,7 +339,7 @@ func TestEvaluate_MissingCap_FilesWithoutFsCap(t *testing.T) {
 
 func TestEvaluate_NetworkSatisfiedByCh(t *testing.T) {
 	f := evaluate("some.app", "CAPABILITY_NETWORK", []app.SubjectFilter{
-		{Pattern: "ch.query.boxer", Direction: app.CapDirectionPub},
+		{Pattern: "runtime.ch.server.read.boxer", Direction: app.CapDirectionPub},
 	})
 	assert.Equal(t, StatusOK, f.Status)
 }

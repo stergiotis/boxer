@@ -256,7 +256,7 @@ func TestManifest_Validate_UnregisteredTopicRefused(t *testing.T) {
 	}
 	err := m.Validate()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unregistered topic")
+	assert.Contains(t, err.Error(), "not in the vocabulary")
 	assert.Equal(t, "nonsense", ebtest.Fields(t, err)["topic"])
 }
 
