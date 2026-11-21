@@ -808,6 +808,17 @@
       }
     },
     {
+      "name": "BOXER_FACTS_READ_TABLE",
+      "type": "string",
+      "description": "the relation every read of facts goes to, database-qualified: a view over a deployment's own table, or a Merge over storage tables. It must return every boxer.facts column under its name and with its type; nothing about its engine or layout is checked. Empty reads boxer.facts",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
+      }
+    },
+    {
       "name": "BOXER_FAIRLEAD_JOURNAL_DIR",
       "type": "path",
       "description": "directory each process appends one JSON line per distinct SQL statement it sends to (file `<pid>-<start>.jsonl`); empty records nothing. Statement text is written as sent, bound values excluded and inlined literals included, so the directory is as sensitive as the queries",
