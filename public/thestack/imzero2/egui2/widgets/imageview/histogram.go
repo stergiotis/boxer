@@ -79,8 +79,10 @@ func (inst *Viewer) wantHistogram() {
 	if inst.hists[idx] != nil || !inst.histogramAvailable() {
 		return
 	}
+	// The count runs off the frame, which may replace or clear the source
+	// meanwhile: it holds the source it was asked of, never the field.
+	hs, _ := inst.source.(HistogramSourceI)
 	count := func(ctx context.Context) (*stats.Histogram, error) {
-		hs := inst.source.(HistogramSourceI)
 		h, err := hs.Histogram(ctx, idx)
 		return &h, err
 	}
