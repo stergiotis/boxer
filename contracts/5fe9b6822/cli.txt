@@ -327,7 +327,10 @@ boxer gov filenames
 boxer gov filenames --dry-run
 boxer gov filenames --root
 boxer gov gate
+boxer gov gate --app-prefix
 boxer gov gate --code-pattern
+boxer gov gate --ctx-baseline
+boxer gov gate --ctx-prefix
 boxer gov gate --doc-root
 boxer gov gate --entry-points-baseline
 boxer gov gate --exclude
