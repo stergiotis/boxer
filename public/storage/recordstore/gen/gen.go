@@ -160,7 +160,7 @@ type Input struct {
 	// OutDir receives the emitted files.
 	OutDir string
 	// ImportPath is the generated package's own import path (e.g.
-	// "github.com/stergiotis/boxer/public/storage/recordstore/example");
+	// "github.com/stergiotis/boxer/public/storage/recordstore/internal/example");
 	// the store file imports the internal/lowlevel scaffolding through
 	// it. Required unless Flat.
 	ImportPath string

@@ -55,8 +55,8 @@ it obeys.
 The **closed world** — one program owning both the writing and the reading, ids
 it assigns itself — is the special case, and a legitimate one. It is what
 [`anchor/ecsdemo`](../../../public/semistructured/leeway/anchor/ecsdemo/),
-[`recordstore/example`](../../../public/storage/recordstore/example/) and
-[`recordstore/sharedsection`](../../../public/storage/recordstore/sharedsection/)
+[`recordstore/example`](../../../public/storage/recordstore/internal/example/) and
+[`recordstore/sharedsection`](../../../public/storage/recordstore/internal/sharedsection/)
 demonstrate. Take it deliberately, not by default.
 
 ## The id-agreement rule
@@ -244,7 +244,7 @@ test is where to look first when a field is unexpectedly empty.
   the shape record for tuples and views. The rest are historical for consumers.
 - **Running code**:
   [`meshdemo`](../../../public/keelson/runtime/factsschema/meshdemo/) (the main
-  scenario), [`sharedsection`](../../../public/storage/recordstore/sharedsection/)
+  scenario), [`sharedsection`](../../../public/storage/recordstore/internal/sharedsection/)
   (two kinds, one section, registry-stable ids),
   [`anchor/ecsdemo`](../../../public/semistructured/leeway/anchor/ecsdemo/) (the
   closed-world overlap example).

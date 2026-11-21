@@ -100,7 +100,7 @@ use today without writing D1 first.
 Taking the question on its merits, independent of §2's gating.
 
 `StorageI` is three methods over opaque bytes. A generated store — read from
-`public/storage/recordstore/example/device_store.out.go`, 1202 lines for a
+`public/storage/recordstore/internal/example/device_store.out.go`, 1202 lines for a
 four-component example — exposes typed per-component DTOs plus `Begin`
 (entity builder) / `Ingest<Kind>` / `Latest` / `GetLive` / `Delete` /
 `Scan<Kind>` / `Replay` / `Flush`, with a batching read-through cache and an

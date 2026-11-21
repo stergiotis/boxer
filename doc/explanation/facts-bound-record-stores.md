@@ -235,8 +235,8 @@ not `go generate` alone.
 ## How to add one
 
 There is no CLI. The lane is a gen-test in the target package, the way
-[`recordstore/sharedsection`](../../public/storage/recordstore/sharedsection)
-and [`recordstore/example`](../../public/storage/recordstore/example) are
+[`recordstore/sharedsection`](../../public/storage/recordstore/internal/sharedsection)
+and [`recordstore/example`](../../public/storage/recordstore/internal/example) are
 driven. `keelson/runtime/sysmfacts` was the first facts-bound store and is
 the worked example to copy — the same lane drives `watchbill/watchbillpresence`,
 `runtime/trail`, `lading/ladingpolicy`, `markdown/mddocfacts` and

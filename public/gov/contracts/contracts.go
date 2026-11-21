@@ -98,7 +98,7 @@ var versionConstsAt = map[string][]string{
 // demonstration store.
 var nonProductionDDL = []string{
 	"public/semistructured/leeway/anchor/",
-	"public/storage/recordstore/sharedsection/",
+	"public/storage/recordstore/internal/sharedsection/",
 }
 
 // productionDDL says whether a DDL golden belongs to a production table:

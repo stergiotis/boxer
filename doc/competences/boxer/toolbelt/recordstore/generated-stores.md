@@ -10,7 +10,7 @@ realised_by:
   - adr:0105
   - adr:0089
   - pkg:public/storage/recordstore/gen
-  - pkg:public/storage/recordstore/example
+  - pkg:public/storage/recordstore/internal/example
   - explanation:facts-bound-record-stores
 assessment:
   - dimension: readiness

@@ -8,7 +8,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/storage/recordstore"
-	"github.com/stergiotis/boxer/public/storage/recordstore/example"
+	"github.com/stergiotis/boxer/public/storage/recordstore/internal/example"
 )
 
 // printingExecutor stands in for ClickHouse: it prints what a store would

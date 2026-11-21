@@ -749,10 +749,10 @@ Illustrative and demonstration code. Outside the promise.
 
 ### storage
 
-- `public/storage/recordstore/bypassguard` — Package bypassguard proves, from outside the store's package tree, that a generated store's dml builder keeps its frame control walled off (ADR-0100 SD6).
-- `public/storage/recordstore/cqrsexample` — Package cqrsexample is the ADR-0100 slice-S4 worked example: a minimal event-sourced account ledger (CQRS write model) built on a generated recordstore, documentation-grade.
-- `public/storage/recordstore/example` — Package example is the ADR-0100 slice-S1 worked example: a small "device" fact table with three ECS-style components (Identity, Battery, Tagged), the reference store over it, and the clickhouse-local round-trip test.
-- `public/storage/recordstore/sharedsection` — Package sharedsection is the ADR-0105 D2 worked example: two components (Label, State) binding ONE tagged section, generated under a caller-assigned membership-id wrapper (marshallgen.FixedIdsWrapper) instead of the default per-plan declaration-order ids.
+- `public/storage/recordstore/internal/bypassguard` — Package bypassguard proves, from outside the store's package tree, that a generated store's dml builder keeps its frame control walled off (ADR-0100 SD6).
+- `public/storage/recordstore/internal/cqrsexample` — Package cqrsexample is the ADR-0100 slice-S4 worked example: a minimal event-sourced account ledger (CQRS write model) built on a generated recordstore, documentation-grade.
+- `public/storage/recordstore/internal/example` — Package example is the ADR-0100 slice-S1 worked example: a small "device" fact table with three ECS-style components (Identity, Battery, Tagged), the reference store over it, and the clickhouse-local round-trip test.
+- `public/storage/recordstore/internal/sharedsection` — Package sharedsection is the ADR-0105 D2 worked example: two components (Label, State) binding ONE tagged section, generated under a caller-assigned membership-id wrapper (marshallgen.FixedIdsWrapper) instead of the default per-plan declaration-order ids.
 
 ### thestack
 
