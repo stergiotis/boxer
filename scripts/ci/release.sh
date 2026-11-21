@@ -21,7 +21,12 @@
 #   supply chain    govuln.sh, cargo_advisories.sh, license_gate.sh
 #   generated code  boxer-idl-check.sh --force, the browser host digest
 #   fuzz            one gofuzz.sh pass, --fuzztime per target (default 10s)
-#   api             scripts/ci/apidiff.sh, the stable tier against the last tag
+#   api             scripts/ci/apidiff.sh, the stable tier against the
+#                   previous tag: the latest by version order that does not
+#                   already contain the candidate
+#   release notes   boxer gov releasenotes for previous-tag..candidate, with
+#                   the apidiff listing, written to release-notes.md beside
+#                   the logs (never into the tree)
 #   clean tree      nothing above left the worktree dirty
 #
 # Exit status 0 means every gate ran and passed; the script then prints the
@@ -40,7 +45,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --version) version="$2"; shift 2 ;;
         --fuzztime) fuzztime="$2"; shift 2 ;;
-        -h|--help) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         -*) echo "release: unknown option $1" >&2; exit 2 ;;
         *) rev="$1"; shift ;;
     esac
@@ -103,12 +108,28 @@ host_digest() {
 }
 gate "browser host digest" host_digest
 
-# ---- fuzz, API -------------------------------------------------------------------
+# ---- fuzz, API, release notes -------------------------------------------------------
 gate "gofuzz ($fuzztime per target)" env BOXER_FUZZ_TIME="$fuzztime" BOXER_FUZZ_LOG_DIR="$logdir/fuzz" scripts/ci/gofuzz.sh
-if [ -x scripts/ci/apidiff.sh ]; then
-    gate "apidiff" scripts/ci/apidiff.sh
-else
+# The previous release: the newest tag by version order that the candidate
+# is not itself, so a re-run on a tagged commit compares with the one before.
+prev_tag=$(git tag --sort=-v:refname --no-contains "$sha" | head -n 1)
+apidiff_listing="$logdir/apidiff.txt"
+apidiff_against() {
+    scripts/ci/apidiff.sh "$prev_tag" | tee "$apidiff_listing"
+}
+release_notes() {
+    ./boxer.sh gov releasenotes --from "$prev_tag" --to "$sha" --apidiff "$apidiff_listing" >"$logdir/release-notes.md"
+    echo "release notes for $prev_tag..$(git rev-parse --short "$sha") in $logdir/release-notes.md"
+}
+if [ -z "$prev_tag" ]; then
+    not_run "apidiff" "no earlier tag to compare with"
+    not_run "release notes" "no earlier tag to start the range at"
+elif [ ! -x scripts/ci/apidiff.sh ]; then
     not_run "apidiff" "scripts/ci/apidiff.sh is absent at this commit"
+    not_run "release notes" "no apidiff listing to include"
+else
+    gate "apidiff against $prev_tag" apidiff_against
+    gate "release notes" release_notes
 fi
 
 # ---- the tree --------------------------------------------------------------------
@@ -120,7 +141,7 @@ if [ ${#gate_failed[@]} -gt 0 ]; then
     exit 1
 fi
 v="${version:-vX.Y.Z}"
-echo "release: $(git rev-parse --short "$sha") passed every gate. To tag it (doc/howto/release-signing.md):"
+echo "release: $(git rev-parse --short "$sha") passed every gate; release notes in $logdir/release-notes.md. To tag it (doc/howto/release-signing.md):"
 echo
 echo "  git tag -s -a $v -m 'boxer $v' $sha"
 echo "  git verify-tag $v"
