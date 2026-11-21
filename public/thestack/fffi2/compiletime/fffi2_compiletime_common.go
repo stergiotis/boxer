@@ -10,12 +10,11 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/compiletimeflags"
 	"github.com/stergiotis/boxer/public/functional"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"golang.org/x/exp/constraints"
 )
 
-var ErrInvalidState = eh.Errorf("builder is in wrong state")
+var ErrInvalidState = errors.New("builder is in wrong state")
 
 type StateAndErrTracker[T constraints.Unsigned] struct {
 	errs               []error

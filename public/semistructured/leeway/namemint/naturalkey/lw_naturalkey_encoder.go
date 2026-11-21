@@ -73,8 +73,8 @@ func (inst *Encoder) handleErr(err error) *Encoder {
 	return inst
 }
 
-var ErrWrongState = eh.Errorf("wrong state")
-var ErrInvalidArgument = eh.Errorf("invalid argument")
+var ErrWrongState = errors.New("wrong state")
+var ErrInvalidArgument = errors.New("invalid argument")
 
 func (inst *Encoder) Begin() *Encoder {
 	switch inst.state {

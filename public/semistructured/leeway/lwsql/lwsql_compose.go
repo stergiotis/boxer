@@ -1,6 +1,7 @@
 package lwsql
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -42,15 +43,15 @@ const (
 
 // ErrUseAspectOnPlainColumn rejects a `use:` token on a plain-column spec.
 // Use aspects are section-level and tagged-only; the error names the fix.
-var ErrUseAspectOnPlainColumn = eb.Build().Errorf("use aspects are section-level and tagged-only; a plain column cannot carry one — make the column a tagged section (LW_TV) or drop the use: token")
+var ErrUseAspectOnPlainColumn = errors.New("use aspects are section-level and tagged-only; a plain column cannot carry one — make the column a tagged section (LW_TV) or drop the use: token")
 
 // ErrItemTokenOnTaggedColumn rejects an `item:` token on a tagged-column
 // spec: the item type is what files a plain column, a tagged column has none.
-var ErrItemTokenOnTaggedColumn = eb.Build().Errorf("tagged columns carry no item type; item: belongs to plain-column specs (LW_PLAIN)")
+var ErrItemTokenOnTaggedColumn = errors.New("tagged columns carry no item type; item: belongs to plain-column specs (LW_PLAIN)")
 
 // ErrMissingItemToken rejects a plain-column spec without its mandatory
 // item: token (ADR-0181 §SD2 — prefixes carry semantics, calls read complete).
-var ErrMissingItemToken = eb.Build().Errorf("plain column spec requires exactly one item: token (e.g. item:oq, item:id)")
+var ErrMissingItemToken = errors.New("plain column spec requires exactly one item: token (e.g. item:oq, item:id)")
 
 // PlainSpecTokens is the parsed token list of a plain-column spec.
 type PlainSpecTokens struct {

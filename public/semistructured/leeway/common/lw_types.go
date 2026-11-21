@@ -2,13 +2,13 @@ package common
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"iter"
 	"strings"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/containers"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -72,8 +72,8 @@ type IntermediateTableRepresentation struct {
 	TaggedValueDesc []*IntermediateTaggedValuesDesc `cbor:"taggedValueDesc"`
 }
 
-var ErrNotImplemented = eh.Errorf("not implemented")
-var ErrNoBuilder = eh.Errorf("no builder to write code to")
+var ErrNotImplemented = errors.New("not implemented")
+var ErrNoBuilder = errors.New("no builder to write code to")
 
 type CodeBuilderHolderI interface {
 	SetCodeBuilder(s *strings.Builder)
@@ -102,7 +102,7 @@ type PlainItemTypeE uint8
 
 var _ fmt.Stringer = PlainItemTypeE(0)
 
-var ErrNoCodebuilder = eh.Errorf("no codebuilder set")
+var ErrNoCodebuilder = errors.New("no codebuilder set")
 
 type TableDictionaryEntryDescDto struct {
 	Name    naming.StylableName
@@ -214,7 +214,7 @@ type TechnologySpecificGeneratorI interface {
 	GetTechnology() (tech TechnologyDto)
 }
 
-var ErrInvalidMembershipSpec = eh.Errorf("invalid membership spec")
+var ErrInvalidMembershipSpec = errors.New("invalid membership spec")
 
 type ImplementationStatusE uint8
 

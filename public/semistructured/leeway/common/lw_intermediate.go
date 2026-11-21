@@ -1,6 +1,7 @@
 package common
 
 import (
+	"errors"
 	"iter"
 	"slices"
 
@@ -143,7 +144,7 @@ func (inst *IntermediateTaggedValuesDesc) LoadSection(sec *TaggedValuesSection, 
 	return
 }
 
-var ErrUnhandledMembershipSpec = eh.Errorf("unhandled membership specification")
+var ErrUnhandledMembershipSpec = errors.New("unhandled membership specification")
 
 func (inst *IntermediateTaggedValuesDesc) loadSectionMembership(sec *TaggedValuesSection, tech TechnologySpecificMembershipSetGenI) (err error) {
 	inst.Membership.Reserve(sec.MembershipSpec.Count() + 2)

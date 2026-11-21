@@ -1,13 +1,13 @@
 package canonicaltypes
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"iter"
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/fxamacker/cbor/v2"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/parsing/antlr4utils"
 )
 
@@ -93,7 +93,7 @@ type MachineNumericTypeAstNode struct {
 }
 
 var _ PrimitiveAstNodeI = MachineNumericTypeAstNode{}
-var ErrInternalParserError = eh.Errorf("internal parser error")
+var ErrInternalParserError = errors.New("internal parser error")
 
 type Parser struct {
 	errListener *antlr4utils.StoringErrListener

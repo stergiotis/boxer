@@ -8,14 +8,13 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/trivialsql"
-	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // ErrNotPresentation is the refusal of a statement that computes, filters
 // or orders: a presentation cell picks columns and names them, and a record
 // does the rest (ADR-0371 §SD6). So every cell is answered in process, on
 // every host, from what is stored.
-var ErrNotPresentation = eh.Errorf("not a presentation statement")
+var ErrNotPresentation = errors.New("not a presentation statement")
 
 // Refusal is a refused statement and what in it was refused. Found is what
 // a cell shows in place of a result. It is [ErrNotPresentation] to

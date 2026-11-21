@@ -30,6 +30,7 @@ package trivialsql
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -39,12 +40,11 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // ErrNeedsClickHouse is the refusal of a statement outside the shape.
-var ErrNeedsClickHouse = eh.Errorf("trivialsql: this endpoint answers only SELECT * FROM keelson(…); the statement needs ClickHouse")
+var ErrNeedsClickHouse = errors.New("trivialsql: this endpoint answers only SELECT * FROM keelson(…); the statement needs ClickHouse")
 
 // Run answers sql against reg, binding `{slot:Type}` placeholders from
 // params by bare name (ADR-0133 §SD2), and returns the result encoded in the

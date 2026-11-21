@@ -1,11 +1,11 @@
 package lwsql
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
@@ -28,13 +28,13 @@ const conditionColumnPrefix = "c"
 // ErrConditionSectionExists is returned when the table already carries a section
 // by the configured condition-section name. Adding condition columns to it would merge
 // synthesized columns into an authored section, so the namer refuses.
-var ErrConditionSectionExists = eh.Errorf("table already has a condition section")
+var ErrConditionSectionExists = errors.New("table already has a condition section")
 
 // ErrSeparatorInSectionName is returned when the configured section name
 // contains the separator the table's physical names are joined with. Such a name
 // would corrupt the column-name grammar — the name would re-split at the wrong
 // position — so it is rejected rather than emitted.
-var ErrSeparatorInSectionName = eh.Errorf("condition section name contains the table's name separator")
+var ErrSeparatorInSectionName = errors.New("condition section name contains the table's name separator")
 
 // conditionType is the canonical type of a condition column: a boolean, which takes
 // no width (see the CT rules). It renders as `b`.

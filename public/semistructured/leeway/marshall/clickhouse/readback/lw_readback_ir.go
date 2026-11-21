@@ -1,6 +1,7 @@
 package readback
 
 import (
+	"errors"
 	"iter"
 	"slices"
 
@@ -47,7 +48,7 @@ func (inst *InformationRetrieval) Reset() {
 	inst.records = inst.records[:0]
 }
 
-var ErrInvariantViolation = eh.Errorf("an invariance has been violated")
+var ErrInvariantViolation = errors.New("an invariance has been violated")
 
 func (inst *InformationRetrieval) LoadTable(ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE) (err error) {
 	i := 0

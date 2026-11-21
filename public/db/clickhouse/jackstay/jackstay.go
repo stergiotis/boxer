@@ -32,6 +32,7 @@ package jackstay
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"strings"
 
@@ -69,7 +70,7 @@ var (
 	})
 )
 
-var ErrNoTarget = eh.Errorf("no target endpoint configured")
+var ErrNoTarget = errors.New("no target endpoint configured")
 
 // Endpoint names a server as a plan records it: where it is and who connects.
 // The password is deliberately absent.

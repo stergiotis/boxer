@@ -14,6 +14,7 @@ package ipcexec
 
 import (
 	"context"
+	"errors"
 	"io"
 	"iter"
 
@@ -25,7 +26,7 @@ import (
 )
 
 // ErrWriteOnly is what QueryArrow yields: a stream cannot be queried.
-var ErrWriteOnly = eh.New("the Arrow IPC stream executor is write-only")
+var ErrWriteOnly = errors.New("the Arrow IPC stream executor is write-only")
 
 var _ recordstore.ExecutorI = (*StreamExecutor)(nil)
 var _ recordstore.InsertSettingsI = (*StreamExecutor)(nil)

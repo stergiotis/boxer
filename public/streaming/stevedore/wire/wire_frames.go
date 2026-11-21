@@ -22,7 +22,7 @@ const DefaultMaxFrame = 64 * 1024
 const netstringMaxDigits = 10
 
 // ErrFrameTooLarge is wrapped by a reader refusing a frame above its bound.
-var ErrFrameTooLarge = eh.Errorf("frame exceeds the reader's bound")
+var ErrFrameTooLarge = errors.New("frame exceeds the reader's bound")
 
 // FrameReader reads one frame at a time from a pipe under one codec.
 //

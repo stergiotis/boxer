@@ -1,13 +1,13 @@
 package common
 
 import (
+	"errors"
 	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 )
 
-var ErrUnhandledRole = eh.Errorf("unhandled role")
+var ErrUnhandledRole = errors.New("unhandled role")
 
 func (inst ColumnRoleE) IsCardinalityRole() bool {
 	switch inst {

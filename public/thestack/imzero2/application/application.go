@@ -281,7 +281,7 @@ func clientArgs(cfg *Config) (args []string) {
 	return
 }
 
-var ErrNeedsToBeLaunchedBeforeRun = eh.Errorf("application needs to be launched before run")
+var ErrNeedsToBeLaunchedBeforeRun = errors.New("application needs to be launched before run")
 
 // Channel is the FFFI2 transport Launch established, or nil before Launch.
 func (inst *Application[U]) Channel() *runtime.InlineIoChannel[U] {

@@ -1,18 +1,18 @@
 package runtime
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stergiotis/boxer/public/generic"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 var AccelEstimatedInitialLength = 128
 
-var ErrUnexpectedArrowDataType = eh.Errorf("unexpected arrow data type")
+var ErrUnexpectedArrowDataType = errors.New("unexpected arrow data type")
 
 // unexpectedDataType reports a column whose Arrow type does not match what the
 // generated read access expects at that position.
@@ -48,7 +48,7 @@ func ReleaseIfNotNil[T ReleasableI](a T) {
 	}
 }
 
-var ErrColumnIndexOutOfRange = eh.Errorf("column index out of range")
+var ErrColumnIndexOutOfRange = errors.New("column index out of range")
 
 // recordShapeI is the part of a record the index guard needs. Both RecordI
 // variants — the non-generic one and the type-parameterised leeway_generic one —

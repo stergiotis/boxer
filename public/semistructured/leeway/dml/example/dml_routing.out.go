@@ -39,7 +39,7 @@ func CreateSchemaRouting() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1494
 
 type InEntityRouting struct {
 	allocator             memory.Allocator
@@ -138,7 +138,7 @@ var InEntityRoutingSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1697
 
 // SetId sets the entity's id, naturalKey columns, one positional argument per
 // column in that order. Hand-written code should call the per-column setters
@@ -190,7 +190,7 @@ func (inst *InEntityRouting) SetNaturalKey(naturalKey1 string) *InEntityRouting 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1697
 
 // SetTimestamp sets the entity's ts column.
 func (inst *InEntityRouting) SetTimestamp(ts2 uint64) *InEntityRouting {
@@ -206,7 +206,7 @@ func (inst *InEntityRouting) SetTimestamp(ts2 uint64) *InEntityRouting {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1697
 
 // SetRouting sets the entity's partitioningKey, routingKey, classification,
 // kind columns, one positional argument per column in that order.

@@ -19,11 +19,11 @@ import (
 
 // ErrBodyTooLarge is wrapped, permanent, when a request's body exceeds
 // Config.MaxBody.
-var ErrBodyTooLarge = eh.Errorf("request body exceeds the host's bound")
+var ErrBodyTooLarge = errors.New("request body exceeds the host's bound")
 
 // ErrReplyTooLarge is wrapped, permanent, when the items of one request do
 // not fit one reply frame.
-var ErrReplyTooLarge = eh.Errorf("reply exceeds the host's frame bound — raise it with the framework's, or emit fewer items per request")
+var ErrReplyTooLarge = errors.New("reply exceeds the host's frame bound — raise it with the framework's, or emit fewer items per request")
 
 // panicStackLimit bounds the stack a recovered panic carries into its error.
 const panicStackLimit = 4096

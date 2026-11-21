@@ -1,7 +1,7 @@
 package membership
 
 import (
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"errors"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -66,10 +66,10 @@ const (
 // is a real corpus property (a JSON array longer than MaxParamsIndex+1
 // elements), not a programming error, so producers are expected to count and
 // report it the way they count undecodable documents.
-var ErrParamsIndexOutOfRange = eh.Errorf("membership params index exceeds the maximum")
+var ErrParamsIndexOutOfRange = errors.New("membership params index exceeds the maximum")
 
 // ErrParamsMalformed reports a blob that is not in canonical form.
-var ErrParamsMalformed = eh.Errorf("membership params blob is malformed")
+var ErrParamsMalformed = errors.New("membership params blob is malformed")
 
 const hexDigitsLower = "0123456789abcdef"
 

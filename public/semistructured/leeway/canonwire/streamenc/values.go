@@ -1,9 +1,9 @@
 package streamenc
 
 import (
+	"errors"
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonwire/runtime"
@@ -266,4 +266,4 @@ func writeNetwork(cw *runtime.CborWriter, arr arrow.Array, i int, ct canonicalty
 
 // errNoView reports a value column the driver framed but never delivered a
 // view for — the sink was driven without the ArrowValueSinkI lane.
-var errNoView = eh.Errorf("streamenc: value column received no Arrow view; the driver must drive the encoder through ArrowValueSinkI")
+var errNoView = errors.New("streamenc: value column received no Arrow view; the driver must drive the encoder through ArrowValueSinkI")

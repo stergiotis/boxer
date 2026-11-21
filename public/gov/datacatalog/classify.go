@@ -1,9 +1,9 @@
 package datacatalog
 
 import (
+	"errors"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 )
@@ -13,7 +13,7 @@ import (
 // valid leeway schema — but a table that carries no evidence is not a leeway
 // table, and calling it one would put an attribute-less row into
 // boxer.tables_leeway and an empty-set node into every pair it takes part in.
-var ErrNoColumns = eh.Errorf("no columns to classify")
+var ErrNoColumns = errors.New("no columns to classify")
 
 // KindE is how a table's physical column names classified under the leeway
 // naming grammar. There are exactly two answers because the grammar itself

@@ -2,11 +2,11 @@
 package units
 
 import (
+	"errors"
 	"iter"
 	"math/bits"
 
 	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/base62"
 )
@@ -30,8 +30,8 @@ func encode(num uint64) (encoded AspectSet) {
 	return AspectSet(base62.Encode(num))
 }
 
-var ErrInvalidEncoding = eh.Errorf("encoding is wrong")
-var ErrEmptySet = eh.Errorf("encoding contains empty set")
+var ErrInvalidEncoding = errors.New("encoding is wrong")
+var ErrEmptySet = errors.New("encoding contains empty set")
 
 func EncodeAspects(aspects ...AspectE) (encoded AspectSet, err error) {
 	var num uint64

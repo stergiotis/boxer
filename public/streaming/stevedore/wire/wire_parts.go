@@ -2,15 +2,15 @@ package wire
 
 import (
 	"encoding/binary"
+	"errors"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // ErrBadParts is wrapped by DeserializeParts when the bytes are not a part
 // archive: a truncated count, a length past the end, a part count past the
 // bytes that could hold it.
-var ErrBadParts = eh.Errorf("bytes are not a part archive")
+var ErrBadParts = errors.New("bytes are not a part archive")
 
 const partsIntLen = 4
 

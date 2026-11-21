@@ -1,14 +1,13 @@
 package golang
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
-
-	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-var ErrInvalidCodeGeneratorName = eh.Errorf("code generator name is invalid")
+var ErrInvalidCodeGeneratorName = errors.New("code generator name is invalid")
 
 func ValidateCodeGeneratorName(generator string) (err error) {
 	l := len(generator)

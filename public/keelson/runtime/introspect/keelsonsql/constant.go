@@ -192,7 +192,7 @@ func (inst Constant) Text() (text string, err error) {
 // ErrNotConstant is the error of an expression that is not an inline
 // constant — a function call, a column, an operator: something a server
 // evaluates.
-var ErrNotConstant = eh.Errorf("keelsonsql: not a constant")
+var ErrNotConstant = errors.New("keelsonsql: not a constant")
 
 // NotConstantError names the expression that is not a constant. It is
 // ErrNotConstant to errors.Is.

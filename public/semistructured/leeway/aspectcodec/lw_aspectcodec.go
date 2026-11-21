@@ -11,9 +11,9 @@
 package aspectcodec
 
 import (
+	"errors"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -28,8 +28,8 @@ const indicesPerLevel = 60
 
 const legacyEmptySegment = "0"
 
-var ErrInvalidEncoding = eh.Errorf("encoding is wrong")
-var ErrEmptySet = eh.Errorf("encoding contains empty set")
+var ErrInvalidEncoding = errors.New("encoding is wrong")
+var ErrEmptySet = errors.New("encoding contains empty set")
 
 type IndexI interface {
 	~uint8

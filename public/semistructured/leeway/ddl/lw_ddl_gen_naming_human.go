@@ -1,6 +1,7 @@
 package ddl
 
 import (
+	"errors"
 	"slices"
 	"strings"
 
@@ -130,19 +131,19 @@ var ColumnsComponentsExplanation21 = []string{
 	ComponentStreamingGroup,
 }
 
-var ErrUnhandledIntermediateColumnContextType = eh.Errorf("unhandled intermediate column context type")
+var ErrUnhandledIntermediateColumnContextType = errors.New("unhandled intermediate column context type")
 
 func init() {
 	addParseData(&parseStructure13, ColumnsComponentsExplanation13)
 	addParseData(&parseStructure21, ColumnsComponentsExplanation21)
 }
 
-var ErrUnhandledNumberOfComponents = eh.Errorf("unhandled number of components")
-var ErrNameComponentContainsSeparator = eh.Errorf("name component contains separator")
-var ErrParseError = eh.Errorf("parse error")
-var ErrInvalidColumns = eh.Errorf("invalid column name")
-var ErrInvalidCanonicalType = eh.Errorf("invalid canonical type")
-var ErrInvalidAspects = eh.Errorf("invalid useaspects")
+var ErrUnhandledNumberOfComponents = errors.New("unhandled number of components")
+var ErrNameComponentContainsSeparator = errors.New("name component contains separator")
+var ErrParseError = errors.New("parse error")
+var ErrInvalidColumns = errors.New("invalid column name")
+var ErrInvalidCanonicalType = errors.New("invalid canonical type")
+var ErrInvalidAspects = errors.New("invalid useaspects")
 
 var _ common.NamingConventionI = (*HumanReadableNamingConvention)(nil)
 

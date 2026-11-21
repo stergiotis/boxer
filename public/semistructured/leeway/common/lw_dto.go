@@ -1,7 +1,7 @@
 package common
 
 import (
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"errors"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
@@ -211,7 +211,7 @@ func (inst *TableDescDto) Reset() {
 	inst.OpaqueColumnValueSemantics = initSlice(inst.OpaqueColumnValueSemantics, idColumnEst)
 }
 
-var ErrInvalidType = eh.Errorf("table contains an invalid canonical type")
+var ErrInvalidType = errors.New("table contains an invalid canonical type")
 
 type TechnologyDto struct {
 	Id   string

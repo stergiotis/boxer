@@ -9,13 +9,13 @@
 package queryendpoint
 
 import (
+	"errors"
 	"net/url"
 	"slices"
 	"strings"
 	"sync"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/loopback"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -31,13 +31,13 @@ const (
 var (
 	// ErrName: the name is empty or holds something other than lowercase
 	// letters, digits and hyphens.
-	ErrName = eh.New("queryendpoint: a name is lowercase letters, digits and hyphens")
+	ErrName = errors.New("queryendpoint: a name is lowercase letters, digits and hyphens")
 	// ErrReserved: the name is NameDefault.
-	ErrReserved = eh.New("queryendpoint: the name is reserved for the environment's target")
+	ErrReserved = errors.New("queryendpoint: the name is reserved for the environment's target")
 	// ErrTaken: a live endpoint already has the name.
-	ErrTaken = eh.New("queryendpoint: the name is already published")
+	ErrTaken = errors.New("queryendpoint: the name is already published")
 	// ErrURL: the URL is not an http URL on loopback.
-	ErrURL = eh.New("queryendpoint: an endpoint is an http URL on loopback")
+	ErrURL = errors.New("queryendpoint: an endpoint is an http URL on loopback")
 )
 
 // Endpoint is one query endpoint the process serves.

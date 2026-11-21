@@ -1,6 +1,7 @@
 package passes
 
 import (
+	"errors"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,7 +23,7 @@ const DefaultConditionPrefix = "cond_"
 // a column of the table being read. Rewriting anyway would silently shadow the
 // stored column — ClickHouse accepts the duplicate name and binds the WHERE
 // reference to the alias — so the pass declines instead (ADR-0121 §SD4).
-var ErrConditionNameCollision = eh.Errorf("condition column name collides with a table column")
+var ErrConditionNameCollision = errors.New("condition column name collides with a table column")
 
 // ConditionNamerI names the condition columns an ExposeSelectionConditions
 // rewrite adds for one table, letting a domain place them inside its own schema

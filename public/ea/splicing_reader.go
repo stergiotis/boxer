@@ -1,9 +1,8 @@
 package ea
 
 import (
+	"errors"
 	"io"
-
-	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 type SplicingReader struct {
@@ -18,7 +17,7 @@ func NewSplicingReader(primary io.Reader) *SplicingReader {
 	}
 }
 
-var ErrSplicingReaderAlreadySet = eh.Errorf("splicing reader is already set")
+var ErrSplicingReaderAlreadySet = errors.New("splicing reader is already set")
 
 func (inst *SplicingReader) SpliceReader(r io.Reader) (err error) {
 	if inst.secondary != nil {

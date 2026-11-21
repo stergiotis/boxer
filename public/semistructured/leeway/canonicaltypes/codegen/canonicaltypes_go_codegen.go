@@ -1,9 +1,9 @@
 package codegen
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
@@ -13,7 +13,7 @@ import (
 
 var CodeGeneratorName = "Leeway CT (" + vcs.ModuleInfo() + ")"
 
-var ErrNotImplemented = eh.Errorf("go code generation not implemtented for given canonical type")
+var ErrNotImplemented = errors.New("go code generation not implemtented for given canonical type")
 
 func GenerateGoCode(canonicalType canonicaltypes.PrimitiveAstNodeI, hints encodingaspects.AspectSet) (typeCode string, zeroValueLiteral string, imports []string, err error) {
 	switch ct := canonicalType.(type) {

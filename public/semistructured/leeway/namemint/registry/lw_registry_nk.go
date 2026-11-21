@@ -1,13 +1,13 @@
 package registry
 
 import (
+	"errors"
 	"iter"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/identity/tagmint"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
@@ -105,7 +105,7 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) MustBeginNext(nk naming.Stylable
 	return
 }
 
-var ErrNotFound = eh.Errorf("item is not contained in registry")
+var ErrNotFound = errors.New("item is not contained in registry")
 
 func (inst *HumanReadableNaturalKeyRegistry[C]) Lookup(nk naming.StylableName) (r RegisteredNaturalKey, err error) {
 	var has bool

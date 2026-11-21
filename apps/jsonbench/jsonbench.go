@@ -283,7 +283,7 @@ type ingester struct {
 // errStopIngest unwinds eachDoc when --limit is reached. Without it the
 // reader would keep decoding the rest of the file for nothing, which silently
 // inflates every throughput number the trial records.
-var errStopIngest = eh.Errorf("ingest limit reached")
+var errStopIngest = errors.New("ingest limit reached")
 
 func (inst *ingester) ingestFile(ctx context.Context, file string) (err error) {
 	err = eachDoc(file, 0, func(_ []byte, doc map[string]any) error {

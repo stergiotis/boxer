@@ -158,6 +158,10 @@ if err != nil {
 }
 ```
 
+### Sentinel Errors
+*   **A package-level error is `errors.New`.** `eh.Errorf`, `eh.New` and `eb.Build` record the stack where they run, and a package-level `var ErrX = eh.Errorf("…")` runs during initialisation, so every error wrapping it reports `runtime.doInit` instead of the failing path. `errors.Is` matches the sentinel by identity either way; the code that returns it wraps it with `eh.Errorf("…: %w", ErrX)` or `eb.Build()…Errorf` where the stack and the facts are worth recording. Codelint `CS019` reports the init-time form.
+*   **Read a fact back with `eh.LookupFact[T](err, key)`** rather than matching on the message text.
+
 ### Message Text
 *   **No package or function-name prefixes.** `eh.Errorf` and `eb.Build()` capture a stack trace at the call site (via `runtime.Callers` in `eh`), so the originating package and function are already attached to the error. Do **not** prefix the message with the package/function name (e.g. `"mypkg: ..."` or `"LoadConfig: ..."`) — it duplicates what the stack records and drifts out of sync when code is moved or renamed.
 *   Write the bare semantic message; let `Str`/`Int`/… carry structured context and the stack carry location.

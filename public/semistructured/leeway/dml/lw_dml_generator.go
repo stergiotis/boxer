@@ -1,6 +1,7 @@
 package dml
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -87,8 +88,8 @@ func (inst *GoClassBuilder) ComposeNamingConventionDependentCode(tableName namin
 	return
 }
 
-var ErrUnhandledSubType = eh.Errorf("unhandled sub type")
-var ErrUnhandledRole = eh.Errorf("unhandled column role")
+var ErrUnhandledSubType = errors.New("unhandled sub type")
+var ErrUnhandledRole = errors.New("unhandled column role")
 
 func (inst *GoClassBuilder) composeSharedMethods(clsName string) (err error) {
 	return

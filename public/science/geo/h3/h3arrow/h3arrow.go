@@ -1,12 +1,12 @@
 package h3arrow
 
 import (
+	"errors"
 	"unsafe"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
-	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // Sentinel errors.
@@ -14,10 +14,10 @@ var (
 	// ErrEmptyOffsets is returned by the CSR adapters when the offsets
 	// slice is empty (it must have at least one element — the terminating
 	// offsets[N]).
-	ErrEmptyOffsets = eh.New("h3arrow: CSR offsets must be non-empty (len(offsets) == N+1)")
+	ErrEmptyOffsets = errors.New("h3arrow: CSR offsets must be non-empty (len(offsets) == N+1)")
 
 	// ErrOffsetsOutOfRange is returned when offsets[N] exceeds len(values).
-	ErrOffsetsOutOfRange = eh.New("h3arrow: CSR offsets[N] exceeds len(values)")
+	ErrOffsetsOutOfRange = errors.New("h3arrow: CSR offsets[N] exceeds len(values)")
 )
 
 // bytesOfU64 returns a zero-copy []byte view over a []uint64 backing

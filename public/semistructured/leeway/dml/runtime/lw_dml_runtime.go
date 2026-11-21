@@ -1,24 +1,24 @@
 package runtime
 
 import (
+	"errors"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/unsafeperf"
 )
 
-var ErrInvalidStateTransition = eh.Errorf("invalid state transition")
+var ErrInvalidStateTransition = errors.New("invalid state transition")
 
 // ErrSingleMembershipViolated reports an attribute closing with a membership
 // count other than one on a channel its section declares single-instance
 // (ADR-0213). Raised by the generated completeAttribute path, so it surfaces
 // like every DML error: on CheckErrors and CommitEntity. Match with errors.Is.
-var ErrSingleMembershipViolated = eh.Errorf("the schema declares exactly one membership per attribute on this channel")
+var ErrSingleMembershipViolated = errors.New("the schema declares exactly one membership per attribute on this channel")
 
 // ErrFixedWidthExceeded reports a value longer than its fixed-width column
 // (`sxN`) can hold. Raised by AppendFixedText, so it surfaces like every DML
 // error: on CheckErrors and CommitEntity. Match with errors.Is.
-var ErrFixedWidthExceeded = eh.Errorf("value exceeds the fixed width of its column")
+var ErrFixedWidthExceeded = errors.New("value exceeds the fixed width of its column")
 
 // AppendFixedText appends v to a fixed-width text (`sxN`) column's builder
 // with ClickHouse INSERT semantics: exactly width bytes append verbatim, a

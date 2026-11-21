@@ -3,6 +3,7 @@ package stevedore
 import (
 	"encoding/binary"
 	"encoding/json/v2"
+	"errors"
 
 	"lukechampine.com/blake3"
 
@@ -45,7 +46,7 @@ type Request struct {
 }
 
 // ErrRequestShape is wrapped when a frame is not a one- or two-part archive.
-var ErrRequestShape = eh.Errorf("a request is a part archive of a header and a body, or of a body alone")
+var ErrRequestShape = errors.New("a request is a part archive of a header and a body, or of a body alone")
 
 // DecodeRequest reads a framed request. Every failure is permanent: a
 // request that does not parse will not parse next time either.

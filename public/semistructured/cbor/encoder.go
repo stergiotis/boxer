@@ -3,6 +3,7 @@ package cbor
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"hash"
 	"io"
 	"math"
@@ -348,7 +349,7 @@ func (inst *Encoder) flushHashBuffer(force bool) (err error) {
 	return nil
 }
 
-var ErrNoHasher = eh.Errorf("no hasher")
+var ErrNoHasher = errors.New("no hasher")
 
 func (inst *Encoder) Hash(b []byte) (hash []byte, err error) {
 	if inst.hasher == nil {

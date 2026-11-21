@@ -560,6 +560,47 @@ func TestCS018_PassesServeAndDirective(t *testing.T) {
 	}
 }
 
+func TestCS019_FlagsInitTimeErrors(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs019/bad")
+	require.NoError(t, err)
+
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS019())
+
+	var findings []codelint.Finding
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		findings = append(findings, f)
+	}
+
+	require.Len(t, findings, 3, "expected 3 CS019 findings (eh.Errorf, eh.New, eb.Build)")
+	for _, f := range findings {
+		assert.Equal(t, "CS019", f.RuleId)
+		assert.Equal(t, codelint.FindingSeverityError, f.Severity)
+	}
+}
+
+func TestCS019_PassesErrorsNewAndFuncLiterals(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs019/good")
+	require.NoError(t, err)
+
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS019())
+
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		t.Fatalf("unexpected finding: %+v", f)
+	}
+}
+
 func TestCS013_FlagsNonWrapVerbs(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs013/bad")
 	require.NoError(t, err)

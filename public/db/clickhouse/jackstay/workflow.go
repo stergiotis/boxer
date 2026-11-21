@@ -2,6 +2,7 @@ package jackstay
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"time"
 
@@ -95,7 +96,7 @@ func Recheck(ctx context.Context, src SourceI, dst QueryI, plan *Plan, now time.
 
 // ErrStale is returned by steps that refuse a plan the servers have moved away
 // from.
-var ErrStale = eh.Errorf("the plan no longer matches the servers")
+var ErrStale = errors.New("the plan no longer matches the servers")
 
 // ApplyDDLStep is the confirmation of the Structure step: recheck, run the
 // pending DDL through ddl (a client carrying [DDLClientConfig]), and judge

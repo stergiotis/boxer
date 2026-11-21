@@ -2,6 +2,7 @@ package ea
 
 import (
 	"bufio"
+	"errors"
 	"io"
 
 	"github.com/stergiotis/boxer/public/fec/anchor"
@@ -22,7 +23,7 @@ type BaseReader struct {
 	buffered                  byte
 }
 
-var ErrTooFar = eh.Errorf("unable to peek byte, peeked more bytes than maxMessageSize")
+var ErrTooFar = errors.New("unable to peek byte, peeked more bytes than maxMessageSize")
 
 // BytesRead returns how many bytes have been consumed from the underlying reader.
 func (inst *BaseReader) BytesRead() int {
