@@ -69,11 +69,11 @@ func (inst TableLayout) String() string {
 func (inst TableLayout) Digest() string {
 	n := inst.Normalized()
 	h := blake3.New(32, nil)
-	h.Write([]byte(n.Engine))
-	h.Write([]byte{0x1f})
-	h.Write([]byte(n.PartitionKey))
-	h.Write([]byte{0x1f})
-	h.Write([]byte(n.SortingKey))
+	_, _ = h.Write([]byte(n.Engine))
+	_, _ = h.Write([]byte{0x1f})
+	_, _ = h.Write([]byte(n.PartitionKey))
+	_, _ = h.Write([]byte{0x1f})
+	_, _ = h.Write([]byte(n.SortingKey))
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
