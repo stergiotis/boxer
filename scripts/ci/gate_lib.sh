@@ -116,24 +116,39 @@ clickhouse_point_private() {
     unset CLICKHOUSE_PASSWORD CLICKHOUSE_PASSWORD_FILE CLICKHOUSE_DATABASE
 }
 
+# _gate_clickhouse_provision DIR: give the fresh server what a host's first
+# run leaves on one — the facts table (chstore's setup DDL, as `keelsonddl`
+# prints it) and leeway's SQL read surface — built from the tree in the
+# current directory. The live-server tests read and write boxer.facts and
+# call the surface's functions; on a server that never ran a host they fail
+# on a missing table rather than on what they test.
+_gate_clickhouse_provision() {
+    local dir="$1"
+    ./boxer.sh keelsonddl |
+        "$dir/clickhouse" client --host 127.0.0.1 --port "$gate_clickhouse_native_port" --user default --multiquery
+    ./boxer.sh leeway sqlsurface install --url "$gate_clickhouse_url" --user default
+}
+
 # clickhouse_private DIR: clickhouse_point_private, then install the pinned
 # server from clickhouse_server.sh under DIR (the binary is kept between runs;
-# data and logs are not) and start it on those ports, listening on 127.0.0.1
-# only. The variables stay where they point if the server does not start, so
+# data and logs are not), start it on those ports, listening on 127.0.0.1
+# only, and provision it as a host's first run would. The variables stay where they point if the server does not start, so
 # a client finds either this server or nothing — never another one. The
-# binary's directory goes first on PATH, so `clickhouse local` is the pinned
-# build too. Succeeds when the server answers; gate_clickhouse_dir is then
+# binary's directory goes first on PATH and BOXER_CLICKHOUSE_BINARY_PATH
+# names it, so `clickhouse local` is the pinned build too. Succeeds when the server answers; gate_clickhouse_dir is then
 # set, for gate_stop_clickhouse.
 clickhouse_private() {
     local dir="$1" srv="$_gate_lib_dir/clickhouse_server.sh"
     local log="$gate_logdir/clickhouse.log"
     clickhouse_point_private
     export PATH="$dir:$PATH"
+    export BOXER_CLICKHOUSE_BINARY_PATH="$dir/clickhouse"
     mkdir -p "$dir"
     rm -rf -- "$dir/data" "$dir/log"
     gate_clickhouse_dir="$dir"
     if "$srv" install "$dir" >"$log" 2>&1 &&
-        "$srv" start "$dir" "$gate_clickhouse_http_port" "$gate_clickhouse_native_port" >>"$log" 2>&1; then
+        "$srv" start "$dir" "$gate_clickhouse_http_port" "$gate_clickhouse_native_port" >>"$log" 2>&1 &&
+        _gate_clickhouse_provision "$dir" >>"$log" 2>&1; then
         echo "ClickHouse: the run's own server on 127.0.0.1:$gate_clickhouse_http_port (native $gate_clickhouse_native_port), under $dir"
         return 0
     fi

@@ -102,6 +102,11 @@ start() {
         <table>query_log</table>
         <flush_interval_milliseconds>1000</flush_interval_milliseconds>
     </query_log>
+    <asynchronous_metric_log>
+        <database>system</database>
+        <table>asynchronous_metric_log</table>
+        <flush_interval_milliseconds>1000</flush_interval_milliseconds>
+    </asynchronous_metric_log>
     <users>
         <default>
             <password></password>
