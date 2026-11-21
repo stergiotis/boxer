@@ -154,7 +154,6 @@ boxer datacatalog refresh --password
 boxer datacatalog refresh --url
 boxer datacatalog refresh --user
 boxer datacatalog shapes
-boxer datasource
 boxer designsystem
 boxer designsystem colors
 boxer designsystem colors gen

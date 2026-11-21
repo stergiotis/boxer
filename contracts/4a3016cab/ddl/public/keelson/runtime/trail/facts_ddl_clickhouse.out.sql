@@ -186,7 +186,6 @@ CREATE TABLE IF NOT EXISTS boxer.facts (
 	"tv:bool:hrcard:hrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
 	"tv:bool:lrcard:lrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
 	"tv:bool:lmrcard:lmrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3))
-) ENGINE = MergeTree()
-ORDER BY ("id:id:u64:47::0:", "ts:ts:z64:47::0:")
+) ENGINE = MergeTree() PARTITION BY toYYYYMM("ts:ts:z64:47::0:") ORDER BY "ts:ts:z64:47::0:"
 SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
-COMMENT 'boxer-table/1 kind=facts columns=c6904140adc8ae04 naming=2 vocab=3c526c35a9ce4a40'
+COMMENT 'boxer-table/1 kind=facts columns=c6904140adc8ae04 naming=2 vocab=79669c99e9cac493'
