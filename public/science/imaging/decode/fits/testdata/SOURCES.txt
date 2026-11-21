@@ -1,0 +1,36 @@
+Fixtures of public/science/imaging/decode/fits (ADR-0398 §SD7, verification
+plan). Every file here is synthetic: written on 2026-11-21 by
+gen_fixtures.py.txt with astropy 8.0.3 and numpy 2.5.5 as the reference
+implementation, from arrays the script computes. They carry no third-party
+data and no licence beyond this repository's.
+
+The tables are astropy's reading of the files it wrote, which the tests hold
+the reader to:
+  samples.tsv  every sample of every image HDU: the stored value
+               (do_not_scale_image_data) and the scaled value, NaN where
+               BLANK or a float NaN, by 1-based FITS index, NAXIS1 first.
+  wcs.tsv      longitude and latitude of FITS pixels (origin 1) by
+               astropy.wcs.WCS.wcs_pix2world, for every TAN file.
+  coords.tsv   the world coordinate of each position of a third axis.
+  hdus.tsv     each HDU's type, EXTNAME, BITPIX and NAXIS, read with image
+               compression disabled.
+
+bitpix8/16/32/m32/m64.fits  one 5 × 3 image per BITPIX; m32 has a NaN.
+bitpix64.fits               BITPIX 64, refused.
+bitpix16.fits.gz            bitpix16.fits through Python's gzip (mtime 0).
+cube_i16.fits               NAXIS 5, 4, 3, 2; FREQ third axis, STOKES fourth.
+cube_f32.fits               NAXIS 5, 4, 3, no world coordinates.
+scaled.fits                 BSCALE 0.5, BZERO 10, BLANK -32768, BUNIT.
+uint16.fits                 astropy's unsigned 16-bit (BZERO 32768).
+blank_float.fits            BLANK on a float image, ignored by both readers.
+tan_cd.fits                 RA---TAN/DEC--TAN, rotated CD matrix, ICRS.
+tan_pc_latfirst.fits        DEC--TAN first, PC with CDELT, FK5 J2000.
+tan_crota.fits              CROTA2 = 30 with CDELT, EQUINOX 1950.
+tan_gal_arcsec.fits         GLON-TAN/GLAT-TAN, CUNIT arcsec.
+tan_pole.fits               reference point at Dec 89.75, LONPOLE 170.
+tan_sip.fits                TAN-SIP with A/B coefficients: not placed, noted.
+sin.fits                    RA---SIN: not placed, noted.
+linear.fits                 linear X/Y in mm, with an alternate description A.
+mef.fits                    empty primary, IMAGE SCI with TAN, BINTABLE, IMAGE ERR.
+tilecomp.fits               a tile-compressed image (CompImageHDU), refused.
+groups.fits                 random groups (GroupsHDU), refused.

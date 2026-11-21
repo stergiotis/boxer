@@ -1,0 +1,172 @@
+# Provenance of the FITS fixtures and of the expectation tables beside them
+# (ADR-0398 §SD7, verification plan). Not part of any toolchain: run by hand
+# with astropy as the reference implementation, from this directory:
+#   uv run --no-project --with astropy --with numpy python gen_fixtures.py.txt
+# Every file is synthetic and written by astropy.io.fits; the tables are
+# astropy's own reading of the files it wrote: samples.tsv (stored and
+# scaled value of every sample, by 1-based FITS index), wcs.tsv (celestial
+# coordinates of FITS pixels by astropy.wcs, origin 1), coords.tsv (the
+# world coordinate of each position of a third axis) and hdus.tsv.
+import gzip, io, os
+import numpy as np
+import astropy
+from astropy.io import fits
+from astropy.wcs import WCS
+
+out = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else '.'
+
+
+def ramp(shape, dtype, scale=1, offset=0):
+    """A distinct value at every index, so an axis-order or row-flip error shows."""
+    n = int(np.prod(shape))
+    return (np.arange(n, dtype=np.float64) * scale + offset).reshape(shape).astype(dtype)
+
+
+files = {}
+
+
+def primary(name, data, cards=(), **kw):
+    h = fits.PrimaryHDU(data=data, **kw)
+    for k, v in cards:
+        h.header[k] = v
+    files[name] = fits.HDUList([h])
+
+
+# Every BITPIX, 2-D, numpy shape (NAXIS2, NAXIS1) = (3, 5).
+primary('bitpix8.fits', ramp((3, 5), np.uint8, 7, 3))
+primary('bitpix16.fits', ramp((3, 5), np.int16, -1111, 7000))
+primary('bitpix32.fits', ramp((3, 5), np.int32, -123457, 900001))
+d = ramp((3, 5), np.float32, 0.25, -1.5)
+d[1, 2] = np.nan
+primary('bitpixm32.fits', d)
+primary('bitpixm64.fits', ramp((3, 5), np.float64, 1e-3, 1e10))
+primary('bitpix64.fits', ramp((3, 5), np.int64, 1, 1 << 40))
+
+# A 4-D cube, NAXIS1..4 = 5, 4, 3, 2, a linear third axis with coordinates.
+primary('cube_i16.fits', ramp((2, 3, 4, 5), np.int16, 1, -50),
+        cards=[('CTYPE3', 'FREQ'), ('CUNIT3', 'Hz'), ('CRVAL3', 1.4e9), ('CDELT3', 2.5e6), ('CRPIX3', 2.0),
+               ('CTYPE4', 'STOKES'), ('CRVAL4', 1.0), ('CDELT4', 1.0), ('CRPIX4', 1.0)])
+# A 3-D float cube without world coordinates.
+primary('cube_f32.fits', ramp((3, 4, 5), np.float32, 0.5, 2))
+
+# BSCALE, BZERO and BLANK on 16-bit integers; BUNIT.
+raw = ramp((3, 5), np.int16, 13, -90)
+raw[0, 1] = -32768
+raw[2, 4] = -32768
+h = fits.PrimaryHDU(data=raw, do_not_scale_image_data=True)
+h.header['BSCALE'] = 0.5
+h.header['BZERO'] = 10.0
+h.header['BLANK'] = -32768
+h.header['BUNIT'] = 'Jy/beam'
+files['scaled.fits'] = fits.HDUList([h])
+
+# The unsigned 16-bit convention, as astropy writes a uint16 array.
+primary('uint16.fits', ramp((3, 5), np.uint16, 4000, 5))
+# BLANK on a float image, which the standard says to ignore.
+primary('blank_float.fits', ramp((3, 5), np.float32, 1, 0), cards=[('BLANK', -1)])
+
+
+def tan(name, cards, shape=(10, 20), dtype=np.float32):
+    h = fits.PrimaryHDU(data=ramp(shape, dtype, 1, 0))
+    for k, v in cards:
+        h.header[k] = v
+    files[name] = fits.HDUList([h])
+
+
+th = np.deg2rad(25)
+tan('tan_cd.fits', [('CTYPE1', 'RA---TAN'), ('CTYPE2', 'DEC--TAN'), ('CRVAL1', 150.1), ('CRVAL2', 2.2),
+                    ('CRPIX1', 10.5), ('CRPIX2', 4.25),
+                    ('CD1_1', -2.8e-4 * np.cos(th)), ('CD1_2', 2.8e-4 * np.sin(th)),
+                    ('CD2_1', 2.8e-4 * np.sin(th)), ('CD2_2', 2.8e-4 * np.cos(th)),
+                    ('RADESYS', 'ICRS')])
+tan('tan_pc_latfirst.fits', [('CTYPE1', 'DEC--TAN'), ('CTYPE2', 'RA---TAN'), ('CRVAL1', -35.5), ('CRVAL2', 280.25),
+                             ('CRPIX1', 3.0), ('CRPIX2', 12.0), ('CDELT1', 0.01), ('CDELT2', -0.012),
+                             ('PC1_1', 0.9), ('PC1_2', 0.3), ('PC2_1', -0.2), ('PC2_2', 1.1),
+                             ('RADESYS', 'FK5'), ('EQUINOX', 2000.0)])
+tan('tan_crota.fits', [('CTYPE1', 'RA---TAN'), ('CTYPE2', 'DEC--TAN'), ('CRVAL1', 10.0), ('CRVAL2', 41.0),
+                       ('CRPIX1', 8.0), ('CRPIX2', 6.0), ('CDELT1', -1e-3), ('CDELT2', 1e-3), ('CROTA2', 30.0),
+                       ('EQUINOX', 1950.0)])
+tan('tan_gal_arcsec.fits', [('CTYPE1', 'GLON-TAN'), ('CTYPE2', 'GLAT-TAN'), ('CUNIT1', 'arcsec'), ('CUNIT2', 'arcsec'),
+                            ('CRVAL1', 3600.0 * 120.5), ('CRVAL2', 3600.0 * -10.25),
+                            ('CRPIX1', 1.0), ('CRPIX2', 1.0), ('CDELT1', -3.6), ('CDELT2', 3.6)])
+tan('tan_pole.fits', [('CTYPE1', 'RA---TAN'), ('CTYPE2', 'DEC--TAN'), ('CRVAL1', 33.0), ('CRVAL2', 89.75),
+                      ('CRPIX1', 10.0), ('CRPIX2', 5.0), ('CDELT1', -0.05), ('CDELT2', 0.05), ('LONPOLE', 170.0)])
+tan('tan_sip.fits', [('CTYPE1', 'RA---TAN-SIP'), ('CTYPE2', 'DEC--TAN-SIP'), ('CRVAL1', 150.1), ('CRVAL2', 2.2),
+                     ('CRPIX1', 10.5), ('CRPIX2', 4.25), ('CD1_1', -2.8e-4), ('CD1_2', 0.0), ('CD2_1', 0.0), ('CD2_2', 2.8e-4),
+                     ('A_ORDER', 2), ('A_0_2', 1e-6), ('A_1_1', 2e-6), ('A_2_0', 3e-6),
+                     ('B_ORDER', 2), ('B_0_2', -1e-6), ('B_1_1', 1e-6), ('B_2_0', 2e-6)])
+tan('sin.fits', [('CTYPE1', 'RA---SIN'), ('CTYPE2', 'DEC--SIN'), ('CRVAL1', 150.1), ('CRVAL2', 2.2),
+                 ('CRPIX1', 10.5), ('CRPIX2', 4.25), ('CDELT1', -2.8e-4), ('CDELT2', 2.8e-4)])
+tan('linear.fits', [('CTYPE1', 'X'), ('CTYPE2', 'Y'), ('CUNIT1', 'mm'), ('CUNIT2', 'mm'), ('CRVAL1', 100.0), ('CRVAL2', -40.0),
+                    ('CRPIX1', 1.0), ('CRPIX2', 1.0), ('CDELT1', 0.5), ('CDELT2', 0.25),
+                    ('CTYPE1A', 'RA---TAN'), ('CTYPE2A', 'DEC--TAN')])
+
+# A multi-extension file: an empty primary, a float image with WCS, a
+# binary table, and a second image.
+sci = fits.ImageHDU(data=ramp((4, 6), np.float32, 1.5, -3), name='SCI')
+for k, v in [('CTYPE1', 'RA---TAN'), ('CTYPE2', 'DEC--TAN'), ('CRVAL1', 200.0), ('CRVAL2', -60.0),
+             ('CRPIX1', 3.5), ('CRPIX2', 2.5), ('CDELT1', -1e-4), ('CDELT2', 1e-4)]:
+    sci.header[k] = v
+tab = fits.BinTableHDU.from_columns([fits.Column(name='a', format='J', array=np.arange(3))], name='CAT')
+err = fits.ImageHDU(data=ramp((4, 6), np.int16, 3, 1), name='ERR')
+files['mef.fits'] = fits.HDUList([fits.PrimaryHDU(), sci, tab, err])
+
+# Refused: a tile-compressed image as the only image; random groups.
+files['tilecomp.fits'] = fits.HDUList([fits.PrimaryHDU(), fits.CompImageHDU(data=ramp((8, 8), np.int16, 1, 0))])
+gdata = fits.GroupData(ramp((3, 1, 2, 2), np.float32, 1, 0), parnames=['u', 'v'],
+                       pardata=[np.arange(3, dtype=np.float32), np.arange(3, dtype=np.float32)], bitpix=-32)
+files['groups.fits'] = fits.HDUList([fits.GroupsHDU(gdata)])
+
+samples, wcsrows, coordrows, hdurows = [], [], [], []
+for name, hl in files.items():
+    path = os.path.join(out, name)
+    hl.writeto(path, overwrite=True)
+
+# A gzip-wrapped copy, by the standard library's gzip.
+with open(os.path.join(out, 'bitpix16.fits'), 'rb') as f:
+    blob = f.read()
+with open(os.path.join(out, 'bitpix16.fits.gz'), 'wb') as f:
+    f.write(gzip.compress(blob, mtime=0))
+
+
+def fmt(v):
+    v = float(v)
+    return 'nan' if np.isnan(v) else repr(v)
+
+
+for name in sorted(files):
+    with fits.open(os.path.join(out, name), do_not_scale_image_data=True, disable_image_compression=True) as rawl, \
+            fits.open(os.path.join(out, name), disable_image_compression=True) as scl:
+        for i, (hr, hs) in enumerate(zip(rawl, scl)):
+            kind = 'primary' if i == 0 else hr.header.get('XTENSION', '').strip()
+            hdurows.append((name, i, kind, hr.header.get('EXTNAME', ''), hr.header['BITPIX'], hr.header['NAXIS']))
+            if not isinstance(hr, (fits.PrimaryHDU, fits.ImageHDU)) or isinstance(hr, fits.GroupsHDU):
+                continue
+            if hr.data is None or hr.data.ndim < 2 or hr.header['BITPIX'] == 64:
+                continue
+            st, sv = np.asarray(hr.data), np.asarray(hs.data, dtype=np.float64)
+            for idx in np.ndindex(st.shape):
+                fidx = ','.join(str(j + 1) for j in reversed(idx))
+                samples.append((name, i, fidx, fmt(st[idx]), fmt(sv[idx])))
+            w = WCS(hs.header)
+            if w.has_celestial and 'TAN' in hs.header.get('CTYPE1', '') and '-SIP' not in hs.header.get('CTYPE1', ''):
+                for p1, p2 in [(1, 1), (hs.header['NAXIS1'], 1), (1, hs.header['NAXIS2']),
+                               (hs.header['NAXIS1'], hs.header['NAXIS2']), (3.25, 2.75), (0.5, 0.5), (7, 4)]:
+                    world = w.wcs_pix2world([[p1, p2]], 1)[0]
+                    lonidx = w.wcs.lng
+                    wcsrows.append((name, i, repr(float(p1)), repr(float(p2)),
+                                    repr(float(world[lonidx])), repr(float(world[w.wcs.lat]))))
+            if hs.header['NAXIS'] >= 3 and 'CRVAL3' in hs.header:
+                w3 = WCS(hs.header).sub([3])
+                for k in range(1, hs.header['NAXIS3'] + 1):
+                    coordrows.append((name, i, 3, k, repr(float(w3.wcs_pix2world([[k]], 1)[0][0]))))
+
+note = '# astropy ' + astropy.__version__ + ', numpy ' + np.__version__
+for fname, header, rows in [('samples.tsv', 'file\thdu\tindex\tstored\tvalue', samples),
+                            ('wcs.tsv', 'file\thdu\tp1\tp2\tlon\tlat', wcsrows),
+                            ('coords.tsv', 'file\thdu\taxis\tposition\tcoord', coordrows),
+                            ('hdus.tsv', 'file\thdu\ttype\textname\tbitpix\tnaxis', hdurows)]:
+    with open(os.path.join(out, fname), 'w') as f:
+        f.write(note + '\n' + header + '\n')
+        for r in rows:
+            f.write('\t'.join(str(x) for x in r) + '\n')
