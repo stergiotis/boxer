@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/apptest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,20 +37,12 @@ func TestHelpCorpusIndexes(t *testing.T) {
 	}
 }
 
-// TestHelpCorpusDropsNothing is the zero-drops gate (ADR-0180 M2): a construct
-// the markdown lowering has no case for vanishes from the rendered page
-// silently, and this turns that into a failure.
-func TestHelpCorpusDropsNothing(t *testing.T) {
-	help.SyncFromRegistry()
-	b, ok := help.Book(AppId)
-	require.True(t, ok)
-	docs := b.Docs()
-	require.NotEmpty(t, docs)
-	for _, info := range docs {
-		doc, _, parsed := b.Doc(info.Path)
-		require.Truef(t, parsed, "doc %q must parse", info.Path)
-		require.Emptyf(t, doc.Dropped(), "doc %q loses content in the lowering: %+v", info.Path, doc.Dropped())
-	}
+// TestHelpCorpus is the conformance kit's check of the help book
+// (ADR-0396 §8): it indexes, every page parses and loses nothing in the
+// lowering, and every operation and resource is named.
+func TestHelpCorpus(t *testing.T) {
+	apptest.HelpCorpus(t, AppId)
+	apptest.HelpNamesCatalog(t, AppId)
 }
 
 // TestHelpNamesEveryOperationAndPhase keeps the book, the catalog and the

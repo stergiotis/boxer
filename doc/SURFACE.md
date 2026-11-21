@@ -25,7 +25,7 @@ itself; ADR-0389 states its tier.
 | [Stable](#stable) | 77 |
 | [Experimental](#experimental) | 282 |
 | [Internal](#internal) | 16 |
-| [Test support](#test-support) | 15 |
+| [Test support](#test-support) | 16 |
 | [Tools](#tools) | 91 |
 | [Demos and examples](#demos-and-examples) | 40 |
 | [Unclassified](#unclassified) | 208 |
@@ -541,6 +541,7 @@ Helpers and conformance suites meant to be imported by tests. Outside the promis
 
 ### keelson
 
+- `public/keelson/runtime/apptest` — Package apptest is the app conformance kit (ADR-0396 §8): the checks this module runs over its own apps, as functions another module's tests call over theirs.
 - `public/keelson/runtime/statestore/statestoretest` — Package statestoretest is the contract every statestore.StoreI implementation answers: the in-memory statestore.Memory and the durable persist.StoreBackend run the same cases, so the fallback a host uses with ClickHouse down cannot drift from the backend it uses with it up.
 
 ### observability

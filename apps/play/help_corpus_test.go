@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/keelson/runtime/apptest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,32 +54,11 @@ func TestHelpCorpusIndexes(t *testing.T) {
 	}
 }
 
-// TestHelpCorpusDropsNothing is the ADR-0180 M2 zero-drops gate over this
-// book.
-//
-// The markdown lowering's failure mode for a construct it does not know is
-// INVISIBLE: the node reaches a default branch, and the node plus the prose it
-// covered is dropped from the rendered document with nothing to say so. A page
-// reads short and no test notices. That is how a parser feature once deleted
-// the text it covered.
-//
-// [markdown.Doc.Dropped] counts every skip by AST kind; asserting zero over a
-// real corpus turns the failure mode into a property. What fails here is not
-// only a regression — a future goldmark feature whose node the lowering has no
-// case for lands here first, which is the point.
-func TestHelpCorpusDropsNothing(t *testing.T) {
-	help.SyncFromRegistry()
-	b, ok := help.Book("github.com/stergiotis/boxer/apps/play")
-	require.True(t, ok, "play help book must be indexed from Manifest.Help")
-
-	docs := b.Docs()
-	require.NotEmpty(t, docs, "help corpus must not be empty")
-	for _, info := range docs {
-		doc, _, parsed := b.Doc(info.Path)
-		require.Truef(t, parsed, "doc %q must parse", info.Path)
-		require.Emptyf(t, doc.Dropped(), "doc %q loses content in the lowering: %+v",
-			info.Path, doc.Dropped())
-	}
+// TestHelpCorpus is the conformance kit's check of the help book
+// (ADR-0396 §8): it indexes, and every page parses and loses nothing in the
+// lowering.
+func TestHelpCorpus(t *testing.T) {
+	apptest.HelpCorpus(t, "github.com/stergiotis/boxer/apps/play")
 }
 
 // TestHelpCorpusSQLBlocksParse asserts every fenced SQL block in the corpus

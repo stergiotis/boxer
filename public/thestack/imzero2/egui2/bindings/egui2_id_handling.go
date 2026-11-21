@@ -14,9 +14,31 @@ import (
 
 var seenIds = containers.NewHashSet[uint64](10000)
 
+// idViolationHook hears what checkId and the pops warn about; nil when no
+// one listens. Render goroutine only, as the id stack is.
+var idViolationHook func(what string, id uint64)
+
+// OnIdViolation installs fn to hear every id used twice in a frame and
+// every pop of an empty or mismatched id stack, besides the warning each
+// logs, and returns the hook it replaced. A strict headless frame test
+// (apptest, ADR-0396 §8) installs one to fail on what a host only warns
+// about; nil removes the hook. Call it on the render goroutine.
+func OnIdViolation(fn func(what string, id uint64)) (previous func(what string, id uint64)) {
+	previous = idViolationHook
+	idViolationHook = fn
+	return
+}
+
+func reportIdViolation(what string, id uint64) {
+	if h := idViolationHook; h != nil {
+		h(what, id)
+	}
+}
+
 func checkId(id uint64) uint64 {
 	if seenIds.Has(id) {
 		log.Warn().Uint64("id", id).Caller(2).Msg("id has already been used")
+		reportIdViolation("id has already been used", id)
 	} else {
 		seenIds.Add(id)
 	}
@@ -282,6 +304,7 @@ func (inst *WidgetIdStack) PopIdFromStack() {
 	_, err := inst.idStack.Pop()
 	if err != nil {
 		log.Warn().Caller(3).Msg("nesting id stack is empty (incorrect nesting/id handling)")
+		reportIdViolation("nesting id stack is empty", 0)
 	}
 }
 func (inst *WidgetIdStack) PopIdFromStackChecked(expectedId uint64) {
@@ -290,9 +313,11 @@ func (inst *WidgetIdStack) PopIdFromStackChecked(expectedId uint64) {
 	id2, err := inst.idStack.Pop()
 	if err != nil {
 		log.Warn().Caller(3).Msg("nesting id stack is empty (incorrect nesting/id handling)")
+		reportIdViolation("nesting id stack is empty", 0)
 	}
 	if id2 != expectedId {
 		log.Warn().Caller(3).Uint64("expectedId", expectedId).Uint64("poppedId", id2).Msg("popped id does not match expected id")
+		reportIdViolation("popped id does not match expected id", id2)
 	}
 }
 func (inst *WidgetIdStack) peekIdFromStack() uint64 {

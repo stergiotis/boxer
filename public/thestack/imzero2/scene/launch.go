@@ -126,6 +126,10 @@ func hostEnv(spec Spec, opts Options, port int, w, h int, exported map[string]st
 		"IMZERO2_HEADLESS_FPS":        strconv.Itoa(fps),
 		"IMZERO2_SCREENSHOT_SIZE":     strconv.Itoa(w) + "x" + strconv.Itoa(h),
 		"BOXER_COMPONENT":             "scene-" + opts.Name,
+		// An imzero2 call off the render goroutine panics in a scene, naming
+		// its caller (ADR-0261, ADR-0396 §8): a scene is where such a call
+		// would otherwise interleave into a frame unseen.
+		"IMZERO2_RENDER_GOROUTINE_CHECK": "true",
 		// The software encoder: a scene must not depend on the box's GPU. A
 		// scene that wants another lane says so in its own env.
 		"IMZERO2_HEADLESS_ENCODER_ARGS": "-c:v libopenh264 -rc_mode off -bf 0 -g 100000",

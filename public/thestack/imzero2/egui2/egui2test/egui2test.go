@@ -33,9 +33,14 @@ func (discardChannel) ReceiveMsg() iter.Seq[*runtime.Unmarshaller] {
 
 // Install points the fffi2 runtime at a channel that discards every paint
 // command and clears the scripted registers of the current state manager.
-// The returned func clears them again, for a test's cleanup.
+// The channel is bound to the calling goroutine, as
+// IMZERO2_RENDER_GOROUTINE_CHECK binds a host's: an imzero2 call from any
+// other goroutine panics, naming its caller (ADR-0261). The returned func
+// clears the registers again, for a test's cleanup.
 func Install() (reset func()) {
-	typed.SetCurrentFffiVar(runtime.NewFffi2[*runtime.Unmarshaller](discardChannel{}))
+	fffi := runtime.NewFffi2[*runtime.Unmarshaller](discardChannel{})
+	fffi.BindToCurrentGoroutine()
+	typed.SetCurrentFffiVar(fffi)
 	sm := c.CurrentApplicationState.StateManager
 	sm.ScriptReset()
 	return sm.ScriptReset

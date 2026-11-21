@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/help"
+	"github.com/stergiotis/boxer/public/keelson/runtime/apptest"
 )
 
 type memStorage struct{ m map[string][]byte }
@@ -25,11 +25,13 @@ func (s *memStorage) Set(ctx context.Context, key string, value []byte) (err err
 }
 func (s *memStorage) Delete(ctx context.Context, key string) (err error) { delete(s.m, key); return }
 
-func TestManifestRegisters(t *testing.T) {
-	require.NoError(t, manifest.Validate())
-	_, ok := app.DefaultRegistry.LookupManifest(AppId)
-	assert.True(t, ok)
-	assert.Equal(t, app.SurfaceWindowed, manifest.Surface)
+// TestConforms runs the conformance kit (apptest, ADR-0396 §8): the
+// manifest registers as it is, the help book is sound, and the window
+// mounts, draws two frames headless with no id used twice, and unmounts.
+func TestConforms(t *testing.T) {
+	apptest.ManifestOK(t, manifest)
+	apptest.HelpCorpus(t, AppId)
+	apptest.FrameHeadless(t, app.DefaultRegistry, AppId, apptest.FrameOpts{Strict: true})
 }
 
 // TestGreetingsSurviveTheWindow mounts a window over a store that already
@@ -46,16 +48,4 @@ func TestGreetingsSurviveTheWindow(t *testing.T) {
 	stored, found, _ := st.Get(t.Context(), GreetingsKey)
 	require.True(t, found)
 	assert.Equal(t, strconv.Itoa(43), string(stored))
-}
-
-func TestHelpBookIndexes(t *testing.T) {
-	help.SyncFromRegistry()
-	b, ok := help.Book(AppId)
-	require.True(t, ok)
-	require.Empty(t, b.Validate())
-	for _, info := range b.Docs() {
-		doc, _, parsed := b.Doc(info.Path)
-		require.Truef(t, parsed, "doc %q must parse", info.Path)
-		require.Emptyf(t, doc.Dropped(), "doc %q loses content: %+v", info.Path, doc.Dropped())
-	}
 }

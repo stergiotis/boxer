@@ -1,11 +1,10 @@
 package imztop
 
 import (
-	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/apptest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,43 +34,10 @@ func TestHelpCorpusIndexes(t *testing.T) {
 	}
 }
 
-// TestHelpCorpusDropsNothing is the zero-drops gate (ADR-0180 M2): a construct
-// the markdown lowering has no case for vanishes from the rendered page
-// silently, and this turns that into a failure.
-func TestHelpCorpusDropsNothing(t *testing.T) {
-	help.SyncFromRegistry()
-	b, ok := help.Book(manifest.Id)
-	require.True(t, ok)
-	docs := b.Docs()
-	require.NotEmpty(t, docs)
-	for _, info := range docs {
-		doc, _, parsed := b.Doc(info.Path)
-		require.Truef(t, parsed, "doc %q must parse", info.Path)
-		require.Emptyf(t, doc.Dropped(), "doc %q loses content in the lowering: %+v", info.Path, doc.Dropped())
-	}
-}
-
-// TestHelpNamesEveryOperation keeps the book and the catalog together: an
-// operation or resource added to imztop_ops.go without a line in the help is
-// one a model is told exists (keelson('helpsections')) and nothing explains.
-// Names are matched in backticks, as the book spells them.
-func TestHelpNamesEveryOperation(t *testing.T) {
-	help.SyncFromRegistry()
-	b, ok := help.Book(manifest.Id)
-	require.True(t, ok)
-	var corpus strings.Builder
-	for _, d := range b.Docs() {
-		src, found := b.Source(d.Path)
-		require.True(t, found, d.Path)
-		corpus.Write(src)
-		corpus.WriteByte('\n')
-	}
-	text := corpus.String()
-	require.NotNil(t, manifest.Operations)
-	for _, op := range manifest.Operations.Operations {
-		assert.Containsf(t, text, "`"+op.Name+"`", "operation %q is not named in the help book", op.Name)
-	}
-	for _, r := range manifest.Operations.Resources {
-		assert.Containsf(t, text, "`"+r.Name+"`", "resource %q is not named in the help book", r.Name)
-	}
+// TestHelpCorpus is the conformance kit's check of the help book
+// (ADR-0396 §8): it indexes, every page parses and loses nothing in the
+// lowering, and every operation and resource is named.
+func TestHelpCorpus(t *testing.T) {
+	apptest.HelpCorpus(t, manifest.Id)
+	apptest.HelpNamesCatalog(t, manifest.Id)
 }
