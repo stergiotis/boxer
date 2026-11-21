@@ -270,6 +270,15 @@ alias, as those packages do, adding its ids with `storegen.AddOriginIds`
 when its vocabulary is not the runtime one; a hand-written lane writes the
 same three slots, `""` and `0` when unattributed.
 
+A deployment may read facts from a relation other than the table written to
+— a view over its own storage — named by `BOXER_FACTS_READ_TABLE`
+([ADR-0402](../adr/0402-facts-stored-in-a-deployments-own-table-a-write-transform-at-the-insert-seam-and-one-read-table-setting.md)).
+A generated store does not look the setting up: whoever builds one over
+the facts table passes `factsschema.ReadTableFor(<Store>TableName)` as the
+config's `ReadTable`, or the store's scans and its schema check read the
+table written to. The writes need nothing: the executor applies an insert
+transform the binary registered.
+
 The one seam worth understanding before you start is
 `factsschema/storegen.MembershipIds`. A store bakes membership ids into its
 scan filter SQL at *generation* time, so they must come from the same
@@ -288,3 +297,5 @@ reconciled.
   its own DDL.
 - **ADR-0183** — the component-authoring surface these DTOs are
   written against.
+- **ADR-0402** (proposed) — facts stored in a deployment's own table: the
+  insert transform and the read table.
