@@ -405,4 +405,5 @@ withdrawn, deferred — is described in the
 | [0389](./0389-stability-tiers-per-package-and-what-a-version-number-promises.md) | Stability tiers per package, and what a version number promises | proposed | 2026-11-20 |  |
 | [0390](./0390-a-gate-that-tests-the-commit-and-a-ref-that-names-the-last-green-main.md) | A gate that tests the commit, and a ref that names the last green main | proposed | 2026-11-20 |  |
 | [0391](./0391-what-a-tab-link-may-decide.md) | What a tab link may decide | proposed | 2026-11-20 |  |
+| [0394](./0394-library-packages-do-not-import-the-app-platform.md) | Library packages do not import the app platform; where generated code finds its runtime | proposed | 2026-11-20 |  |
 | [0397](./0397-the-facts-tables-partition-key-row-id-and-engine-clause.md) | The facts table's partition key, row id and engine clause | proposed | 2026-11-20 |  |
