@@ -132,7 +132,7 @@ func TestErrorfWithData(t *testing.T) {
 	}
 }
 
-func TestErrorfWithData_SetCBOR(t *testing.T) {
+func TestErrorfWithData_NilCBOR(t *testing.T) {
 	e := ErrorfWithData(nil, "test")
 	esd, ok := e.(ErrorWithStructuredDataI)
 	if !ok {
@@ -140,12 +140,6 @@ func TestErrorfWithData_SetCBOR(t *testing.T) {
 	}
 	if esd.GetCBORStructuredData() != nil {
 		t.Fatal("expected nil initially")
-	}
-
-	newData := []byte{0xa0} // CBOR empty map
-	esd.SetCBORStructuredData(newData)
-	if !bytes.Equal(esd.GetCBORStructuredData(), newData) {
-		t.Fatal("SetCBORStructuredData did not stick")
 	}
 }
 
@@ -1184,18 +1178,13 @@ func TestErrorfWithData_MultiWrapped_AllMethods(t *testing.T) {
 		t.Fatal("expected 'a' in message")
 	}
 
-	// Exercise GetCBORStructuredData / SetCBORStructuredData
+	// Exercise GetCBORStructuredData
 	esd, ok := outer.(ErrorWithStructuredDataI)
 	if !ok {
 		t.Skip("not ErrorWithStructuredDataI — fmt.Errorf may not produce unwrapableMulti")
 	}
 	if !bytes.Equal(esd.GetCBORStructuredData(), data) {
 		t.Fatal("CBOR data mismatch")
-	}
-	newData := []byte{0xf6} // CBOR null
-	esd.SetCBORStructuredData(newData)
-	if !bytes.Equal(esd.GetCBORStructuredData(), newData) {
-		t.Fatal("SetCBOR did not update")
 	}
 
 	// Exercise StackTrace()
@@ -1263,21 +1252,5 @@ func TestErrorContainer_MarshalZerologObject(t *testing.T) {
 	output := buf.String()
 	if !strings.Contains(output, "perStackFacts") {
 		t.Fatalf("expected perStackFacts key: %s", output)
-	}
-}
-
-func TestErrorfWithData_NilCBOR_ThenSet(t *testing.T) {
-	err := ErrorfWithData(nil, "test")
-	esd := err.(ErrorWithStructuredDataI)
-
-	if esd.GetCBORStructuredData() != nil {
-		t.Fatal("expected nil initially")
-	}
-
-	data, _ := cbor.Marshal(42)
-	esd.SetCBORStructuredData(data)
-
-	if !bytes.Equal(esd.GetCBORStructuredData(), data) {
-		t.Fatal("set/get round trip failed")
 	}
 }

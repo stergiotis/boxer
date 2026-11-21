@@ -71,8 +71,10 @@ type unwrapableMulti interface {
 	error
 	Unwrap() []error
 }
+
+// ErrorWithStructuredDataI is an error carrying the CBOR facts eb.Build or
+// ErrorfWithData attached. The facts are fixed when the error is built.
 type ErrorWithStructuredDataI interface {
 	error
-	SetCBORStructuredData(p []byte)
 	GetCBORStructuredData() []byte
 }

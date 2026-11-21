@@ -58,7 +58,8 @@ type frameContainer struct {
 	Type     FrameTypeE
 }
 
-var (
+// The keys a stack frame is logged under.
+const (
 	StackSourceFileName     = "source"
 	StackSourceLineName     = "line"
 	StackSourceFunctionName = "func"

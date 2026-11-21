@@ -11,10 +11,6 @@ type singleWrappedWithStackError struct {
 	cborData   []byte
 }
 
-func (inst *singleWrappedWithStackError) SetCBORStructuredData(p []byte) {
-	inst.cborData = p
-}
-
 func (inst *singleWrappedWithStackError) GetCBORStructuredData() []byte {
 	return inst.cborData
 }
@@ -41,10 +37,6 @@ type multiWrappedWithStackError struct {
 	cborData   []byte
 }
 
-func (inst *multiWrappedWithStackError) SetCBORStructuredData(p []byte) {
-	inst.cborData = p
-}
-
 func (inst *multiWrappedWithStackError) GetCBORStructuredData() []byte {
 	return inst.cborData
 }
@@ -69,10 +61,6 @@ type withStackError struct {
 	err      error
 	stack    *stack
 	cborData []byte
-}
-
-func (inst *withStackError) SetCBORStructuredData(p []byte) {
-	inst.cborData = p
 }
 
 func (inst *withStackError) GetCBORStructuredData() []byte {
