@@ -12,15 +12,17 @@ import (
 
 // TestMintCarriesEveryComponent pins the shape, since the whole change is
 // that the host is now in it.
+//
+// The host component may itself hold '-' (Token keeps it, and hostnames such
+// as "build-01" have one), so the id is read from its fixed prefix and its
+// numeric tail rather than split into a fixed number of parts.
 func TestMintCarriesEveryComponent(t *testing.T) {
 	id := Mint("play", "main")
 
-	parts := strings.Split(id, "-")
-	require.Len(t, parts, 5, "id=%q", id)
-	assert.Equal(t, "play", parts[0])
-	assert.Equal(t, "main", parts[1])
-	assert.Equal(t, HostToken(), parts[2], "the host component is what makes the id safe on a shared channel")
-	assert.Equal(t, strconv.Itoa(os.Getpid()), parts[3])
+	prefix := "play-main-" + HostToken() + "-" + strconv.Itoa(os.Getpid()) + "-"
+	require.True(t, strings.HasPrefix(id, prefix), "the host component is what makes the id safe on a shared channel; id=%q", id)
+	_, err := strconv.ParseUint(strings.TrimPrefix(id, prefix), 10, 64)
+	require.NoError(t, err, "the last component is the sequence number; id=%q", id)
 	assert.True(t, Valid(id), "a minted id must pass the consumer's own check")
 }
 
