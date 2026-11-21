@@ -29,6 +29,7 @@ func PrettyCaller(skip int, rootFolder string, defaultFuncName string) (funcName
 	}
 	return
 }
+
 // EmitGeneratingCodeLocation writes a comment naming the generator function
 // and file that emitted the code that follows. It leaves out the line number:
 // a line number moves with every edit to the generator's source, so emitted
