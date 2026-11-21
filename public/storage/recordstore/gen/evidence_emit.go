@@ -1178,9 +1178,9 @@ func (inst Input) evidencePreconditions(keyGoType, orderGoType string) (err erro
 	}
 	switch {
 	case keyGoType != "uint64":
-		err = eh.Errorf("Evidence.Chain needs a uint64 Key as the scope; this schema's Key is %s", keyGoType)
+		err = eb.Build().Str("key", keyGoType).Errorf("Evidence.Chain needs a uint64 Key as the scope")
 	case orderGoType != "uint64":
-		err = eh.Errorf("Evidence.Chain needs a uint64 Order as the ordinal (Roles.Order on a plain uint64 column); this schema's Order is %s", orderGoType)
+		err = eb.Build().Str("order", orderGoType).Errorf("Evidence.Chain needs a uint64 Order as the ordinal (Roles.Order on a plain uint64 column)")
 	case inst.Cas:
 		err = eh.Errorf("Evidence.Chain is refused with Cas: a row rewritten in place has no chain")
 	}
@@ -1215,7 +1215,7 @@ func (inst Input) vaultPreconditions() (err error) {
 	}
 	for _, name := range shredderSections {
 		if !have[name] {
-			err = eh.Errorf("Evidence.Shredded needs the shredder's sections on the table, each taking the mixed verbatim name + parameters channel; %q is missing", name)
+			err = eb.Build().Str("missing", name).Errorf("Evidence.Shredded needs the shredder's sections on the table, each taking the mixed verbatim name + parameters channel")
 			return
 		}
 	}
