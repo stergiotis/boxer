@@ -9,7 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
-	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
+	"github.com/stergiotis/boxer/public/observability/runinfo"
 )
 
 // bootRunRow boots a minimal host and returns the run row it wrote.

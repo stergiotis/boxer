@@ -904,7 +904,6 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 - `public/keelson/runtime/queryendpoint` — Package queryendpoint lists the SQL query endpoints this OS process serves to its own apps: loopback HTTP interfaces in ClickHouse's dialect, each under the name a document or a menu names it by.
 - `public/keelson/runtime/queryrunfacts` — Package queryrunfacts is the pure library of the queryrunsd capture pipeline (ADR-0115 S1): it turns terminal system.query_log events into boxer.facts entities of kind QueryRun.
 - `public/keelson/runtime/queryrunsvc` — Package queryrunsvc is the query-run capture service (ADR-0115 S1): a stateless, idempotent, loopback-only HTTP endpoint that a ClickHouse-owned refreshable materialized view pulls.
-- `public/keelson/runtime/runinfo` — Package runinfo captures the identity of a single process boot — a "run" — and makes it discoverable to every app launched inside that run via two channels: the BOXER_RUN_ID environment variable, and a zerolog field on the base logger that app loggers derive from.
 - `public/keelson/runtime/statestore` — Package statestore is the typed surface of the two state kinds that are not persist values: saved workingsets (ADR-0148) and table column-width overrides (ADR-0151).
 - `public/keelson/runtime/task/estimator` — Package estimator is the throughput + humanized-form computation that gates emission inside a task.Handle.
 - `public/keelson/runtime/task/supervisor` — Package supervisor is the ADR-0038 M3 audit + heartbeat layer for the task primitive.
@@ -933,6 +932,7 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 
 ### observability
 
+- `public/observability/runinfo` — Package runinfo captures the identity of a single process boot — a "run" — and makes it discoverable to every app launched inside that run via two channels: the BOXER_RUN_ID environment variable, and a zerolog field on the base logger that app loggers derive from.
 - `public/observability/vcs`
 
 ### rust

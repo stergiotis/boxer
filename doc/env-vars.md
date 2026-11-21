@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-11-21T00:45:01Z
+generated-at: 2026-11-21T00:52:14Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -710,10 +710,10 @@ Names the registry no longer declares. A process that finds one set warns once a
 | `BOXER_PLAY_TIMELINE_BANDS_SQL` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
 | `BOXER_PLAY_WINDOW_SIZE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
 | `BOXER_RCLONE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/extbin` |
-| `BOXER_RUN_DRIVER_ATTEMPT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/runinfo` |
-| `BOXER_RUN_DRIVER_JOB` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/runinfo` |
-| `BOXER_RUN_DRIVER_JOB_KIND` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/runinfo` |
-| `BOXER_RUN_ID` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/runinfo` |
+| `BOXER_RUN_DRIVER_ATTEMPT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/observability/runinfo` |
+| `BOXER_RUN_DRIVER_JOB` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/observability/runinfo` |
+| `BOXER_RUN_DRIVER_JOB_KIND` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/observability/runinfo` |
+| `BOXER_RUN_ID` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/observability/runinfo` |
 | `BOXER_SCHEMA_STRICT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/schemacheck` |
 | `BOXER_SQLAPPLETCREATOR_DRAFT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/sqlappletcreator` |
 | `BOXER_SQLAPPLET_DATASET_EVENTS` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/sqlapplet` |

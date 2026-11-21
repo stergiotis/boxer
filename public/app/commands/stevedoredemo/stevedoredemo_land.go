@@ -14,8 +14,8 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
-	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/runinfo"
 	pkafka "github.com/stergiotis/boxer/public/streaming/persisted/kafka"
 	"github.com/stergiotis/boxer/public/streaming/stevedore"
 	"github.com/stergiotis/boxer/public/streaming/stevedore/deadletter"

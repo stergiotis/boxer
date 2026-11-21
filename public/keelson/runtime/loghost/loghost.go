@@ -38,8 +38,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/logbridge"
 	"github.com/stergiotis/boxer/public/keelson/runtime/logviewer"
-	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/logging"
+	"github.com/stergiotis/boxer/public/observability/runinfo"
 )
 
 // Install rewires log.Logger onto the operator writer and, when log lines

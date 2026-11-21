@@ -9,8 +9,8 @@ import (
 	"github.com/rs/zerolog"
 	"lukechampine.com/blake3"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/runinfo"
 	"github.com/stergiotis/boxer/public/streaming/stevedore/stevedorefacts"
 )
 

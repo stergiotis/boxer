@@ -16,9 +16,9 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingpolicy"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingremote"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
-	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/observability/runinfo"
 )
 
 // newSnapshotCommand is `boxer fs snapshot`: walk one tree into the store as

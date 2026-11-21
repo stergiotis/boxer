@@ -9,9 +9,9 @@ import (
 	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
-	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/observability/runinfo"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mddocfacts"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdextract"
 )

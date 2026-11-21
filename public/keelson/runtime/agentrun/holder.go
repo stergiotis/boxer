@@ -8,7 +8,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
+	"github.com/stergiotis/boxer/public/observability/runinfo"
 )
 
 // The writer lease (ADR-0319 §SD7) is held by a run — one process of the
