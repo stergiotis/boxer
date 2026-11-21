@@ -97,7 +97,9 @@ func TestTransformExecutor_ForwardsStatementsAndQueries(t *testing.T) {
 	}
 	exec := recordstore.TransformExecutor(inner, "boxer.facts", renameTo(memory.NewGoAllocator(), "carrier.rows"))
 	require.NoError(t, exec.Exec(context.Background(), "ALTER TABLE boxer.facts DELETE WHERE 1"))
-	for range exec.QueryArrow(context.Background(), "SELECT * FROM boxer.facts") {
+	for rec, err := range exec.QueryArrow(context.Background(), "SELECT * FROM boxer.facts") {
+		require.NoError(t, err)
+		rec.Release()
 	}
 	assert.Equal(t, "ALTER TABLE boxer.facts DELETE WHERE 1", execd)
 	assert.Equal(t, "SELECT * FROM boxer.facts", queried)
