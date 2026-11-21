@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
@@ -20,11 +21,11 @@ func TestOnlyASceneHostTakesTheTestLaneKnobs(t *testing.T) {
 }
 
 func TestSceneLaunchedNeedsTheMarkAndTheCarrier(t *testing.T) {
-	imzero2env.HeadlessListen.SetForTest(t, "127.0.0.1:9000")
-	topo.Mark.SetForTest(t, "imzero2-demo")
+	envtest.Set(t, imzero2env.HeadlessListen, "127.0.0.1:9000")
+	envtest.Set(t, topo.Mark, "imzero2-demo")
 	assert.False(t, sceneLaunched(), "a served appliance is headless but not a scene")
-	topo.Mark.SetForTest(t, "scene-chat-stream")
+	envtest.Set(t, topo.Mark, "scene-chat-stream")
 	assert.True(t, sceneLaunched())
-	imzero2env.HeadlessListen.SetForTest(t, "")
+	envtest.Set(t, imzero2env.HeadlessListen, "")
 	assert.False(t, sceneLaunched(), "the desktop host is not a scene's")
 }

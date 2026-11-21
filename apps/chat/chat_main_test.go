@@ -12,7 +12,7 @@ import (
 // that seed a chat window or its profile. The tests assert those defaults —
 // the rounds range, Apps off, the Artefact off — and a developer's shell
 // that seeds chat windows (BOXER_CHAT_*, BOXER_AGENT_COORDINATORS) would
-// otherwise move them. A test that wants a value sets it with SetForTest,
+// otherwise move them. A test that wants a value sets it with envtest.Set,
 // which still applies: nothing here overrides, it only unsets.
 func TestMain(m *testing.M) {
 	for _, kv := range os.Environ() {

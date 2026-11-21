@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 )
@@ -101,7 +102,7 @@ func TestRecorderWithoutABackend(t *testing.T) {
 	assert.NoError(t, refuse)
 	assert.Equal(t, Origin{App: "a", Instance: 3}, none.OriginOf("a", 3))
 
-	RequiredEnv.SetForTest(t, "true")
+	envtest.Set(t, RequiredEnv, "true")
 	rec := NewRecorder(nil, "run-1", zerolog.Nop())
 	defer rec.Close()
 	assert.Equal(t, "run-1", rec.OriginOf("a", 3).Run, "the recorder stamps its run")
@@ -137,7 +138,7 @@ func TestRecorderSaysWhyItIsNotDurable(t *testing.T) {
 	durable.Close()
 	assert.Equal(t, notDurableClosed, durable.NotDurable())
 
-	RequiredEnv.SetForTest(t, "true")
+	envtest.Set(t, RequiredEnv, "true")
 	refused := NewRecorder(&gateExec{open: true}, "", zerolog.Nop())
 	defer refused.Close()
 	_, refuse := refused.WriteAhead(context.Background())

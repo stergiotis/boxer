@@ -17,7 +17,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v3"
 
-	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/config/env/envcli"
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunsvc"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -33,11 +33,11 @@ func NewCliCommand() *cli.Command {
 		Name:  "queryrunsd",
 		Usage: "capture terminal system.query_log events into boxer.facts through the url()-pulled transform endpoint (ADR-0115 queryrunsd service)",
 		Flags: []cli.Flag{
-			queryrunsvc.ListenAddr.AsCliFlag(),
-			clickhouseenv.Endpoint.AsCliFlag(env.WithCliFlagName("ch-url")),
-			queryrunsvc.Cadence.AsCliFlag(),
-			queryrunsvc.Scope.AsCliFlag(),
-			queryrunsvc.Backfill.AsCliFlag(),
+			envcli.Flag(queryrunsvc.ListenAddr),
+			envcli.Flag(clickhouseenv.Endpoint, envcli.WithFlagName("ch-url")),
+			envcli.Flag(queryrunsvc.Cadence),
+			envcli.Flag(queryrunsvc.Scope),
+			envcli.Flag(queryrunsvc.Backfill),
 		},
 		Action: run,
 	}

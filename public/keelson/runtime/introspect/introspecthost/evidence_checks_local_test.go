@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -24,7 +25,7 @@ import (
 // the trail's own kinds (ADR-0327's Update of the same date), so a metrics
 // row of the run is not a row the trail failed to seal.
 func TestEvidenceChecksL34HoldsBesideOtherWritersOfTheRun(t *testing.T) {
-	Enabled.SetForTest(t, "true")
+	envtest.Set(t, Enabled, "true")
 	introspect.SetLocalQueryEndpoint("")
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {

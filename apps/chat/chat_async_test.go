@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -223,7 +224,7 @@ func TestTheCallLimitsAreTheProfiles(t *testing.T) {
 	assert.NotEqual(t, before, p.Fingerprint(), "a changed limit changes the fingerprint")
 	p.CallWait = 0
 	assert.Error(t, p.Validate())
-	CallWaitEnv.SetForTest(t, "3s")
+	envtest.Set(t, CallWaitEnv, "3s")
 	assert.Equal(t, 3*time.Second, defaultProfile().CallWait, "the variable sets it")
 }
 
@@ -333,7 +334,7 @@ func TestWakesAreWithheld(t *testing.T) {
 		assert.True(t, due(c))
 	})
 	t.Run("past the limit, until they speak", func(t *testing.T) {
-		WakesMaxEnv.SetForTest(t, "2")
+		envtest.Set(t, WakesMaxEnv, "2")
 		c := newCoordinator(nil, nil, "c")
 		waiting(c)
 		c.noteWake()
@@ -344,7 +345,7 @@ func TestWakesAreWithheld(t *testing.T) {
 		assert.True(t, due(c))
 	})
 	t.Run("zero means never", func(t *testing.T) {
-		WakesMaxEnv.SetForTest(t, "0")
+		envtest.Set(t, WakesMaxEnv, "0")
 		c := newCoordinator(nil, nil, "c")
 		waiting(c)
 		assert.False(t, due(c))

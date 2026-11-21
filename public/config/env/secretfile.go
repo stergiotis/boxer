@@ -40,8 +40,7 @@ func newSecretFile(spec Spec) (inst *secretFile) {
 		Origin:      spec.Origin,
 		Type:        TypePath,
 	}
-	p := &PathVar{spec: fs}
-	register(p)
+	p := register(&PathVar{spec: fs}).(*PathVar)
 	inst = &secretFile{path: p}
 	return
 }

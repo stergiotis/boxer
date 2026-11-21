@@ -164,6 +164,7 @@ func WithCliFlagName(name string) FlagOption
 
 A `Configer` impl that wants to attach the existing name-transform pattern calls:
 
+<!-- boxer:lint disable=DL013 reason="the original API, kept as decided; the Updates entry of 2026-11-20 names its successor in envcli" -->
 ```go
 spec.AsCliFlag(env.WithCliFlagName(nameTransf(spec.CliFlagName)))
 ```
@@ -427,6 +428,8 @@ ADRs are append-only; supersession is recorded, not deleted.
 - **2026-11-20 — A `Sensitive` variable can be read from a file: `NAME_FILE`.** `NewString` registers a companion `NAME_FILE` (a path, not itself sensitive, same category and origin) for every `Sensitive` spec, and `Get` reads the named file — one trailing newline dropped, at most 64 KiB — when `NAME` is unset or empty. The variable wins over the file, and an unreadable file is reported once on stderr and resolves as unset. `ValueSourceE` gains `ValueSourceFile`, appended so the existing values keep their numbers. This keeps a secret out of the process environment, which every child inherits and `/proc/<pid>/environ` shows; extbin now also removes `Sensitive` variables from a child's environment unless the program declares it keeps them (ADR-0118, update of the same date). It covers code that reads the secret through `Get`; a flag bound to the variable by `cli.EnvVars` alone does not see the file. The core decision is unchanged.
 
 - **2026-11-20 — The markdown reference drops its `generated-at` header.** The timestamp changed on every `go generate`, so regenerating an unchanged registry dirtied the tree and the post-test drift check could not tell a stale page from a fresh one. Like the JSON snapshot, `doc/env-vars.md` is now a pure function of the linked registry. The core decision is unchanged.
+
+- **2026-11-20 — The CLI and test helpers leave the core package; a duplicate declaration no longer panics.** `eh` reads `GOPATH`, `GOROOT` and `HOME` through this registry, so every package that returns an error linked whatever the registry linked — `testing`, `flag` and the CLI library among it. The flag derivation (`AsCliFlag`, the `With*Action` options, `NewCliCommand`) moves to `public/config/env/envcli` as `envcli.Flag(v, opts…)`, `envcli.With*Action`, `envcli.WithFlagName` and `envcli.NewCommand`; `SetForTest` moves to `public/config/env/envtest` as `envtest.Set(t, v, value)`. The core keeps declaration, resolution and the registry, and each typed handle gains the three seams those packages call: `RecordFlag`, `ClearCache` and (for the parsed types) `DefaultValue`. Declaring an identical `Spec` twice now returns the first handle; a conflicting declaration keeps the first, is reported by `env.RegistrationErrors()` (which `logging.Apply` logs once), and no longer panics in `init`. The single-registry decision is unchanged; [ADR-0394](./0394-library-packages-do-not-import-the-app-platform.md) records the layering rule this serves.
 
 ## References
 

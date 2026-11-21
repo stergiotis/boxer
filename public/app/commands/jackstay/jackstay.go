@@ -45,6 +45,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/config/env/envcli"
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	jk "github.com/stergiotis/boxer/public/db/clickhouse/jackstay"
 	"github.com/stergiotis/boxer/public/gov/datacatalog"
@@ -73,10 +74,10 @@ func NewCliCommand() *cli.Command {
 
 func endpointFlags() []cli.Flag {
 	return []cli.Flag{
-		clickhouseenv.Endpoint.AsCliFlag(env.WithCliFlagName("source")),
-		clickhouseenv.User.AsCliFlag(env.WithCliFlagName("source-user")),
-		jk.TargetEndpointEnv.AsCliFlag(),
-		jk.TargetUserEnv.AsCliFlag(),
+		envcli.Flag(clickhouseenv.Endpoint, envcli.WithFlagName("source")),
+		envcli.Flag(clickhouseenv.User, envcli.WithFlagName("source-user")),
+		envcli.Flag(jk.TargetEndpointEnv),
+		envcli.Flag(jk.TargetUserEnv),
 	}
 }
 

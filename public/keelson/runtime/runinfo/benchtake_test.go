@@ -4,29 +4,30 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestBenchTakeFromEnvIsZeroWhenUnset(t *testing.T) {
-	RunDriverJob.SetForTest(t, "")
-	RunDriverAttempt.SetForTest(t, "")
-	RunDriverJobKind.SetForTest(t, "")
+	envtest.Set(t, RunDriverJob, "")
+	envtest.Set(t, RunDriverAttempt, "")
+	envtest.Set(t, RunDriverJobKind, "")
 	take, err := BenchTakeFromEnv()
 	require.NoError(t, err)
 	assert.True(t, take.IsZero())
 }
 
 func TestBenchTakeFromEnvReadsTheTake(t *testing.T) {
-	RunDriverJob.SetForTest(t, "seco-dq/report/take-4")
-	RunDriverAttempt.SetForTest(t, "2")
-	RunDriverJobKind.SetForTest(t, "suite v3 · ü")
+	envtest.Set(t, RunDriverJob, "seco-dq/report/take-4")
+	envtest.Set(t, RunDriverAttempt, "2")
+	envtest.Set(t, RunDriverJobKind, "suite v3 · ü")
 	take, err := BenchTakeFromEnv()
 	require.NoError(t, err)
 	assert.Equal(t, BenchTake{Job: "seco-dq/report/take-4", Attempt: 2, Kind: "suite v3 · ü"}, take)
 
-	RunDriverAttempt.SetForTest(t, "")
-	RunDriverJobKind.SetForTest(t, "")
+	envtest.Set(t, RunDriverAttempt, "")
+	envtest.Set(t, RunDriverJobKind, "")
 	take, err = BenchTakeFromEnv()
 	require.NoError(t, err)
 	assert.Equal(t, BenchTake{Job: "seco-dq/report/take-4"}, take, "attempt and kind are optional")
@@ -48,9 +49,9 @@ func TestBenchTakeFromEnvRefusesWhatTheRowCannotCarry(t *testing.T) {
 		{name: "kind not UTF-8", job: "s/t/1", kind: "v\xff"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			RunDriverJob.SetForTest(t, tc.job)
-			RunDriverAttempt.SetForTest(t, tc.attempt)
-			RunDriverJobKind.SetForTest(t, tc.kind)
+			envtest.Set(t, RunDriverJob, tc.job)
+			envtest.Set(t, RunDriverAttempt, tc.attempt)
+			envtest.Set(t, RunDriverJobKind, tc.kind)
 			_, err := BenchTakeFromEnv()
 			assert.Error(t, err)
 		})

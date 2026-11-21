@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/science/audio/pcm"
 	"github.com/stergiotis/boxer/public/science/audio/peaks"
@@ -362,7 +363,7 @@ func TestCacheDirComesFromTheEnvVar(t *testing.T) {
 	dir := t.TempDir()
 	id := testIdentity(11)
 
-	PeaksCacheDir.SetForTest(t, filepath.Join(dir, "peaks"))
+	envtest.Set(t, PeaksCacheDir, filepath.Join(dir, "peaks"))
 	require.Equal(t, filepath.Join(dir, "peaks"), ResolvePeaksCacheDir())
 
 	tr, err := Open(ctx, newTestSource(t, format, frames), Options{Identity: &id})

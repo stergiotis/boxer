@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,11 +24,11 @@ func TestConfigured(t *testing.T) {
 	if TileURL.Get() == "" {
 		t.Fatalf("TileURL.Get() = empty with BOXER_MAP_TILE_URL unset; want the OSM default")
 	}
-	TileURL.SetForTest(t, "   ") // whitespace-only trims to empty → unset
+	envtest.Set(t, TileURL, "   ") // whitespace-only trims to empty → unset
 	if Configured() {
 		t.Fatalf("Configured() = true with whitespace-only BOXER_MAP_TILE_URL")
 	}
-	TileURL.SetForTest(t, "http://mygis/{z}/{x}/{y}.png")
+	envtest.Set(t, TileURL, "http://mygis/{z}/{x}/{y}.png")
 	if !Configured() {
 		t.Fatalf("Configured() = false with BOXER_MAP_TILE_URL set")
 	}
@@ -73,11 +74,11 @@ func TestTLSKnobsDefaultToVerifiedPublicRoots(t *testing.T) {
 	// A CA file is a path, not the PEM itself — it is read renderer-side, once
 	// per tile-source construction, because the map widget reads every
 	// frame.
-	TileCAFile.SetForTest(t, "/etc/ssl/gis-ca.pem")
+	envtest.Set(t, TileCAFile, "/etc/ssl/gis-ca.pem")
 	if got := TileCAFile.Get(); got != "/etc/ssl/gis-ca.pem" {
 		t.Errorf("TileCAFile.Get() = %q; want the path unchanged", got)
 	}
-	TileInsecureTLS.SetForTest(t, "1")
+	envtest.Set(t, TileInsecureTLS, "1")
 	if !TileInsecureTLS.Get() {
 		t.Errorf("TileInsecureTLS.Get() = false after being set to 1")
 	}
@@ -114,8 +115,8 @@ func TestClampMaxZoom(t *testing.T) {
 // certificate verification against a public host on the strength of a stray
 // environment variable.
 func TestDestinationGatesOnConfiguredURL(t *testing.T) {
-	TileCAFile.SetForTest(t, "/etc/ssl/gis-ca.pem")
-	TileInsecureTLS.SetForTest(t, "1")
+	envtest.Set(t, TileCAFile, "/etc/ssl/gis-ca.pem")
+	envtest.Set(t, TileInsecureTLS, "1")
 
 	if Configured() {
 		t.Fatalf("Configured() = true with BOXER_MAP_TILE_URL unset; the rest of this test is meaningless")
@@ -127,7 +128,7 @@ func TestDestinationGatesOnConfiguredURL(t *testing.T) {
 	assert.Equal(t, []string{"https://tile.openstreetmap.org/"}, d.Prefixes)
 
 	// Whitespace-only is unset too — the same predicate Configured uses.
-	TileURL.SetForTest(t, "   ")
+	envtest.Set(t, TileURL, "   ")
 	d, err = ResolveDestination()
 	require.NoError(t, err)
 	assert.False(t, d.InsecureTLS)
@@ -135,7 +136,7 @@ func TestDestinationGatesOnConfiguredURL(t *testing.T) {
 
 	// A named server: now both knobs land on the destination, and its
 	// prefix is the server's.
-	TileURL.SetForTest(t, "https://mygis.internal/{z}/{x}/{y}.png")
+	envtest.Set(t, TileURL, "https://mygis.internal/{z}/{x}/{y}.png")
 	d, err = ResolveDestination()
 	require.NoError(t, err)
 	assert.True(t, d.InsecureTLS)
@@ -146,8 +147,8 @@ func TestDestinationGatesOnConfiguredURL(t *testing.T) {
 // TestDestinationTrimsCAFile pins the trim on the path: a path with a stray
 // space is a CA file that silently does not load.
 func TestDestinationTrimsCAFile(t *testing.T) {
-	TileURL.SetForTest(t, "https://mygis.internal/{z}/{x}/{y}.png")
-	TileCAFile.SetForTest(t, "  /etc/ssl/gis-ca.pem\n")
+	envtest.Set(t, TileURL, "https://mygis.internal/{z}/{x}/{y}.png")
+	envtest.Set(t, TileCAFile, "  /etc/ssl/gis-ca.pem\n")
 	d, err := ResolveDestination()
 	require.NoError(t, err)
 	assert.Equal(t, "/etc/ssl/gis-ca.pem", d.CAFile)

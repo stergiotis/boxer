@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
@@ -410,7 +411,7 @@ func TestATranscriptionIsWrittenAhead(t *testing.T) {
 	assert.True(t, calls[1].Durable)
 	assert.Equal(t, 1, calls[1].Messages)
 
-	trail.RequiredEnv.SetForTest(t, "true")
+	envtest.Set(t, trail.RequiredEnv, "true")
 	required := trail.NewRecorder(nil, "run-test", zerolog.Nop())
 	t.Cleanup(required.Close)
 	g := &fakeTranscriber{resp: openaichat.Transcript{Text: "x"}}

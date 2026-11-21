@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -368,14 +369,14 @@ func TestListModelsNonOKIsError(t *testing.T) {
 // --- LoadGeminiApiKey -------------------------------------------------------
 
 func TestLoadGeminiApiKeyFromEnv(t *testing.T) {
-	GeminiApiKey.SetForTest(t, "env-key")
+	envtest.Set(t, GeminiApiKey, "env-key")
 	key, err := LoadGeminiApiKey()
 	require.NoError(t, err)
 	assert.Equal(t, "env-key", key)
 }
 
 func TestLoadGeminiApiKeyFromFile(t *testing.T) {
-	GeminiApiKey.SetForTest(t, "") // unset + reset the resolution cache
+	envtest.Set(t, GeminiApiKey, "") // unset + reset the resolution cache
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	dir := filepath.Join(home, ".config", "gemini")
@@ -387,7 +388,7 @@ func TestLoadGeminiApiKeyFromFile(t *testing.T) {
 }
 
 func TestLoadGeminiApiKeyMissing(t *testing.T) {
-	GeminiApiKey.SetForTest(t, "")
+	envtest.Set(t, GeminiApiKey, "")
 	t.Setenv("HOME", t.TempDir()) // empty dir, no api_key file
 	_, err := LoadGeminiApiKey()
 	require.Error(t, err)

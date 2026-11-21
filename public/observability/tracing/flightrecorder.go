@@ -12,6 +12,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/config/env/envcli"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/urfave/cli/v3"
@@ -43,7 +44,7 @@ var (
 )
 
 var TracingFlags = []cli.Flag{
-	FlightRecorder.AsCliFlag(env.WithBoolAction(func(ctx context.Context, cmd *cli.Command, b bool) error {
+	envcli.Flag(FlightRecorder, envcli.WithBoolAction(func(ctx context.Context, cmd *cli.Command, b bool) error {
 		if !b {
 			return nil
 		}
@@ -106,7 +107,7 @@ var TracingFlags = []cli.Flag{
 		Name:  flightRecorderExitOnSignalFlag,
 		Usage: "exit with code 1 after writing the trace on SIGINT, SIGTERM or SIGPIPE; for a command with no handler of its own for them, which would otherwise not stop on the first",
 	},
-	FlightRecorderOutputFile.AsCliFlag(),
+	envcli.Flag(FlightRecorderOutputFile),
 }
 
 func writeFlightRecorderTrace(d string) {

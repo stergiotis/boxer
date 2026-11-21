@@ -1,6 +1,9 @@
 package imzero2env
 
-import "testing"
+import (
+	"github.com/stergiotis/boxer/public/config/env/envtest"
+	"testing"
+)
 
 // TestRenderCadence_Values pins the string values. They are a cross-language
 // contract: the Rust client (src/imzero2/app.rs) hardcodes "reactive" when
@@ -17,14 +20,14 @@ func TestRenderCadence_Values(t *testing.T) {
 }
 
 func TestRenderCadence_DefaultsToContinuous(t *testing.T) {
-	RenderCadence.SetForTest(t, "")
+	envtest.Set(t, RenderCadence, "")
 	if got := RenderCadence.Get(); got != RenderCadenceContinuous {
 		t.Errorf("RenderCadence default: got %q want %q", got, RenderCadenceContinuous)
 	}
 }
 
 func TestRenderCadence_AcceptsReactive(t *testing.T) {
-	RenderCadence.SetForTest(t, RenderCadenceReactive)
+	envtest.Set(t, RenderCadence, RenderCadenceReactive)
 	if got := RenderCadence.Get(); got != RenderCadenceReactive {
 		t.Errorf("RenderCadence reactive: got %q want %q", got, RenderCadenceReactive)
 	}
@@ -33,7 +36,7 @@ func TestRenderCadence_AcceptsReactive(t *testing.T) {
 func TestRenderCadence_OutOfSetFallsBackToDefault(t *testing.T) {
 	// An unrecognised value is user error; Get falls back to the default
 	// (same convention as Bool/Int/Duration vars — see CategorialStringVar.Get).
-	RenderCadence.SetForTest(t, "bogus")
+	envtest.Set(t, RenderCadence, "bogus")
 	if got := RenderCadence.Get(); got != RenderCadenceContinuous {
 		t.Errorf("RenderCadence out-of-set: got %q want default %q", got, RenderCadenceContinuous)
 	}

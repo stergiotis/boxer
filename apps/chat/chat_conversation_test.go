@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
@@ -514,11 +515,11 @@ func TestACutOffAnswerSaysWhy(t *testing.T) {
 // A chat the person registered as a coordinator starts with Apps on: the
 // registration is the intent Apps serves.
 func TestARegisteredCoordinatorStartsWithAppsOn(t *testing.T) {
-	agent.CoordinatorsEnv.SetForTest(t, "")
+	envtest.Set(t, agent.CoordinatorsEnv, "")
 	assert.False(t, newApp().apps)
-	agent.CoordinatorsEnv.SetForTest(t, "other, chat")
+	envtest.Set(t, agent.CoordinatorsEnv, "other, chat")
 	assert.True(t, newApp().apps)
-	agent.CoordinatorsEnv.SetForTest(t, string(ManifestId))
+	envtest.Set(t, agent.CoordinatorsEnv, string(ManifestId))
 	assert.True(t, newApp().apps)
 }
 

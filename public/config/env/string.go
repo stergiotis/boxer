@@ -1,11 +1,7 @@
 package env
 
 import (
-	"context"
 	"os"
-	"testing"
-
-	cli "github.com/urfave/cli/v3"
 )
 
 // StringVar is the typed env-var handle for string values.
@@ -20,16 +16,17 @@ type StringVar struct {
 var _ VarI = (*StringVar)(nil)
 
 // NewString registers spec and returns a *StringVar. Intended for
-// package-level var declarations; calling twice with the same Spec.Name
-// panics. A Sensitive spec also registers NAME_FILE (SecretFileSuffix),
-// read when NAME is unset.
+// package-level var declarations; declaring an identical Spec again
+// returns the first handle, and a conflicting one is reported by
+// RegistrationErrors. A Sensitive spec also registers NAME_FILE
+// (SecretFileSuffix), read when NAME is unset.
 func NewString(spec Spec) (v *StringVar) {
 	mustValidate(spec)
 	spec.Origin = callerOrigin(2)
 	spec.Type = TypeString
-	v = &StringVar{spec: spec}
-	register(v)
-	if spec.Sensitive {
+	fresh := &StringVar{spec: spec}
+	v = register(fresh).(*StringVar)
+	if v == fresh && spec.Sensitive {
 		v.file = newSecretFile(spec)
 	}
 	return
@@ -69,52 +66,18 @@ func (inst *StringVar) Lookup() (raw string, set bool) {
 	return
 }
 
-func (inst *StringVar) setCached(value string) {
+// RecordFlag records the value a command-line flag parsed
+// (ValueSourceFlag); it shadows the environment and the default but not an
+// Override. public/config/env/envcli calls it from a derived flag's Action.
+func (inst *StringVar) RecordFlag(value string) {
 	inst.res.setFlag(value)
 }
 
-// WithStringAction attaches a caller-supplied Action func to the
-// cli.StringFlag returned by AsCliFlag. The user action runs first; on
-// success the parsed value is written to the cache so subsequent
-// inst.Get() calls observe it.
-func WithStringAction(fn func(ctx context.Context, cmd *cli.Command, parsed string) error) (opt FlagOption) {
-	return func(o *flagOptions) {
-		o.actionFn = fn
-	}
-}
-
-// AsCliFlag returns a cli.StringFlag derived from the Spec. The Action
-// runs an optional caller-supplied user action (via WithStringAction)
-// and then writes the parsed value into the cache so post-parse reads
-// see it. An empty parsed value is not a value (Spec: empty means unset):
-// urfave/cli hands one over for a set-but-empty environment variable or a
-// bare `--flag=`, and caching it would shadow Get's own empty-means-default
-// reading; the Action then leaves the cache alone and the user action
-// does not run.
-func (inst *StringVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
-	fo := resolveFlagOptions(inst.spec, opts)
-	userAction, _ := fo.actionFn.(func(context.Context, *cli.Command, string) error)
-	return &cli.StringFlag{
-		Name:     fo.cliFlagName,
-		Usage:    inst.spec.Description,
-		Category: string(inst.spec.Category),
-		Sources:  cli.EnvVars(inst.spec.Name),
-		Value:    inst.spec.Default,
-		Action: func(ctx context.Context, cmd *cli.Command, parsed string) (err error) {
-			if parsed == "" {
-				inst.res.clearCache()
-				return
-			}
-			if userAction != nil {
-				err = userAction(ctx, cmd, parsed)
-				if err != nil {
-					return
-				}
-			}
-			inst.setCached(parsed)
-			return
-		},
-	}
+// ClearCache forgets a recorded flag value and the cached environment
+// read, so the next Get resolves from the environment again. The
+// Override stays.
+func (inst *StringVar) ClearCache() {
+	inst.res.clearCache()
 }
 
 // Override pins the resolved value for this process (ValueSourceOverride):
@@ -137,15 +100,4 @@ func (inst *StringVar) ClearOverride() {
 func (inst *StringVar) ValueSource() (src ValueSourceE) {
 	_, src = inst.res.get(inst.resolveEnv)
 	return
-}
-
-// SetForTest sets the env var via t.Setenv and resets the cache. The
-// cache is reset again on t.Cleanup so subsequent tests start fresh.
-func (inst *StringVar) SetForTest(t testing.TB, value string) {
-	t.Helper()
-	inst.res.reset()
-	t.Setenv(inst.spec.Name, value)
-	t.Cleanup(func() {
-		inst.res.reset()
-	})
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/config/env/envcli"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/urfave/cli/v3"
 )
@@ -53,7 +54,7 @@ func init() {
 	switch runtime.GOOS {
 	case "linux":
 		DebuggerFlags = []cli.Flag{
-			WaitForDebugger.AsCliFlag(env.WithBoolAction(func(ctx context.Context, cmd *cli.Command, b bool) error {
+			envcli.Flag(WaitForDebugger, envcli.WithBoolAction(func(ctx context.Context, cmd *cli.Command, b bool) error {
 				for {
 					log.Info().Msg("waiting for debugger to attach")
 					tpid, err := getTracerPidLinux()

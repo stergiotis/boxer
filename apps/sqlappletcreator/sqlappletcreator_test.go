@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
@@ -333,7 +334,7 @@ func TestManifest_DeclaresNoWildcardHandleCap(t *testing.T) {
 }
 
 func TestMountSeedsTheDraftFromTheSeedVariable(t *testing.T) {
-	DraftSeed.SetForTest(t, `{"Sql":"SELECT 7","Endpoint":"introspection","Slug":"seven","Title":"Seven","Summary":"one line","Icon":"x"}`)
+	envtest.Set(t, DraftSeed, `{"Sql":"SELECT 7","Endpoint":"introspection","Slug":"seven","Title":"Seven","Summary":"one line","Icon":"x"}`)
 	inst := &App{}
 	mc := app.NewStaticMountContext(appletcreatecfg.AppId, zerolog.Nop(), nil, nil, nil)
 	require.NoError(t, inst.Mount(mc))
@@ -351,7 +352,7 @@ func TestMountSeedsTheDraftFromTheSeedVariable(t *testing.T) {
 	assert.Equal(t, "SELECT 42", inst.sql)
 	assert.Empty(t, inst.slug)
 
-	DraftSeed.SetForTest(t, `{"Slug":"x","Colour":"red"}`)
+	envtest.Set(t, DraftSeed, `{"Slug":"x","Colour":"red"}`)
 	inst = &App{}
 	mc = app.NewStaticMountContext(appletcreatecfg.AppId, zerolog.Nop(), nil, nil, nil)
 	assert.ErrorContains(t, inst.Mount(mc), "draft seed", "an unknown field fails the mount")

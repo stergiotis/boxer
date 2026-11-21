@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/ration"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
@@ -86,7 +87,7 @@ func TestTheCallersDeadlineBoundsTheProviderCall(t *testing.T) {
 // trail on a host without a durable backend — sent nothing, and the exit
 // budget is charged nothing for it.
 func TestARefusalAfterAdmissionChargesNoBytes(t *testing.T) {
-	trail.RequiredEnv.SetForTest(t, "true")
+	envtest.Set(t, trail.RequiredEnv, "true")
 	rec := trail.NewRecorder(nil, "run-test", zerolog.Nop())
 	t.Cleanup(rec.Close)
 	remote := &fakeProvider{resp: openaichat.CompletionResponse{Content: "x"}}

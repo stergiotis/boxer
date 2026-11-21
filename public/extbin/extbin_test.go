@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -97,7 +98,7 @@ func TestHost_OverrideEnv_WinsOverPath(t *testing.T) {
 
 	ovDir := t.TempDir()
 	fakeBin(t, ovDir, "override-bin", "from-override")
-	fakeOverride.SetForTest(t, filepath.Join(ovDir, "override-bin"))
+	envtest.Set(t, fakeOverride, filepath.Join(ovDir, "override-bin"))
 
 	p := &Program{Name: "boxer-fake-ov", Kind: Host, OverrideEnv: fakeOverride.Spec().Name}
 	out, err := p.Output(context.Background(), Opts{})
@@ -266,7 +267,7 @@ func TestResolve_HostAndLocal(t *testing.T) {
 	}
 
 	// OverrideEnv wins.
-	resolveOverride.SetForTest(t, "/opt/custom/tool")
+	envtest.Set(t, resolveOverride, "/opt/custom/tool")
 	ov := &Program{Name: "boxer-resolve-absent-xyz", Kind: Host, OverrideEnv: resolveOverride.Spec().Name}
 	if path, ok := ov.Resolve(); !ok || path != "/opt/custom/tool" {
 		t.Errorf("override resolve = (%q, %v), want ('/opt/custom/tool', true)", path, ok)

@@ -1,6 +1,9 @@
 package imzero2env
 
-import "testing"
+import (
+	"github.com/stergiotis/boxer/public/config/env/envtest"
+	"testing"
+)
 
 // TestHeadlessCodec_Values pins the codec strings. They are a cross-language
 // contract: the Rust client's VideoCodec::parse (codeclane.rs) maps these
@@ -20,18 +23,18 @@ func TestHeadlessCodec_Values(t *testing.T) {
 }
 
 func TestHeadlessCodec_DefaultsToH264(t *testing.T) {
-	HeadlessCodec.SetForTest(t, "")
+	envtest.Set(t, HeadlessCodec, "")
 	if got := HeadlessCodec.Get(); got != HeadlessCodecH264 {
 		t.Errorf("HeadlessCodec default: got %q want %q", got, HeadlessCodecH264)
 	}
 }
 
 func TestHeadlessCodec_AcceptsVP9AndAV1(t *testing.T) {
-	HeadlessCodec.SetForTest(t, HeadlessCodecVP9)
+	envtest.Set(t, HeadlessCodec, HeadlessCodecVP9)
 	if got := HeadlessCodec.Get(); got != HeadlessCodecVP9 {
 		t.Errorf("HeadlessCodec vp9: got %q want %q", got, HeadlessCodecVP9)
 	}
-	HeadlessCodec.SetForTest(t, HeadlessCodecAV1)
+	envtest.Set(t, HeadlessCodec, HeadlessCodecAV1)
 	if got := HeadlessCodec.Get(); got != HeadlessCodecAV1 {
 		t.Errorf("HeadlessCodec av1: got %q want %q", got, HeadlessCodecAV1)
 	}
@@ -40,7 +43,7 @@ func TestHeadlessCodec_AcceptsVP9AndAV1(t *testing.T) {
 func TestHeadlessCodec_OutOfSetFallsBackToDefault(t *testing.T) {
 	// An unrecognised value is user error; Get falls back to the default
 	// (same convention as the other categorial vars — see CategorialStringVar.Get).
-	HeadlessCodec.SetForTest(t, "bogus")
+	envtest.Set(t, HeadlessCodec, "bogus")
 	if got := HeadlessCodec.Get(); got != HeadlessCodecH264 {
 		t.Errorf("HeadlessCodec out-of-set: got %q want default %q", got, HeadlessCodecH264)
 	}

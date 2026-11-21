@@ -1,13 +1,9 @@
 package env
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
-	"testing"
-
-	cli "github.com/urfave/cli/v3"
 )
 
 // PathVar is the typed env-var handle for filesystem path values. Get
@@ -25,7 +21,7 @@ func NewPath(spec Spec) (v *PathVar) {
 	spec.Origin = callerOrigin(2)
 	spec.Type = TypePath
 	v = &PathVar{spec: spec}
-	register(v)
+	v = register(v).(*PathVar)
 	return
 }
 
@@ -54,46 +50,18 @@ func (inst *PathVar) Lookup() (raw string, set bool) {
 	return
 }
 
-func (inst *PathVar) setCached(value string) {
+// RecordFlag records the value a command-line flag parsed
+// (ValueSourceFlag); it shadows the environment and the default but not an
+// Override. public/config/env/envcli calls it from a derived flag's Action.
+func (inst *PathVar) RecordFlag(value string) {
 	inst.res.setFlag(expandHome(value))
 }
 
-// WithPathAction attaches a caller-supplied Action func to the
-// cli.PathFlag returned by AsCliFlag. The user action runs first; on
-// success the parsed (and ~-expanded by the cache) value is written to
-// the cache.
-func WithPathAction(fn func(ctx context.Context, cmd *cli.Command, parsed string) error) (opt FlagOption) {
-	return func(o *flagOptions) {
-		o.actionFn = fn
-	}
-}
-
-func (inst *PathVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
-	fo := resolveFlagOptions(inst.spec, opts)
-	userAction, _ := fo.actionFn.(func(context.Context, *cli.Command, string) error)
-	return &cli.StringFlag{
-		Name:     fo.cliFlagName,
-		Usage:    inst.spec.Description,
-		Category: string(inst.spec.Category),
-		Sources:  cli.EnvVars(inst.spec.Name),
-		Value:    inst.spec.Default,
-		Action: func(ctx context.Context, cmd *cli.Command, parsed string) (err error) {
-			// Empty means unset; see StringVar.AsCliFlag.
-			if parsed == "" {
-				inst.res.clearCache()
-				return
-			}
-			if userAction != nil {
-				err = userAction(ctx, cmd, parsed)
-				if err != nil {
-					return
-				}
-			}
-			inst.setCached(parsed)
-			return
-		},
-		TakesFile: true,
-	}
+// ClearCache forgets a recorded flag value and the cached environment
+// read, so the next Get resolves from the environment again. The
+// Override stays.
+func (inst *PathVar) ClearCache() {
+	inst.res.clearCache()
 }
 
 // Override pins the resolved value for this process (ValueSourceOverride):
@@ -116,15 +84,6 @@ func (inst *PathVar) ClearOverride() {
 func (inst *PathVar) ValueSource() (src ValueSourceE) {
 	_, src = inst.res.get(inst.resolveEnv)
 	return
-}
-
-func (inst *PathVar) SetForTest(t testing.TB, value string) {
-	t.Helper()
-	inst.res.reset()
-	t.Setenv(inst.spec.Name, value)
-	t.Cleanup(func() {
-		inst.res.reset()
-	})
 }
 
 // expandHome rewrites a leading "~" or "~/" to the user's home directory.

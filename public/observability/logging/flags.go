@@ -20,7 +20,9 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/config/env/envcli"
 	"github.com/urfave/cli/v3"
+	"sync"
 )
 
 func getBuildTags(info *debug.BuildInfo) []string {
@@ -463,17 +465,17 @@ var LoggingFlags = NewLoggingFlags()
 // NewLoggingFlags returns a fresh instance of every logging flag.
 func NewLoggingFlags() []cli.Flag {
 	return []cli.Flag{
-		LogFile.AsCliFlag(),
-		LogCaller.AsCliFlag(),
-		LogOsHostOnStart.AsCliFlag(),
-		LogOsArgsOnStart.AsCliFlag(),
-		LogOsPidOnStart.AsCliFlag(),
-		LogVcsRevisionOnStart.AsCliFlag(),
-		LogModuleInfoOnStart.AsCliFlag(),
-		LogCorrelationId.AsCliFlag(),
-		LogLevel.AsCliFlag(),
-		LogFormat.AsCliFlag(),
-		LogColor.AsCliFlag(),
+		envcli.Flag(LogFile),
+		envcli.Flag(LogCaller),
+		envcli.Flag(LogOsHostOnStart),
+		envcli.Flag(LogOsArgsOnStart),
+		envcli.Flag(LogOsPidOnStart),
+		envcli.Flag(LogVcsRevisionOnStart),
+		envcli.Flag(LogModuleInfoOnStart),
+		envcli.Flag(LogCorrelationId),
+		envcli.Flag(LogLevel),
+		envcli.Flag(LogFormat),
+		envcli.Flag(LogColor),
 	}
 }
 
@@ -507,12 +509,20 @@ func Apply(ctx context.Context, cmd *cli.Command) (ctxOut context.Context, err e
 	return
 }
 
+var registrationOnce sync.Once
+
 // warnEnviron warns, once per process, about each set variable the env
 // registry retired — naming its replacement — and each set variable in a
-// boxer namespace that nothing declares (env.CheckEnviron). Apply is the
-// hook every binary's root command runs, after the writer is in place, which
-// is why the check lives here rather than in the registry.
+// boxer namespace that nothing declares (env.CheckEnviron), and reports
+// conflicting declarations of one variable (env.RegistrationErrors). Apply
+// is the hook every binary's root command runs, after the writer is in
+// place, which is why the check lives here rather than in the registry.
 func warnEnviron() {
+	registrationOnce.Do(func() {
+		if regErr := env.RegistrationErrors(); regErr != nil {
+			log.Error().Err(regErr).Msg("environment variables declared twice with different specs; the first declaration of each is in effect")
+		}
+	})
 	for _, f := range env.CheckProcessEnvironOnce() {
 		switch f.Kind {
 		case env.EnvFindingRetired:
@@ -536,7 +546,7 @@ func applyWriter(ctx context.Context, cmd *cli.Command) (err error) {
 	// distinguishes "flag not on app" from "flag on app, defaulted".
 	// This lets smaller mains wire Before: logging.Apply without
 	// having to also list LoggingFlags. urfave/cli runs Before before
-	// flag Actions, so the categorial Action inside env.CategorialStringVar.AsCliFlag
+	// flag Actions, so the categorial Action envcli.Flag derives
 	// fires too late to catch invalid CLI values before Apply runs —
 	// we re-validate here.
 	format := cmd.String("logFormat")

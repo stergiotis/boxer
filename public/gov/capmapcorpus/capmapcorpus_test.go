@@ -370,5 +370,5 @@ func TestNaturalKeyIsStableAndDistinct(t *testing.T) {
 
 // Vault-location resolution and Load are exercised in the internal test file
 // (capmapcorpus_env_test.go): the env handle caches on first read, so those
-// tests need env.SetForTest, which resets that cache and is not reachable from
+// tests need envtest.Set on the handle, which resets that cache and is not reachable from
 // here.

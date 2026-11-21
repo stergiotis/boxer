@@ -1,12 +1,10 @@
 package env
 
 import (
-	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
-
-	cli "github.com/urfave/cli/v3"
 )
 
 func TestPackageFromFuncName(t *testing.T) {
@@ -66,7 +64,7 @@ func TestStringVarSetForTest(t *testing.T) {
 		Description: "test fixture",
 		Category:    CategoryDev,
 	})
-	v.SetForTest(t, "overridden")
+	setForTest(t, v, "overridden")
 	got := v.Get()
 	if got != "overridden" {
 		t.Errorf("Get after SetForTest = %q, want %q", got, "overridden")
@@ -144,7 +142,7 @@ func TestCategorialStringVarAcceptsAllowedEnvValue(t *testing.T) {
 		Description: "test fixture",
 		Category:    CategoryDev,
 	}, []string{"debug", "info", "warn"})
-	v.SetForTest(t, "debug")
+	setForTest(t, v, "debug")
 	got := v.Get()
 	if got != "debug" {
 		t.Errorf("Get with allowed env value = %q, want %q", got, "debug")
@@ -159,7 +157,7 @@ func TestCategorialStringVarFallsBackOnInvalidEnvValue(t *testing.T) {
 		Description: "test fixture",
 		Category:    CategoryDev,
 	}, []string{"debug", "info", "warn"})
-	v.SetForTest(t, "purple")
+	setForTest(t, v, "purple")
 	got := v.Get()
 	if got != "info" {
 		t.Errorf("Get with out-of-set env value = %q, want fallback %q", got, "info")
@@ -218,7 +216,7 @@ func TestCategorialStringVarEmptyDefaultMeansUnset(t *testing.T) {
 	if v.IsAllowed("") {
 		t.Errorf("empty must not count as an allowed value")
 	}
-	v.SetForTest(t, "b")
+	setForTest(t, v, "b")
 	if got := v.Get(); got != "b" {
 		t.Errorf("Get after SetForTest = %q, want b", got)
 	}
@@ -321,103 +319,6 @@ func TestCategorialStringVarLookupReturnsRaw(t *testing.T) {
 	}
 }
 
-func TestCategorialStringVarAsCliFlagUsageHasAllowedSuffix(t *testing.T) {
-	resetRegistryForTest()
-	v := NewCategorialString(Spec{
-		Name:        "BOXER_TEST_CAT_USAGE",
-		Default:     "a",
-		Description: "test fixture",
-		Category:    CategoryDev,
-		CliFlagName: "testCat",
-	}, []string{"a", "b", "c"})
-	sf, ok := v.AsCliFlag().(*cli.StringFlag)
-	if !ok {
-		t.Fatalf("AsCliFlag() returned %T, want *cli.StringFlag", v.AsCliFlag())
-	}
-	if !strings.Contains(sf.Usage, "(one of: a|b|c)") {
-		t.Errorf("Usage = %q, want suffix '(one of: a|b|c)'", sf.Usage)
-	}
-	if sf.Value != "a" {
-		t.Errorf("StringFlag.Value = %q, want %q (Spec.Default)", sf.Value, "a")
-	}
-}
-
-func TestCategorialStringVarAsCliFlagRejectsExplicitInvalidValue(t *testing.T) {
-	resetRegistryForTest()
-	v := NewCategorialString(Spec{
-		Name:        "BOXER_TEST_CAT_REJECT_FLAG",
-		Default:     "a",
-		Description: "test fixture",
-		Category:    CategoryDev,
-		CliFlagName: "testCat",
-	}, []string{"a", "b", "c"})
-	sf := v.AsCliFlag().(*cli.StringFlag)
-	// env unset; the only source of "invalid" is the explicit flag.
-	err := sf.Action(context.Background(), nil, "invalid")
-	if err == nil {
-		t.Fatalf("expected error for explicit invalid --flag value")
-	}
-	if !strings.Contains(err.Error(), "invalid") || !strings.Contains(err.Error(), "testCat") {
-		t.Errorf("error = %v, want it to mention 'invalid' and the flag name 'testCat'", err)
-	}
-}
-
-func TestCategorialStringVarAsCliFlagSilentFallbackOnInvalidEnv(t *testing.T) {
-	resetRegistryForTest()
-	v := NewCategorialString(Spec{
-		Name:        "BOXER_TEST_CAT_ENV_FALLBACK",
-		Default:     "a",
-		Description: "test fixture",
-		Category:    CategoryDev,
-		CliFlagName: "testCat",
-	}, []string{"a", "b", "c"})
-	t.Setenv("BOXER_TEST_CAT_ENV_FALLBACK", "invalid")
-	sf := v.AsCliFlag().(*cli.StringFlag)
-	// urfave/cli passes parsed=envValue when env is set and no explicit
-	// flag is supplied; replicate that shape directly.
-	err := sf.Action(context.Background(), nil, "invalid")
-	if err != nil {
-		t.Fatalf("expected silent fallback for env-supplied invalid value, got error: %v", err)
-	}
-	if got := v.Get(); got != "a" {
-		t.Errorf("Get after env fallback = %q, want %q (Default)", got, "a")
-	}
-}
-
-func TestCategorialStringVarAsCliFlagUserActionRunsAfterValidation(t *testing.T) {
-	resetRegistryForTest()
-	var captured string
-	v := NewCategorialString(Spec{
-		Name:        "BOXER_TEST_CAT_USERACTION",
-		Default:     "a",
-		Description: "test fixture",
-		Category:    CategoryDev,
-		CliFlagName: "testCat",
-	}, []string{"a", "b", "c"})
-	sf := v.AsCliFlag(WithStringAction(func(ctx context.Context, cmd *cli.Command, parsed string) error {
-		captured = parsed
-		return nil
-	})).(*cli.StringFlag)
-	// Valid input: user action runs and the cache reflects the value.
-	if err := sf.Action(context.Background(), nil, "b"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if captured != "b" {
-		t.Errorf("userAction captured %q, want %q", captured, "b")
-	}
-	if got := v.Get(); got != "b" {
-		t.Errorf("Get after Action = %q, want %q", got, "b")
-	}
-	// Invalid explicit input: user action must NOT run.
-	captured = ""
-	if err := sf.Action(context.Background(), nil, "invalid"); err == nil {
-		t.Fatalf("expected rejection of explicit invalid value")
-	}
-	if captured != "" {
-		t.Errorf("userAction ran with invalid input (captured=%q); validation must gate it", captured)
-	}
-}
-
 func TestFloatVarDefault(t *testing.T) {
 	resetRegistryForTest()
 	v := NewFloat(Spec{
@@ -440,7 +341,7 @@ func TestFloatVarSetForTest(t *testing.T) {
 		Description: "test fixture",
 		Category:    CategoryDev,
 	})
-	v.SetForTest(t, "3.14")
+	setForTest(t, v, "3.14")
 	got := v.Get()
 	if got != 3.14 {
 		t.Errorf("Get after SetForTest = %v, want 3.14", got)
@@ -455,7 +356,7 @@ func TestFloatVarBadEnvFallsBack(t *testing.T) {
 		Description: "test fixture",
 		Category:    CategoryDev,
 	})
-	v.SetForTest(t, "not-a-number")
+	setForTest(t, v, "not-a-number")
 	got := v.Get()
 	if got != 2.0 {
 		t.Errorf("Get with bad env = %v, want fallback 2.0", got)
@@ -506,24 +407,33 @@ func TestPathVarHomeExpansion(t *testing.T) {
 	}
 }
 
-func TestDuplicateRegistrationPanics(t *testing.T) {
+func TestIdenticalDuplicateReturnsTheFirstHandle(t *testing.T) {
 	resetRegistryForTest()
-	_ = NewString(Spec{
-		Name:        "BOXER_TEST_DUP",
-		Description: "test fixture",
-		Category:    CategoryDev,
-	})
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Fatalf("expected panic on duplicate registration")
-		}
-	}()
-	_ = NewString(Spec{
-		Name:        "BOXER_TEST_DUP",
-		Description: "test fixture",
-		Category:    CategoryDev,
-	})
+	spec := Spec{Name: "BOXER_TEST_DUP", Description: "test fixture", Category: CategoryDev}
+	first := NewString(spec)
+	second := NewString(spec)
+	if first != second {
+		t.Fatalf("an identical redeclaration must return the first handle")
+	}
+	if err := RegistrationErrors(); err != nil {
+		t.Fatalf("an identical redeclaration is not a conflict: %v", err)
+	}
+}
+
+func TestConflictingDuplicateIsReportedNotPanicked(t *testing.T) {
+	resetRegistryForTest()
+	first := NewString(Spec{Name: "BOXER_TEST_DUP", Description: "test fixture", Category: CategoryDev})
+	second := NewString(Spec{Name: "BOXER_TEST_DUP", Description: "another meaning", Category: CategoryDev})
+	if first == second {
+		t.Fatalf("a conflicting redeclaration must not share the first handle")
+	}
+	if held, _ := LookupVar("BOXER_TEST_DUP"); held != VarI(first) {
+		t.Fatalf("the registry must keep the first declaration")
+	}
+	err := RegistrationErrors()
+	if !errors.Is(err, ErrConflictingDeclaration) {
+		t.Fatalf("RegistrationErrors = %v, want ErrConflictingDeclaration", err)
+	}
 }
 
 func TestRegistryFilters(t *testing.T) {
@@ -559,38 +469,6 @@ func TestRegistryFilters(t *testing.T) {
 	}
 }
 
-func TestAsCliFlagDerivation(t *testing.T) {
-	resetRegistryForTest()
-	v := NewString(Spec{
-		Name:        "BOXER_TEST_FLAG",
-		Default:     "hello",
-		Description: "test fixture",
-		Category:    CategoryDev,
-		CliFlagName: "testFlag",
-	})
-	flag := v.AsCliFlag()
-	names := flag.Names()
-	if len(names) == 0 || names[0] != "testFlag" {
-		t.Errorf("AsCliFlag().Names() = %v, want first=%q", names, "testFlag")
-	}
-}
-
-func TestAsCliFlagWithOverride(t *testing.T) {
-	resetRegistryForTest()
-	v := NewString(Spec{
-		Name:        "BOXER_TEST_FLAG_OV",
-		Default:     "hello",
-		Description: "test fixture",
-		Category:    CategoryDev,
-		CliFlagName: "testFlag",
-	})
-	flag := v.AsCliFlag(WithCliFlagName("prefixed.testFlag"))
-	names := flag.Names()
-	if len(names) == 0 || names[0] != "prefixed.testFlag" {
-		t.Errorf("AsCliFlag(WithCliFlagName) Names() = %v, want first=%q", names, "prefixed.testFlag")
-	}
-}
-
 func TestFormatValueRedaction(t *testing.T) {
 	got := FormatValue(Spec{Sensitive: true}, "secret")
 	if got != "<redacted>" {
@@ -600,4 +478,21 @@ func TestFormatValueRedaction(t *testing.T) {
 	if got != "ordinary" {
 		t.Errorf("FormatValue(non-sensitive) = %q, want %q", got, "ordinary")
 	}
+}
+
+// setForTest is envtest.Set for this package's own tests, which cannot
+// import envtest without a cycle.
+func setForTest(t testing.TB, v interface {
+	VarI
+	ClearCache()
+	ClearOverride()
+}, value string) {
+	t.Helper()
+	v.ClearCache()
+	v.ClearOverride()
+	t.Setenv(v.Spec().Name, value)
+	t.Cleanup(func() {
+		v.ClearCache()
+		v.ClearOverride()
+	})
 }

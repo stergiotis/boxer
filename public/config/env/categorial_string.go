@@ -1,21 +1,16 @@
 package env
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"slices"
-	"strings"
-	"testing"
-
-	cli "github.com/urfave/cli/v3"
 )
 
 // CategorialStringVar is the typed env-var handle for string values
 // restricted to a fixed, declared set. Get() returns Spec.Default when
 // the env value is not in the allowed set, mirroring the env-side
 // parse-failure fallback used by BoolVar/IntVar/DurationVar (see
-// ADR-0009 §3 update 2026-05-17). AsCliFlag honours the same fallback
+// ADR-0009 §3 update 2026-05-17). The flag envcli.Flag derives honours the same fallback
 // for env-supplied values; explicit `--flag=X` invocations with a
 // value outside the set surface as a hard CLI error.
 type CategorialStringVar struct {
@@ -52,7 +47,7 @@ func NewCategorialString(spec Spec, allowed []string) (v *CategorialStringVar) {
 	allowedCopy := append([]string(nil), allowed...)
 	spec.Allowed = allowedCopy
 	v = &CategorialStringVar{spec: spec, allowed: allowedCopy}
-	register(v)
+	v = register(v).(*CategorialStringVar)
 	return
 }
 
@@ -107,61 +102,18 @@ func (inst *CategorialStringVar) Lookup() (raw string, set bool) {
 	return
 }
 
-func (inst *CategorialStringVar) setCached(value string) {
+// RecordFlag records the value a command-line flag parsed
+// (ValueSourceFlag); it shadows the environment and the default but not an
+// Override. public/config/env/envcli calls it from a derived flag's Action.
+func (inst *CategorialStringVar) RecordFlag(value string) {
 	inst.res.setFlag(value)
 }
 
-// AsCliFlag returns a cli.StringFlag derived from the Spec. The Usage
-// string gains an "(one of: a|b|c)" suffix listing the allowed values.
-// The Action's behaviour on an out-of-set value depends on the source
-// — matching urfave/cli's existing env-vs-flag treatment for typed
-// flags (BoolFlag / Int64Flag / DurationFlag): when the value came
-// from the bound env var it silently falls back to Spec.Default and
-// the chained user action runs on the default; when the value was
-// supplied explicitly via `--flag=…` it surfaces as a CLI error.
-func (inst *CategorialStringVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
-	fo := resolveFlagOptions(inst.spec, opts)
-	userAction, _ := fo.actionFn.(func(context.Context, *cli.Command, string) error)
-	usage := inst.spec.Description
-	usage += fmt.Sprintf(" (one of: %s)", strings.Join(inst.allowed, "|"))
-	return &cli.StringFlag{
-		Name:     fo.cliFlagName,
-		Usage:    usage,
-		Category: string(inst.spec.Category),
-		Sources:  cli.EnvVars(inst.spec.Name),
-		Value:    inst.spec.Default,
-		Action: func(ctx context.Context, cmd *cli.Command, parsed string) (err error) {
-			// Empty means unset; see StringVar.AsCliFlag.
-			if parsed == "" {
-				inst.res.clearCache()
-				return
-			}
-			effective := parsed
-			if !inst.IsAllowed(effective) {
-				envRaw, envSet := os.LookupEnv(inst.spec.Name)
-				if envSet && envRaw == parsed {
-					// env-supplied invalid: silent fallback to Default
-					effective = inst.spec.Default
-				} else {
-					// eh is unavailable here: public/observability/eh
-					// imports this package to read its own formatting
-					// switches, so eh.Errorf would close an import cycle.
-					// The message carries the prefix the stack would
-					// otherwise have supplied.
-					return fmt.Errorf("env: %q is not in allowed values for --%s: %v", //boxer:lint disable=CS001 reason="eh imports config/env; eh.Errorf would close an import cycle"
-						parsed, fo.cliFlagName, inst.allowed)
-				}
-			}
-			if userAction != nil {
-				err = userAction(ctx, cmd, effective)
-				if err != nil {
-					return
-				}
-			}
-			inst.setCached(effective)
-			return
-		},
-	}
+// ClearCache forgets a recorded flag value and the cached environment
+// read, so the next Get resolves from the environment again. The
+// Override stays.
+func (inst *CategorialStringVar) ClearCache() {
+	inst.res.clearCache()
 }
 
 // Override pins the resolved value for this process (ValueSourceOverride):
@@ -184,17 +136,4 @@ func (inst *CategorialStringVar) ClearOverride() {
 func (inst *CategorialStringVar) ValueSource() (src ValueSourceE) {
 	_, src = inst.res.get(inst.resolveEnv)
 	return
-}
-
-// SetForTest sets the env var via t.Setenv and resets the cache. The
-// cache is reset again on t.Cleanup so subsequent tests start fresh.
-// Out-of-set values are allowed here; the next Get() will fall back to
-// the default per the env-parse-failure convention.
-func (inst *CategorialStringVar) SetForTest(t testing.TB, value string) {
-	t.Helper()
-	inst.res.reset()
-	t.Setenv(inst.spec.Name, value)
-	t.Cleanup(func() {
-		inst.res.reset()
-	})
 }

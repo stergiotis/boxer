@@ -10,6 +10,7 @@ import (
 
 	md "github.com/nao1215/markdown"
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/config/env/envcli"
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/urfave/cli/v3"
@@ -23,7 +24,7 @@ var MarkdownEcho = env.NewBool(env.Spec{
 })
 
 var DocFlags = []cli.Flag{
-	MarkdownEcho.AsCliFlag(env.WithBoolAction(func(ctx context.Context, cmd *cli.Command, b bool) error {
+	envcli.Flag(MarkdownEcho, envcli.WithBoolAction(func(ctx context.Context, cmd *cli.Command, b bool) error {
 		if b {
 			args := slices.Clone(os.Args)
 			cwd, err := os.Getwd()

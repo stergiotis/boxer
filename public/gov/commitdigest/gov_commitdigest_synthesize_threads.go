@@ -10,6 +10,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 
+	"github.com/stergiotis/boxer/public/config/env/envcli"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -73,7 +74,7 @@ func newSynthesizeThreadsCommand() *cli.Command {
 				Name:  "llm-model",
 				Usage: "Model name for the LLM (required unless --dry-run)",
 			},
-			LLMAPIKey.AsCliFlag(),
+			envcli.Flag(LLMAPIKey),
 			&cli.StringFlag{
 				Name:  "gemini-api-key",
 				Usage: "Gemini API key. When set, overrides --llm-apikey; when set empty, walks GEMINI_API_KEY → ~/.config/gemini/api_key. Auto-engaged when --llm-endpoint points at generativelanguage.googleapis.com.",

@@ -34,22 +34,22 @@ func TestSecretIsReadFromTheFileWhenUnset(t *testing.T) {
 	secret, companion := newSecretFixture(t)
 	path := filepath.Join(t.TempDir(), "secret")
 	require.NoError(t, os.WriteFile(path, []byte("s3cret\n"), 0o600))
-	companion.SetForTest(t, path)
+	setForTest(t, companion, path)
 
-	secret.SetForTest(t, "")
+	setForTest(t, secret, "")
 	assert.Equal(t, "s3cret", secret.Get())
 	assert.Equal(t, ValueSourceFile, secret.ValueSource())
 
 	// The variable itself wins over the file.
-	secret.SetForTest(t, "direct")
+	setForTest(t, secret, "direct")
 	assert.Equal(t, "direct", secret.Get())
 	assert.Equal(t, ValueSourceEnv, secret.ValueSource())
 }
 
 func TestUnreadableSecretFileResolvesAsUnset(t *testing.T) {
 	secret, companion := newSecretFixture(t)
-	companion.SetForTest(t, filepath.Join(t.TempDir(), "missing"))
-	secret.SetForTest(t, "")
+	setForTest(t, companion, filepath.Join(t.TempDir(), "missing"))
+	setForTest(t, secret, "")
 	assert.Equal(t, "", secret.Get())
 	assert.Equal(t, ValueSourceDefault, secret.ValueSource())
 }

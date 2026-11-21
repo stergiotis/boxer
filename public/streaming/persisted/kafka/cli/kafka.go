@@ -48,6 +48,7 @@ import (
 	"github.com/twmb/franz-go/pkg/sasl"
 	cli "github.com/urfave/cli/v3"
 
+	"github.com/stergiotis/boxer/public/config/env/envcli"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	pkafka "github.com/stergiotis/boxer/public/streaming/persisted/kafka"
@@ -73,16 +74,16 @@ func NewCliCommand() *cli.Command {
 func commonFlags() []cli.Flag {
 	return []cli.Flag{
 		brokersFlag(),
-		ClientID.AsCliFlag(),
-		SASLMechanism.AsCliFlag(),
-		SASLUsername.AsCliFlag(),
-		SASLPassword.AsCliFlag(),
-		SASLToken.AsCliFlag(),
-		TLS.AsCliFlag(),
-		TLSCAFile.AsCliFlag(),
-		TLSCertFile.AsCliFlag(),
-		TLSKeyFile.AsCliFlag(),
-		TLSSkipVerify.AsCliFlag(),
+		envcli.Flag(ClientID),
+		envcli.Flag(SASLMechanism),
+		envcli.Flag(SASLUsername),
+		envcli.Flag(SASLPassword),
+		envcli.Flag(SASLToken),
+		envcli.Flag(TLS),
+		envcli.Flag(TLSCAFile),
+		envcli.Flag(TLSCertFile),
+		envcli.Flag(TLSKeyFile),
+		envcli.Flag(TLSSkipVerify),
 	}
 }
 

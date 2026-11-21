@@ -12,7 +12,7 @@ import (
 )
 
 // NewGenDocsCommand returns the `gen-docs` subcommand. It is mounted
-// under boxer's `env` parent by public/app/main.go (env.NewCliCommand
+// under boxer's `env` parent by public/app/main.go (envcli.NewCommand
 // accepts cross-package subcommands precisely so this can live here
 // without forming an env → envdoc → env import cycle).
 func NewGenDocsCommand() (cmd *cli.Command) {

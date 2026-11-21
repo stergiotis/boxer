@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/harness"
@@ -277,9 +278,9 @@ func TestFromEnvDefaultsAndFailsClosed(t *testing.T) {
 	assert.Equal(t, ApprovalTierPerson, d.Approvals.Path(agentrun.TierAmber))
 	assert.False(t, d.Managed)
 	assert.Empty(t, d.Canaries)
-	RouteClearanceEnv.SetForTest(t, "RED")
-	ApprovalsEnv.SetForTest(t, "RED=person")
-	CanariesEnv.SetForTest(t, "hr=zq@AMBER")
+	envtest.Set(t, RouteClearanceEnv, "RED")
+	envtest.Set(t, ApprovalsEnv, "RED=person")
+	envtest.Set(t, CanariesEnv, "hr=zq@AMBER")
 	t.Setenv(EgressClearanceEnv.Spec().Name, "amber")
 	d = FromEnv(nil)
 	assert.Equal(t, agentrun.TierRed, d.Clearances.ModelRoute)

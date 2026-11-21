@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -66,7 +67,7 @@ type checkRow struct {
 // and L32 per journal run, L34 and the seal anchors per trail run, each
 // row saying whether the law holds and where it breaks (ADR-0327 §SD7).
 func TestEvidenceChecksServeTheLawsInProcess(t *testing.T) {
-	Enabled.SetForTest(t, "true")
+	envtest.Set(t, Enabled, "true")
 	introspect.SetLocalQueryEndpoint("")
 	ctx := context.Background()
 	journal := agentrun.NewMemStore()
@@ -107,7 +108,7 @@ func TestEvidenceChecksServeTheLawsInProcess(t *testing.T) {
 // Without a journal store, an anchor store or a recorder the relation is
 // present and empty, so the table names do not depend on what was wired.
 func TestEvidenceChecksPresentWithoutStores(t *testing.T) {
-	Enabled.SetForTest(t, "true")
+	envtest.Set(t, Enabled, "true")
 	introspect.SetLocalQueryEndpoint("")
 	reg := introspect.NewRegistry()
 	stop, err := Start(Deps{Registry: reg, Log: zerolog.Nop()})
@@ -125,7 +126,7 @@ func TestEvidenceChecksPresentWithoutStores(t *testing.T) {
 // ClickHouse, or one without a run id — and no seal laws, which have no
 // stream to read.
 func TestEvidenceChecksSayTheTrailIsNotDurable(t *testing.T) {
-	Enabled.SetForTest(t, "true")
+	envtest.Set(t, Enabled, "true")
 	introspect.SetLocalQueryEndpoint("")
 	rows := readEvidenceChecks(t, Deps{Trail: sealVerdict{notDurable: "the host has no run id, so the trail has no seal stream"}})
 	require.Len(t, rows, 1)
@@ -155,7 +156,7 @@ func (inst journalNotRead) ListRuns(context.Context, string, int) ([]agentrun.Ru
 // and canonicalise every run the store lists; the other columns filter
 // the rows after.
 func TestEvidenceChecksFilterSparesTheJournal(t *testing.T) {
-	Enabled.SetForTest(t, "true")
+	envtest.Set(t, Enabled, "true")
 	introspect.SetLocalQueryEndpoint("")
 	reg := introspect.NewRegistry()
 	stop, err := Start(Deps{Registry: reg, Log: zerolog.Nop(), AgentRuns: journalNotRead{StoreI: agentrun.NewMemStore(), t: t},

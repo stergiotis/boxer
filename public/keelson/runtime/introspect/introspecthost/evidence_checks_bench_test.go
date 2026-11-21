@@ -8,6 +8,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -19,7 +20,7 @@ import (
 // journal's laws L31 and L32 and the compaction laws, as a SQL reader of
 // keelson('evidence_checks') pays them per run.
 func BenchmarkEvidenceChecksJournal(b *testing.B) {
-	Enabled.SetForTest(b, "true")
+	envtest.Set(b, Enabled, "true")
 	introspect.SetLocalQueryEndpoint("")
 	ctx := context.Background()
 	journal := agentrun.NewMemStore()

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 )
@@ -75,7 +76,7 @@ func TestBindHistory_EmptyTrailInstallsNothing(t *testing.T) {
 // the half-life the store is asked for is the resolved knob rather than a
 // hardcoded constant.
 func TestBindHistory_InstallsBothOrders(t *testing.T) {
-	HalfLife.SetForTest(t, "72h")
+	envtest.Set(t, HalfLife, "72h")
 	inst := newTestInst()
 	store := &historyStore{stats: []factsstore.AppLaunchStat{
 		mkStat("a", 10, 0, 100),

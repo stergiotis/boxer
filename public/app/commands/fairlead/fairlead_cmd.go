@@ -15,6 +15,7 @@ import (
 
 	"github.com/urfave/cli/v3"
 
+	"github.com/stergiotis/boxer/public/config/env/envcli"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -159,7 +160,7 @@ func NewCliCommand() *cli.Command {
 				Name:  "report",
 				Usage: "classify the statements in a journal directory, per exit point",
 				Flags: []cli.Flag{
-					fairlead.JournalDir.AsCliFlag(),
+					envcli.Flag(fairlead.JournalDir),
 				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					dir := fairlead.JournalDir.Get()

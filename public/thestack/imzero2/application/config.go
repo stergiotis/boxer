@@ -8,7 +8,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/config"
-	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/config/env/envcli"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
 
@@ -236,7 +236,7 @@ func (inst *Config) ToCliFlags(nameTransf config.NameTransformFunc, envVarNameTr
 		// ClientBinary zero. apps/svgserver sets it, but constructs its Config
 		// directly and keeps its own flag — that one names the headless_svg
 		// client, a different binary, so it must not share this variable.
-		imzero2env.ClientBinary.AsCliFlag(env.WithCliFlagName(nameTransf("clientBinary"))),
+		envcli.Flag(imzero2env.ClientBinary, envcli.WithFlagName(nameTransf("clientBinary"))),
 		&cli.StringFlag{
 			Name:     nameTransf("imZeroCmdOutFile"),
 			Value:    inst.ImZeroCmdOutFile,

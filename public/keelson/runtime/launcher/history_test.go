@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 )
@@ -123,13 +124,13 @@ func TestSortManifestHits_RelevanceDominatesHistory(t *testing.T) {
 // TestResolveHalfLife_RejectsNonPositive covers the guard DurationVar cannot:
 // a value that parses but cannot drive a decay.
 func TestResolveHalfLife_RejectsNonPositive(t *testing.T) {
-	HalfLife.SetForTest(t, "0s")
+	envtest.Set(t, HalfLife, "0s")
 	assert.Equal(t, defaultHalfLife, resolveHalfLife(testLogger()))
 }
 
 // TestResolveHalfLife_HonoursTheKnob is the other half — a set value is used.
 func TestResolveHalfLife_HonoursTheKnob(t *testing.T) {
-	HalfLife.SetForTest(t, "48h")
+	envtest.Set(t, HalfLife, "48h")
 	assert.Equal(t, 48*time.Hour, resolveHalfLife(testLogger()))
 }
 

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/config/env/envcli"
 	cli "github.com/urfave/cli/v3"
 )
 
@@ -89,7 +90,7 @@ var (
 
 // brokersFlag is Brokers as the required --brokers / -b flag.
 func brokersFlag() cli.Flag {
-	f := Brokers.AsCliFlag().(*cli.StringFlag)
+	f := envcli.Flag(Brokers).(*cli.StringFlag)
 	f.Aliases = []string{"b"}
 	f.Required = true
 	return f

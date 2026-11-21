@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
@@ -30,7 +31,7 @@ func (inst copiesOf) Records() []clipboardbroker.CopyRecord { return inst }
 // declaration does not list are not judged — the copy law judges the
 // broker's records, and a compaction whose from is not zero breaks L22.
 func TestLawChecksOverLiveRows(t *testing.T) {
-	Enabled.SetForTest(t, "true")
+	envtest.Set(t, Enabled, "true")
 	introspect.SetLocalQueryEndpoint("")
 	ctx := context.Background()
 	journal := agentrun.NewMemStore()

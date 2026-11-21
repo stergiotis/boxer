@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -317,19 +318,19 @@ func TestLocalEndpoint(t *testing.T) {
 
 // The env gate: endpoint AND model, neither with a default.
 func TestConfigFromEnvGatesOnEndpointAndModel(t *testing.T) {
-	Endpoint.SetForTest(t, "")
-	Model.SetForTest(t, "")
+	envtest.Set(t, Endpoint, "")
+	envtest.Set(t, Model, "")
 	assert.False(t, ConfigFromEnv().Configured(), "no endpoint, no model")
-	Endpoint.SetForTest(t, "http://localhost:1234/v1")
+	envtest.Set(t, Endpoint, "http://localhost:1234/v1")
 	assert.False(t, ConfigFromEnv().Configured(), "an endpoint without a model is still no model — a wrong default is worse than a refusal")
-	Model.SetForTest(t, "qwen3")
+	envtest.Set(t, Model, "qwen3")
 	cfg := ConfigFromEnv()
 	assert.True(t, cfg.Configured())
 	assert.Equal(t, int32(4096), cfg.MaxTokens)
 	assert.Equal(t, 120*time.Second, cfg.Timeout)
 	assert.Equal(t, RetainOff, cfg.Retain, "text is not kept unless the deployment says so")
 	assert.Empty(t, cfg.ReasoningEffort, "no level is sent unless the deployment names one")
-	ReasoningEffort.SetForTest(t, "medium")
+	envtest.Set(t, ReasoningEffort, "medium")
 	assert.Equal(t, "medium", ConfigFromEnv().ReasoningEffort)
 }
 

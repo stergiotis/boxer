@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
@@ -33,7 +34,7 @@ func TestBoot_CoordinatorsPredicateWithoutChlocalFails(t *testing.T) {
 
 // The predicate selects among launchable apps, beside the named list.
 func TestBoot_CoordinatorsPredicateSelectsBesideTheList(t *testing.T) {
-	agent.CoordinatorsEnv.SetForTest(t, "named")
+	envtest.Set(t, agent.CoordinatorsEnv, "named")
 	agent.CoordinatorsWhereEnv.Override("id = '" + string(headlessId) + "'")
 	t.Cleanup(agent.CoordinatorsWhereEnv.ClearOverride)
 	reg, _ := registryWithService(t)

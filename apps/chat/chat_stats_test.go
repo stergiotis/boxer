@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
@@ -107,6 +108,6 @@ func TestNothingIsHandedOverBeforeATurn(t *testing.T) {
 
 func TestBoxerChatAdvancedFalseHidesTheStatistics(t *testing.T) {
 	assert.True(t, newApp().advanced, "on by default")
-	AdvancedSeed.SetForTest(t, "false")
+	envtest.Set(t, AdvancedSeed, "false")
 	assert.False(t, newApp().advanced)
 }

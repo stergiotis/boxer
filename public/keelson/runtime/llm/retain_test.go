@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
@@ -257,7 +258,7 @@ func TestTrailIsWrittenAheadWithoutKeep(t *testing.T) {
 // leave the machine; without it the call proceeds and says it is not durable.
 func TestTrailRequiredRefusesWithoutABackend(t *testing.T) {
 	for _, required := range []bool{false, true} {
-		trail.RequiredEnv.SetForTest(t, strconv.FormatBool(required))
+		envtest.Set(t, trail.RequiredEnv, strconv.FormatBool(required))
 		p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "a", FinishReason: "stop"}}
 		cfg := localCfg(p)
 		cfg.Trail = trail.NewRecorder(nil, "run-test", zerolog.Nop())

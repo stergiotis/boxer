@@ -9,6 +9,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/config/env/envcli"
 	"github.com/stergiotis/boxer/public/fec/anchor"
 	"github.com/urfave/cli/v3"
 )
@@ -35,8 +36,8 @@ func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name: "findAnchor",
 		Flags: []cli.Flag{
-			NAnchorBytes.AsCliFlag(),
-			MaxHammingDistPerByteIncl.AsCliFlag(),
+			envcli.Flag(NAnchorBytes),
+			envcli.Flag(MaxHammingDistPerByteIncl),
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			r := bufio.NewReader(os.Stdin)

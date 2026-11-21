@@ -22,11 +22,11 @@ itself; ADR-0389 states its tier.
 
 | Section | Packages |
 | --- | ---: |
-| [Stable](#stable) | 74 |
-| [Experimental](#experimental) | 280 |
+| [Stable](#stable) | 76 |
+| [Experimental](#experimental) | 281 |
 | [Internal](#internal) | 16 |
 | [Test support](#test-support) | 14 |
-| [Tools](#tools) | 90 |
+| [Tools](#tools) | 91 |
 | [Demos and examples](#demos-and-examples) | 40 |
 | [Unclassified](#unclassified) | 208 |
 
@@ -46,6 +46,8 @@ Covered by the compatibility promise in [VERSIONING.md](../VERSIONING.md): an in
 ### config
 
 - `public/config/env` — Package env is the boxer-wide environment variable registry.
+- `public/config/env/envcli` — Package envcli derives urfave/cli flags and the `env` command from the variables registered with public/config/env.
+- `public/config/env/envtest` — Package envtest sets registry variables from tests.
 
 ### containers
 
@@ -212,6 +214,7 @@ Public and usable, but may change in any MINOR version without a deprecation win
 - `public/db/clickhouse/dsl/marshalling` — Package marshalling converts between Go values and ClickHouse SQL literal text: scalars, homogeneous arrays and tuples, as a [TypedLiteral] that keeps the canonical type beside the value so a literal round-trips without losing its type.
 - `public/db/clickhouse/dsl/nanopass` — Package nanopass is the framework for rewriting ClickHouse SQL as a sequence of small passes, each taking SQL text and returning SQL text.
 - `public/db/clickhouse/dsl/nanopass/analysis` — Package analysis answers read-only questions about a parsed ClickHouse statement: which tables, columns and functions it references ([ExtractTables], [ExtractColumns], [ExtractFunctions]), what kind of statement it is ([ClassifyStatementKind], [Classify]), which stratum a query falls in ([ClassifyQueryStratum]) and what it can reach ([ClassifyQuerySecurity]).
+- `public/db/clickhouse/dsl/nanopass/nanopasstest` — Package nanopasstest checks a nanopass pass's declared properties from a test.
 - `public/db/clickhouse/dsl/nanopass/passes` — Package passes holds the SQL-to-SQL passes built on github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass: the canonicalize family that brings a statement into the function-call form later passes expect ([CanonicalizeFull] composes them into one pass), and rewrites such as [QualifyTables], [ExtractLiterals] with [InjectParams], [SetFormat], [StripComments], [ValidateColumnNames] and [ResolveColumnNames].
 - `public/db/clickhouse/dsl/sqlcomplete` — Package sqlcomplete answers "what may stand where the caret is" for a ClickHouse buffer (ADR-0190).
 - `public/db/clickhouse/jackstay` — Package jackstay is the engine of the guided ClickHouse-to-ClickHouse sync of ADR-0259.
@@ -579,6 +582,7 @@ Command and governance packages of this repository's tooling. Their Go API is ou
 - `public/app/commands/datasource`
 - `public/app/commands/designsystem` — Package designsystem is the CLI wiring for the IDS toolchain (ADR-0029).
 - `public/app/commands/egui2gen` — Package egui2gen exposes the FFFI2 egui2-widget code generator as a boxer subcommand.
+- `public/app/commands/errordemo` — Package errordemo is `boxer error demo`: it returns a nested structured error so a person can see how the logger renders one.
 - `public/app/commands/fairlead` — Package fairlead is the CLI over the statement journal of ADR-0367 §SD4: it reads what [fairlead.Journal] recorded and says, per exit point, how the statements classify.
 - `public/app/commands/findAnchor`
 - `public/app/commands/http`

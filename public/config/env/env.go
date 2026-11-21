@@ -3,8 +3,10 @@
 // Each variable is declared once as a package-level value via NewString /
 // NewBool / NewInt / NewDuration / NewPath / NewCategorialString. The
 // declaration registers a Spec process-globally, and the returned typed
-// *Var carries the resolved value, caching, CLI-flag derivation, and
-// test helpers. See ADR-0009 for design rationale.
+// *Var carries the resolved value and its caching. A command-line flag is
+// derived from a Var by public/config/env/envcli, and a test sets one with
+// public/config/env/envtest; neither is linked by a package that only
+// reads variables. See ADR-0009 for design rationale.
 //
 // # Resolution
 //
@@ -28,8 +30,10 @@
 package env
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -97,36 +101,6 @@ type Spec struct {
 	Allowed []string
 }
 
-// FlagOption customises the cli.Flag returned by Var.AsCliFlag.
-type FlagOption func(opts *flagOptions)
-
-// flagOptions carries the user-supplied customisations applied to
-// AsCliFlag's output. actionFn is typed per-Var via the WithXxxAction
-// helpers; each typed AsCliFlag type-asserts it to the matching
-// signature and chains it after the spec-derived cache write.
-type flagOptions struct {
-	cliFlagName string
-	actionFn    any
-}
-
-// WithCliFlagName overrides Spec.CliFlagName for the produced cli.Flag.
-// Intended for the Configer composition path: the caller's
-// NameTransformFunc is applied to the spec's CliFlagName and the result
-// is passed in here.
-func WithCliFlagName(name string) (opt FlagOption) {
-	return func(opts *flagOptions) {
-		opts.cliFlagName = name
-	}
-}
-
-func resolveFlagOptions(spec Spec, opts []FlagOption) (out flagOptions) {
-	out.cliFlagName = spec.CliFlagName
-	for _, opt := range opts {
-		opt(&out)
-	}
-	return
-}
-
 // VarI is the common surface shared by every typed Var. Useful for
 // registry walks where the exact value type does not matter; the
 // runtime `env list` subcommand consumes Spec() for metadata and
@@ -150,18 +124,53 @@ var (
 	registry   = map[string]VarI{}
 )
 
-func register(v VarI) {
+// register adds v to the registry and returns the variable that holds the
+// name. Declaring an identical Spec twice — the same metadata from any
+// origin — returns the first declaration, so both handles share one
+// resolution state. A conflicting declaration keeps the first, is recorded
+// for RegistrationErrors, and returns v unregistered: a binary that links
+// both declarations still starts, and its host reports the conflict.
+func register(v VarI) (held VarI) {
 	s := v.Spec()
 	registryMu.Lock()
 	defer registryMu.Unlock()
 	existing, dup := registry[s.Name]
-	if dup {
-		panic(fmt.Sprintf(
-			"env: duplicate registration of %q (first at %s, again at %s)",
-			s.Name, existing.Spec().Origin.Package, s.Origin.Package,
-		))
+	if !dup {
+		registry[s.Name] = v
+		return v
 	}
-	registry[s.Name] = v
+	first := existing.Spec()
+	if sameDeclaration(first, s) {
+		return existing
+	}
+	conflicts = append(conflicts, fmt.Errorf( //boxer:lint disable=CS001 reason="eh imports config/env; eh.Errorf would close an import cycle"
+		"env: conflicting declarations of %q (first at %s, again at %s): %w",
+		s.Name, first.Origin.Package, s.Origin.Package, ErrConflictingDeclaration))
+	return v
+}
+
+// ErrConflictingDeclaration is wrapped by every error RegistrationErrors
+// returns.
+var ErrConflictingDeclaration = errors.New("env: variable declared twice with different specs")
+
+var conflicts []error
+
+// RegistrationErrors returns one error per conflicting duplicate
+// declaration seen so far (ErrConflictingDeclaration), joined; nil when
+// there is none. A host calls it after init — logging.Apply does — since a
+// package-level declaration has no caller to return an error to.
+func RegistrationErrors() (err error) {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	return errors.Join(conflicts...)
+}
+
+// sameDeclaration reports whether two specs declare the same variable,
+// ignoring where they were declared.
+func sameDeclaration(a Spec, b Spec) (same bool) {
+	return a.Name == b.Name && a.Default == b.Default && a.Description == b.Description &&
+		a.Category == b.Category && a.Sensitive == b.Sensitive && a.CliFlagName == b.CliFlagName &&
+		a.Type == b.Type && slices.Equal(a.Allowed, b.Allowed)
 }
 
 // All returns every Spec registered process-wide. Order is unspecified.
@@ -223,6 +232,7 @@ func resetRegistryForTest() {
 	registryMu.Lock()
 	defer registryMu.Unlock()
 	registry = map[string]VarI{}
+	conflicts = nil
 }
 
 // callerOrigin extracts the calling package and module from the call

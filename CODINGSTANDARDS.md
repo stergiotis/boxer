@@ -412,7 +412,7 @@ Nevertheless, use stdlib functions aiming at writing portable code where it help
 
 Do not add ad-hoc `main()` functions for new utilities, linters, or compile-time code generators. Register them as subcommands under an existing entry point — in boxer this is `./public/app/main.go`, invoked via `./boxer.sh` — so that build tags, flags, the environment-variable registry, and observability wiring are shared.
 
-`github.com/urfave/cli/v3` ([ADR-0294](./doc/adr/0294-urfave-cli-v3-for-every-cli-surface.md)) is mandatory for every CLI surface, including small internal tools: utilities, linters, compile-time code generators. Even one-off commands expose their flags as `cli.Command` definitions; this keeps `--help` output, flag parsing, and `Spec.AsCliFlag()` integration uniform.
+`github.com/urfave/cli/v3` ([ADR-0294](./doc/adr/0294-urfave-cli-v3-for-every-cli-surface.md)) is mandatory for every CLI surface, including small internal tools: utilities, linters, compile-time code generators. Even one-off commands expose their flags as `cli.Command` definitions; this keeps `--help` output, flag parsing, and registry-derived flags (`envcli.Flag`) uniform.
 
 ## Configuration
 
@@ -430,7 +430,7 @@ var LogLevel = env.NewString(env.Spec{
 })
 ```
 
-Read the value through the handle (`LogLevel.Get(ctx)` / `LogLevel.Lookup(ctx)`); derive CLI flags with `Spec.AsCliFlag()`; override in tests with `SetForTest`. Rationale: a single registry yields discoverability, typed parsing, doc generation (`boxer env gen-docs`), a commented environment file to fill in (`boxer env gen-envfile`), and prevents the lowercase-name and typo defects that motivated ADR-0009.
+Read the value through the handle (`LogLevel.Get(ctx)` / `LogLevel.Lookup(ctx)`); derive CLI flags with `envcli.Flag(LogLevel)` (`public/config/env/envcli`); set one in a test with `envtest.Set(t, LogLevel, v)` (`public/config/env/envtest`). The core package links neither the CLI library nor `testing`, so a library that only reads variables does not either ([ADR-0394](./doc/adr/0394-library-packages-do-not-import-the-app-platform.md)). Rationale: a single registry yields discoverability, typed parsing, doc generation (`boxer env gen-docs`), a commented environment file to fill in (`boxer env gen-envfile`), and prevents the lowercase-name and typo defects that motivated ADR-0009.
 
 ## Concurrency Patterns
 *  **Context:** usage is mandatory for all I/O bound or long-running functions. `ctx` must be the first argument.

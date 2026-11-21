@@ -6,6 +6,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 )
@@ -13,7 +14,7 @@ import (
 // TestStart_DisabledGate: KEELSON_INTROSPECT_ENABLE=false returns a no-op
 // stop, binds nothing, and publishes no endpoint.
 func TestStart_DisabledGate(t *testing.T) {
-	Enabled.SetForTest(t, "false")
+	envtest.Set(t, Enabled, "false")
 	introspect.SetLocalQueryEndpoint("") // reset process global
 
 	stop, err := Start(Deps{Log: zerolog.Nop()})
@@ -36,7 +37,7 @@ func TestStart_DisabledGate(t *testing.T) {
 // but /query is unbacked (503), so the co-resident-app discovery endpoint
 // stays unpublished. A nil window host is tolerated (drops keelson.windows).
 func TestStart_NoRunnerDoesNotPublishEndpoint(t *testing.T) {
-	Enabled.SetForTest(t, "true")
+	envtest.Set(t, Enabled, "true")
 	introspect.SetLocalQueryEndpoint("") // reset process global
 
 	stop, err := Start(Deps{
@@ -67,7 +68,7 @@ func TestStart_NoRunnerDoesNotPublishEndpoint(t *testing.T) {
 // record saved by the window host is queryable through this endpoint. It was
 // the facts store until ADR-0105's Update of 2026-08-15 moved the records.
 func TestStart_RegistersWorkingsetsFromState(t *testing.T) {
-	Enabled.SetForTest(t, "true")
+	envtest.Set(t, Enabled, "true")
 	introspect.SetLocalQueryEndpoint("")
 
 	state := statestore.NewMemory()
@@ -102,7 +103,7 @@ func TestStart_RegistersWorkingsetsFromState(t *testing.T) {
 // wires no sampler, and the three coverage tables must still exist, empty
 // (ADR-0169 §SD5) — the table names must not depend on the build lane.
 func TestStart_CoverageTablesPresentWithoutSampler(t *testing.T) {
-	Enabled.SetForTest(t, "true")
+	envtest.Set(t, Enabled, "true")
 	introspect.SetLocalQueryEndpoint("")
 
 	reg := introspect.NewRegistry()
@@ -131,7 +132,7 @@ func TestStart_CoverageTablesPresentWithoutSampler(t *testing.T) {
 // TestStart_WorkingsetsPresentWithoutState: no store wired means an empty
 // table, not a missing one — the table name must not depend on the wiring.
 func TestStart_WorkingsetsPresentWithoutState(t *testing.T) {
-	Enabled.SetForTest(t, "true")
+	envtest.Set(t, Enabled, "true")
 	introspect.SetLocalQueryEndpoint("")
 
 	reg := introspect.NewRegistry()

@@ -2,8 +2,8 @@ package capmapcorpus
 
 // Internal, unlike the rest of the package's tests, for one reason: the env
 // handle caches its value on the first Get for the life of the process, so a
-// plain t.Setenv is invisible to it once anything has read it. env's
-// SetForTest sets the variable and resets that cache, and the handle is
+// plain t.Setenv is invisible to it once anything has read it. envtest.Set
+// sets the variable and resets that cache, and the handle is
 // unexported.
 
 import (
@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,7 +35,7 @@ func writeOneCapVault(t *testing.T, slug string) (root string) {
 // ignored entirely.
 func TestResolveVaultRefusesNonDirectory(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
-	envVaultDir.SetForTest(t, missing)
+	envtest.Set(t, envVaultDir, missing)
 	_, err := ResolveVault()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), EnvVaultDirName)
@@ -45,7 +46,7 @@ func TestResolveVaultRefusesNonDirectory(t *testing.T) {
 // that has a conventional vault can still be aimed elsewhere.
 func TestResolveVaultHonoursTheSetting(t *testing.T) {
 	root := writeOneCapVault(t, "alpha")
-	envVaultDir.SetForTest(t, root)
+	envtest.Set(t, envVaultDir, root)
 	got, err := ResolveVault()
 	require.NoError(t, err)
 	assert.Equal(t, root, got)
@@ -54,7 +55,7 @@ func TestResolveVaultHonoursTheSetting(t *testing.T) {
 // Load degrades to nothing rather than erroring: its callers are introspection
 // surfaces where "no corpus" is a legible answer.
 func TestLoadYieldsNothingWhenVaultIsUnresolvable(t *testing.T) {
-	envVaultDir.SetForTest(t, filepath.Join(t.TempDir(), "does-not-exist"))
+	envtest.Set(t, envVaultDir, filepath.Join(t.TempDir(), "does-not-exist"))
 	resetLoadMemo()
 	corpus := Load()
 	caps, rels := corpus.Competences, corpus.Relations
@@ -66,7 +67,7 @@ func TestLoadYieldsNothingWhenVaultIsUnresolvable(t *testing.T) {
 // query joining competences to relations from tearing across an edit.
 func TestLoadSharesOneSnapshotWithinTheWindow(t *testing.T) {
 	root := writeOneCapVault(t, "alpha")
-	envVaultDir.SetForTest(t, root)
+	envtest.Set(t, envVaultDir, root)
 	resetLoadMemo()
 
 	first := Load().Competences

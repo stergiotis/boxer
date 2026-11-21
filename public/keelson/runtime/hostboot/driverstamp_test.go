@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 )
@@ -34,9 +35,9 @@ func TestBoot_AHostWithoutATakeStampsTheHost(t *testing.T) {
 }
 
 func TestBoot_AHostStartedForATakeStampsIt(t *testing.T) {
-	runinfo.RunDriverJob.SetForTest(t, "seco-dq/report/take-4")
-	runinfo.RunDriverAttempt.SetForTest(t, "2")
-	runinfo.RunDriverJobKind.SetForTest(t, "suite v3")
+	envtest.Set(t, runinfo.RunDriverJob, "seco-dq/report/take-4")
+	envtest.Set(t, runinfo.RunDriverAttempt, "2")
+	envtest.Set(t, runinfo.RunDriverJobKind, "suite v3")
 	row := bootRunRow(t)
 	assert.Equal(t, factsstore.DriverBench, row.Driver)
 	assert.Equal(t, "seco-dq/report/take-4", row.DriverJob)
@@ -45,8 +46,8 @@ func TestBoot_AHostStartedForATakeStampsIt(t *testing.T) {
 }
 
 func TestBoot_ATakeTheRowCannotCarryRefusesTheBoot(t *testing.T) {
-	runinfo.RunDriverJob.SetForTest(t, "s/t/1")
-	runinfo.RunDriverAttempt.SetForTest(t, "two")
+	envtest.Set(t, runinfo.RunDriverJob, "s/t/1")
+	envtest.Set(t, runinfo.RunDriverAttempt, "two")
 	rt, err := Boot(context.Background(), minimalOptions(t, newTestRegistry(t)))
 	assert.Nil(t, rt)
 	assert.ErrorContains(t, err, "driver stamp")

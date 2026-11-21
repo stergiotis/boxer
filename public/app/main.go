@@ -37,7 +37,7 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/watch"
 	watchbillcli "github.com/stergiotis/boxer/public/app/commands/watchbill"
 	"github.com/stergiotis/boxer/public/code"
-	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/config/env/envcli"
 	"github.com/stergiotis/boxer/public/config/env/envdoc"
 	badgercli "github.com/stergiotis/boxer/public/db/badger/cli"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/genbuildertest"
@@ -133,7 +133,7 @@ func newApp() (app *cli.Command) {
 			dev.NewCliCommand(
 				viewerfixture.NewCliCommand(),
 			),
-			env.NewCliCommand(envdoc.NewGenDocsCommand(), envdoc.NewGenEnvFileCommand()),
+			envcli.NewCommand(envdoc.NewGenDocsCommand(), envdoc.NewGenEnvFileCommand()),
 			gov.NewCliCommand(),
 			finddivisions.NewCliCommand(),
 			code.NewCliCommand(genbuildertest.NewCliCommand()),

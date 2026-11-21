@@ -1,4 +1,4 @@
-package env
+package envcli
 
 import (
 	"context"
@@ -8,17 +8,17 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	cli "github.com/urfave/cli/v3"
 )
 
-// NewCliCommand returns the `env` parent command. Currently exposes
-// `env list`, the runtime introspection surface per ADR-0009 §4.
-// Mounted into the boxer top-level CLI by public/app/main.go.
+// NewCommand returns the `env` parent command with its `env list`
+// subcommand, the runtime introspection surface per ADR-0009 §4.
 //
 // extraSubcommands lets sibling packages (notably envdoc) attach their
 // own subcommands without forming an env → … → env import cycle —
 // public/app/main.go passes them in at wire-up time.
-func NewCliCommand(extraSubcommands ...*cli.Command) (cmd *cli.Command) {
+func NewCommand(extraSubcommands ...*cli.Command) (cmd *cli.Command) {
 	subs := make([]*cli.Command, 0, 1+len(extraSubcommands))
 	subs = append(subs, newListCommand())
 	subs = append(subs, extraSubcommands...)
@@ -60,13 +60,13 @@ func newListCommand() (cmd *cli.Command) {
 }
 
 func runList(ctx context.Context, cmd *cli.Command) (err error) {
-	specs := Snapshot()
+	specs := env.Snapshot()
 	cat := cmd.String("category")
 	origin := cmd.String("origin")
 	prefix := cmd.String("prefix")
 
-	filtered := SpecFilter{
-		Category: CategoryE(cat),
+	filtered := env.SpecFilter{
+		Category: env.CategoryE(cat),
 		Origin:   origin,
 		Prefix:   prefix,
 	}.Apply(specs)
@@ -113,8 +113,8 @@ func runList(ctx context.Context, cmd *cli.Command) (err error) {
 // categorial specs whose env value is outside the declared set, the
 // raw value is annotated as "<raw> [invalid; using <default>]" so
 // operators see why Get() returns the default.
-func formatCurrent(s Spec) (out string) {
-	v, ok := LookupVar(s.Name)
+func formatCurrent(s env.Spec) (out string) {
+	v, ok := env.LookupVar(s.Name)
 	if !ok {
 		return ""
 	}
@@ -128,7 +128,7 @@ func formatCurrent(s Spec) (out string) {
 	if len(s.Allowed) > 0 && !slices.Contains(s.Allowed, raw) {
 		return fmt.Sprintf("%s [invalid; using %s]", raw, s.Default)
 	}
-	return RedactURL(raw)
+	return env.RedactURL(raw)
 }
 
 // displayValue replaces empty values with a single-character placeholder
@@ -140,39 +140,4 @@ func displayValue(s string) (out string) {
 		return "—"
 	}
 	return s
-}
-
-// SpecFilter selects Specs by the fields `env list` filters on. A zero
-// field matches every Spec.
-type SpecFilter struct {
-	Category CategoryE
-	// Origin is compared with Spec.Origin.Module.
-	Origin string
-	// Prefix is compared with the start of Spec.Name.
-	Prefix string
-}
-
-// Match reports whether s passes every non-zero field of the filter.
-func (inst SpecFilter) Match(s Spec) (ok bool) {
-	if inst.Category != "" && s.Category != inst.Category {
-		return false
-	}
-	if inst.Origin != "" && s.Origin.Module != inst.Origin {
-		return false
-	}
-	if inst.Prefix != "" && !strings.HasPrefix(s.Name, inst.Prefix) {
-		return false
-	}
-	return true
-}
-
-// Apply returns the Specs of specs that Match, in their given order.
-func (inst SpecFilter) Apply(specs []Spec) (out []Spec) {
-	out = make([]Spec, 0, len(specs))
-	for _, s := range specs {
-		if inst.Match(s) {
-			out = append(out, s)
-		}
-	}
-	return
 }

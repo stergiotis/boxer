@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audioout"
 	"github.com/stergiotis/boxer/public/science/audio/pcm"
@@ -61,7 +62,7 @@ func TestBoot_AudioOutDefaultsToThePulseDevice(t *testing.T) {
 // audio lane to it: the lane where the client opened its end, this machine's
 // sound server where no lane exists.
 func TestBoot_AudioOutFollowsTheLaneBehindACarrier(t *testing.T) {
-	imzero2env.HeadlessListen.SetForTest(t, "127.0.0.1:0")
+	envtest.Set(t, imzero2env.HeadlessListen, "127.0.0.1:0")
 	opts := minimalOptions(t, newTestRegistry(t))
 	opts.Services.AudioOut = true
 	rt, err := Boot(context.Background(), opts)

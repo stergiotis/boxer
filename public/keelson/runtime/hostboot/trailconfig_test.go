@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
@@ -19,10 +20,10 @@ import (
 // setting, the anchor store's URL never among them (ADR-0296, the Update
 // of 2026-10-31).
 func TestTrailConfigRow(t *testing.T) {
-	trail.RequiredEnv.SetForTest(t, "true")
-	llm.Retain.SetForTest(t, "ring")
-	chstore.LogFactsEnabled.SetForTest(t, "0")
-	headstore.OrgStoreURL.SetForTest(t, "http://anchors.example:8123")
+	envtest.Set(t, trail.RequiredEnv, "true")
+	envtest.Set(t, llm.Retain, "ring")
+	envtest.Set(t, chstore.LogFactsEnabled, "0")
+	envtest.Set(t, headstore.OrgStoreURL, "http://anchors.example:8123")
 	s := trailSettingsOf(anchor.NewMemStore(), &runinfo.Inst{VcsRevision: "abc123", VcsModified: true})
 	row := trailConfigRow(s)
 	assert.Equal(t, trail.TrailDomain, row.Domain)

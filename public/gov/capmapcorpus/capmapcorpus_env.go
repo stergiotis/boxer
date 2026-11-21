@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -161,11 +162,11 @@ func resetLoadMemo() {
 // snapshot even after the variable changed. This resets both, and restores
 // them when the test ends.
 //
-// Following the same convention as [env.PathVar.SetForTest], which is why the
+// Following the same convention as [envtest.Set], which is why the
 // production file imports testing.
 func SetVaultForTest(t testing.TB, dir string) {
 	t.Helper()
-	envVaultDir.SetForTest(t, dir)
+	envtest.Set(t, envVaultDir, dir)
 	resetLoadMemo()
 	t.Cleanup(resetLoadMemo)
 }

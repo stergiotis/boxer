@@ -1,13 +1,9 @@
 package env
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strconv"
-	"testing"
-
-	cli "github.com/urfave/cli/v3"
 )
 
 // BoolVar is the typed env-var handle for boolean values.
@@ -23,7 +19,7 @@ func NewBool(spec Spec) (v *BoolVar) {
 	spec.Origin = callerOrigin(2)
 	spec.Type = TypeBool
 	v = &BoolVar{spec: spec}
-	register(v)
+	v = register(v).(*BoolVar)
 	return
 }
 
@@ -43,16 +39,18 @@ func (inst *BoolVar) Get() (out bool) {
 func (inst *BoolVar) resolveEnv() (out bool, src ValueSourceE) {
 	raw, ok := os.LookupEnv(inst.spec.Name)
 	if !ok || raw == "" {
-		return inst.parseDefault(), ValueSourceDefault
+		return inst.DefaultValue(), ValueSourceDefault
 	}
 	parsed, parseErr := strconv.ParseBool(raw)
 	if parseErr != nil {
-		return inst.parseDefault(), ValueSourceDefault
+		return inst.DefaultValue(), ValueSourceDefault
 	}
 	return parsed, ValueSourceEnv
 }
 
-func (inst *BoolVar) parseDefault() (out bool) {
+// DefaultValue parses Spec.Default; the zero value when it is empty. A
+// default that does not parse panics (a programmer error).
+func (inst *BoolVar) DefaultValue() (out bool) {
 	if inst.spec.Default == "" {
 		return false
 	}
@@ -72,43 +70,18 @@ func (inst *BoolVar) Lookup() (raw string, set bool) {
 	return
 }
 
-func (inst *BoolVar) setCached(value bool) {
+// RecordFlag records the value a command-line flag parsed
+// (ValueSourceFlag); it shadows the environment and the default but not an
+// Override. public/config/env/envcli calls it from a derived flag's Action.
+func (inst *BoolVar) RecordFlag(value bool) {
 	inst.res.setFlag(value)
 }
 
-// WithBoolAction attaches a caller-supplied Action func to the
-// cli.BoolFlag returned by AsCliFlag. The user action runs first; on
-// success the parsed value is written to the cache.
-func WithBoolAction(fn func(ctx context.Context, cmd *cli.Command, parsed bool) error) (opt FlagOption) {
-	return func(o *flagOptions) {
-		o.actionFn = fn
-	}
-}
-
-func (inst *BoolVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
-	fo := resolveFlagOptions(inst.spec, opts)
-	userAction, _ := fo.actionFn.(func(context.Context, *cli.Command, bool) error)
-	defaultValue := false
-	if inst.spec.Default != "" {
-		defaultValue = inst.parseDefault()
-	}
-	return &cli.BoolFlag{
-		Name:     fo.cliFlagName,
-		Usage:    inst.spec.Description,
-		Category: string(inst.spec.Category),
-		Sources:  cli.EnvVars(inst.spec.Name),
-		Value:    defaultValue,
-		Action: func(ctx context.Context, cmd *cli.Command, parsed bool) (err error) {
-			if userAction != nil {
-				err = userAction(ctx, cmd, parsed)
-				if err != nil {
-					return
-				}
-			}
-			inst.setCached(parsed)
-			return
-		},
-	}
+// ClearCache forgets a recorded flag value and the cached environment
+// read, so the next Get resolves from the environment again. The
+// Override stays.
+func (inst *BoolVar) ClearCache() {
+	inst.res.clearCache()
 }
 
 // Override pins the resolved value for this process (ValueSourceOverride):
@@ -131,13 +104,4 @@ func (inst *BoolVar) ClearOverride() {
 func (inst *BoolVar) ValueSource() (src ValueSourceE) {
 	_, src = inst.res.get(inst.resolveEnv)
 	return
-}
-
-func (inst *BoolVar) SetForTest(t testing.TB, value string) {
-	t.Helper()
-	inst.res.reset()
-	t.Setenv(inst.spec.Name, value)
-	t.Cleanup(func() {
-		inst.res.reset()
-	})
 }

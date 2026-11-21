@@ -1,13 +1,9 @@
 package env
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strconv"
-	"testing"
-
-	cli "github.com/urfave/cli/v3"
 )
 
 // FloatVar is the typed env-var handle for 64-bit floating-point values.
@@ -23,7 +19,7 @@ func NewFloat(spec Spec) (v *FloatVar) {
 	spec.Origin = callerOrigin(2)
 	spec.Type = TypeFloat64
 	v = &FloatVar{spec: spec}
-	register(v)
+	v = register(v).(*FloatVar)
 	return
 }
 
@@ -41,16 +37,18 @@ func (inst *FloatVar) Get() (out float64) {
 func (inst *FloatVar) resolveEnv() (out float64, src ValueSourceE) {
 	raw, ok := os.LookupEnv(inst.spec.Name)
 	if !ok || raw == "" {
-		return inst.parseDefault(), ValueSourceDefault
+		return inst.DefaultValue(), ValueSourceDefault
 	}
 	parsed, parseErr := strconv.ParseFloat(raw, 64)
 	if parseErr != nil {
-		return inst.parseDefault(), ValueSourceDefault
+		return inst.DefaultValue(), ValueSourceDefault
 	}
 	return parsed, ValueSourceEnv
 }
 
-func (inst *FloatVar) parseDefault() (out float64) {
+// DefaultValue parses Spec.Default; the zero value when it is empty. A
+// default that does not parse panics (a programmer error).
+func (inst *FloatVar) DefaultValue() (out float64) {
 	if inst.spec.Default == "" {
 		return 0
 	}
@@ -70,43 +68,18 @@ func (inst *FloatVar) Lookup() (raw string, set bool) {
 	return
 }
 
-func (inst *FloatVar) setCached(value float64) {
+// RecordFlag records the value a command-line flag parsed
+// (ValueSourceFlag); it shadows the environment and the default but not an
+// Override. public/config/env/envcli calls it from a derived flag's Action.
+func (inst *FloatVar) RecordFlag(value float64) {
 	inst.res.setFlag(value)
 }
 
-// WithFloat64Action attaches a caller-supplied Action func to the
-// cli.Float64Flag returned by AsCliFlag. The user action runs first; on
-// success the parsed value is written to the cache.
-func WithFloat64Action(fn func(ctx context.Context, cmd *cli.Command, parsed float64) error) (opt FlagOption) {
-	return func(o *flagOptions) {
-		o.actionFn = fn
-	}
-}
-
-func (inst *FloatVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
-	fo := resolveFlagOptions(inst.spec, opts)
-	userAction, _ := fo.actionFn.(func(context.Context, *cli.Command, float64) error)
-	defaultValue := float64(0)
-	if inst.spec.Default != "" {
-		defaultValue = inst.parseDefault()
-	}
-	return &cli.Float64Flag{
-		Name:     fo.cliFlagName,
-		Usage:    inst.spec.Description,
-		Category: string(inst.spec.Category),
-		Sources:  cli.EnvVars(inst.spec.Name),
-		Value:    defaultValue,
-		Action: func(ctx context.Context, cmd *cli.Command, parsed float64) (err error) {
-			if userAction != nil {
-				err = userAction(ctx, cmd, parsed)
-				if err != nil {
-					return
-				}
-			}
-			inst.setCached(parsed)
-			return
-		},
-	}
+// ClearCache forgets a recorded flag value and the cached environment
+// read, so the next Get resolves from the environment again. The
+// Override stays.
+func (inst *FloatVar) ClearCache() {
+	inst.res.clearCache()
 }
 
 // Override pins the resolved value for this process (ValueSourceOverride):
@@ -129,13 +102,4 @@ func (inst *FloatVar) ClearOverride() {
 func (inst *FloatVar) ValueSource() (src ValueSourceE) {
 	_, src = inst.res.get(inst.resolveEnv)
 	return
-}
-
-func (inst *FloatVar) SetForTest(t testing.TB, value string) {
-	t.Helper()
-	inst.res.reset()
-	t.Setenv(inst.spec.Name, value)
-	t.Cleanup(func() {
-		inst.res.reset()
-	})
 }

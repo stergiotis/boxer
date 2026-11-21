@@ -1,13 +1,9 @@
 package env
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"testing"
 	"time"
-
-	cli "github.com/urfave/cli/v3"
 )
 
 // DurationVar is the typed env-var handle for time.Duration values.
@@ -23,7 +19,7 @@ func NewDuration(spec Spec) (v *DurationVar) {
 	spec.Origin = callerOrigin(2)
 	spec.Type = TypeDuration
 	v = &DurationVar{spec: spec}
-	register(v)
+	v = register(v).(*DurationVar)
 	return
 }
 
@@ -41,16 +37,18 @@ func (inst *DurationVar) Get() (out time.Duration) {
 func (inst *DurationVar) resolveEnv() (out time.Duration, src ValueSourceE) {
 	raw, ok := os.LookupEnv(inst.spec.Name)
 	if !ok || raw == "" {
-		return inst.parseDefault(), ValueSourceDefault
+		return inst.DefaultValue(), ValueSourceDefault
 	}
 	parsed, parseErr := time.ParseDuration(raw)
 	if parseErr != nil {
-		return inst.parseDefault(), ValueSourceDefault
+		return inst.DefaultValue(), ValueSourceDefault
 	}
 	return parsed, ValueSourceEnv
 }
 
-func (inst *DurationVar) parseDefault() (out time.Duration) {
+// DefaultValue parses Spec.Default; the zero value when it is empty. A
+// default that does not parse panics (a programmer error).
+func (inst *DurationVar) DefaultValue() (out time.Duration) {
 	if inst.spec.Default == "" {
 		return 0
 	}
@@ -70,43 +68,18 @@ func (inst *DurationVar) Lookup() (raw string, set bool) {
 	return
 }
 
-func (inst *DurationVar) setCached(value time.Duration) {
+// RecordFlag records the value a command-line flag parsed
+// (ValueSourceFlag); it shadows the environment and the default but not an
+// Override. public/config/env/envcli calls it from a derived flag's Action.
+func (inst *DurationVar) RecordFlag(value time.Duration) {
 	inst.res.setFlag(value)
 }
 
-// WithDurationAction attaches a caller-supplied Action func to the
-// cli.DurationFlag returned by AsCliFlag. The user action runs first;
-// on success the parsed value is written to the cache.
-func WithDurationAction(fn func(ctx context.Context, cmd *cli.Command, parsed time.Duration) error) (opt FlagOption) {
-	return func(o *flagOptions) {
-		o.actionFn = fn
-	}
-}
-
-func (inst *DurationVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
-	fo := resolveFlagOptions(inst.spec, opts)
-	userAction, _ := fo.actionFn.(func(context.Context, *cli.Command, time.Duration) error)
-	defaultValue := time.Duration(0)
-	if inst.spec.Default != "" {
-		defaultValue = inst.parseDefault()
-	}
-	return &cli.DurationFlag{
-		Name:     fo.cliFlagName,
-		Usage:    inst.spec.Description,
-		Category: string(inst.spec.Category),
-		Sources:  cli.EnvVars(inst.spec.Name),
-		Value:    defaultValue,
-		Action: func(ctx context.Context, cmd *cli.Command, parsed time.Duration) (err error) {
-			if userAction != nil {
-				err = userAction(ctx, cmd, parsed)
-				if err != nil {
-					return
-				}
-			}
-			inst.setCached(parsed)
-			return
-		},
-	}
+// ClearCache forgets a recorded flag value and the cached environment
+// read, so the next Get resolves from the environment again. The
+// Override stays.
+func (inst *DurationVar) ClearCache() {
+	inst.res.clearCache()
 }
 
 // Override pins the resolved value for this process (ValueSourceOverride):
@@ -129,13 +102,4 @@ func (inst *DurationVar) ClearOverride() {
 func (inst *DurationVar) ValueSource() (src ValueSourceE) {
 	_, src = inst.res.get(inst.resolveEnv)
 	return
-}
-
-func (inst *DurationVar) SetForTest(t testing.TB, value string) {
-	t.Helper()
-	inst.res.reset()
-	t.Setenv(inst.spec.Name, value)
-	t.Cleanup(func() {
-		inst.res.reset()
-	})
 }

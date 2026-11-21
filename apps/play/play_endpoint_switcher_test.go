@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
@@ -42,7 +43,7 @@ func withLocalQueryEndpoint(t *testing.T, url string) {
 // clickhouse-local's own system tables rather than the server's, which is a
 // wrong answer rather than an error.
 func TestMount_IntrospectionLaunchKeepsExternalResetTarget(t *testing.T) {
-	clickhouseenv.URL.SetForTest(t, testExternalURL)
+	envtest.Set(t, clickhouseenv.URL, testExternalURL)
 	withLocalQueryEndpoint(t, testLocalURL)
 
 	cfg := encodePlayLaunch(t, launchcfg.PlayLaunch{
@@ -70,7 +71,7 @@ func TestMount_IntrospectionLaunchKeepsExternalResetTarget(t *testing.T) {
 // TestMount_PlainOpenExternalIsTheEnvTarget: with no retarget, the external
 // target is simply where the window opened.
 func TestMount_PlainOpenExternalIsTheEnvTarget(t *testing.T) {
-	clickhouseenv.URL.SetForTest(t, testExternalURL)
+	envtest.Set(t, clickhouseenv.URL, testExternalURL)
 	withLocalQueryEndpoint(t, testLocalURL)
 
 	inst, err := mountLauncher(t, nil, mapStorage{})
@@ -85,7 +86,7 @@ func TestMount_PlainOpenExternalIsTheEnvTarget(t *testing.T) {
 // failed one — and the external target is untouched, so the switcher is in the
 // same state a plain open leaves it.
 func TestMount_IntrospectionLaunchWithoutLocalEndpointDegrades(t *testing.T) {
-	clickhouseenv.URL.SetForTest(t, testExternalURL)
+	envtest.Set(t, clickhouseenv.URL, testExternalURL)
 	withLocalQueryEndpoint(t, "")
 
 	cfg := encodePlayLaunch(t, launchcfg.PlayLaunch{

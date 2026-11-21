@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	boxerenv "github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/filepicker"
@@ -67,17 +68,17 @@ func TestBridge_ToAbsolute_AlreadyAbsolute(t *testing.T) {
 }
 
 func TestDefaultStartDir_NoHome(t *testing.T) {
-	boxerenv.Home.SetForTest(t, "")
+	envtest.Set(t, boxerenv.Home, "")
 	assert.Equal(t, ".", defaultStartDir("/"))
 }
 
 func TestDefaultStartDir_HomeUnderRoot(t *testing.T) {
-	boxerenv.Home.SetForTest(t, "/home/test-user")
+	envtest.Set(t, boxerenv.Home, "/home/test-user")
 	assert.Equal(t, "home/test-user", defaultStartDir("/"))
 }
 
 func TestDefaultStartDir_HomeOutsideRoot(t *testing.T) {
-	boxerenv.Home.SetForTest(t, "/somewhere/else")
+	envtest.Set(t, boxerenv.Home, "/somewhere/else")
 	// FsRoot "/srv" is unrelated to HOME — relative would start with ".." → fall back to "."
 	assert.Equal(t, ".", defaultStartDir("/srv"))
 }

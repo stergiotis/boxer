@@ -14,7 +14,7 @@ const (
 	// ValueSourceEnv: the process environment carried a non-empty,
 	// well-formed value.
 	ValueSourceEnv
-	// ValueSourceFlag: the cli.Flag derived by AsCliFlag parsed a value
+	// ValueSourceFlag: the cli.Flag envcli.Flag derives parsed a value
 	// (from the command line or, through urfave/cli, from the bound
 	// environment variable).
 	ValueSourceFlag
@@ -103,10 +103,4 @@ func (inst *resolved[T]) clearOverride() {
 	var zero T
 	inst.override = zero
 	inst.overridden = false
-}
-
-// reset forgets everything — cache and override — for SetForTest.
-func (inst *resolved[T]) reset() {
-	inst.clearCache()
-	inst.clearOverride()
 }

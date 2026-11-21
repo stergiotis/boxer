@@ -3,64 +3,65 @@ package styletokens
 import (
 	"testing"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSequentialDefaultEmptyEnv(t *testing.T) {
-	PaletteSequentialEnv.SetForTest(t, "")
-	AccessibilityEnv.SetForTest(t, "")
+	envtest.Set(t, PaletteSequentialEnv, "")
+	envtest.Set(t, AccessibilityEnv, "")
 	assert.Equal(t, SequentialBatlow, SequentialDefault())
 }
 
 func TestSequentialDefaultExplicitPick(t *testing.T) {
-	AccessibilityEnv.SetForTest(t, "default")
-	PaletteSequentialEnv.SetForTest(t, "viridis")
+	envtest.Set(t, AccessibilityEnv, "default")
+	envtest.Set(t, PaletteSequentialEnv, "viridis")
 	assert.Equal(t, SequentialViridis, SequentialDefault())
 }
 
 func TestSequentialDefaultInvalidValueFallsBackToDefault(t *testing.T) {
-	AccessibilityEnv.SetForTest(t, "")
-	PaletteSequentialEnv.SetForTest(t, "this-palette-does-not-exist")
+	envtest.Set(t, AccessibilityEnv, "")
+	envtest.Set(t, PaletteSequentialEnv, "this-palette-does-not-exist")
 	// env.CategoricalString falls back to spec default on invalid input.
 	assert.Equal(t, SequentialBatlow, SequentialDefault())
 }
 
 func TestAccessibilityHighContrastOverridesSequential(t *testing.T) {
-	PaletteSequentialEnv.SetForTest(t, "viridis")
-	AccessibilityEnv.SetForTest(t, "high-contrast")
+	envtest.Set(t, PaletteSequentialEnv, "viridis")
+	envtest.Set(t, AccessibilityEnv, "high-contrast")
 	assert.Equal(t, SequentialBatlowK, SequentialDefault())
 }
 
 func TestAccessibilityMonochromeOverridesSequential(t *testing.T) {
-	PaletteSequentialEnv.SetForTest(t, "magma")
-	AccessibilityEnv.SetForTest(t, "monochrome")
+	envtest.Set(t, PaletteSequentialEnv, "magma")
+	envtest.Set(t, AccessibilityEnv, "monochrome")
 	assert.Equal(t, SequentialGrayC, SequentialDefault())
 }
 
 func TestAccessibilityFromEnv(t *testing.T) {
-	AccessibilityEnv.SetForTest(t, "high-contrast")
+	envtest.Set(t, AccessibilityEnv, "high-contrast")
 	assert.Equal(t, AccessibilityHighContrast, AccessibilityFromEnv())
 
-	AccessibilityEnv.SetForTest(t, "monochrome")
+	envtest.Set(t, AccessibilityEnv, "monochrome")
 	assert.Equal(t, AccessibilityMonochrome, AccessibilityFromEnv())
 
-	AccessibilityEnv.SetForTest(t, "default")
+	envtest.Set(t, AccessibilityEnv, "default")
 	assert.Equal(t, AccessibilityDefault, AccessibilityFromEnv())
 
-	AccessibilityEnv.SetForTest(t, "bogus")
+	envtest.Set(t, AccessibilityEnv, "bogus")
 	assert.Equal(t, AccessibilityDefault, AccessibilityFromEnv())
 }
 
 func TestDivergingDefault(t *testing.T) {
-	AccessibilityEnv.SetForTest(t, "")
-	PaletteDivergingEnv.SetForTest(t, "roma")
+	envtest.Set(t, AccessibilityEnv, "")
+	envtest.Set(t, PaletteDivergingEnv, "roma")
 	assert.Equal(t, DivergingRoma, DivergingDefault())
 
 	// Accessibility presets do not currently swap diverging — vik covers
 	// all three presets.
-	PaletteDivergingEnv.SetForTest(t, "broc")
-	AccessibilityEnv.SetForTest(t, "monochrome")
+	envtest.Set(t, PaletteDivergingEnv, "broc")
+	envtest.Set(t, AccessibilityEnv, "monochrome")
 	assert.Equal(t, DivergingVik, DivergingDefault())
 }
 
