@@ -3,6 +3,7 @@ package trailviewer
 import (
 	"context"
 	"iter"
+	"sync"
 	"testing"
 	"time"
 
@@ -81,8 +82,56 @@ func (inst *blockingExec) QueryArrow(ctx context.Context, sql string) iter.Seq2[
 	}
 }
 
+// gatedExec answers like fakeExec, but while held a query waits for the
+// release, so a test can look at a read in flight without racing an
+// answer that would otherwise arrive at once.
+type gatedExec struct {
+	fakeExec
+	gmu  sync.Mutex
+	gate chan struct{}
+}
+
+func (inst *gatedExec) hold() {
+	inst.gmu.Lock()
+	defer inst.gmu.Unlock()
+	inst.gate = make(chan struct{})
+}
+
+func (inst *gatedExec) release() {
+	inst.gmu.Lock()
+	defer inst.gmu.Unlock()
+	if inst.gate != nil {
+		close(inst.gate)
+		inst.gate = nil
+	}
+}
+
+func (inst *gatedExec) QueryArrow(ctx context.Context, sql string) iter.Seq2[arrow.RecordBatch, error] {
+	answer := inst.fakeExec.QueryArrow(ctx, sql)
+	inst.gmu.Lock()
+	gate := inst.gate
+	inst.gmu.Unlock()
+	return func(yield func(arrow.RecordBatch, error) bool) {
+		if gate != nil {
+			select {
+			case <-gate:
+			case <-ctx.Done():
+				yield(nil, ctx.Err())
+				return
+			}
+		}
+		answer(yield)
+	}
+}
+
+// settled waits for the table read to end. The trail views a read selects
+// from are composed once per process, on the first read, and that parse is
+// slow under -race; waiting for the composition first, unbounded, keeps it
+// out of the bounded wait for the read itself.
 func settled(t *testing.T, inst *App) {
 	t.Helper()
+	_, err := loadMarts("")
+	require.NoError(t, err)
 	require.Eventually(t, func() bool { return !inst.cache.runner.Running() }, 5*time.Second, time.Millisecond)
 }
 
@@ -97,15 +146,18 @@ func readStateOf(t *testing.T, inst *App) string {
 // a failure; nothing starts until refresh or a scope change; a second stop
 // is the first.
 func TestStopReadHoldsTheCacheUntilRefreshOrAScopeChange(t *testing.T) {
-	exec := &fakeExec{}
+	exec := &gatedExec{}
+	t.Cleanup(exec.release)
 	prev := sourceRef.Load()
 	Register(&Source{Exec: exec, Trail: fakeTrail{}, Run: func() string { return fixtureRun }})
 	t.Cleanup(func() { Register(prev) })
 	inst := newInstance(manifest)
 	now := time.Now()
 	assert.Equal(t, "idle", readStateOf(t, inst))
+	exec.hold()
 	inst.tick(now)
 	assert.Equal(t, "reading", readStateOf(t, inst))
+	exec.release()
 	settled(t, inst)
 	inst.tick(now)
 	require.True(t, inst.cache.filled)
@@ -134,9 +186,11 @@ func TestStopReadHoldsTheCacheUntilRefreshOrAScopeChange(t *testing.T) {
 	assert.Equal(t, "stopped", readStateOf(t, inst))
 
 	require.NoError(t, command(t, inst, opRefresh, struct{}{}))
+	exec.hold()
 	inst.tick(now.Add(5 * refreshInterval()))
 	assert.True(t, inst.cache.runner.Running(), "refresh lifts the hold and a read starts")
 	assert.Equal(t, "refreshing", readStateOf(t, inst))
+	exec.release()
 	settled(t, inst)
 	inst.tick(now.Add(5 * refreshInterval()))
 	assert.Equal(t, "empty", readStateOf(t, inst))
@@ -152,9 +206,11 @@ func TestStopReadHoldsTheCacheUntilRefreshOrAScopeChange(t *testing.T) {
 	assert.False(t, inst.cache.runner.Running(), "the scope settles first")
 	assert.Equal(t, "reading", readStateOf(t, inst), "the previous read shows while the new scope's is pending")
 	assert.Equal(t, "showing the previous read", inst.freshness())
+	exec.hold()
 	inst.tick(scoped.Add(scopeSettle))
 	assert.True(t, inst.cache.runner.Running())
 	assert.Equal(t, "reading", readStateOf(t, inst))
+	exec.release()
 	settled(t, inst)
 
 	// The machine's graph, as an agent reads it.
