@@ -33,6 +33,10 @@ import (
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
+// The tests reach the server the CLICKHOUSE_* variables name, as the service
+// they start does: a test client on another server than the service's would
+// set up and tear down where the service is not.
+//
 // scratchDb isolates the pipeline objects; dropped at test end. The
 // destination table, MV, and extract watermark all live here — only
 // system.query_log is shared with whatever else the server is doing.
@@ -45,9 +49,9 @@ const scratchDb = "queryruns_it"
 // clock tolerable; polls are bounded.
 func TestLivePipelineEndToEnd(t *testing.T) {
 	ctx := context.Background()
-	cli := chclient.New(chclient.Defaults(), nil)
+	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if cli.Ping(ctx) != nil {
-		t.Skip("no live ClickHouse at localhost:8123")
+		t.Skipf("no live ClickHouse at %s", chclient.ConfigFromEnv().URL)
 	}
 	require.NoError(t, cli.Exec(ctx, "DROP DATABASE IF EXISTS "+scratchDb))
 	t.Cleanup(func() { _ = cli.Exec(context.Background(), "DROP DATABASE IF EXISTS "+scratchDb) })
@@ -207,9 +211,9 @@ func startScratch(t *testing.T, cli *chclient.Client, db string, cfg Config) (sv
 // stops, the second takes over — the restart path.
 func TestLiveSecondInstanceRefused(t *testing.T) {
 	ctx := context.Background()
-	cli := chclient.New(chclient.Defaults(), nil)
+	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if cli.Ping(ctx) != nil {
-		t.Skip("no live ClickHouse at localhost:8123")
+		t.Skipf("no live ClickHouse at %s", chclient.ConfigFromEnv().URL)
 	}
 	const db = scratchDb + "_owner"
 	first := startScratch(t, cli, db, Config{BackfillFrom: time.Now()})
@@ -236,9 +240,9 @@ func TestLiveSecondInstanceRefused(t *testing.T) {
 // probes inside a second against a cap of 20.
 func TestLiveDenseOverlapDoesNotStall(t *testing.T) {
 	ctx := context.Background()
-	cli := chclient.New(chclient.Defaults(), nil)
+	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if cli.Ping(ctx) != nil {
-		t.Skip("no live ClickHouse at localhost:8123")
+		t.Skipf("no live ClickHouse at %s", chclient.ConfigFromEnv().URL)
 	}
 	const probes = 60
 	from := time.Now().Add(-time.Second)
@@ -263,9 +267,9 @@ func TestLiveDenseOverlapDoesNotStall(t *testing.T) {
 // older than a day; skips otherwise.
 func TestLiveOldBackfillStaysDuplicateFree(t *testing.T) {
 	ctx := context.Background()
-	cli := chclient.New(chclient.Defaults(), nil)
+	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if cli.Ping(ctx) != nil {
-		t.Skip("no live ClickHouse at localhost:8123")
+		t.Skipf("no live ClickHouse at %s", chclient.ConfigFromEnv().URL)
 	}
 	oldest := queryScalar(t, cli,
 		"SELECT toUnixTimestamp(min(event_time)) FROM system.query_log WHERE type != 'QueryStart' AND event_time < now() - INTERVAL 2 DAY")
@@ -298,9 +302,9 @@ func TestLiveOldBackfillStaysDuplicateFree(t *testing.T) {
 // correlated-subquery error.
 func TestLiveReconcileRefusesDriftedDestination(t *testing.T) {
 	ctx := context.Background()
-	cli := chclient.New(chclient.Defaults(), nil)
+	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if cli.Ping(ctx) != nil {
-		t.Skip("no live ClickHouse at localhost:8123")
+		t.Skipf("no live ClickHouse at %s", chclient.ConfigFromEnv().URL)
 	}
 	const db = scratchDb + "_drift"
 	require.NoError(t, cli.Exec(ctx, "DROP DATABASE IF EXISTS "+db))
@@ -367,7 +371,7 @@ func expandAuthored(t *testing.T, sql string, table string) string {
 // key the assertions look up) and optional log_comment stamp.
 func runTaggedQuery(t *testing.T, queryId string, logComment string) {
 	t.Helper()
-	u := "http://localhost:8123/?query_id=" + queryId
+	u := strings.TrimRight(chclient.ConfigFromEnv().URL, "/") + "/?query_id=" + queryId
 	if logComment != "" {
 		u += "&log_comment=" + strings.ReplaceAll(logComment, `"`, "%22")
 	}
