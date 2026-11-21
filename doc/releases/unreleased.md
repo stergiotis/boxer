@@ -12,14 +12,34 @@ generator: boxer gov releasenotes
 
 # Release notes: v0.0.23..HEAD
 
-2071 commit(s) in the range.
+2081 commit(s) in the range.
 
 ## Build requirements
 
 - `go` directive: 1.27.0 → 1.27.3.
 - `toolchain` line: absent at both ends.
 
-## Breaking changes (48)
+## Breaking changes (53)
+
+### refactor(trail)!: the trail verbs take the context their row is written under
+
+`b61744d2dc17` — - (*trail.Recorder) LlmCall, LlmMessage, AgentAction, AgentGrant, AgentCapture, AgentDisclosure, LadingPublish, HttpFetch, AdhocDataset, CoverageBuild, CoverageFuncs, CoverageSample, CoverageAgentApply: (at, ...) -> (ctx, at, ...). - (*adhocdata.Service) ReadColumns, Read, PublishBundle, ResolveBundle, RetractBundle take ctx first; covtrail.New(opts) -> New(ctx, opts).
+
+### refactor(recordstore)!: generated stores write under a context only
+
+`24767430f06f` — - every generated store: Begin(id, order[, env]) -> Begin(ctx, id, order[, env]); Delete(id, order) -> Delete(ctx, id, order); Ingest<Kind>(order, rows) -> Ingest<Kind>(ctx, order, rows). BeginCtx, DeleteCtx and Ingest<Kind>Ctx are removed: rename a call of one to the plain name. Regenerate stores generated outside this module. - auditrec.BatchI.Seal(id, ...) -> Seal(ctx, id, ...). - sysmtee.Start(opts) -> Start(ctx, opts); (*mddocfacts.MddocStore) IngestDocument and IngestRows take ctx first.
+
+### refactor(app,inprocbus)!: a bus request takes a context; RequestWithTimeout goes
+
+`3a719e59aea3` — - app.BusI Request(subject, payload) -> Request(ctx, subject, payload); RequestWithTimeout(subject, payload, d) -> app.RequestWithin(ctx, bus, d, subject, payload). (*inprocbus.Client).RequestCtx and the RequestWithTimeout methods of inprocbus, natsbus and app.NoopBus are removed. - ctx first: clipboardbroker Write/WriteText/Resolve; attention RequestUrgent/Notify/Seen/FetchNotices/Post/Status/Withdraw/FetchLevels/ SetLevel; adhocdata ReadColumns/ReadAll/PublishRequest/ResolveRequest/ ResolveVerifyRequest/RetractRequest/PublishBundleRequest/ RetractBundleRequest/ResolveBundleRequest/NewFollower/ NewDeferredFollower and (*Publisher) Publish/PublishRecord/Retract; audioout Open/OpenWith; windowopen RequestRaise/RequestOpen/ RequestOpenKind; ladingpublish Check/Publish; externaledit Give/Open/ Next/End/Locate and (*Editing).Start; playground Open/PublishBundle; agent.NewService; (*watchbill.Client) Enqueue/Get/List/Cancel/Retry; (*fsbroker.AppDataClient) every method; (*appstate.Client) Delete/ Forget; task.TaskApiI.ListInflight; (*taskmonitor.Monitor).Start; play.PublishBundle; mdeditlink.Open; play.NewHeadlessLauncherForTest. - jackstay.FilesI ReadFile/WriteFile/AppendFile, (*Plan) Save/SaveIn, LoadPlan/LoadPlanIn, OpenJournal/OpenJournalIn, ReadJournal/ ReadJournalIn, (*PackManifest).SaveIn: ctx first. - editexternally.Input gains BusCtx; the demo registry's BusInit gains a leading ctx.
+
+### refactor(persist,app,statestore)!: persist, app storage and the state stores take a context
+
+`d6d8dc662b39` — - app.StorageI Get/Set/Delete(key, ...) -> (ctx, key, ...). - persist.StorageBackendI Get/Set/Delete(ref, key, ...) -> (ctx, ref, key, ...); (*persist.StoreBackend) LiveEntries, EntryAt, DeleteEntity, DeleteEntities and the workingset and column-width verbs take ctx first. - statestore.WorkingsetStoreI, ColumnWidthStoreI, colwidth.StoreI, appstate.StoreI, appstate.BatchDeleterI, attention.PersonStoreI: ctx first on every method. - colwidth.New(store, opts) -> New(ctx, store, opts); filepicker.NewColumnWidths(store) -> (ctx, store); attention.AttachPersonStore(levels, store, log) -> (ctx, levels, store, log); appletstore.Start(reg, ...) -> Start(ctx, reg, ...); workstatelet.StartStore(reg, ...) -> (ctx, reg, ...), (*Store).Load() -> Load(ctx), Save(doc) -> Save(ctx, doc). - (*play.PlayApp).SetCapabilities(bus, storage, log) -> (ctx, bus, storage, log); sqlapplet.NewEmbedded(def, cfg) -> (ctx, def, cfg).
+
+### refactor(factsstore,hostboot)!: the facts writes take a context, and shutdown hands its own
+
+`b892266c5a02` — - factsstore.FactsStoreI and its implementations: WriteGrant, WriteLog, WriteLogs, WriteRuntimeStart, WriteRuntimeHeartbeat, WriteAppLifecycle, WriteLaunch(row) -> (ctx, row). - logbridge.NewSink(store, cfg) -> NewSink(ctx, store, cfg); (*Sink).Close() -> Close(ctx); InstallGlobal, NopCloser and loghost.Install return func(ctx context.Context) error. - heartbeat (*Inst).Stop() -> Stop(ctx). - windowhost.NewInst(reg, log) -> NewInst(ctx, reg, log); (*windowhost.Inst).ReapAll(reason) -> ReapAll(ctx, reason). - (*servicehost.Inst).ReapAll(reason) -> ReapAll(ctx, reason). - (*supervisor.Supervisor).Start() -> Start(ctx). - (*hostboot.Runtime).Close() -> Close(ctx), Reap() -> Reap(ctx), OnClose(func()) -> OnClose(func(ctx context.Context)).
 
 ### refactor(app)!: remove the empty datasource command group
 
@@ -329,6 +349,7 @@ generator: boxer gov releasenotes
 
 - [2026-10-watchbill-delegation.md](../../doc/migration/2026-10-watchbill-delegation.md)
 - [2026-11-facts-layout.md](../../doc/migration/2026-11-facts-layout.md)
+- [2026-11-io-context.md](../../doc/migration/2026-11-io-context.md)
 - [2026-11-library-layering.md](../../doc/migration/2026-11-library-layering.md)
 - [README.md](../../doc/migration/README.md)
 
@@ -374,9 +395,52 @@ breaking commits touching it:
   be7504315 refactor!: remove six packages nothing imports
 
 ## public/keelson/runtime/app (acknowledged)
+- (*NoopBus).Request: changed from func(string, []byte) ([]byte, error) to func(context.Context, string, []byte) ([]byte, error)
+- (*NoopBus).RequestWithTimeout: removed
+- (*NoopStorage).Delete: changed from func(string) error to func(context.Context, string) error
+- (*NoopStorage).Get: changed from func(string) ([]byte, bool, error) to func(context.Context, string) ([]byte, bool, error)
+- (*NoopStorage).Set: changed from func(string, []byte) error to func(context.Context, string, []byte) error
+- BusI.Request: changed from func(string, []byte) ([]byte, error) to func(context.Context, string, []byte) ([]byte, error)
+- BusI.RequestWithTimeout: removed
 - StaticFrameContext: old is comparable, new is not
+- StorageI.Delete: changed from func(string) error to func(context.Context, string) error
+- StorageI.Get: changed from func(string) ([]byte, bool, error) to func(context.Context, string) ([]byte, bool, error)
+- StorageI.Set: changed from func(string, []byte) error to func(context.Context, string, []byte) error
 breaking commits touching it:
+  3a719e59a refactor(app,inprocbus)!: a bus request takes a context; RequestWithTimeout goes
+  d6d8dc662 refactor(persist,app,statestore)!: persist, app storage and the state stores take a context
   4f5528bf2 fix(inprocbus)!: a request's wait is bounded, and no responder fails at once
+
+## public/keelson/runtime/persist (acknowledged)
+- (*Client).Delete: changed from func(string) error to func(context.Context, string) error
+- (*Client).Get: changed from func(string) ([]byte, bool, error) to func(context.Context, string) ([]byte, bool, error)
+- (*Client).Set: changed from func(string, []byte) error to func(context.Context, string, []byte) error
+- (*MemoryBackend).Delete: changed from func(StorageRef, string) error to func(context.Context, StorageRef, string) error
+- (*MemoryBackend).Get: changed from func(StorageRef, string) ([]byte, bool, error) to func(context.Context, StorageRef, string) ([]byte, bool, error)
+- (*MemoryBackend).Set: changed from func(StorageRef, string, []byte) error to func(context.Context, StorageRef, string, []byte) error
+- (*StoreBackend).Delete: changed from func(StorageRef, string) error to func(context.Context, StorageRef, string) error
+- (*StoreBackend).Get: changed from func(StorageRef, string) ([]byte, bool, error) to func(context.Context, StorageRef, string) ([]byte, bool, error)
+- (*StoreBackend).Set: changed from func(StorageRef, string, []byte) error to func(context.Context, StorageRef, string, []byte) error
+- StorageBackendI.Delete: changed from func(StorageRef, string) error to func(context.Context, StorageRef, string) error
+- StorageBackendI.Get: changed from func(StorageRef, string) ([]byte, bool, error) to func(context.Context, StorageRef, string) ([]byte, bool, error)
+- StorageBackendI.Set: changed from func(StorageRef, string, []byte) error to func(context.Context, StorageRef, string, []byte) error
+breaking commits touching it:
+  24767430f refactor(recordstore)!: generated stores write under a context only
+  3a719e59a refactor(app,inprocbus)!: a bus request takes a context; RequestWithTimeout goes
+  d6d8dc662 refactor(persist,app,statestore)!: persist, app storage and the state stores take a context
+  6f901631c refactor(runinfo)!: move runinfo to observability
+  7f6ab5efb refactor(chclient)!: move the ClickHouse client to db/clickhouse/chclient
+  9c56dc6a1 refactor(buscodec)!: move buscodec to semistructured/cbor
+  4f5528bf2 fix(inprocbus)!: a request's wait is bounded, and no responder fails at once
+
+## public/keelson/runtime/task (acknowledged)
+- (*BusApi).ListInflight: changed from func() ([]InflightSnapshotEntry, error) to func(context.Context) ([]InflightSnapshotEntry, error)
+- (*NoopTaskApi).ListInflight: changed from func() ([]InflightSnapshotEntry, error) to func(context.Context) ([]InflightSnapshotEntry, error)
+- TaskApiI.ListInflight: changed from func() ([]InflightSnapshotEntry, error) to func(context.Context) ([]InflightSnapshotEntry, error)
+breaking commits touching it:
+  3a719e59a refactor(app,inprocbus)!: a bus request takes a context; RequestWithTimeout goes
+  9c56dc6a1 refactor(buscodec)!: move buscodec to semistructured/cbor
+  b90ad3b31 refactor(task)!: Run takes the context first
 
 ## public/observability/eh (acknowledged)
 - ErrorWithStructuredDataI.SetCBORStructuredData: removed
@@ -971,6 +1035,6 @@ breaking commits touching it:
 breaking commits touching it:
   9e6e40b10 refactor(imzero2)!: migrate the Go widgets to the ADR-0267 contract (M1–M4)
 
-apidiff v0.0.23..HEAD: 57 stable package(s) compared, 31 compatible, 26 incompatible and acknowledged, 0 incompatible and not acknowledged; 19 new since the base
+apidiff v0.0.23..HEAD: 57 stable package(s) compared, 29 compatible, 28 incompatible and acknowledged, 0 incompatible and not acknowledged; 19 new since the base
 apidiff: v0.0.23 declares no Stable package, so no promise was made at it; reporting only
 ```
