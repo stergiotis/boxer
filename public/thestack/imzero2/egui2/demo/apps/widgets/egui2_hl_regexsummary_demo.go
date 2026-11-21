@@ -27,7 +27,7 @@ import (
 // Bus wiring: the gallery host hands a BusI in via BusInit; the demo
 // forwards it to every Renderer so the embedded explorer's CH-backed
 // tabs work end-to-end (extractAll, replaceRegexpAll, multiMatchAllIndices
-// route through ch.local.exec.regex_explorer the same way the standalone
+// route through runtime.ch.local.exec.regex_explorer the same way the standalone
 // app does).
 // =============================================================================
 

@@ -134,7 +134,7 @@ type Services struct {
 	// the persist backend's database. It needs Persist on a live store;
 	// without one the worker is not started.
 	Watchbill bool
-	// ChLocal is ch.local.exec.*: lazily created `clickhouse local` pools
+	// ChLocal is runtime.ch.local.exec.*: lazily created `clickhouse local` pools
 	// (ADR-0028 §SD9).
 	ChLocal bool
 	// AdhocData is the ad-hoc dataset capability (ADR-0240): publish,

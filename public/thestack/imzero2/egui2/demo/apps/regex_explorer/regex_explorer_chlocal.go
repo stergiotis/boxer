@@ -2,7 +2,7 @@ package regex_explorer
 
 // ClickHouse transport: capability-mediated via ADR-0028's
 // chlocalbroker. The regex explorer publishes a request on
-// `ch.local.exec.regex_explorer`; the runtime broker drains a
+// `runtime.ch.local.exec.regex_explorer`; the runtime broker drains a
 // pre-spawned `clickhouse-local` worker's stdout and replies with
 // the Arrow IPC bytes. No subprocess management lives in this
 // package post-M2.
@@ -40,7 +40,7 @@ const chLocalPoolName = "regex_explorer"
 const ChLocalCapPattern = chlocalbroker.SubjectExecPrefix + chLocalPoolName
 
 // executeArrowStreamViaBus publishes the query on
-// ch.local.exec.regex_explorer via the supplied BusI, ingests the
+// runtime.ch.local.exec.regex_explorer via the supplied BusI, ingests the
 // reply bytes as an Arrow IPC stream, and returns the reader + a
 // closer to release the reply. ctx.Deadline (if any) is forwarded to
 // the broker so a cancelled caller doesn't pin a worker.

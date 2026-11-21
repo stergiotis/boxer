@@ -36,7 +36,7 @@ import (
 // Config parameterises an [Engine]. Bus is required.
 type Config struct {
 	// Bus is the caller's bus client. It must hold a SubjectFilter with
-	// CapDirectionPub (or Both) covering `ch.local.exec.<PoolName>`.
+	// CapDirectionPub (or Both) covering `runtime.ch.local.exec.<PoolName>`.
 	Bus app.BusI
 	// PoolName is the chlocal pool to execute on; empty means
 	// [DefaultPoolName].

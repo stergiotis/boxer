@@ -55,7 +55,7 @@ var manifest = app.Manifest{
 		// Replay (ADR-0197 §SD7). This entry names an outbound reach, not a bus
 		// route: nothing publishes on `ch.server.read.*`, and the host mints a
 		// client for it that imztop never uses. The only `ch.` subject family
-		// that is routed is `ch.local.exec.*`, which fronts clickhouse-local
+		// that is routed is `runtime.ch.local.exec.*`, which fronts clickhouse-local
 		// (ADR-0028), not the server holding `boxer.facts`.
 		//
 		// It is declared because it is true — entering replay dials ClickHouse

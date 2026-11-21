@@ -6,7 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
-// wireRequest is the envelope sent on ch.local.exec.<pool>, wire-encoded
+// wireRequest is the envelope sent on runtime.ch.local.exec.<pool>, wire-encoded
 // via buscodec (CBOR canonical). []byte fields ride as CBOR major type 2
 // (byte strings) — no base64 expansion.
 type wireRequest struct {

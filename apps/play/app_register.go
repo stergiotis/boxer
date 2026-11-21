@@ -261,7 +261,7 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		// fs Powerbox — Load .sql button publishes runtime.fs.dialog.read,
 		// then issues runtime.fs.handle.{uuid}.read once the broker mints
 		// the handle. ADR-0026 §SD7.
-		// ch.local.exec.timerangepicker — the from/to param-slot
+		// runtime.ch.local.exec.timerangepicker — the from/to param-slot
 		// widget calls evaluator.Eval to resolve ClickHouse SQL
 		// time expressions to literal bounds; routes through the
 		// chlocalbroker pool per ADR-0028. Absent this cap the

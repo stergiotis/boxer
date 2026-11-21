@@ -506,7 +506,7 @@ where the viewer cannot do WebGL2 or the link needs a constant rate.
 ```text
  ┌─────────────────────────────── the keelson host ────────────────────────────────┐
  │                                                                                 │
- │  ch.local.exec.<pool>   chlocal broker ──▶ pool: pre-spawned clickhouse-local   │
+ │  runtime.ch.local.exec.<pool>   broker ──▶ pool: pre-spawned clickhouse-local   │
  │  (a bus capability)       cache (blake3 of SQL‖FORMAT‖settings, opt-in)         │
  │                                     │ SQL+FORMAT on stdin, close; drain stdout  │
  │  introspection /query ──(chhttp)────┤  one-shot workers: no listener, no reuse, │

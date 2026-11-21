@@ -1,6 +1,6 @@
 // Package chlocalbroker is the runtime's broker for ADR-0028's
-// `ch.local.exec.<pool>` capability surface. It subscribes to
-// `ch.local.exec.>` on the in-proc bus (ADR-0026 §SD5), lazy-creates
+// `runtime.ch.local.exec.<pool>` capability surface. It subscribes to
+// `runtime.ch.local.exec.>` on the in-proc bus (ADR-0026 §SD5), lazy-creates
 // a `chlocalpool.Pool` per pool name, executes the requested SQL on
 // a one-shot worker, drains stdout into a tier-pooled buffer
 // (`valyala/bytebufferpool`), and publishes the bytes back on the
@@ -34,9 +34,9 @@ import (
 // Subject taxonomy this service binds (ADR-0028 §SD1).
 const (
 	// SubjectExecPrefix is the dotted prefix preceding the pool name.
-	SubjectExecPrefix = "ch.local.exec."
+	SubjectExecPrefix = "runtime.ch.local.exec."
 	// SubjectExecAll is the NATS wildcard subscription pattern.
-	SubjectExecAll = "ch.local.exec.>"
+	SubjectExecAll = "runtime.ch.local.exec.>"
 )
 
 // ServiceAppId is the synthetic app identity the broker registers
@@ -72,7 +72,7 @@ type Service struct {
 }
 
 // NewService registers the broker on the given bus and returns the
-// Service handle. The first request to any `ch.local.exec.<pool>`
+// Service handle. The first request to any `runtime.ch.local.exec.<pool>`
 // subject lazily constructs the corresponding pool using poolCfg as
 // the template.
 func NewService(bus *inprocbus.Inst, poolCfg chlocalpool.Config, log zerolog.Logger) (svc *Service, err error) {
@@ -94,7 +94,7 @@ func NewService(bus *inprocbus.Inst, poolCfg chlocalpool.Config, log zerolog.Log
 		{
 			Pattern:   SubjectExecAll,
 			Direction: app.CapDirectionBoth,
-			Reason:    "broker: handle ch.local.exec.<pool> requests",
+			Reason:    "broker: handle runtime.ch.local.exec.<pool> requests",
 		},
 		{
 			Pattern:   inprocbus.InboxPrefix + ">",
@@ -297,7 +297,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 
 	poolName := strings.TrimPrefix(msg.Subject, SubjectExecPrefix)
 	if poolName == msg.Subject || poolName == "" {
-		aud.errMsg = "subject does not match ch.local.exec.<pool>"
+		aud.errMsg = "subject does not match runtime.ch.local.exec.<pool>"
 		inst.sendError(msg.Reply, aud.errMsg, "", 0)
 		return
 	}

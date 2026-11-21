@@ -49,7 +49,7 @@ func init() {
 		Stage:       [2]float32{1200, 720},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
-		Description: "Composite picker: from/to expression fields + Apply + Grafana 7.5 presets. Phase 4 of ADR-0016: evaluator routes through ch.local.exec.timerangepicker (ADR-0028) and the same expression evaluates against two timezones to demonstrate the Tz builder.",
+		Description: "Composite picker: from/to expression fields + Apply + Grafana 7.5 presets. Phase 4 of ADR-0016: evaluator routes through runtime.ch.local.exec.timerangepicker (ADR-0028) and the same expression evaluates against two timezones to demonstrate the Tz builder.",
 		BusInit: func(_ context.Context, _ *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
 			tokyoID, tzErr := timerangepicker.LookupTz("Asia/Tokyo")
 			if tzErr != nil {
@@ -93,7 +93,7 @@ func init() {
 func demoTimeRangePicker(ids *c.WidgetIdStack, st *timeRangePickerDemoState) {
 	for range c.CollapsingHeader(ids.PrepareStr("trp-default"),
 		c.WidgetText().Text("Grafana 7.5 presets + ClickHouse SQL via chlocalbroker").Keep()).DefaultOpen(true).KeepIter() {
-		c.Label("Two pickers, same expressions, different timezones. Apply or click a preset; the evaluator routes through ch.local.exec.timerangepicker and the resolved bounds appear under each picker.").Send()
+		c.Label("Two pickers, same expressions, different timezones. Apply or click a preset; the evaluator routes through runtime.ch.local.exec.timerangepicker and the resolved bounds appear under each picker.").Send()
 		if st.evalErr != nil {
 			c.Label(fmt.Sprintf("evaluator: %v (no bus wired — picker UI works, evaluation disabled)", st.evalErr)).Send()
 		}
@@ -159,7 +159,7 @@ func renderTimeRangePickerInstance(ids *c.WidgetIdStack, st *timeRangePickerDemo
 				inst.lastEvalErr = nil
 			}
 		} else {
-			inst.lastEvalErr = eh.Errorf("evaluator not wired; ch.local.exec broker unavailable")
+			inst.lastEvalErr = eh.Errorf("evaluator not wired; runtime.ch.local.exec broker unavailable")
 		}
 	}
 

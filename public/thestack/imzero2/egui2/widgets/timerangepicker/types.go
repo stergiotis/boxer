@@ -25,7 +25,7 @@ import (
 const rangeDelimiter = "\x1e"
 
 // PoolName is the chlocalbroker pool name the Phase-4 evaluator
-// routes through (ch.local.exec.<PoolName>). Hosts that wire the
+// routes through (runtime.ch.local.exec.<PoolName>). Hosts that wire the
 // picker declare a SubjectFilter against this exact subject in
 // their AppI Manifest, then construct the evaluator with the same
 // string. Lives here, in the widget's canonical package, so

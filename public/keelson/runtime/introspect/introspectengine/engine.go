@@ -58,7 +58,7 @@ type Config struct {
 	// Registry of tables to expose; defaults to introspect.Default.
 	Registry *introspect.Registry
 	// Bus is the caller's bus client, holding a CapDirectionPub (or Both)
-	// SubjectFilter for ch.local.exec.<PoolName>. Required.
+	// SubjectFilter for runtime.ch.local.exec.<PoolName>. Required.
 	Bus app.BusI
 	// PoolName is the chlocal pool; defaults to DefaultPoolName.
 	PoolName string

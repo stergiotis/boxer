@@ -33,7 +33,7 @@ import (
 var ErrEvaluatorUnavailable = errors.New("evaluator: bus unavailable")
 
 // Evaluator routes time-range SQL expressions through ADR-0028's
-// chlocalbroker cap on ch.local.exec.<poolName>. Cheap to construct;
+// chlocalbroker cap on runtime.ch.local.exec.<poolName>. Cheap to construct;
 // safe for concurrent Eval calls (each draws an independent worker
 // from the runtime-owned pool). Close is a no-op kept for API
 // forward-compatibility — the pool lifecycle belongs to the runtime,
@@ -45,7 +45,7 @@ type Evaluator struct {
 
 // NewEvaluator returns an Evaluator bound to the supplied bus client
 // and pool name. The bus client must hold a SubjectFilter with
-// CapDirectionPub matching ch.local.exec.<poolName> (or a wildcard
+// CapDirectionPub matching runtime.ch.local.exec.<poolName> (or a wildcard
 // that covers it). Returns ErrEvaluatorUnavailable on nil bus.
 func NewEvaluator(bus app.BusI, poolName string) (inst *Evaluator, err error) {
 	if bus == nil {

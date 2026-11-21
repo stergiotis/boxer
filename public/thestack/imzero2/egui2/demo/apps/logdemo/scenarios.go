@@ -186,9 +186,9 @@ type authFixture struct {
 }
 
 var authFixtures = []authFixture{
-	{"alice@example.com", "admin", "ch.local.exec", true, 1,
+	{"alice@example.com", "admin", "runtime.ch.local.exec", true, 1,
 		[]byte{0xa3, 0x4f, 0x12, 0xde, 0xad, 0xbe, 0xef, 0x01}},
-	{"bob@example.com", "viewer", "ch.local.exec", false, 3,
+	{"bob@example.com", "viewer", "runtime.ch.local.exec", false, 3,
 		[]byte{0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee}},
 	{"svc-ingest", "service", "factsstore.write_log", true, 1,
 		[]byte{0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13}},

@@ -95,7 +95,7 @@ Subtle distinction from No-results: No-results is a query/filter applied by the 
 
 **Permission-denied.** Shown when the user lacks the capability to view the data. Icon is `fa-lock` ≈ `\u{f023}` tinted `semantic.warning.default`. Headline is "Access denied" or specific to the missing capability ("Requires `admin` role"). Body explains what capability is needed and why. CTAs depend on the auth model.
 
-For ImZero2 apps under [ADR-0026](../../adr/0026-app-runtime-and-capability-subjects.md), permission-denied corresponds to a missing cap-grant in the app's `Manifest.Caps`. The body text can name the missing subject (`ch.local.exec.scratchpad`) directly — operators reading the dashboard recognise the syntax.
+For ImZero2 apps under [ADR-0026](../../adr/0026-app-runtime-and-capability-subjects.md), permission-denied corresponds to a missing cap-grant in the app's `Manifest.Caps`. The body text can name the missing subject (`runtime.ch.local.exec.scratchpad`) directly — operators reading the dashboard recognise the syntax.
 
 **Coming-soon.** Shown in scaffolded panels where the implementation is deliberately deferred. Icon is `fa-wrench` ≈ `\u{f0ad}` or `fa-construction` (alternative) tinted `text.secondary`. Headline is "Coming soon." Body is optional context about why and when. No CTA, or "Learn more" linking to the relevant ADR. Use sparingly — coming-soon panels should rarely ship; prefer hiding the panel entirely until implemented.
 

@@ -142,7 +142,7 @@ type App struct {
 	alloc memory.Allocator
 
 	// bus is the per-instance BusI captured at Mount. All SQL goes
-	// through ch.local.exec.regex_explorer via the broker.
+	// through runtime.ch.local.exec.regex_explorer via the broker.
 	//
 	// Guarded by mu: a host may re-attach a bus between frames
 	// (regexsummary pushes one on every open frame) while query
@@ -204,7 +204,7 @@ const (
 )
 
 // newApp builds one [App] — the unit of per-window state. clickhouse-local
-// is reached via the chlocalbroker subject `ch.local.exec.regex_explorer`;
+// is reached via the chlocalbroker subject `runtime.ch.local.exec.regex_explorer`;
 // no binary path or env var is consulted here. The fresh WidgetIdStack the
 // App carries is the fallback used by tests; AppInstance.Mount (and the
 // demo scenes' BusInit) override it with the host-supplied per-instance
@@ -300,7 +300,7 @@ func (inst *AppInstance) Manifest() (m runtimeapp.Manifest) { m = manifest; retu
 
 // Mount captures the host's BusI and per-instance WidgetIdStack
 // on inst.state. The bus is used by query goroutines to publish on
-// ch.local.exec.<pool> via the chlocalbroker (ADR-0028 §SD9). The
+// runtime.ch.local.exec.<pool> via the chlocalbroker (ADR-0028 §SD9). The
 // ids stack is pre-prepared by the host every frame with a window-
 // unique salt so the renderer can derive widget ids that cannot
 // collide with another app's ids — even when two apps use the same

@@ -68,7 +68,7 @@ func TestSubjectsAndCaps(t *testing.T) {
 	assert.Contains(t, caps[1].Reason, "watchbill_worker")
 	svc := ServiceCaps("introspect")
 	require.Len(t, svc, 3)
-	assert.Equal(t, "ch.local.exec.introspect", svc[2].Pattern)
+	assert.Equal(t, "runtime.ch.local.exec.introspect", svc[2].Pattern)
 }
 
 // sealedTable is a sealed provider as the registry sees one: what an

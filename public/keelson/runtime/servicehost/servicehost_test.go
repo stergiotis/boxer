@@ -370,10 +370,10 @@ func TestUnansweredCaps(t *testing.T) {
 	subs := []inprocbus.SubscriptionInfo{{Pattern: "runtime.fs.dialog.read"}, {Pattern: inprocbus.InboxPrefix + "abc"}}
 	caps := []app.SubjectFilter{
 		{Pattern: "runtime.fs.dialog.read", Direction: app.CapDirectionPub},
-		{Pattern: "ch.local.exec.default", Direction: app.CapDirectionPub},
+		{Pattern: "runtime.ch.local.exec.default", Direction: app.CapDirectionPub},
 		{Pattern: "app.x.event.>", Direction: app.CapDirectionSub},
 	}
-	assert.Equal(t, []string{"ch.local.exec.default"}, UnansweredCaps(subs, caps))
+	assert.Equal(t, []string{"runtime.ch.local.exec.default"}, UnansweredCaps(subs, caps))
 }
 
 func TestSelect_UnsetTouchesNothing(t *testing.T) {

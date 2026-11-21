@@ -208,7 +208,7 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 		assert.NotContains(t, cap.Pattern, fsbroker.HandleSubjectPrefix,
 			"handle caps are granted dynamically, never declared")
 	}
-	assert.Contains(t, patterns, "ch.local.exec."+timerangepicker.PoolName)
+	assert.Contains(t, patterns, "runtime.ch.local.exec."+timerangepicker.PoolName)
 	assert.Contains(t, patterns, windowopen.OpenSubject)
 	assert.Contains(t, patterns, adhocdata.SubjectPublish)
 	assert.Contains(t, patterns, adhocdata.SubjectBundleResolve)

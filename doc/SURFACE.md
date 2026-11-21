@@ -818,7 +818,7 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 
 ### keelson
 
-- `public/keelson/data/chlocalbroker` — Package chlocalbroker is the runtime's broker for ADR-0028's `ch.local.exec.<pool>` capability surface.
+- `public/keelson/data/chlocalbroker` — Package chlocalbroker is the runtime's broker for ADR-0028's `runtime.ch.local.exec.<pool>` capability surface.
 - `public/keelson/data/chlocalpool` — Package chlocalpool implements ADR-0028's pool of pre-spawned `clickhouse-local` worker processes.
 - `public/keelson/data/storeexec` — Package storeexec adapts github.com/stergiotis/boxer/public/db/clickhouse/chclient to github.com/stergiotis/boxer/public/storage/recordstore.ExecutorI, the seam a generated record store (ADR-0100) uses to reach ClickHouse.
 - `public/keelson/designsystem/colors/apca` — Package apca implements the Accessible Perceptual Contrast Algorithm (APCA) per Andrew Somers' Myndex SAPC-APCA Beta 0.1.9 reference.

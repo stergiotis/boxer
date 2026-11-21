@@ -80,10 +80,10 @@ func (inst *ExecReply) Err() (err error) {
 	return
 }
 
-// ExecOnPool publishes a request on `ch.local.exec.<poolName>` via
+// ExecOnPool publishes a request on `runtime.ch.local.exec.<poolName>` via
 // the given bus and returns the decoded reply. The caller's bus
 // client must hold a SubjectFilter with CapDirectionPub (or Both)
-// matching `ch.local.exec.<poolName>` (or a wildcard that covers it).
+// matching `runtime.ch.local.exec.<poolName>` (or a wildcard that covers it).
 //
 // ctx is honoured two ways: (1) if it has a deadline, the deadline is
 // encoded into the wire request, and the broker kills the worker when

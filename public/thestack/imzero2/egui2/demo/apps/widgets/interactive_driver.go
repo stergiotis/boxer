@@ -133,7 +133,7 @@ type App struct {
 	// bus is the per-instance BusI captured at Mount. Demos that opt
 	// into [registry.Demo.BusInit] receive this pointer for capability
 	// publishes (currently: the timerangepicker demo's evaluator on
-	// ch.local.exec.timerangepicker, ADR-0016 Phase 4).
+	// runtime.ch.local.exec.timerangepicker, ADR-0016 Phase 4).
 	bus runtimeapp.BusI
 
 	// demoState carries per-demo, per-window state structs returned

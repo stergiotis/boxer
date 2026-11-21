@@ -16,7 +16,7 @@ func TestClassify_Subjects(t *testing.T) {
 		"runtime.facts.read":              CapFacts,
 		"runtime.heartbeat.tick":          CapRun,
 		"runtime.run.start":               CapRun,
-		"ch.local.exec.regex_explorer":    "",
+		"runtime.ch.local.exec.regex_explorer":    "",
 		"":                                "",
 	}
 	for subj, want := range cases {
@@ -30,7 +30,7 @@ func TestCounters_Record_PerCap(t *testing.T) {
 	c.Record(audit.AuditRecord{Subject: "runtime.fs.dialog.read"})
 	c.Record(audit.AuditRecord{Subject: "runtime.fs.handle.abc.read"})
 	c.Record(audit.AuditRecord{Subject: "runtime.persist.play.x.set"})
-	c.Record(audit.AuditRecord{Subject: "ch.local.exec.foo"}) // → other
+	c.Record(audit.AuditRecord{Subject: "runtime.ch.local.exec.foo"}) // → other
 
 	assert.EqualValues(t, 2, c.Count(CapFs))
 	assert.EqualValues(t, 1, c.Count(CapPersist))
