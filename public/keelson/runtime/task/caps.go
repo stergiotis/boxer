@@ -3,7 +3,7 @@ package task
 import "github.com/stergiotis/boxer/public/keelson/runtime/app"
 
 // ProducerCaps returns the SubjectFilter set an app needs to spawn tasks.
-// task.> with Both direction covers publishing created/progress/done/error
+// runtime.task.> with Both direction covers publishing created/progress/done/error
 // and subscribing to the per-task cancel inbox. Add to Manifest.Caps.
 func ProducerCaps() (caps []app.SubjectFilter) {
 	caps = []app.SubjectFilter{

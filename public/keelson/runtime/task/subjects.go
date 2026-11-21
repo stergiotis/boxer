@@ -4,12 +4,12 @@ import "strings"
 
 // Subject taxonomy (ADR-0038). Flat per-task layout:
 //
-//	task.<id>.<verb>
+//	runtime.task.<id>.<verb>
 //
 // Producers publish created/progress/done/error; consumers publish cancel;
-// observers subscribe task.> with one wildcard.
+// observers subscribe runtime.task.> with one wildcard.
 const (
-	SubjectPrefix = "task."
+	SubjectPrefix = "runtime.task."
 
 	VerbCreated  = "created"
 	VerbProgress = "progress"
@@ -19,12 +19,12 @@ const (
 
 	// PatternAll matches every task verb across every task id. Used by
 	// WatchAll observers and by the M3 supervisor.
-	PatternAll = "task.>"
+	PatternAll = "runtime.task.>"
 
 	// PatternCancelAll matches the cancel verb across every task id. Used
 	// by callers that want to issue cancels but never produce or observe
 	// progress.
-	PatternCancelAll = "task.*.cancel"
+	PatternCancelAll = "runtime.task.*.cancel"
 
 	// SubjectListInflight is the request/reply subject the M3 supervisor
 	// serves. A consumer publishes a Request on this subject (empty
@@ -32,7 +32,7 @@ const (
 	// reply inbox. The constant lives on the task package — not on the
 	// supervisor — so consumers can query the snapshot without taking
 	// a build-time dependency on the supervisor package.
-	SubjectListInflight = "task.list.inflight"
+	SubjectListInflight = "runtime.task.list.inflight"
 )
 
 // SubjectCreated returns the subject a producer publishes once per task on
@@ -69,9 +69,9 @@ func SubjectError(id TaskIdT) (subject string) {
 	return
 }
 
-// ParseSubject splits a task.<id>.<verb> subject into its id and verb
+// ParseSubject splits a runtime.task.<id>.<verb> subject into its id and verb
 // components. Returns ok=false for subjects that do not match the
-// taxonomy. Used by WatchAll to demux a single task.> subscription into
+// taxonomy. Used by WatchAll to demux a single runtime.task.> subscription into
 // per-verb observer callbacks.
 func ParseSubject(subject string) (id TaskIdT, verb string, ok bool) {
 	if !strings.HasPrefix(subject, SubjectPrefix) {

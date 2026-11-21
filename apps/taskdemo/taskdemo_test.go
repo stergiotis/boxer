@@ -54,7 +54,7 @@ func waitFor(predicate func() bool) (ok bool) {
 func TestManifest_DeclaresProducerCaps(t *testing.T) {
 	require.Len(t, manifest.Caps, 1)
 	cap := manifest.Caps[0]
-	assert.Equal(t, "task.>", cap.Pattern)
+	assert.Equal(t, "runtime.task.>", cap.Pattern)
 	assert.Equal(t, app.CapDirectionBoth, cap.Direction)
 }
 

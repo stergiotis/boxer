@@ -5,14 +5,14 @@
 //
 // What the supervisor does:
 //
-//   - Subscribes task.> via task.WatchAll and writes one factsstore
+//   - Subscribes runtime.task.> via task.WatchAll and writes one factsstore
 //     LogRow per terminal verb (created / done / error / cancel) plus
 //     one row per abandoned-by-heartbeat detection. Progress events
 //     are observed but not persisted (too high-frequency for an audit
 //     trail).
 //   - Maintains an in-memory snapshot of currently in-flight tasks
 //     and serves it on a request/reply subject (default
-//     "task.list.inflight"). UI status panels and supervisors of
+//     "runtime.task.list.inflight"). UI status panels and supervisors of
 //     supervisors (M4 NATS cluster bridges) query this without
 //     reconstructing from history.
 //   - Runs a heartbeat watchdog: an in-flight task whose last

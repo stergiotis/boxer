@@ -140,7 +140,7 @@ func TestSpawnBuildTaskCancelStopsTheBuild(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, h)
 	time.Sleep(60 * time.Millisecond)
-	tasks.handle.cancel() // as a task.<id>.cancel from the bus would
+	tasks.handle.cancel() // as a runtime.task.<id>.cancel from the bus would
 
 	deadline := time.Now().Add(5 * time.Second)
 	for tr.BuildProgress().Err == nil && time.Now().Before(deadline) {

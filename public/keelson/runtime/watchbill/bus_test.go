@@ -23,7 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 )
 
-// taskRecorder counts what an observer of task.> sees.
+// taskRecorder counts what an observer of runtime.task.> sees.
 type taskRecorder struct {
 	created, finished, errored atomic.Int32
 }

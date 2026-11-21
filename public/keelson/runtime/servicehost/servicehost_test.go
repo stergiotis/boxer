@@ -358,7 +358,7 @@ func TestPatternsOverlap(t *testing.T) {
 		{"fs.>", "runtime.fs.dialog.read", true},
 		{"fs.*.read", "runtime.fs.dialog.>", true},
 		{"runtime.fs.dialog", "runtime.fs.dialog.read", false},
-		{"task.>", "task.*.cancel", true},
+		{"runtime.task.>", "runtime.task.*.cancel", true},
 		{"", "fs.>", false},
 	}
 	for _, c := range cases {

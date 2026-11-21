@@ -187,7 +187,7 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// runtime.llm.complete and keelson.query.sql_passes left with the tab
 	// (ADR-0254, Updates 2026-10-07). runtime.adhoc.bundle.publish for
 	// publish_result and the Publish menu, runtime.adhoc.read for the column values
-	// list_bundles shows (ADR-0288 §SD4, §SD5). task.> for the query runs,
+	// list_bundles shows (ADR-0288 §SD4, §SD5). runtime.task.> for the query runs,
 	// write runs, projector, vector-field builds and publishes the window
 	// starts, which run as keelson tasks owned by it. externaledit.offer,
 	// .wait and .close for the Editor's buffer handed to the host's editor

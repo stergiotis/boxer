@@ -1,5 +1,5 @@
 // Package taskdone is the leeway-coded wire form of the
-// terminal-success payload published on `task.<id>.done`. Fifth and
+// terminal-success payload published on `runtime.task.<id>.done`. Fifth and
 // final broker DTO from the task package to migrate off the buscodec
 // fxamacker-cbor default onto the ADR-0042 SoA codec.
 //
@@ -11,7 +11,7 @@
 //
 // Vocabulary:
 //
-//   - [vdd.MembTaskId] — shared subject identifier across all task.*
+//   - [vdd.MembTaskId] — shared subject identifier across all runtime.task.*
 //     wire DTOs.
 //   - [vdd.MembTaskResult] — narrow, blob section. The semantic
 //     ("application-defined success payload") is task-specific, so
@@ -33,7 +33,7 @@ package taskdone
 import "time"
 
 // TaskDone is the wire payload published once at task success on
-// subject `task.<id>.done`. Result is opaque on the wire — observers
+// subject `runtime.task.<id>.done`. Result is opaque on the wire — observers
 // decode by the originating TaskCreated.Kind.
 type TaskDone struct {
 	_ struct{} `kind:"taskDone"`

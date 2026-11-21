@@ -23,7 +23,7 @@ look for when the contract needs to evolve.
 The M1 producer package handed apps a `task.HandleI`. The M2 demo
 showed an in-process consumer doing its own bookkeeping. The
 supervisor is the same observer pattern hoisted to the runtime: a
-host-side service that subscribes to `task.>`, persists every
+host-side service that subscribes to `runtime.task.>`, persists every
 terminal-grade verb (created, done, error, cancel, abandoned) into
 `boxer.facts`, and exposes the current in-flight set on a
 request/reply subject so any consumer — UI panel, M4 NATS bridge, the
@@ -61,7 +61,7 @@ Why not a dedicated `WriteTaskEvent` + `TaskEventRow`?
 
 The structured fields preserve the high-cardinality data
 (`task_id` as string, `error_chain` as the raw `eh.MarshalError` bytes
-on `task.error` rows) so a later projection pass can hydrate a typed
+on `runtime.task.error` rows) so a later projection pass can hydrate a typed
 row without re-running tasks.
 
 The `error_chain` field stays as raw bytes deliberately — the
@@ -94,8 +94,8 @@ back to `InflightStateRunning`. That is in-memory work, no IO.
 
 ## The cancellation lifecycle has two distinct events
 
-The bus carries both `task.<id>.cancel` (the request) and
-`task.<id>.done` or `task.<id>.error` (the producer's terminal). The
+The bus carries both `runtime.task.<id>.cancel` (the request) and
+`runtime.task.<id>.done` or `runtime.task.<id>.error` (the producer's terminal). The
 M3 supervisor writes a row for the cancel *and* a row for the
 subsequent terminal. There is no relabeling of "done after cancel was
 requested" into "cancelled-as-terminal" — that promotion lives in the
@@ -121,7 +121,7 @@ producer has gone silent past the threshold*. Each in-flight entry's
 Three deliberate choices in this design:
 
 1. **No synthetic bus event.** Abandoned-detection writes a
-   `task.abandoned` *audit row* but does not publish a `task.<id>.error`
+   `runtime.task.abandoned` *audit row* but does not publish a `runtime.task.<id>.error`
    or similar on the bus. The producer may yet recover — and indeed
    `OnProgress` clears the abandoned label back to running. Publishing
    a fake terminal would race the real terminal that might still
@@ -142,7 +142,7 @@ Three deliberate choices in this design:
 A UI consuming the supervisor could read the in-flight map via a Go
 API call (`supervisor.InflightSnapshot()`). The supervisor exposes
 that for in-process consumers, but **also** offers the same data over
-a bus request/reply (`task.SubjectListInflight = "task.list.inflight"`
+a bus request/reply (`task.SubjectListInflight = "runtime.task.list.inflight"`
 — the constant lives on the `task` package so consumers do not need to
 import `supervisor`). Why both?
 
@@ -160,7 +160,7 @@ import `supervisor`). Why both?
 
 The Go method and the bus reply share the same internal snapshot
 builder; they cannot drift. The Go API exposes the full payload
-fields (`Created`, `Progress` as `task.*` structs); the bus reply
+fields (`Created`, `Progress` as `runtime.task.*` structs); the bus reply
 exposes projected flat fields (`Current`, `Total`, `Unit`, `EtaMs`,
 `State` as string) for transport compactness and locale-independent
 re-humanization on the consumer side.

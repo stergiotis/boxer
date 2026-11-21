@@ -24,12 +24,12 @@ import (
 // publishing (idempotent), and Ctx().Done() is closed.
 type HandleI interface {
 	// Id returns the task identifier — same value as appears in subject
-	// paths task.<id>.<verb>.
+	// paths runtime.task.<id>.<verb>.
 	Id() (id TaskIdT)
 
 	// Ctx returns a context.Context that cancels when:
 	//   - the parent context passed to Spawn cancels;
-	//   - a task.<id>.cancel message arrives on the bus;
+	//   - a runtime.task.<id>.cancel message arrives on the bus;
 	//   - the handle reaches a terminal state (Done/Error).
 	// Worker loops poll Ctx().Done() (or call Cancelled() as a
 	// convenience) and exit promptly.
@@ -317,7 +317,7 @@ func (inst *Handle) finishLocked() {
 
 // cancelExternal is invoked by the Spawn-time monitor goroutine when the
 // parent context or the host mount-cancel channel fires before the producer
-// reached a terminal verb. It does what an inbound task.<id>.cancel does —
+// reached a terminal verb. It does what an inbound runtime.task.<id>.cancel does —
 // cancels Ctx so the worker sees Cancelled() — and announces the
 // cancellation on the bus with the same verb, best-effort, so observers and
 // the supervisor's audit trail see it; the worker's own Done/Error then

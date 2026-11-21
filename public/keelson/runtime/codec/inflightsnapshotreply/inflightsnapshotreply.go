@@ -1,5 +1,5 @@
 // Package inflightsnapshotreply is the leeway-coded wire form of the
-// supervisor's list-inflight reply payload. Final task.* DTO in the
+// supervisor's list-inflight reply payload. Final runtime.task.* DTO in the
 // broker-DTO migration cohort.
 //
 // First **list-of-structs** migration. The leeway codec is

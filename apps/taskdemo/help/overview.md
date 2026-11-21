@@ -22,11 +22,11 @@ every observer of the bus like any other app's, and, while in flight, in
 ## What a task is here
 
 A task is one unit of long-running, cancellable, observable work. The
-producer publishes it on the bus under `task.<id>.<verb>` with the verbs
+producer publishes it on the bus under `runtime.task.<id>.<verb>` with the verbs
 `created`, `progress`, `cancel`, `done` and `error`; the owning app's id
-rides in the payload, so one observer subscription on `task.>` sees every
+rides in the payload, so one observer subscription on `runtime.task.>` sees every
 producer's tasks. The task's id is a 21-character nanoid, not time-sortable.
-The window declares the producer capability (`task.>` in both directions),
+The window declares the producer capability (`runtime.task.>` in both directions),
 which covers publishing the task's events and subscribing to its cancel
 inbox and to the monitor's watch.
 
@@ -67,7 +67,7 @@ task already running.
 The monitor is the shared `taskmonitor` widget, open by default here. The
 **In-flight (n)** pane has one row per running task with its progress bar
 and, for a cancellable task, a cancel button; **History (n)** keeps the
-finished ones, done or errored. A cancel publishes `task.<id>.cancel`; the
+finished ones, done or errored. A cancel publishes `runtime.task.<id>.cancel`; the
 worker sees the handle cancelled on its next tick and ends the task with
 `Done` and no result, and the monitor, which saw the cancel first, lists it
 in the history as cancelled rather than done.

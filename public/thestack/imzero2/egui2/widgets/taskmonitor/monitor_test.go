@@ -32,8 +32,8 @@ func newBusFixture(t *testing.T) (f *busFixture) {
 	bus := inprocbus.NewInst(zerolog.Nop())
 	bus.SetRequestTimeout(2 * time.Second)
 	producer := bus.NewClient("test.producer", task.ProducerCaps())
-	// Monitor consumer needs Sub on task.> + Pub on task.*.cancel (for
-	// the Cancel button) + Pub on task.list.inflight (for the optional
+	// Monitor consumer needs Sub on runtime.task.> + Pub on runtime.task.*.cancel (for
+	// the Cancel button) + Pub on runtime.task.list.inflight (for the optional
 	// seed; not exercised here but documented for parity).
 	consumerCaps := append([]app.SubjectFilter{}, task.ObserverCaps()...)
 	consumerCaps = append(consumerCaps, task.CancelerCaps()...)

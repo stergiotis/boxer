@@ -1,12 +1,12 @@
 // Package taskcancel is the leeway-coded wire form of the
-// cancellation request published on `task.<id>.cancel`. Third broker
+// cancellation request published on `runtime.task.<id>.cancel`. Third broker
 // DTO to migrate off the buscodec fxamacker-cbor default onto the
 // ADR-0042 SoA codec (after [keelson/runtime/codec/taskprogress]
 // and [keelson/runtime/codec/taskcreated]).
 //
 // Vocabulary reuse:
 //
-//   - [vdd.MembTaskId] — shared subject identifier across all task.*
+//   - [vdd.MembTaskId] — shared subject identifier across all runtime.task.*
 //     wire DTOs.
 //   - [vdd.MembReason] — shared free-text rationale column; will be
 //     reused by TaskError and future audit DTOs that carry a
@@ -31,7 +31,7 @@ package taskcancel
 import "time"
 
 // TaskCancel is the wire payload a consumer publishes on
-// `task.<id>.cancel`. The producer's handle subscribes to this and
+// `runtime.task.<id>.cancel`. The producer's handle subscribes to this and
 // cancels its internal context when one arrives.
 type TaskCancel struct {
 	_ struct{} `kind:"taskCancel"`

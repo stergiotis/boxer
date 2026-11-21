@@ -66,7 +66,7 @@ func TestManifestHoldsClientAndTaskCaps(t *testing.T) {
 		patterns = append(patterns, cp.Pattern)
 	}
 	assert.Contains(t, patterns, watchbill.SubjectJobAll)
-	assert.Contains(t, patterns, "task.>")
+	assert.Contains(t, patterns, "runtime.task.>")
 	assert.Equal(t, app.KindDemo, manifest.Kind)
 	h, ok := watchbill.DefaultRegistry.Lookup(KindSleep)
 	require.True(t, ok, "the handler registers at init")

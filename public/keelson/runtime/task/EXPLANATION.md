@@ -60,9 +60,9 @@ handle observation.
 
 ## Subject layout: flat, not scoped
 
-Subjects are `task.<id>.<verb>` with no app-id prefix. Two reasons:
+Subjects are `runtime.task.<id>.<verb>` with no app-id prefix. Two reasons:
 
-1. **Observer simplicity.** A single `task.>` subscription fans out
+1. **Observer simplicity.** A single `runtime.task.>` subscription fans out
    across every producer in the process (or cluster). Scoped subjects
    (`app.<owner>.task.<id>.<verb>`) would force observers to subscribe
    `app.*.task.>` and demux an extra wildcard hop.
@@ -86,7 +86,7 @@ A task can be cancelled in three ways:
 1. **The parent context cancels.** The caller's `context.Context`
    passed to `Spawn` propagates: when the parent fires, the handle's
    internal context fires too (it is a `context.WithCancel(parent)`).
-2. **A `task.<id>.cancel` message arrives.** During `Spawn`, the
+2. **A `runtime.task.<id>.cancel` message arrives.** During `Spawn`, the
    handle subscribes to its own cancel subject; the subscription's
    handler calls the internal `cancel()` function.
 3. **The handle reaches a terminal state.** Calling `Done` or
@@ -104,7 +104,7 @@ honour a bus-cancel, by design.
 
 The cancel subscription is set up *before* `TaskCreated` is
 published. This matters because the in-proc bus dispatches synchronously
-inside `Publish` — if an observer subscribed to `task.>` reacts to
+inside `Publish` — if an observer subscribed to `runtime.task.>` reacts to
 `TaskCreated` by immediately publishing a cancel, the handler runs
 before `Spawn` returns. With the subscription pre-installed, the cancel
 correctly fires the handle's context; without it, the cancel would
@@ -180,7 +180,7 @@ shows.
 `chlocalpool` (ADR-0028) is a domain-specific *execution* pool for
 clickhouse-local subprocess workers. The task primitive is a *coordination
 contract* for arbitrary work. They compose: a chlocal worker can
-report its progress on `task.>` while running inside the pool. The
+report its progress on `runtime.task.>` while running inside the pool. The
 pool tracks subprocess lifecycle; the task tracks user-visible work.
 
 If you find yourself wanting "a goroutine pool with progress and
@@ -194,7 +194,7 @@ publish task lifecycle events on the side.
 The package will be exercised in M4 against a NATS-backed `BusI`.
 The properties the design relies on:
 
-- **Subject patterns are NATS-shaped.** `task.<id>.<verb>` and the
+- **Subject patterns are NATS-shaped.** `runtime.task.<id>.<verb>` and the
   `>` / `*` wildcards in `PatternAll` / `PatternCancelAll`
   translate verbatim.
 - **Synchronous in-handler publish is not assumed.** The cancel

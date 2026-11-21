@@ -1,5 +1,5 @@
 // Package taskerror is the leeway-coded wire form of the
-// terminal-failure payload published on `task.<id>.error`. Fourth
+// terminal-failure payload published on `runtime.task.<id>.error`. Fourth
 // broker DTO to migrate off the buscodec fxamacker-cbor default onto
 // the ADR-0042 SoA codec.
 //
@@ -33,7 +33,7 @@ package taskerror
 import "time"
 
 // TaskError is the wire payload published once at task failure on
-// subject `task.<id>.error`. ErrorText carries the producer's
+// subject `runtime.task.<id>.error`. ErrorText carries the producer's
 // FormatErrorWithStackS rendering of the failure (multi-line text);
 // observers render it directly via the errorview widget.
 type TaskError struct {

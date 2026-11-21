@@ -8,7 +8,7 @@
 //
 // Vocabulary:
 //
-//   - [vdd.MembAppId] — shared with the task.* / grant DTOs; here the
+//   - [vdd.MembAppId] — shared with the runtime.task.* / grant DTOs; here the
 //     app the launch targets. The caller's identity is deliberately NOT
 //     a payload field — the host attributes it from the bus envelope
 //     (Msg.Sender) the way capbroker attributes grant requesters.

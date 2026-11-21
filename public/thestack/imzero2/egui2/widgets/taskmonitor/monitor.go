@@ -41,7 +41,7 @@ type Options struct {
 	DefaultOpen bool
 
 	// SeedFromSupervisor causes Start to issue a single
-	// task.list.inflight Request through the api to populate the
+	// runtime.task.list.inflight Request through the api to populate the
 	// in-flight map before subscribing. When false (default), the
 	// widget starts empty and fills as new task.created events
 	// arrive. Set true when attaching to a long-running runtime so

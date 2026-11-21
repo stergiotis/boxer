@@ -21,7 +21,7 @@ const nanoidLen = 21
 // SpawnOpts configures a new task. All fields are optional except Kind,
 // which is the schema-key observers dispatch on. Title defaults to Kind.
 // Id is auto-generated as a nanoid when empty.
-// Reasons the Spawn-time monitor puts on the task.<id>.cancel it publishes
+// Reasons the Spawn-time monitor puts on the runtime.task.<id>.cancel it publishes
 // when cancellation arrives from outside the bus (ADR-0188): the parent
 // context handed to Spawn was cancelled, or the host released the mount —
 // the window closed — and cascaded through MountContextI.Cancel().
@@ -87,10 +87,10 @@ type SpawnOpts struct {
 // Spawn registers a new task and returns a HandleI for the producer side.
 // The supplied bus is used to:
 //
-//   - publish task.<id>.created once now;
-//   - publish task.<id>.progress as the handle reports;
-//   - publish task.<id>.done or task.<id>.error on terminal;
-//   - subscribe to task.<id>.cancel for the lifetime of the handle.
+//   - publish runtime.task.<id>.created once now;
+//   - publish runtime.task.<id>.progress as the handle reports;
+//   - publish runtime.task.<id>.done or runtime.task.<id>.error on terminal;
+//   - subscribe to runtime.task.<id>.cancel for the lifetime of the handle.
 //
 // The handle's Ctx() is derived from parent and cancels on parent-cancel,
 // bus-cancel, or Done/Error.

@@ -33,9 +33,9 @@ func TestSubjectFormatters_RoundTripThroughParse(t *testing.T) {
 func TestParseSubject_RejectsMalformed(t *testing.T) {
 	cases := []string{
 		"",
-		"task.",
-		"task.id",
-		"task.id.",
+		"runtime.task.",
+		"runtime.task.id",
+		"runtime.task.id.",
 		"runtime.fs.dialog.read",
 		"taskid.verb",
 		"task..verb",
@@ -49,9 +49,9 @@ func TestParseSubject_RejectsMalformed(t *testing.T) {
 }
 
 func TestPatternAll_CoversAllVerbs(t *testing.T) {
-	// PatternAll is task.> — the > wildcard matches one or more tokens.
+	// PatternAll is runtime.task.> — the > wildcard matches one or more tokens.
 	// This test documents the contract; if the prefix or wildcard
 	// changes, downstream observers break.
-	assert.Equal(t, "task.>", PatternAll)
-	assert.Equal(t, "task.*.cancel", PatternCancelAll)
+	assert.Equal(t, "runtime.task.>", PatternAll)
+	assert.Equal(t, "runtime.task.*.cancel", PatternCancelAll)
 }

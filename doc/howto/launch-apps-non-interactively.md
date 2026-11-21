@@ -214,10 +214,10 @@ q "SELECT 'task' AS effect, concat(kind, ' ', task_id, ' [', state, ']') AS what
 Before the close:
 
 ```
-subscription │ task.>
+subscription │ runtime.task.>
 subscription │ task.5qZknmZb2wP82MOAB1OBX.cancel
 task         │ demo.steps 5qZknmZb2wP82MOAB1OBX [running]
-cap          │ task.> declared=true
+cap          │ runtime.task.> declared=true
 ```
 
 After it: no rows — the host released the subscription the app never

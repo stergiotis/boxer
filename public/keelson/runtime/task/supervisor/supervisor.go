@@ -122,7 +122,7 @@ func New(bus app.BusI, facts factsstore.FactsStoreI, log zerolog.Logger, opts Op
 	return
 }
 
-// Start subscribes to task.> and listSubject, then launches the
+// Start subscribes to runtime.task.> and listSubject, then launches the
 // heartbeat watchdog goroutine. Idempotent: a second call returns an
 // error without restarting. Bus errors during subscribe roll back any
 // partial state. ctx is the supervisor's lifetime: the audit rows are

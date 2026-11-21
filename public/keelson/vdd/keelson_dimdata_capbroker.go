@@ -18,7 +18,7 @@ import (
 // (capbroker.GrantRequest) is unchanged.
 var (
 	// MembCapFilterPattern is the NATS-style subject pattern from
-	// app.SubjectFilter.Pattern (e.g. "task.*.cancel"). String section
+	// app.SubjectFilter.Pattern (e.g. "runtime.task.*.cancel"). String section
 	// because patterns are open-cardinality.
 	MembCapFilterPattern = KeelsonHrNkRegistry.MustBegin("capFilterPattern", 8).
 				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()

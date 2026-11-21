@@ -13,7 +13,7 @@ func sampleRequest() grantrequest.GrantRequest {
 		FactId:          7,
 		At:              time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		AppId:           "test.app",
-		FilterPattern:   "task.*.cancel",
+		FilterPattern:   "runtime.task.*.cancel",
 		FilterReason:    "user clicked allow",
 		FilterDirection: "pub+sub",
 		FilterSticky:    true,

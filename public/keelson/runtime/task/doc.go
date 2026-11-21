@@ -21,17 +21,17 @@
 // The handle owns:
 //
 //   - A context.Context derived from the caller's parent, cancelled when
-//     either parent cancels OR a task.<id>.cancel message arrives OR the
+//     either parent cancels OR a runtime.task.<id>.cancel message arrives OR the
 //     handle reaches a terminal state (Done/Error).
 //   - An emission gate: Report is throttled by the humanized form of the
 //     progress (e.g., "47% · 2m12s left") — a publish happens only when
 //     the visible string would change, plus a 1 Hz heartbeat for
 //     indeterminate-mode tasks.
-//   - A cancel subscription on task.<id>.cancel that cancels the
+//   - A cancel subscription on runtime.task.<id>.cancel that cancels the
 //     internal context.
 //
 // Observers watch via WatchAll(bus, observer). The wire is canonical CBOR
-// through buscodec; subjects are flat: task.<id>.<verb> with
+// through buscodec; subjects are flat: runtime.task.<id>.<verb> with
 // verbs created | progress | cancel | done | error.
 //
 // See ADR-0038 (background task primitive) for the rationale and

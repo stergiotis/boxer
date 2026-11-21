@@ -167,7 +167,7 @@ func classify(subject string) (capId CapId) {
 		capId = CapAgent
 	case isOperationSubject(subject):
 		capId = CapAgent
-	case strings.HasPrefix(subject, "task."):
+	case strings.HasPrefix(subject, "runtime.task."):
 		capId = CapTask
 	case strings.HasPrefix(subject, "watchbill."):
 		capId = CapWatchbill

@@ -1,12 +1,12 @@
 // Package taskprogress is the leeway-coded wire form of the periodic
-// progress payload published on `task.<id>.progress`. It is the first
+// progress payload published on `runtime.task.<id>.progress`. It is the first
 // broker DTO to migrate off the buscodec default (fxamacker-cbor)
 // onto the ADR-0042 SoA codec.
 //
 // Vocabulary split:
 //   - Shared (cross-DTO) memberships [vdd.MembTaskId], [vdd.MembNote] —
 //     defined once in keelson/vdd/keelson_dimdata_shared.go so future
-//     task.* wire DTOs (TaskCreated/Done/Error/Cancel) can reuse the
+//     runtime.task.* wire DTOs (TaskCreated/Done/Error/Cancel) can reuse the
 //     same vocabulary entries.
 //   - Narrow (progress-specific) memberships in
 //     keelson/vdd/keelson_dimdata_taskprogress.go.
@@ -30,7 +30,7 @@ package taskprogress
 import "time"
 
 // TaskProgress is the periodic progress payload broadcast by the
-// task producer on subject `task.<id>.progress`. The estimator's
+// task producer on subject `runtime.task.<id>.progress`. The estimator's
 // humanized-change gate (see keelson/runtime/task/handle.go) decides
 // when to emit; this struct carries the raw numbers + derived
 // throughput/ETA so each observer humanizes per its own locale/font.
@@ -53,7 +53,7 @@ type TaskProgress struct {
 
 	// TaskId is the per-task identifier (a nanoid by default; see
 	// task.TaskIdT). Carried as a string-section column so future
-	// task.* DTOs can share the membership and join on this column.
+	// runtime.task.* DTOs can share the membership and join on this column.
 	TaskId string `lw:"taskId,stringArray"`
 
 	// Current is the work-units-completed counter at the At timestamp.

@@ -529,7 +529,7 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 	taskSupBus := rt.Bus.NewClient(tasksupervisor.AppId, tasksupervisor.Caps())
 	taskSup := tasksupervisor.New(taskSupBus, rt.Facts, logger, tasksupervisor.Opts{})
 	if startErr := taskSup.Start(ctx); startErr != nil {
-		logger.Warn().Err(startErr).Msg("task supervisor: start failed; task.* observable but un-audited")
+		logger.Warn().Err(startErr).Msg("task supervisor: start failed; runtime.task.* observable but un-audited")
 	} else {
 		rt.Tasks = taskSup
 		rt.onClose(func() { _ = taskSup.Stop() })

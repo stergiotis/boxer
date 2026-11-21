@@ -8,8 +8,8 @@ import (
 
 // Caps returns the SubjectFilter set the supervisor's bus client needs:
 //
-//   - task.> Sub                  — observe lifecycle for audit + inflight
-//   - task.list.inflight Sub      — receive list-inflight requests
+//   - runtime.task.> Sub                  — observe lifecycle for audit + inflight
+//   - runtime.task.list.inflight Sub      — receive list-inflight requests
 //   - _INBOX.> Pub                — reply on consumer inboxes
 //
 // Same shape as persist/fsbroker — services need _INBOX.> publish to

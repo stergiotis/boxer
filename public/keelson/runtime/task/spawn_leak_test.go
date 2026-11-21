@@ -109,7 +109,7 @@ func leakedGoroutinesCreatedBy(t *testing.T, createdBy string) (out []string) {
 // TestSpawn_ParentCancelIsAnnouncedAndWorkerTerminates verifies the
 // complementary path (ADR-0188): when the parent context cancels before a
 // terminal verb, the handle's Ctx cancels, the cancellation is announced on
-// the bus as a task.<id>.cancel carrying CancelReasonParent, and the
+// the bus as a runtime.task.<id>.cancel carrying CancelReasonParent, and the
 // worker's own Done still publishes the terminal — observers see cancel,
 // then done, instead of a task that silently vanished into "running".
 func TestSpawn_ParentCancelIsAnnouncedAndWorkerTerminates(t *testing.T) {

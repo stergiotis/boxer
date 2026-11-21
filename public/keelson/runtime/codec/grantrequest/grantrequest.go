@@ -15,7 +15,7 @@
 //
 // Vocabulary:
 //
-//   - [vdd.MembAppId] — shared with task.* DTOs.
+//   - [vdd.MembAppId] — shared with runtime.task.* DTOs.
 //   - [vdd.MembReason] — shared with TaskCancel / TaskError.
 //   - [vdd.MembCapFilterPattern] / [vdd.MembCapDirection] /
 //     [vdd.MembCapFilterSticky] — narrow, the flattened SubjectFilter

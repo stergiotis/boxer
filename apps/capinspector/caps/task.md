@@ -5,11 +5,11 @@ status: draft
 ---
 
 > **Status: draft — pre-human-review.** Rendered by the capability
-> inspector for the task.* cap. Refine as the M4 task monitor widget
+> inspector for the runtime.task.* cap. Refine as the M4 task monitor widget
 > lands and a "task:supervisor-on" segment becomes a value of the
 > status readout.
 
-# task.* — background task primitive
+# runtime.task.* — background task primitive
 
 [ADR-0038](../../../doc/adr/0038-keelson-background-task-primitive.md)
 introduces a bus-protocol primitive for long-running, cancellable,
@@ -39,10 +39,10 @@ tags the producer-side logger with `task_id` (on top of the per-app
 logger's `run_id` / `app_id` / `instance_id` fields wired by the
 windowhost).
 
-**Subject family.** Flat per-task: `task.<id>.<verb>` with verbs
+**Subject family.** Flat per-task: `runtime.task.<id>.<verb>` with verbs
 `created` / `progress` / `cancel` / `done` / `error`. A single
-`task.>` subscription fans out every event to any observer; the
-M3 supervisor adds a `task.list.inflight` request/reply that
+`runtime.task.>` subscription fans out every event to any observer; the
+M3 supervisor adds a `runtime.task.list.inflight` request/reply that
 returns a buscodec-encoded `task.InflightSnapshotReply` snapshot
 of every running task.
 
@@ -53,16 +53,16 @@ of every running task.
   `RequestCancel`, `ObserverI`) + the estimator subpackage that
   drives the humanized-change emission gate.
 - `runtime/task/supervisor` — the opt-in audit + heartbeat layer.
-  Subscribes `task.>`, persists every terminal-grade verb to
+  Subscribes `runtime.task.>`, persists every terminal-grade verb to
   `boxer.facts` via `factsstore.WriteLog` with structured fields
   (`task_id`, `task_kind`, `run_id`, `instance_id`, `duration_ms`,
   `reason`, `error_chain`). Promotes silent in-flight tasks to
   `InflightStateAbandoned` after `HeartbeatThresholdMs` (default
-  30s). Serves `task.list.inflight` request/reply.
+  30s). Serves `runtime.task.list.inflight` request/reply.
 
-**Producer caps:** `task.>` Both — covers publishing the lifecycle
+**Producer caps:** `runtime.task.>` Both — covers publishing the lifecycle
 verbs and subscribing to per-task cancels. **Observer caps:**
-`task.>` Sub. **Canceler caps:** `task.*.cancel` Pub. Helpers:
+`runtime.task.>` Sub. **Canceler caps:** `runtime.task.*.cancel` Pub. Helpers:
 `task.ProducerCaps()`, `task.ObserverCaps()`, `task.CancelerCaps()`,
 `supervisor.Caps()`, `supervisor.RequesterCaps()`.
 

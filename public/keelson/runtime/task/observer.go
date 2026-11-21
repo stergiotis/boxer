@@ -13,7 +13,7 @@ import (
 )
 
 // ObserverI is the consumer-side contract: a visitor that receives one
-// callback per verb. WatchAll fans out a single task.> subscription into
+// callback per verb. WatchAll fans out a single runtime.task.> subscription into
 // these per-verb calls. Implementations need not be goroutine-safe — the
 // in-proc bus delivers messages on the publisher's goroutine, one at a
 // time per subscription. M4 NATS-backed delivery uses one goroutine per
@@ -89,7 +89,7 @@ func WatchAll(bus app.BusI, obs ObserverI) (unsubscribe func(), err error) {
 	return
 }
 
-// RequestCancel publishes a TaskCancel on task.<id>.cancel. Used by UI
+// RequestCancel publishes a TaskCancel on runtime.task.<id>.cancel. Used by UI
 // cancel buttons and by supervisor abandoned-task cleanup. Returns the
 // underlying publish error verbatim; callers that lack the CancelerCaps
 // receive ErrPermissionViolation.

@@ -16,10 +16,10 @@ import (
 var helpFS embed.FS
 
 // manifest declares the demo's identity + the single Caps entry the task
-// primitive requires. task.ProducerCaps() expands to task.> with
+// primitive requires. task.ProducerCaps() expands to runtime.task.> with
 // CapDirectionBoth — covering both the publish side (created / progress
 // / done / error) and the subscribe side (per-task cancel inbox + the
-// observer WatchAll subscription on task.>). A separate ObserverCaps
+// observer WatchAll subscription on runtime.task.>). A separate ObserverCaps
 // is not needed because Both already includes Sub.
 var manifest = app.Manifest{
 	Id:       "github.com/stergiotis/boxer/apps/taskdemo",

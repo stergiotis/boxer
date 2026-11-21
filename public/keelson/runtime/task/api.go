@@ -31,7 +31,7 @@ type TaskApiI interface {
 	// context.Background() to opt out of caller-side scoping.
 	Spawn(callerCtx context.Context, opts SpawnOpts) (h HandleI, err error)
 
-	// WatchAll attaches an observer to task.> on the host bus.
+	// WatchAll attaches an observer to runtime.task.> on the host bus.
 	// Identical to task.WatchAll(bus, obs) — exposed here so apps
 	// don't need to thread the bus.
 	WatchAll(obs ObserverI) (unsubscribe func(), err error)
@@ -202,7 +202,7 @@ func (inst *heldHandle) Error(err error, reason string) (rerr error) {
 	return inst.HandleI.Error(err, reason)
 }
 
-// WatchAll registers an observer on task.> over the host bus.
+// WatchAll registers an observer on runtime.task.> over the host bus.
 func (inst *BusApi) WatchAll(obs ObserverI) (unsubscribe func(), err error) {
 	unsubscribe, err = WatchAll(inst.cfg.Bus, obs)
 	return

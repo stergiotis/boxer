@@ -283,20 +283,20 @@ var Registry = map[CapId]CapSpec{
 	},
 	CapTask: {
 		Id:            CapTask,
-		Display:       "task.* background primitive",
-		SubjectFamily: "task.<id>.{created|progress|cancel|done|error}, task.list.inflight",
+		Display:       "runtime.task.* background primitive",
+		SubjectFamily: "runtime.task.<id>.{created|progress|cancel|done|error}, runtime.task.list.inflight",
 		Description: "Cancellable, observable background work over the bus " +
 			"(ADR-0038). Apps spawn handles through task.ForApp(MountCtx); the " +
 			"API auto-injects OwnerAppId / OwnerTileKey / OwnerRunId so audit " +
 			"rows join back to AppLifecycleRow + RuntimeStartRow. " +
-			"task.PatternAll (\"task.>\") is the universal observer subscription; " +
-			"task.SubjectListInflight (\"task.list.inflight\") is a request/reply " +
+			"task.PatternAll (\"runtime.task.>\") is the universal observer subscription; " +
+			"task.SubjectListInflight (\"runtime.task.list.inflight\") is a request/reply " +
 			"the M3 supervisor serves with a buscodec-encoded snapshot. The " +
 			"runtime/task package owns the protocol; runtime/task/supervisor is " +
 			"the opt-in audit + heartbeat layer that lands rows in factsstore.",
 		Backend: "runtime/task + runtime/task/supervisor",
 		AppFilter: func(f app.SubjectFilter) bool {
-			return strings.HasPrefix(f.Pattern, "task.")
+			return strings.HasPrefix(f.Pattern, "runtime.task.")
 		},
 		// task and supervisor are co-deployed: the supervisor is the
 		// audit hook for the producer surface, not an alternative impl.
@@ -314,7 +314,7 @@ var Registry = map[CapId]CapSpec{
 		Description: "Durable work as rows on one substrate (ADR-0223): a job is a " +
 			"row on a store-owned table claimed by one guarded update, every " +
 			"transition is an event row, and a running job is a keelson task " +
-			"with the job's id, so its progress and cancel are task.* . An app " +
+			"with the job's id, so its progress and cancel are runtime.task.* . An app " +
 			"holds the capability by declaring watchbill.ClientCaps() and " +
 			"drives it through watchbill.Client — River's five client verbs on " +
 			"the bus (ADR-0234), answered by the worker the host runs under " +

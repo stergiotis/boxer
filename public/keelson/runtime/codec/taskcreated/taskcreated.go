@@ -1,12 +1,12 @@
 // Package taskcreated is the leeway-coded wire form of the spawn
-// payload published once per task on `task.<id>.created`. Second
+// payload published once per task on `runtime.task.<id>.created`. Second
 // broker DTO to migrate off the buscodec fxamacker-cbor default
 // onto the ADR-0042 SoA codec (after [keelson/runtime/codec/taskprogress]).
 //
-// Vocabulary reuse across task.* wire DTOs:
+// Vocabulary reuse across runtime.task.* wire DTOs:
 //
 //   - [vdd.MembTaskId] — shared with [keelson/runtime/codec/taskprogress];
-//     subject identifier carried by every task.* payload.
+//     subject identifier carried by every runtime.task.* payload.
 //   - [vdd.MembTitle], [vdd.MembAppId], [vdd.MembTileKey],
 //     [vdd.MembRunId] — shared with future audit / event DTOs that
 //     join back to runtime lifecycle.
@@ -38,7 +38,7 @@ package taskcreated
 import "time"
 
 // TaskCreated is the wire payload published once at task spawn on
-// subject `task.<id>.created`. Observers consume this to build their
+// subject `runtime.task.<id>.created`. Observers consume this to build their
 // initial row before any TaskProgress arrives.
 //
 // `OwnerAppId` / `OwnerTileKey` / `OwnerRunId` are populated by the
@@ -64,7 +64,7 @@ type TaskCreated struct {
 	At time.Time `lw:",ts"`
 
 	// TaskId is the per-task identifier (a nanoid by default; see
-	// task.TaskIdT). Shared string-section column across task.*
+	// task.TaskIdT). Shared string-section column across runtime.task.*
 	// wire DTOs.
 	TaskId string `lw:"taskId,stringArray"`
 
@@ -89,7 +89,7 @@ type TaskCreated struct {
 	OwnerRunId string `lw:"runId,stringArray"`
 
 	// CancellableB declares whether the producer honours
-	// task.<id>.cancel publications.
+	// runtime.task.<id>.cancel publications.
 	CancellableB bool `lw:"taskCancellableB,bool"`
 
 	// EstimatedMs is the producer-supplied predicted duration in
