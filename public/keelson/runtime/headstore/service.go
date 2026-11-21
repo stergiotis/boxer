@@ -316,6 +316,10 @@ type Client struct {
 
 var _ StoreI = (*Client)(nil)
 
+// deferred: ADR-0396 §9 makes a request/reply client free functions taking
+// ctx and app.BusI first, with one capability helper per capability; this
+// client type stays until the package is tiered Stable.
+
 // NewClient wraps bus; the caller's manifest declares ClientCaps.
 func NewClient(bus app.BusI) (inst *Client) { return &Client{bus: bus} }
 

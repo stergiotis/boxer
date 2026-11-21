@@ -25,6 +25,10 @@ type Client struct {
 	Timeout time.Duration
 }
 
+// deferred: ADR-0396 §9 makes a request/reply client free functions taking
+// ctx and app.BusI first, with one capability helper per capability; this
+// client type stays until the package is tiered Stable.
+
 // NewClient wraps bus.
 func NewClient(bus app.BusI) (inst *Client) {
 	inst = &Client{bus: bus}
