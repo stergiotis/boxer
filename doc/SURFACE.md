@@ -23,7 +23,7 @@ itself; ADR-0389 states its tier.
 | Section | Packages |
 | --- | ---: |
 | [Stable](#stable) | 77 |
-| [Experimental](#experimental) | 282 |
+| [Experimental](#experimental) | 287 |
 | [Internal](#internal) | 16 |
 | [Test support](#test-support) | 16 |
 | [Tools](#tools) | 91 |
@@ -371,9 +371,14 @@ Public and usable, but may change in any MINOR version without a deprecation win
 - `public/science/geo/vectorfield/keelsonfield` — Package keelsonfield serves a gridded vector field held in memory as a family of keelson tables (ADR-0291): the relation itself, its options, and one table per statement purpose of sqlfield, each taking that statement's parameters as named arguments (ADR-0290) and replying in that statement's shape.
 - `public/science/geo/vectorfield/sqlfield` — Package sqlfield is a [vectorfield.SourceI] over a field held in ClickHouse (ADR-0250): every window request is one reduction query, so what crosses the wire is bounded by the request and the field may be any size.
 - `public/science/imaging` — Package imaging holds an image as measured samples, apart from any way of showing it (ADR-0373 §SD1, §SD2): one to four planes of one size and one sample kind, a colour model that says what the planes are, and the provenance of the whole.
-- `public/science/imaging/decode` — Package decode reads a PNG or a JPEG file into an [imaging.Image] without passing its samples through 8 bits or through premultiplied alpha (ADR-0373 §SD10).
+- `public/science/imaging/decode` — Package decode reads a PNG or a JPEG file into an [imaging.Image] without passing its samples through 8 bits or through premultiplied alpha (ADR-0373 §SD10), and is the one way in to the readers of TIFF, FITS and NPY files, which give a stack (see Stacks).
+- `public/science/imaging/decode/fits` — Package fits reads an image HDU of a FITS file into an [imaging.Stack] (ADR-0398 §SD7, milestone M4).
+- `public/science/imaging/decode/npy` — Package npy reads a NumPy NPY array, or one array of an NPZ archive, into an [imaging.Stack] (ADR-0398 §SD8, milestone M5).
+- `public/science/imaging/decode/tiff` — Package tiff reads a TIFF or BigTIFF file into an [imaging.Stack] (ADR-0398 §SD6), written from the TIFF 6.0 specification, Adobe's Technical Note 3 and PageMaker supplement, the BigTIFF description, GeoTIFF 1.1 and GDAL's documentation of its private tags.
 - `public/science/imaging/display` — Package display turns an image's samples into the colours a screen shows, under a recipe that is a value of its own (ADR-0373 §SD4, §SD5).
 - `public/science/imaging/levels` — Package levels reduces an image by halving, for showing it smaller than it is (ADR-0373 §SD6).
+- `public/science/imaging/ops` — Package ops computes new images from images (ADR-0400): a declared operator applied to named inputs with stated parameters, run once at full resolution into a tiled store, with a record of what it did.
+- `public/science/imaging/regions` — Package regions is regions of an image as values (ADR-0399 §M1): a parametric shape in a stated frame, an anchor naming the positions of a stack it belongs to, and an identity apart from any style; one written rule for which pixels a shape covers, and a second, by covered area, under its own name; statistics and line profiles computed from the samples at full resolution.
 - `public/science/imaging/samples` — Package samples makes a few synthetic images, each computed from its coordinates and so the same on every run and every host: something to show in a demo, to seed a scene with, or to try a display recipe on without a file.
 - `public/science/imaging/stats` — Package stats computes numbers about a plane from its samples (ADR-0373 §SD8): a histogram, and from it the range and percentiles of the values.
 - `public/science/imaging/tiles` — Package tiles holds an image as tiles and the reduced levels over it (ADR-0374 §SD7): level 0 cut into 512-pixel tiles, and each level a viewer reduces to — means, minima and maxima, exactly as the levels package defines them — cut the same way.
