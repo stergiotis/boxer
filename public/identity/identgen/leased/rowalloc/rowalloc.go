@@ -139,6 +139,52 @@ type Allocator struct {
 	newToken func() (token string, err error)
 }
 
+// Seed gives tagValue's stream a lease row when it has none, starting after
+// the largest body already in use: floor reports that body, read from
+// wherever the stream's ids are stored, and the row is inserted with the
+// next body after it. A stream whose row exists is left alone and floor is
+// not called; a floor of 0 — no id of the stream is in use — inserts
+// nothing, and the first lease starts the stream at 1 as it always did.
+//
+// It is for the owner of a table of ids to call when it provisions the
+// lease table: a lease table that was lost, while the rows it leased ids
+// for were not, would otherwise start over and hand out bodies those rows
+// carry. Two callers racing insert two rows that agree, and the one at the
+// lowest block position is the lease, as for any first insert. seededAt is
+// the body the stream continues at, 0 when nothing was inserted.
+func Seed(ctx context.Context, exec recordstore.ExecutorI, layout Layout, tagValue identifier.TagValue, floor func(ctx context.Context) (maxBody uint64, err error)) (seededAt uint64, err error) {
+	if !tagValue.IsValid() {
+		err = eb.Build().Uint64("tagValue", uint64(tagValue)).Errorf("invalid tag value (zero is reserved)")
+		return
+	}
+	alloc, err := NewAllocator(exec, layout)
+	if err != nil {
+		return
+	}
+	cur, err := alloc.read(ctx, tagValue, "")
+	if err != nil || cur.found {
+		return
+	}
+	maxBody, err := floor(ctx)
+	if err != nil {
+		err = eb.Build().Uint64("tagValue", uint64(tagValue)).Errorf("seed lease row: read the largest id in use: %w", err)
+		return
+	}
+	if maxBody == 0 {
+		return
+	}
+	if maxBody == maxUint64 {
+		err = eb.Build().Uint64("tagValue", uint64(tagValue)).Errorf("seed lease row: %w", identgen.ErrIdSpaceExhausted)
+		return
+	}
+	if err = exec.Exec(ctx, insertSQLAt(layout, tagValue, maxBody+1)); err != nil {
+		err = eb.Build().Uint64("tagValue", uint64(tagValue)).Errorf("seed lease row: %w", err)
+		return
+	}
+	seededAt = maxBody + 1
+	return
+}
+
 // NewAllocator is an allocator over a provisioned lease table (ProvisionIn).
 // The executor stays the caller's; Close does not close it.
 func NewAllocator(exec recordstore.ExecutorI, layout Layout) (inst *Allocator, err error) {
@@ -298,7 +344,12 @@ func readSQL(layout Layout, tagValue identifier.TagValue, token string) (sql str
 // insertSQL is the lease row's first write. async_insert never sits on the
 // claim path (rowcas), so it is off on the statement.
 func insertSQL(layout Layout, tagValue identifier.TagValue) (sql string) {
-	return "INSERT INTO " + layout.Table() + " (tag, next, holder) SETTINGS async_insert = 0 VALUES (" + tagLit(tagValue) + ", 1, '')"
+	return insertSQLAt(layout, tagValue, 1)
+}
+
+// insertSQLAt is insertSQL for a stream that continues at next.
+func insertSQLAt(layout Layout, tagValue identifier.TagValue, next uint64) (sql string) {
+	return "INSERT INTO " + layout.Table() + " (tag, next, holder) SETTINGS async_insert = 0 VALUES (" + tagLit(tagValue) + ", " + u64Lit(next) + ", '')"
 }
 
 // updateSQL is the compare-and-set: the lease row, pinned by its position and

@@ -20,6 +20,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/rs/zerolog/log"
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
@@ -229,7 +230,10 @@ func ComposeSetupSQL(cfg Config, engineClause string) (sql string, err error) {
 // SetupTable applies the boxer.facts DDL idempotently against the live CH
 // connection, provisions the id lease table the store mints row ids through
 // (ADR-0397 §SD2; not when the configuration brings an allocator of its
-// own), then makes sure the server carries leeway's SQL read
+// own) and, when that table holds no row for the store's stream while the
+// facts carry ids of it, starts the stream after the largest of them — a
+// lease table that was lost must not hand those ids out again —, then
+// makes sure the server carries leeway's SQL read
 // surface ([Store.EnsureReadSurface]). engineClause supplies the engine,
 // partition key, sorting key and TTL (empty selects [EngineClause]). The DDL
 // is composed by ComposeSetupSQL, so this path and the `keelsonddl` CLI
@@ -276,6 +280,18 @@ func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err err
 		if err != nil {
 			err = eh.Errorf("chstore: setup: %w", err)
 			return
+		}
+		// A lease table that holds no row for the stream, beside facts that
+		// carry ids of it, was lost: the stream continues after the largest.
+		var seededAt uint64
+		seededAt, err = seedLease(ctx, inst.exec, inst.leaseLayout(), inst.readTable(), inst.cfg.RowIds.stream().Value())
+		if err != nil {
+			err = eh.Errorf("chstore: setup: %w", err)
+			return
+		}
+		if seededAt != 0 {
+			log.Warn().Str("leaseTable", inst.leaseLayout().Table()).Str("facts", inst.readTable()).Uint64("continuesAt", seededAt).
+				Msg("chstore: the id lease table had no row for the facts row stream while the facts hold ids of it; the stream continues after the largest")
 		}
 	}
 	err = inst.EnsureReadSurface(ctx)

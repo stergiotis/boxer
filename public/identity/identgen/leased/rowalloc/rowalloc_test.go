@@ -248,3 +248,50 @@ func (inst *faultExec) InsertArrowWith(ctx context.Context, table string, record
 }
 
 var _ recordstore.InsertSettingsI = (*faultExec)(nil)
+
+// A stream with no lease row is seeded after the largest body in use, and
+// leases from there; a stream that has its row, or whose ids nothing holds,
+// is left as it is.
+func TestSeedStartsALostStreamAfterTheLargestBodyInUse(t *testing.T) {
+	ctx := context.Background()
+	exec := localExec(t)
+	layout := Layout{Database: "leasetest"}
+	require.NoError(t, ProvisionIn(ctx, exec, layout))
+	a, err := NewAllocator(exec, layout)
+	require.NoError(t, err)
+	const tv identifier.TagValue = 317811
+	asked := 0
+	floor := func(v uint64, ferr error) func(context.Context) (uint64, error) {
+		return func(context.Context) (uint64, error) { asked++; return v, ferr }
+	}
+
+	at, err := Seed(ctx, exec, layout, tv, floor(0, nil))
+	require.NoError(t, err)
+	assert.Zero(t, at, "nothing holds an id of the stream: nothing is inserted")
+	assert.Equal(t, 1, asked)
+
+	_, err = Seed(ctx, exec, layout, tv, floor(0, errInjected))
+	require.ErrorIs(t, err, errInjected, "a stream whose ids cannot be read is not seeded by guess")
+
+	at, err = Seed(ctx, exec, layout, tv, floor(4999, nil))
+	require.NoError(t, err)
+	assert.EqualValues(t, 5000, at)
+	lo, hi, err := a.AllocateBlock(ctx, tv, 10, 10)
+	require.NoError(t, err)
+	assert.EqualValues(t, 5000, lo)
+	assert.EqualValues(t, 5010, hi)
+
+	asked = 0
+	at, err = Seed(ctx, exec, layout, tv, floor(9_000_000, nil))
+	require.NoError(t, err)
+	assert.Zero(t, at, "a stream that has its row is left alone")
+	assert.Zero(t, asked, "and what is in use is not read")
+	lo, _, err = a.AllocateBlock(ctx, tv, 10, 10)
+	require.NoError(t, err)
+	assert.EqualValues(t, 5010, lo)
+
+	_, err = Seed(ctx, exec, layout, 0, floor(1, nil))
+	require.Error(t, err)
+	_, err = Seed(ctx, exec, layout, 99, floor(^uint64(0), nil))
+	require.ErrorIs(t, err, identgen.ErrIdSpaceExhausted)
+}

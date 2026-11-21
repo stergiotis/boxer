@@ -39,9 +39,6 @@ import (
 // other; none of them names boxer.facts. Setup installs leeway's SQL read
 // surface, which is server-wide, as any host's boot does.
 
-// idColumn is the physical name of the facts envelope's row id.
-const idColumn = "id:id:u64:47::0:"
-
 // serverScratch is a config over the server the CLICKHOUSE_* variables
 // name, bound to a scratch database that is dropped before the test and
 // after it. The test skips when no server answers.
@@ -367,23 +364,43 @@ func TestServer_LeaseOutageAndRecovery(t *testing.T) {
 	assert.Len(t, seen, 6, "no id repeats across the outage")
 }
 
-// The lease table is state: the next unleased body of each stream lives
-// nowhere else. Dropped and provisioned again it starts over, and hands
-// out ids rows already carry.
-func TestServer_ADroppedLeaseTableRestartsTheStream(t *testing.T) {
+// A lease table that was lost is not the end of unique ids: setup finds no
+// row for the stream beside facts that carry ids of it, and starts the
+// stream after the largest (ADR-0397 §SD2). Without that the stream would
+// start over and hand out ids rows already carry.
+func TestServer_ALostLeaseTableContinuesAfterTheLargestId(t *testing.T) {
 	cfg := serverScratch(t, "leaseloss")
 	s := serverStore(t, cfg)
 	ctx := context.Background()
 	require.NoError(t, s.SetupTable(ctx, ""))
-	first, err := s.WriteLog(ctx, factsstore.LogRow{AppId: "a", Message: "before"})
-	require.NoError(t, err)
+	lease := cfg.Database + "." + rowalloc.TableName
+	tag := strconv.FormatUint(uint64(vocab.IdStreamFactsRow.Value()), 10)
+	assert.Equal(t, "0", scalar(t, s, "SELECT count() FROM "+lease), "an empty facts table seeds nothing; the first lease starts the stream")
 
-	require.NoError(t, s.exec.Exec(ctx, "DROP TABLE "+cfg.Database+"."+rowalloc.TableName+" SYNC"))
+	var before []uint64
+	for i := range 3 {
+		id, err := s.WriteLog(ctx, factsstore.LogRow{AppId: "a", Message: "before " + strconv.Itoa(i)})
+		require.NoError(t, err)
+		before = append(before, id)
+	}
+	// Counter ids of an older build, and ids of the process-local stream,
+	// are other ranges of the column and do not move the seed.
+	require.NoError(t, s.exec.Exec(ctx, "INSERT INTO "+cfg.Database+".facts (`"+idColumn+"`, `"+factsschema.TsColumn+"`) VALUES (18446744073709551615, now64(9)), (7, now64(9))"))
+
+	require.NoError(t, s.exec.Exec(ctx, "DROP TABLE "+lease+" SYNC"))
 	require.NoError(t, s.SetupTable(ctx, ""))
+	largest := identifier.TaggedId(before[2]).RemoveTag().Value()
+	assert.Equal(t, strconv.FormatUint(largest+1, 10), scalar(t, s, "SELECT next FROM "+lease+" WHERE tag = "+tag), "the stream continues after the largest id the facts hold")
+
 	fresh := serverStore(t, cfg)
-	second, err := fresh.WriteLog(ctx, factsstore.LogRow{AppId: "a", Message: "after"})
+	after, err := fresh.WriteLog(ctx, factsstore.LogRow{AppId: "a", Message: "after"})
 	require.NoError(t, err)
-	assert.Equal(t, first, second, "the stream started over: this is why the lease table is backed up and restored with the facts")
+	assert.Equal(t, vocab.IdStreamFactsRow.Value(), tagOf(after))
+	assert.Greater(t, after, before[2], "no id is handed out twice")
+
+	// A second setup finds the row and reads nothing.
+	require.NoError(t, s.SetupTable(ctx, ""))
+	assert.Equal(t, "1", scalar(t, s, "SELECT count() FROM "+lease+" WHERE tag = "+tag))
 }
 
 // logBatch is n log rows as one facts-shaped batch, with ids minted by s.

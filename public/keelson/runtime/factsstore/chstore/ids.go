@@ -2,15 +2,18 @@ package chstore
 
 import (
 	"context"
+	"strconv"
 	"sync/atomic"
 	"time"
 
+	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/identity/identgen"
 	"github.com/stergiotis/boxer/public/identity/identgen/leased"
 	"github.com/stergiotis/boxer/public/identity/identgen/leased/memalloc"
 	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowalloc"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/identity/tagmint"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -69,11 +72,17 @@ type rowIds struct {
 	retryAt atomic.Int64
 }
 
-func (inst *rowIds) init(exec recordstore.ExecutorI, layout rowalloc.Layout, cfg RowIds) (err error) {
-	stream := cfg.Stream
+// stream is the claimed tag the leased ids carry.
+func (inst RowIds) stream() (stream tagmint.ClaimedTagValue) {
+	stream = inst.Stream
 	if !stream.IsValid() {
 		stream = vocab.IdStreamFactsRow
 	}
+	return
+}
+
+func (inst *rowIds) init(exec recordstore.ExecutorI, layout rowalloc.Layout, cfg RowIds) (err error) {
+	stream := cfg.stream()
 	if stream.Value() == vocab.IdStreamFactsRowLocal.Value() {
 		return eb.Build().Str("stream", stream.Name()).Errorf("row id stream: the process-local stream cannot be the leased one; leased ids need a tag of their own")
 	}
@@ -101,6 +110,38 @@ func (inst *rowIds) init(exec recordstore.ExecutorI, layout rowalloc.Layout, cfg
 		return eh.Errorf("process-local row id stream: %w", err)
 	}
 	return
+}
+
+// idColumn is the physical name of the facts envelope's row id.
+const idColumn = "id:id:u64:47::0:"
+
+// seedLease gives the stream tagValue a lease row in layout when it has
+// none, continuing after the largest id of the stream that relation holds
+// (ADR-0397 §SD2, rowalloc.Seed). The ids of one stream are one range of
+// the id column — the tag sits above the body — so the largest is one
+// aggregate over that range; it reads the whole id column, which is why it
+// runs at setup, once per lost lease row, and never on a write.
+func seedLease(ctx context.Context, exec recordstore.ExecutorI, layout rowalloc.Layout, relation string, tagValue identifier.TagValue) (seededAt uint64, err error) {
+	tag := tagValue.GetTag()
+	lo, hi := tag.ComposeId(1), tag.ComposeId(tag.GetMaxPossibleIdIncl())
+	sql := "SELECT max(`" + idColumn + "`) AS m FROM " + relation +
+		" WHERE `" + idColumn + "` >= " + strconv.FormatUint(lo.Value(), 10) + " AND `" + idColumn + "` <= " + strconv.FormatUint(hi.Value(), 10)
+	return rowalloc.Seed(ctx, exec, layout, tagValue, func(ctx context.Context) (maxBody uint64, err error) {
+		for rec, qerr := range exec.QueryArrow(ctx, sql) {
+			if qerr != nil {
+				return 0, qerr
+			}
+			if col, ok := rec.Column(0).(*array.Uint64); ok && rec.NumRows() > 0 {
+				if largest := identifier.TaggedId(col.Value(0)); largest != 0 {
+					maxBody = largest.RemoveTag().Value()
+				}
+			} else if !ok {
+				err = eb.Build().Str("relation", relation).Errorf("the largest row id did not come back as a UInt64")
+			}
+			rec.Release()
+		}
+		return
+	})
 }
 
 // leaseLayout is the lease table this store leases through when its
