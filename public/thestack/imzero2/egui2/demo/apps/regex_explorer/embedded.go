@@ -82,10 +82,10 @@ func NewEmbedded(seed uint64) (inst *EmbeddedApp) {
 // nothing else.
 func (inst *EmbeddedApp) SetBus(bus runtimeapp.BusI) {
 	if bus == nil {
-		inst.state.setBus(nil, &runtimeapp.NoopBus{})
+		inst.state.swapBus(&runtimeapp.NoopBus{})
 		return
 	}
-	inst.state.setBus(nil, bus)
+	inst.state.swapBus(bus)
 }
 
 // SetPattern seeds the embedded explorer's pattern field. The caller

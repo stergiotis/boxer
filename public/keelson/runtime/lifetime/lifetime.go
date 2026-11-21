@@ -128,6 +128,13 @@ func (inst *Scope) Tail(ctx context.Context) (tail context.Context) {
 	return tailCtx{Context: context.WithoutCancel(ctx), tail: inst.tail}
 }
 
+// TailContext is [Scope.Tail] for a caller with no context of its own: no
+// values, and it ends only at Abandon or once the scope is done (never on
+// a nil scope).
+func (inst *Scope) TailContext() (tail context.Context) {
+	return inst.Tail(context.Background()) //boxer:lint disable=CS020 reason="documented root: a tail with no caller context"
+}
+
 // Enter counts one piece of work in. ok is false once the scope retired:
 // nothing new starts after Retire. leave counts it out, and may be called
 // more than once.

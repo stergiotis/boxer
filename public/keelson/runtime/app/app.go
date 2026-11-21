@@ -223,7 +223,7 @@ func LifetimeOf(ctx MountContextI) (s *lifetime.Scope) {
 // in Mount, and keep the result: each call wraps a new context.
 func ContextOf(mc MountContextI) (ctx context.Context) {
 	if s := LifetimeOf(mc); s != nil {
-		return s.Tail(nil)
+		return s.TailContext()
 	}
 	return context.Background() //boxer:lint disable=CS020 reason="a mount context without a lifetime scope has no end; this is its root"
 }

@@ -368,7 +368,7 @@ func (inst *App) ensurePlay() {
 		}
 		inst.inner = play.NewLivePlayApp(client, sql, playMaxHistory, nil)
 		// nil storage: the buffer is the notebook's, not a draft play keeps.
-		inst.inner.SetCapabilities(inst.scope.Tail(nil), inst.bus, nil, inst.log)
+		inst.inner.SetCapabilities(inst.scope.TailContext(), inst.bus, nil, inst.log)
 		inst.innerOf = inst.textKey
 		return
 	}
@@ -516,7 +516,7 @@ func (inst *App) renderToolbar(ctx app.FrameContextI) {
 		// only where the host registers one editor app (ADR-0365).
 		if _, ok := externaledit.Editor(); ok && inst.doc != nil && inst.bus != nil {
 			if r := editexternally.Render(editexternally.Input{
-				Ids: inst.ids, ScopeKey: "editExternally", Editing: &inst.externalEdit, Bus: inst.bus, BusCtx: inst.scope.Tail(nil),
+				Ids: inst.ids, ScopeKey: "editExternally", Editing: &inst.externalEdit, Bus: inst.bus, BusCtx: inst.scope.TailContext(),
 				Name: inst.doc.name, Text: string(inst.doc.text), Disabled: inst.collect.job.Running(),
 			}); r.Replace {
 				if inst.setText([]byte(r.Text)) {

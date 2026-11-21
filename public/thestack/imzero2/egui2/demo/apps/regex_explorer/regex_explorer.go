@@ -255,6 +255,13 @@ func (inst *App) setBus(ctx context.Context, bus runtimeapp.BusI) {
 	inst.mu.Unlock()
 }
 
+// swapBus replaces the transport and keeps the I/O context.
+func (inst *App) swapBus(bus runtimeapp.BusI) {
+	inst.mu.Lock()
+	inst.bus = bus
+	inst.mu.Unlock()
+}
+
 // busSnapshot returns the currently attached transport. Query goroutines
 // must reach the bus through here rather than touching the field, so a
 // host re-attaching a bus mid-flight does not race them.

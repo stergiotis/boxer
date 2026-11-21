@@ -272,7 +272,7 @@ func (inst *BundleView) startResolve() {
 }
 
 func (inst *BundleView) resolve() {
-	res, err := adhocdata.ResolveBundleRequest(inst.cfg.Lifetime.Tail(nil), inst.cfg.Bus, inst.alias, nil)
+	res, err := adhocdata.ResolveBundleRequest(inst.cfg.Lifetime.TailContext(), inst.cfg.Bus, inst.alias, nil)
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	inst.inflight = false
@@ -318,7 +318,7 @@ func (inst *BundleView) apply(res adhocdata.BundleResult) {
 			inst.revision, inst.digest = res.Revision, res.DocumentDigest
 			return
 		}
-		inner, eErr := NewEmbedded(inst.cfg.Lifetime.Tail(nil), def, EmbedConfig{StampAppId: inst.cfg.StampAppId, RunId: inst.cfg.RunId,
+		inner, eErr := NewEmbedded(inst.cfg.Lifetime.TailContext(), def, EmbedConfig{StampAppId: inst.cfg.StampAppId, RunId: inst.cfg.RunId,
 			InstanceKey: inst.cfg.InstanceKey, Bus: inst.cfg.Bus, Log: inst.cfg.Log, Rules: inst.cfg.Rules})
 		if eErr != nil {
 			inst.failed = "the embedded play could not be built: " + eErr.Error()
@@ -349,7 +349,7 @@ func (inst *BundleView) apply(res adhocdata.BundleResult) {
 		names[d.Alias] = d.LocalName
 	}
 	if inst.follower == nil {
-		inst.follower = adhocdata.NewDeferredFollower(inst.cfg.Lifetime.Tail(nil), adhocdata.FollowerConfig{Bus: inst.cfg.Bus, Log: inst.cfg.Log, LocalNames: names})
+		inst.follower = adhocdata.NewDeferredFollower(inst.cfg.Lifetime.TailContext(), adhocdata.FollowerConfig{Bus: inst.cfg.Bus, Log: inst.cfg.Log, LocalNames: names})
 	}
 	if inst.follower != nil {
 		for _, d := range res.Datasets {
