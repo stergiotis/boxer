@@ -175,7 +175,7 @@ func hostWith(t *testing.T, cfg llm.Config, model openaichat.ClientI) (cli *llm.
 	return cli, svc, model
 }
 
-// Keep off sends on llm.complete: the text is not asked to be kept, and the
+// Keep off sends on runtime.llm.complete: the text is not asked to be kept, and the
 // call still says which conversation and turn it belongs to (ADR-0277 §SD5).
 func TestKeepOffIsNotRetained(t *testing.T) {
 	cli, svc, _ := host(t, llm.Config{Retain: llm.RetainDurable})

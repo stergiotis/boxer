@@ -114,7 +114,7 @@ func TestATranscriptionIsCancelledTimedAndBounded(t *testing.T) {
 	require.Eventually(t, func() bool {
 		calls := svc.Calls()
 		return len(calls) == 1 && calls[0].Error != ""
-	}, 5*time.Second, 10*time.Millisecond, "llm.cancel stopped the provider call")
+	}, 5*time.Second, 10*time.Millisecond, "runtime.llm.cancel stopped the provider call")
 	assert.WithinDuration(t, time.Now().Add(time.Hour), b.deadline, time.Minute, "the route's timeout")
 
 	soon := time.Now().Add(30 * time.Second)

@@ -168,7 +168,7 @@ type Services struct {
 	// over the state store (ADR-0185 §SD3). Without a durable store it
 	// still answers, refusing with the reason.
 	AppState bool
-	// LLM is llm.*: model inference through the host's one provider
+	// LLM is runtime.llm.*: model inference through the host's one provider
 	// (ADR-0254). Without BOXER_LLM_ENDPOINT and BOXER_LLM_MODEL it still
 	// answers, saying no model is configured.
 	LLM bool
@@ -785,16 +785,16 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		}
 		llmSvc, lErr := llm.NewService(rt.Bus, logger, llmCfg)
 		if lErr != nil {
-			logger.Warn().Err(lErr).Msg("llm: service start failed; llm.* will be unbound")
+			logger.Warn().Err(lErr).Msg("llm: service start failed; runtime.llm.* will be unbound")
 		} else {
 			rt.LLM = llmSvc
 			rt.onClose(llmSvc.Close)
 			d := llmSvc.Describe()
 			logger.Info().Bool("configured", d.Configured).Str("model", d.Model).Str("endpointHost", d.EndpointHost).
-				Bool("local", d.Local).Bool("durable", llmSvc.Durable()).Msg("llm: service listening on llm.*")
+				Bool("local", d.Local).Bool("durable", llmSvc.Durable()).Msg("llm: service listening on runtime.llm.*")
 			if tr := d.Transcription; tr.Configured {
 				logger.Info().Str("model", tr.Model).Str("diarizeModel", tr.DiarizeModel).Str("endpointHost", tr.EndpointHost).
-					Bool("local", tr.Local).Msg("llm: transcription route offered on llm.transcribe")
+					Bool("local", tr.Local).Msg("llm: transcription route offered on runtime.llm.transcribe")
 			}
 		}
 	}

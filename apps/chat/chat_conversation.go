@@ -147,7 +147,7 @@ type conversation struct {
 	// ran a turn.
 	coord *coordinator
 	id    string
-	// keep sends the turns on llm.retain.complete; set at the first send.
+	// keep sends the turns on runtime.llm.retain.complete; set at the first send.
 	keep bool
 	// firstTurn is the id of the conversation's first turn, which the
 	// title call names (ADR-0277 §SD5).
@@ -456,7 +456,7 @@ func failureReason(err error) (s string) {
 	case err == nil:
 		return "no answer"
 	case errors.Is(err, context.Canceled):
-		// The client told the host to stop the call (llm.cancel, ADR-0254).
+		// The client told the host to stop the call (runtime.llm.cancel, ADR-0254).
 		return "cancelled"
 	case errors.As(err, &refused):
 		return refused.Reason

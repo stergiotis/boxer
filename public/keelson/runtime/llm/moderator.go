@@ -121,7 +121,7 @@ func (inst *Moderator) Ask(ctx context.Context, r ration.Rule, question string) 
 	return rep.Granted, rep.Decided, err
 }
 
-// CallEvent is one llm.event.call: a call admission decided.
+// CallEvent is one runtime.llm.event.call: a call admission decided.
 type CallEvent struct {
 	CallId string
 	At     time.Time
@@ -141,7 +141,7 @@ type CallEvent struct {
 	Failed       bool
 }
 
-// DecodeCallEvent reads an llm.event.call payload.
+// DecodeCallEvent reads an runtime.llm.event.call payload.
 func DecodeCallEvent(payload []byte) (e CallEvent, err error) {
 	w, err := decode[wireCallEvent](payload)
 	if err != nil {
@@ -159,7 +159,7 @@ func DecodeCallEvent(payload []byte) (e CallEvent, err error) {
 	return
 }
 
-// DecodeThresholdEvent reads an llm.event.threshold payload.
+// DecodeThresholdEvent reads an runtime.llm.event.threshold payload.
 func DecodeThresholdEvent(payload []byte) (e ration.Event, err error) {
 	w, err := decode[wireThresholdEvent](payload)
 	if err != nil {

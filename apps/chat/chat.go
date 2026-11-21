@@ -1,6 +1,6 @@
 // Package chat is a chat with the host's model (ADR-0265): one conversation
 // per window, held in memory for the window's session, each turn sent as
-// one llm.retain.complete — or llm.complete when the user turned keeping
+// one runtime.llm.retain.complete — or runtime.llm.complete when the user turned keeping
 // off — and nothing read back. Past conversations are read in play over
 // SQL on the llmMessage kind (ADR-0264 §SD6).
 //
@@ -348,7 +348,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 }
 
 // Unmount cancels a turn in flight; the client tells the host to stop the
-// call (llm.cancel, ADR-0254).
+// call (runtime.llm.cancel, ADR-0254).
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.externalEdit.End()
 	inst.turn.Cancel()
@@ -412,7 +412,7 @@ func (inst *App) drain() {
 		}
 	} else if snap := inst.describe.Snapshot(); snap.State == bgjob.StateFailed {
 		inst.describe.Invalidate()
-		reason := "the host did not answer llm.describe"
+		reason := "the host did not answer runtime.llm.describe"
 		if snap.Err != nil {
 			reason += ": " + snap.Err.Error()
 		}

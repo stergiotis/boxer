@@ -24,7 +24,7 @@ func TestReportListsGapsAndAnswered(t *testing.T) {
 			return app.NewLegacyFuncApp(m, func() (e error) { return })
 		}))
 	}
-	add(reportManifest("org.test.b", app.SubjectFilter{Pattern: "llm.*", Direction: app.CapDirectionPub, Reason: "ask the model"}))
+	add(reportManifest("org.test.b", app.SubjectFilter{Pattern: "runtime.llm.*", Direction: app.CapDirectionPub, Reason: "ask the model"}))
 	add(reportManifest("org.test.a", append(basemap.ClientCaps("tiles"),
 		app.SubjectFilter{Pattern: "fs.dialog.read", Direction: app.CapDirectionPub, Reason: "open a file"})...))
 	add(reportManifest("org.test.c"))

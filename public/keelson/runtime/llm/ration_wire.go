@@ -29,7 +29,7 @@ type wireRule struct {
 	SetAt  int64  `json:"set_at,omitempty"`
 }
 
-// wireRationSet is the request on llm.ration.set: set Rule, or remove the
+// wireRationSet is the request on runtime.llm.ration.set: set Rule, or remove the
 // rule with Rule.Id.
 type wireRationSet struct {
 	V      uint8    `json:"v"`
@@ -37,7 +37,7 @@ type wireRationSet struct {
 	Remove bool     `json:"remove,omitempty"`
 }
 
-// wireRationCancel is the request on llm.ration.cancel: the call CallId,
+// wireRationCancel is the request on runtime.llm.ration.cancel: the call CallId,
 // or every call charged to the account.
 type wireRationCancel struct {
 	V           uint8  `json:"v"`
@@ -47,7 +47,7 @@ type wireRationCancel struct {
 	Reason      string `json:"reason,omitempty"`
 }
 
-// wireRationAsk is the request on llm.ration.ask: a rule the moderator
+// wireRationAsk is the request on runtime.llm.ration.ask: a rule the moderator
 // proposes, and the question the person is shown.
 type wireRationAsk struct {
 	V        uint8    `json:"v"`
@@ -65,7 +65,7 @@ type wireRuleState struct {
 	Inflight    int64    `json:"inflight,omitempty"`
 }
 
-// wireRationReply is the reply to every llm.ration verb.
+// wireRationReply is the reply to every runtime.llm.ration verb.
 type wireRationReply struct {
 	V      uint8           `json:"v"`
 	Ok     bool            `json:"ok"`
@@ -89,7 +89,7 @@ type wireRemaining struct {
 	ResetAt     int64  `json:"reset_at,omitempty"`
 }
 
-// wireCallEvent is the event on llm.event.call.
+// wireCallEvent is the event on runtime.llm.event.call.
 type wireCallEvent struct {
 	V        uint8  `json:"v"`
 	CallId   string `json:"call_id"`
@@ -114,7 +114,7 @@ type wireCallEvent struct {
 	Failed bool `json:"failed,omitempty"`
 }
 
-// wireThresholdEvent is the event on llm.event.threshold.
+// wireThresholdEvent is the event on runtime.llm.event.threshold.
 type wireThresholdEvent struct {
 	V           uint8  `json:"v"`
 	Rule        string `json:"rule"`

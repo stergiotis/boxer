@@ -16,7 +16,7 @@ import (
 
 const wireVersion uint8 = 2
 
-// wireRequest is the envelope on llm.complete: the caller's purpose and
+// wireRequest is the envelope on runtime.llm.complete: the caller's purpose and
 // sensitivity declaration, and the completion request minus what the
 // service owns (the model id, the endpoint).
 type wireRequest struct {
@@ -64,7 +64,7 @@ type wireRequest struct {
 	// the request left out (ADR-0264 §SD3); OmitTo 0 is none.
 	OmitFrom uint32 `json:"omit_from,omitempty"`
 	OmitTo   uint32 `json:"omit_to,omitempty"`
-	// CancelKey is the requester's handle for llm.cancel; empty is a
+	// CancelKey is the requester's handle for runtime.llm.cancel; empty is a
 	// request that cannot be stopped early.
 	CancelKey string `json:"cancel_key,omitempty"`
 	// StreamInbox, when set, is the requester's private inbox
@@ -79,14 +79,14 @@ type wireRequest struct {
 	OnBehalfCall  string `json:"obo_call,omitempty"`
 }
 
-// wireCancel is the message on llm.cancel: stop the sender's completion
+// wireCancel is the message on runtime.llm.cancel: stop the sender's completion
 // that carried Key. No reply.
 type wireCancel struct {
 	V   uint8  `json:"v"`
 	Key string `json:"key"`
 }
 
-// wireDescribe is the reply on llm.describe.
+// wireDescribe is the reply on runtime.llm.describe.
 type wireDescribe struct {
 	V            uint8  `json:"v"`
 	Configured   bool   `json:"configured"`
@@ -135,7 +135,7 @@ type wireDelta struct {
 	Segments []wireSegment `json:"segments,omitempty"`
 }
 
-// wireReply is the reply on llm.complete. Ok false carries the reason and
+// wireReply is the reply on runtime.llm.complete. Ok false carries the reason and
 // the kind of failure, so a caller can map it back onto the client's
 // sentinel errors; a truncated completion is Ok with Incomplete set and
 // its content kept, the client's own contract.

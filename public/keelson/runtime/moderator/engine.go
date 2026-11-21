@@ -101,7 +101,7 @@ type Window struct {
 
 func (inst Window) String() string { return inst.App + "#" + strconv.FormatUint(inst.Instance, 10) }
 
-// CallObs is one llm.event.call as the engine reads it.
+// CallObs is one runtime.llm.event.call as the engine reads it.
 type CallObs struct {
 	At           time.Time
 	CallId       string

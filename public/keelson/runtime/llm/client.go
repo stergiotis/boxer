@@ -24,7 +24,7 @@ import (
 type Client struct {
 	bus app.BusI
 	// Timeout bounds one request. Zero waits as long as the service bounds
-	// a completion (BOXER_LLM_TIMEOUT, learned from llm.describe) plus
+	// a completion (BOXER_LLM_TIMEOUT, learned from runtime.llm.describe) plus
 	// [ReplyMargin], so the service's own timeout is the one a caller
 	// sees; [DefaultTimeout] when the service cannot be asked.
 	Timeout time.Duration
@@ -130,7 +130,7 @@ type Request struct {
 	// call, and so does a provider that rejects members it does not know.
 	Extra map[string]any
 
-	// Retain sends the request on llm.retain.complete (ADR-0264): the host
+	// Retain sends the request on runtime.llm.retain.complete (ADR-0264): the host
 	// keeps the conversation where its BOXER_LLM_RETAIN ceiling is durable.
 	// Needs [RetainCaps] beside [ClientCaps]; the bus refuses it otherwise.
 	Retain bool
@@ -202,7 +202,7 @@ type Response struct {
 type RetentionE uint8
 
 const (
-	// RetentionNotAsked is a request sent on llm.complete.
+	// RetentionNotAsked is a request sent on runtime.llm.complete.
 	RetentionNotAsked RetentionE = 0
 	// RetentionKept means the messages were flushed to boxer.facts before
 	// the reply was sent.
@@ -299,7 +299,7 @@ func (inst *Client) Describe(ctx context.Context) (d Description, err error) {
 	}
 	raw, err := app.RequestWithin(ctx, inst.bus, inst.wait(ctx, 5*time.Second), SubjectDescribe, nil)
 	if err != nil {
-		return d, eh.Errorf("llm.describe request: %w", err)
+		return d, eh.Errorf("runtime.llm.describe request: %w", err)
 	}
 	w, err := decode[wireDescribe](raw)
 	if err != nil {
@@ -323,7 +323,7 @@ func (inst *Client) Describe(ctx context.Context) (d Description, err error) {
 // Complete runs one completion. A refusal is a *RefusedError; a provider
 // failure wraps the openaichat sentinel it maps to; a transport failure is
 // neither. Cancelling ctx returns at once with its error and asks the
-// service to stop the provider call (llm.cancel).
+// service to stop the provider call (runtime.llm.cancel).
 func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err error) {
 	return inst.complete(ctx, r, nil)
 }
@@ -389,7 +389,7 @@ func (inst *Client) complete(ctx context.Context, r Request, onDelta func(Delta)
 	}
 	raw, err := inst.request(ctx, subject, payload, req.CancelKey, inst.completionWait(ctx))
 	if err != nil {
-		return res, eb.Build().Str("purpose", r.Purpose).Errorf("llm.complete request: %w", err)
+		return res, eb.Build().Str("purpose", r.Purpose).Errorf("runtime.llm.complete request: %w", err)
 	}
 	w, err := decode[wireReply](raw)
 	if err != nil {
@@ -415,7 +415,7 @@ func (inst *Client) complete(ctx context.Context, r Request, onDelta func(Delta)
 }
 
 // request sends payload and waits for the reply or for ctx, whichever
-// comes first. On cancellation it publishes llm.cancel with key so the
+// comes first. On cancellation it publishes runtime.llm.cancel with key so the
 // service stops the provider call rather than finishing it for no one;
 // the abandoned request's goroutine ends when the reply or its wait does.
 func (inst *Client) request(ctx context.Context, subject string, payload []byte, key string, callWait time.Duration) (raw []byte, err error) {
@@ -452,7 +452,7 @@ func (inst *Client) cancel(key string) {
 }
 
 // completionWait is the default wait for a completion: the service's
-// bound plus ReplyMargin. The bound is learned once from llm.describe;
+// bound plus ReplyMargin. The bound is learned once from runtime.llm.describe;
 // a client that cannot ask falls back to DefaultTimeout.
 func (inst *Client) completionWait(ctx context.Context) (d time.Duration) {
 	if inst.Timeout > 0 {

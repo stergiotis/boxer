@@ -657,7 +657,7 @@ func TestManifestRegisters(t *testing.T) {
 // five with the task subjects its restore, file gestures and send run under —
 // and the list is asserted exactly rather than by presence: a cap the app
 // never exercises is the §SD10 gate's other failure mode, so growth has to be
-// deliberate enough to edit a test for. No llm.* subject: mdedit reaches a
+// deliberate enough to edit a test for. No runtime.llm.* subject: mdedit reaches a
 // model only through the harness, over its operations (ADR-0318).
 func TestManifestDeclaresExactlyTheFiveSubjects(t *testing.T) {
 	want := []string{

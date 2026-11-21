@@ -37,13 +37,13 @@ res, err := inst.model.Complete(ctx, llm.Request{
 
 ## What the schematic shows
 
-- **Subjects.** `llm.describe` and `llm.complete`, request/reply. The host
+- **Subjects.** `runtime.llm.describe` and `runtime.llm.complete`, request/reply. The host
   owns the model and the endpoint; a request carries neither.
-  `llm.cancel` is a publish that stops the sender's own completion in
+  `runtime.llm.cancel` is a publish that stops the sender's own completion in
   flight; the typed client sends it when the caller's context is cancelled.
-  `llm.retain.complete` is `complete` whose conversation the host keeps
+  `runtime.llm.retain.complete` is `complete` whose conversation the host keeps
   ([ADR-0264](../../../doc/adr/0264-retained-model-conversations-on-facts.md));
-  it has two tokens, so no `llm.*` grant covers it and an app declares
+  it has two tokens, so no `runtime.llm.*` grant covers it and an app declares
   `llm.RetainCaps(reason)` beside `ClientCaps`.
 - **Backends.** One service, under the id `runtime.llm`, over the
   repository's one chat-completion client, configured once by

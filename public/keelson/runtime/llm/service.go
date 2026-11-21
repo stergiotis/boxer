@@ -70,7 +70,7 @@ type Config struct {
 	// or a recorder without a backend, keeps the record alone — the
 	// in-memory host's case.
 	Trail *trail.Recorder
-	// Moderators are the app ids that may use llm.ration.* (ADR-0300 §SD7).
+	// Moderators are the app ids that may use runtime.llm.ration.* (ADR-0300 §SD7).
 	Moderators []string
 	// Unruled decides calls when the ledger could not be rebuilt from the
 	// trail; empty is allow.
@@ -193,7 +193,7 @@ type Service struct {
 	// inflight is never added to while Close waits on it.
 	closed bool
 	// running holds the cancel of each completion in flight, by its
-	// sender's cancel key (llm.cancel).
+	// sender's cancel key (runtime.llm.cancel).
 	running map[cancelKey]context.CancelFunc
 	// seen remembers the calls whose rows landed, by call id, so a
 	// continuing call writes only what is new (ADR-0264 §SD3); seenOrder
@@ -202,7 +202,7 @@ type Service struct {
 	seen      map[string]seen
 	seenOrder []string
 	// active holds each call between admission and its reply, by call id,
-	// for llm.ration.cancel.
+	// for runtime.llm.ration.cancel.
 	active map[string]activeCall
 	// moderatorTasks are the agent tasks each moderator's own calls were
 	// charged to: rules on them hold the moderator too (ADR-0300 §SD7).

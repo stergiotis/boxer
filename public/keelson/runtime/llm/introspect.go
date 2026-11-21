@@ -113,9 +113,9 @@ type CallRecord struct {
 
 // The verbs a call record names.
 const (
-	// VerbComplete is a chat completion, llm.complete.
+	// VerbComplete is a chat completion, runtime.llm.complete.
 	VerbComplete = "complete"
-	// VerbTranscribe is a transcription, llm.transcribe.
+	// VerbTranscribe is a transcription, runtime.llm.transcribe.
 	VerbTranscribe = "transcribe"
 )
 

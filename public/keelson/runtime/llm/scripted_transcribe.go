@@ -14,11 +14,11 @@ import (
 )
 
 // TranscribeScriptEnv names a scripted transcriber for scenes (ADR-0383
-// §SD8): the service answers llm.transcribe from the script instead of an
+// §SD8): the service answers runtime.llm.transcribe from the script instead of an
 // endpoint. Honoured only on a host a scene launched, like BOXER_LLM_SCRIPT.
 var TranscribeScriptEnv = env.NewString(env.Spec{
 	Name:        "BOXER_LLM_TRANSCRIBE_SCRIPT",
-	Description: "path to a scripted transcriber (JSON lines, each an answer body as OpenAI or vLLM sends it: json, verbose_json or diarized_json) the llm service answers llm.transcribe from, in order, instead of an endpoint; honoured only on a host a scene launched (headless, under a scene-* BOXER_COMPONENT mark)",
+	Description: "path to a scripted transcriber (JSON lines, each an answer body as OpenAI or vLLM sends it: json, verbose_json or diarized_json) the llm service answers runtime.llm.transcribe from, in order, instead of an endpoint; honoured only on a host a scene launched (headless, under a scene-* BOXER_COMPONENT mark)",
 	Category:    env.CategoryLLM,
 })
 

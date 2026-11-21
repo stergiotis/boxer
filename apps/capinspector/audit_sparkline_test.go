@@ -157,7 +157,7 @@ func TestCounters_Snapshot_EveryRegisteredCap(t *testing.T) {
 		CapAppState:     "runtime.appstate.delete",
 		CapKeelsonQuery: "keelson.query.apps",
 		CapAdhoc:        "adhoc.publish",
-		CapLLM:          "llm.complete",
+		CapLLM:          "runtime.llm.complete",
 		CapHTTP:         "net.http.fetch.example",
 		CapAgent:        "runtime.agent.list",
 	}

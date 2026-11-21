@@ -9,7 +9,7 @@ import "github.com/stergiotis/boxer/public/config/env"
 // reason when either is unset.
 var (
 	// Endpoint is the OpenAI-compatible base URL. Unset means no model:
-	// `llm.describe` says so and `llm.complete` refuses.
+	// `runtime.llm.describe` says so and `runtime.llm.complete` refuses.
 	Endpoint = env.NewString(env.Spec{
 		Name:        "BOXER_LLM_ENDPOINT",
 		Description: "OpenAI-compatible chat-completions base URL the host's llm service talks to (e.g. http://localhost:1234/v1); unset means no model is offered to apps",
@@ -37,7 +37,7 @@ var (
 	MaxTokens = env.NewInt(env.Spec{
 		Name:        "BOXER_LLM_MAXTOKENS",
 		Default:     "4096",
-		Description: "completion token ceiling per llm.complete when the request names none",
+		Description: "completion token ceiling per runtime.llm.complete when the request names none",
 		Category:    env.CategoryLLM,
 	})
 
@@ -48,17 +48,17 @@ var (
 	// them, or reject the member outright.
 	ReasoningEffort = env.NewCategorialString(env.Spec{
 		Name:        "BOXER_LLM_REASONING_EFFORT",
-		Description: "reasoning level sent as reasoning_effort on every llm.complete whose request does not set one in its provider-specific extra; unset sends none and leaves the provider's default; each model accepts only some of the values, and a server that does not know the member may reject the call; reasoning tokens count against BOXER_LLM_MAXTOKENS",
+		Description: "reasoning level sent as reasoning_effort on every runtime.llm.complete whose request does not set one in its provider-specific extra; unset sends none and leaves the provider's default; each model accepts only some of the values, and a server that does not know the member may reject the call; reasoning tokens count against BOXER_LLM_MAXTOKENS",
 		Category:    env.CategoryLLM,
 	}, []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"})
 
 	// Timeout bounds one completion on the service side. A client that
-	// names no wait of its own learns it from llm.describe and waits that
+	// names no wait of its own learns it from runtime.llm.describe and waits that
 	// long plus ReplyMargin, so this one value governs the apps too.
 	Timeout = env.NewDuration(env.Spec{
 		Name:        "BOXER_LLM_TIMEOUT",
 		Default:     "120s",
-		Description: "wall-clock bound on one llm.complete; the service cancels the provider call at it, and app clients that name no timeout of their own wait that long plus a few seconds for the reply",
+		Description: "wall-clock bound on one runtime.llm.complete; the service cancels the provider call at it, and app clients that name no timeout of their own wait that long plus a few seconds for the reply",
 		Category:    env.CategoryLLM,
 	})
 
@@ -76,7 +76,7 @@ var (
 	ContextTokens = env.NewInt(env.Spec{
 		Name:        "BOXER_LLM_CONTEXT_TOKENS",
 		Default:     "0",
-		Description: "the model's context size in tokens, reported by llm.describe so a chat can say how full its conversation is; 0 asks the endpoint's model list once at start (context_length, max_model_len and the like), and a server that reports none leaves it unknown",
+		Description: "the model's context size in tokens, reported by runtime.llm.describe so a chat can say how full its conversation is; 0 asks the endpoint's model list once at start (context_length, max_model_len and the like), and a server that reports none leaves it unknown",
 		Category:    env.CategoryLLM,
 	})
 
@@ -88,7 +88,7 @@ var (
 	Retain = env.NewCategorialString(env.Spec{
 		Name:        "BOXER_LLM_RETAIN",
 		Default:     string(RetainOff),
-		Description: "ceiling on keeping model message text: off (sizes and counts only), ring (text on this process's keelson('llm_calls') rows), durable (ring, plus the messages of llm.retain.* requests on boxer.facts, kept until removed by hand)",
+		Description: "ceiling on keeping model message text: off (sizes and counts only), ring (text on this process's keelson('llm_calls') rows), durable (ring, plus the messages of runtime.llm.retain.* requests on boxer.facts, kept until removed by hand)",
 		Category:    env.CategoryLLM,
 	}, []string{string(RetainOff), string(RetainRing), string(RetainDurable)})
 
@@ -98,7 +98,7 @@ var (
 	// moderator.
 	Moderators = env.NewString(env.Spec{
 		Name:        "BOXER_LLM_MODERATORS",
-		Description: "comma-separated app ids that may set, list and cancel through llm.ration.* (ADR-0300): the moderators that throttle and refuse model calls; empty means no app may",
+		Description: "comma-separated app ids that may set, list and cancel through runtime.llm.ration.* (ADR-0300): the moderators that throttle and refuse model calls; empty means no app may",
 		Category:    env.CategoryLLM,
 	})
 

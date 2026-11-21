@@ -356,8 +356,8 @@ func TestTheLedgerChargesAudioLength(t *testing.T) {
 	assert.Equal(t, "audio", refused.Rule)
 }
 
-// The grant covers the verb as the wildcard reads: ClientCaps's llm.*
-// reaches llm.transcribe, and an app without it is refused by the bus.
+// The grant covers the verb as the wildcard reads: ClientCaps's runtime.llm.*
+// reaches runtime.llm.transcribe, and an app without it is refused by the bus.
 func TestTheClientGrantCoversTranscribe(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
 	cfg := speechCfg(&fakeTranscriber{resp: openaichat.Transcript{Text: "x"}})

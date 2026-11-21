@@ -19,14 +19,14 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
-// Speech to text as a verb of the family (ADR-0383): llm.transcribe sends
+// Speech to text as a verb of the family (ADR-0383): runtime.llm.transcribe sends
 // one recording to the host's transcription route — its own endpoint and
 // model, since the speech server is rarely the chat server — through the
-// same policy point as llm.complete, and answers one transcript shape. The
-// `llm.*` grant covers it, as the wildcard reads.
+// same policy point as runtime.llm.complete, and answers one transcript shape. The
+// `runtime.llm.*` grant covers it, as the wildcard reads.
 
 // SubjectTranscribe is one transcription.
-const SubjectTranscribe = "llm.transcribe"
+const SubjectTranscribe = "runtime.llm.transcribe"
 
 // DefaultTranscribeTimeout bounds one transcription when the config names
 // none: a long recording takes longer than a chat answer.
@@ -43,19 +43,19 @@ var (
 	// TranscribeEndpoint is the transcription route's base URL.
 	TranscribeEndpoint = env.NewString(env.Spec{
 		Name:        "BOXER_LLM_TRANSCRIBE_ENDPOINT",
-		Description: "OpenAI-compatible base URL (OpenAI, vLLM) the host's llm service sends llm.transcribe to, e.g. http://localhost:8000/v1; unset means no transcription is offered to apps",
+		Description: "OpenAI-compatible base URL (OpenAI, vLLM) the host's llm service sends runtime.llm.transcribe to, e.g. http://localhost:8000/v1; unset means no transcription is offered to apps",
 		Category:    env.CategoryLLM,
 	})
 	// TranscribeModel is the model a plain transcription uses.
 	TranscribeModel = env.NewString(env.Spec{
 		Name:        "BOXER_LLM_TRANSCRIBE_MODEL",
-		Description: "speech-to-text model id llm.transcribe uses (e.g. whisper-1, gpt-4o-transcribe, or the Whisper model a vLLM serves); unset means no transcription is offered even with the endpoint set",
+		Description: "speech-to-text model id runtime.llm.transcribe uses (e.g. whisper-1, gpt-4o-transcribe, or the Whisper model a vLLM serves); unset means no transcription is offered even with the endpoint set",
 		Category:    env.CategoryLLM,
 	})
 	// TranscribeDiarizeModel is the model a diarized transcription uses.
 	TranscribeDiarizeModel = env.NewString(env.Spec{
 		Name:        "BOXER_LLM_TRANSCRIBE_DIARIZE_MODEL",
-		Description: "model id a diarized llm.transcribe uses (e.g. gpt-4o-transcribe-diarize, or a diarizing model a vLLM serves); unset refuses requests that ask for speakers",
+		Description: "model id a diarized runtime.llm.transcribe uses (e.g. gpt-4o-transcribe-diarize, or a diarizing model a vLLM serves); unset refuses requests that ask for speakers",
 		Category:    env.CategoryLLM,
 	})
 	// TranscribeApiKey is the transcription route's key, its own variable
@@ -70,14 +70,14 @@ var (
 	TranscribeTimeout = env.NewDuration(env.Spec{
 		Name:        "BOXER_LLM_TRANSCRIBE_TIMEOUT",
 		Default:     "300s",
-		Description: "wall-clock bound on one llm.transcribe; the service cancels the provider call at it, and app clients that name no timeout of their own wait that long plus a few seconds for the reply",
+		Description: "wall-clock bound on one runtime.llm.transcribe; the service cancels the provider call at it, and app clients that name no timeout of their own wait that long plus a few seconds for the reply",
 		Category:    env.CategoryLLM,
 	})
 	// TranscribeMaxBytes is the most audio one transcription carries.
 	TranscribeMaxBytes = env.NewInt(env.Spec{
 		Name:        "BOXER_LLM_TRANSCRIBE_MAXBYTES",
 		Default:     strconv.Itoa(DefaultTranscribeMaxBytes),
-		Description: "most bytes one llm.transcribe request may carry as it leaves, the recording and any known-speaker clips together; larger requests are refused before anything leaves (OpenAI and vLLM's default both take 25 MiB)",
+		Description: "most bytes one runtime.llm.transcribe request may carry as it leaves, the recording and any known-speaker clips together; larger requests are refused before anything leaves (OpenAI and vLLM's default both take 25 MiB)",
 		Category:    env.CategoryLLM,
 	})
 )
@@ -106,7 +106,7 @@ func TranscribeConfigFromEnv() (cfg TranscribeConfig) {
 		ApiKey: TranscribeApiKey.Get(), Timeout: TranscribeTimeout.Get(), MaxBytes: TranscribeMaxBytes.Get()}
 }
 
-// TranscriptionDescription is what llm.describe says of the transcription
+// TranscriptionDescription is what runtime.llm.describe says of the transcription
 // route.
 type TranscriptionDescription struct {
 	Configured   bool
@@ -295,7 +295,7 @@ func (inst *Client) transcribe(ctx context.Context, r TranscriptionRequest, onDe
 	}
 	raw, err := inst.request(ctx, SubjectTranscribe, payload, req.CancelKey, inst.transcriptionWait(ctx))
 	if err != nil {
-		return res, eb.Build().Str("purpose", r.Purpose).Errorf("llm.transcribe request: %w", err)
+		return res, eb.Build().Str("purpose", r.Purpose).Errorf("runtime.llm.transcribe request: %w", err)
 	}
 	w, err := decode[wireTranscribeReply](raw)
 	if err != nil {
@@ -329,7 +329,7 @@ func (inst *Client) transcriptionWait(ctx context.Context) (d time.Duration) {
 
 // --- the wire ---------------------------------------------------------------
 
-// wireTranscribeRequest is the envelope on llm.transcribe.
+// wireTranscribeRequest is the envelope on runtime.llm.transcribe.
 type wireTranscribeRequest struct {
 	V           uint8  `json:"v"`
 	Purpose     string `json:"purpose,omitempty"`
@@ -404,7 +404,7 @@ func segmentsOfWire(ss []wireSegment) (out []openaichat.TranscriptSegment) {
 	return
 }
 
-// wireTranscribeReply is the reply on llm.transcribe: the reply every verb
+// wireTranscribeReply is the reply on runtime.llm.transcribe: the reply every verb
 // gives — the refusal, the failure kind, the call id, the admission — and
 // the transcript, its text in Content. A refusal is the plain reply.
 type wireTranscribeReply struct {
@@ -534,7 +534,7 @@ func transcriptionLeaks(req wireTranscribeRequest) string {
 	return b.String()
 }
 
-// handleTranscribe answers llm.transcribe: the request is checked and
+// handleTranscribe answers runtime.llm.transcribe: the request is checked and
 // encoded as it would leave, passes the policy point, and the transcript
 // goes back with the call on the record.
 func (inst *Service) handleTranscribe(msg *app.Msg) {

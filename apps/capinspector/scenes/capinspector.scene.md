@@ -50,7 +50,7 @@ accessibility node, so the scene does not open it.
 {"do":"note","text":"--- a click on a graph node selects its cap ---"}
 {"do":"click","x":523,"y":452,"pointer":true,"comment":"the 'Subject router' card; coordinates because the graph has no accessibility nodes"}
 {"do":"wait","value":"Subject family: (all subjects)","role":"label"}
-{"do":"click","name":"llm.* model inference","role":"button"}
+{"do":"click","name":"runtime.llm.* model inference","role":"button"}
 {"do":"wait","valueContains":"Live consumers in this registry:","role":"label","comment":"llm has a per-app filter, so the line lists the apps that declare it"}
 {"do":"capture","text":"capinspector-llm"}
 

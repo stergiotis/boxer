@@ -374,7 +374,7 @@ func (inst *App) contextFill() (used int64, limit int64, trigger int64, over boo
 }
 
 // renderContext is how full the model's context is: the last answered
-// call's prompt and answer against the size llm.describe reports, a bar
+// call's prompt and answer against the size runtime.llm.describe reports, a bar
 // once the size is known, and a count without it.
 func (inst *App) renderContext() {
 	used, limit, trigger, over, off, why := inst.contextFill()

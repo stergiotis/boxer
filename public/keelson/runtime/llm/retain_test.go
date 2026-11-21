@@ -50,7 +50,7 @@ func user(s string) openaichat.Message {
 	return openaichat.Message{Role: openaichat.ChatRoleUser, Content: s}
 }
 
-// ADR-0264 §SD1: the retained subject is outside every llm.* grant, so an
+// ADR-0264 §SD1: the retained subject is outside every runtime.llm.* grant, so an
 // app that declared only ClientCaps is refused it by the bus.
 func TestRetainNeedsItsOwnGrant(t *testing.T) {
 	p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "a"}}

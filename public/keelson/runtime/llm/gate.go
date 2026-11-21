@@ -50,7 +50,7 @@ type gateIn struct {
 	// canaries read (§SD6).
 	body  []byte
 	leaks string
-	// cancelKey and deadline are the requester's handle for llm.cancel
+	// cancelKey and deadline are the requester's handle for runtime.llm.cancel
 	// and its ctx deadline in Unix nanoseconds, 0 for none.
 	cancelKey string
 	deadline  int64

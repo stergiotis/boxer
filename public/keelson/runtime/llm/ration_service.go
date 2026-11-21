@@ -46,21 +46,21 @@ type AskerI interface {
 
 type askerRef struct{ a AskerI }
 
-// SetAsker installs the dialog llm.ration.ask uses. Until it is set, an ask
+// SetAsker installs the dialog runtime.llm.ration.ask uses. Until it is set, an ask
 // is answered with a refusal.
 func (inst *Service) SetAsker(a AskerI) { inst.asker.Store(&askerRef{a: a}) }
 
 // Ledger is the service's usage ledger, for the introspection tables.
 func (inst *Service) Ledger() (l *ration.Ledger) { return inst.ledger }
 
-// AskTimeout bounds how long llm.ration.ask waits for the person.
+// AskTimeout bounds how long runtime.llm.ration.ask waits for the person.
 const AskTimeout = 10 * time.Minute
 
 // rebuildTimeout bounds the ledger's rebuild from the trail at start.
 const rebuildTimeout = 15 * time.Second
 
 // activeCall is a call between admission and its reply: what
-// llm.ration.cancel can reach.
+// runtime.llm.ration.cancel can reach.
 type activeCall struct {
 	chain  ration.Chain
 	cancel context.CancelCauseFunc
@@ -93,7 +93,7 @@ func (inst *Service) noteModeratorTask(moderator app.AppIdT, task string) {
 	tasks[task] = true
 }
 
-// Moderators are the apps this service admits to llm.ration.*: the list
+// Moderators are the apps this service admits to runtime.llm.ration.*: the list
 // the agent dispatcher admits to its moderator verbs as well.
 func (inst *Service) Moderators() (ids []string) { return slices.Clone(inst.cfg.Moderators) }
 
@@ -165,7 +165,7 @@ func (inst *Service) publish(subject string, v any) {
 	}
 }
 
-// publishCall is llm.event.call for a call admission decided.
+// publishCall is runtime.llm.event.call for a call admission decided.
 func (inst *Service) publishCall(rec CallRecord, chain ration.Chain, class ration.ClassE, d ration.Decision, u ration.Usage) {
 	inst.publish(SubjectEventCall, wireCallEvent{V: wireVersion, CallId: rec.CallId, At: unixNs(rec.At), App: chain.App,
 		Instance: chain.Instance, Task: chain.Task, Purpose: chain.Purpose, Class: class.String(),
@@ -265,7 +265,7 @@ func (inst *Service) rationSet(msg *app.Msg) (rep wireRationReply) {
 			return
 		}
 		if inst.affectsSelf(msg, old.Select) {
-			rep.Reason = "removing " + strconv.Quote(old.Id) + " loosens a rule on the moderator's own calls; ask the person (llm.ration.ask)"
+			rep.Reason = "removing " + strconv.Quote(old.Id) + " loosens a rule on the moderator's own calls; ask the person (runtime.llm.ration.ask)"
 			inst.auditRule(msg, "rule-remove", old, option.None[ration.Rule](), trail.OutcomeDenied, rep.Reason)
 			return
 		}
@@ -285,7 +285,7 @@ func (inst *Service) rationSet(msg *app.Msg) (rep wireRationReply) {
 	}
 	prev := previousRule(inst.ledger, r.Id)
 	if prev.Has && inst.affectsSelf(msg, prev.Val.Select) && loosens(prev.Val, r) {
-		rep.Reason = "the change to " + strconv.Quote(r.Id) + " loosens a rule on the moderator's own calls; ask the person (llm.ration.ask)"
+		rep.Reason = "the change to " + strconv.Quote(r.Id) + " loosens a rule on the moderator's own calls; ask the person (runtime.llm.ration.ask)"
 		inst.auditRule(msg, "rule-set", r, prev, trail.OutcomeDenied, rep.Reason)
 		return
 	}

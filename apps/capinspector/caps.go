@@ -421,8 +421,8 @@ var Registry = map[CapId]CapSpec{
 	},
 	CapLLM: {
 		Id:            CapLLM,
-		Display:       "llm.* model inference",
-		SubjectFamily: "llm.{describe|complete}, llm.retain.complete (request/reply)",
+		Display:       "runtime.llm.* model inference",
+		SubjectFamily: "runtime.llm.{describe|complete}, runtime.llm.retain.complete (request/reply)",
 		Description: "Sending text to a model from an app (ADR-0254): describe " +
 			"says whether the host offers a model, which one and where it is; " +
 			"complete is one chat completion through the host's one client, " +

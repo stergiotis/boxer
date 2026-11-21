@@ -8,7 +8,7 @@
 // per host rather than per app, and so that there is one place — the
 // service — where "may this reach a model" is decided (ADR-0254 §SD3).
 // An app that talks to a model shows no network capability at all; it
-// holds an `llm.*` grant instead.
+// holds an `runtime.llm.*` grant instead.
 //
 // A model's tool calls come back to the caller unexecuted (§SD5): the loop
 // is the app's, and every tool runs through the bus client the app already
@@ -29,57 +29,57 @@ const ServiceAppId app.AppIdT = "runtime.llm"
 // The family (ADR-0254 §SD1): `llm.<verb>`, request/reply.
 const (
 	// SubjectPrefix precedes the verb.
-	SubjectPrefix = "llm."
+	SubjectPrefix = "runtime.llm."
 	// SubjectDescribe asks what the host offers: the model, the endpoint's
 	// host, and what the client supports.
-	SubjectDescribe = "llm.describe"
+	SubjectDescribe = "runtime.llm.describe"
 	// SubjectComplete is one chat completion.
-	SubjectComplete = "llm.complete"
+	SubjectComplete = "runtime.llm.complete"
 	// SubjectCancel stops a completion in flight: a publish, no reply,
 	// naming the cancel key the request carried. Only the sender that
 	// made the request can stop it.
-	SubjectCancel = "llm.cancel"
+	SubjectCancel = "runtime.llm.cancel"
 	// SubjectAll is the service's subscription pattern.
-	SubjectAll = "llm.*"
+	SubjectAll = "runtime.llm.*"
 
 	// SubjectRetainPrefix precedes the retained verbs (ADR-0264 §SD1). Two
-	// tokens, so no `llm.*` grant covers them: an app keeps text only by
+	// tokens, so no `runtime.llm.*` grant covers them: an app keeps text only by
 	// declaring [RetainCaps], and the bus refuses the subject otherwise.
-	SubjectRetainPrefix = "llm.retain."
-	// SubjectRetainComplete is llm.complete whose conversation the service
+	SubjectRetainPrefix = "runtime.llm.retain."
+	// SubjectRetainComplete is runtime.llm.complete whose conversation the service
 	// keeps where the deployment permits it.
-	SubjectRetainComplete = "llm.retain.complete"
+	SubjectRetainComplete = "runtime.llm.retain.complete"
 	// SubjectRetainAll is the service's subscription pattern for them.
-	SubjectRetainAll = "llm.retain.*"
+	SubjectRetainAll = "runtime.llm.retain.*"
 
 	// SubjectRationPrefix precedes the moderator's verbs (ADR-0300 §SD4,
-	// §SD7). Two tokens, so no `llm.*` grant covers them: only an app that
+	// §SD7). Two tokens, so no `runtime.llm.*` grant covers them: only an app that
 	// declares [ModeratorCaps] and is listed in BOXER_LLM_MODERATORS
 	// reaches them.
-	SubjectRationPrefix = "llm.ration."
+	SubjectRationPrefix = "runtime.llm.ration."
 	// SubjectRationSet sets or removes a rule.
-	SubjectRationSet = "llm.ration.set"
+	SubjectRationSet = "runtime.llm.ration.set"
 	// SubjectRationList lists the rules and their state on each account.
-	SubjectRationList = "llm.ration.list"
+	SubjectRationList = "runtime.llm.ration.list"
 	// SubjectRationCancel cancels the calls in flight of a call id or an
 	// account, those waiting in the queue included.
-	SubjectRationCancel = "llm.ration.cancel"
+	SubjectRationCancel = "runtime.llm.ration.cancel"
 	// SubjectRationAsk proposes a rule for the person to decide.
-	SubjectRationAsk = "llm.ration.ask"
+	SubjectRationAsk = "runtime.llm.ration.ask"
 	// SubjectRationAll is the service's subscription pattern for them.
-	SubjectRationAll = "llm.ration.*"
+	SubjectRationAll = "runtime.llm.ration.*"
 
 	// SubjectEventPrefix precedes what the service publishes for
 	// moderators: one event per call admission decided, and one per soft
 	// threshold a call crossed. Publish only; nothing replies.
-	SubjectEventPrefix = "llm.event."
+	SubjectEventPrefix = "runtime.llm.event."
 	// SubjectEventCall is one call: who it was charged to, how admission
 	// decided it, and what it used.
-	SubjectEventCall = "llm.event.call"
+	SubjectEventCall = "runtime.llm.event.call"
 	// SubjectEventThreshold is a soft threshold a call crossed.
-	SubjectEventThreshold = "llm.event.threshold"
+	SubjectEventThreshold = "runtime.llm.event.threshold"
 	// SubjectEventAll is a moderator's subscription pattern.
-	SubjectEventAll = "llm.event.*"
+	SubjectEventAll = "runtime.llm.event.*"
 )
 
 // The introspection tables of the ledger (ADR-0300 §SD3).

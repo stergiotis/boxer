@@ -654,7 +654,7 @@ func (inst *Ledger) dropLapsed(now time.Time) {
 	}
 }
 
-// RuleState is a rule on one account, as llm.ration.list and
+// RuleState is a rule on one account, as runtime.llm.ration.list and
 // keelson('llm_rations') show it.
 type RuleState struct {
 	Rule     Rule

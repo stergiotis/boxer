@@ -1249,7 +1249,7 @@
       "name": "BOXER_LLM_CONTEXT_TOKENS",
       "type": "int64",
       "default": "0",
-      "description": "the model's context size in tokens, reported by llm.describe so a chat can say how full its conversation is; 0 asks the endpoint's model list once at start (context_length, max_model_len and the like), and a server that reports none leaves it unknown",
+      "description": "the model's context size in tokens, reported by runtime.llm.describe so a chat can say how full its conversation is; 0 asks the endpoint's model list once at start (context_length, max_model_len and the like), and a server that reports none leaves it unknown",
       "category": "llm",
       "sensitive": false,
       "origin": {
@@ -1272,7 +1272,7 @@
       "name": "BOXER_LLM_MAXTOKENS",
       "type": "int64",
       "default": "4096",
-      "description": "completion token ceiling per llm.complete when the request names none",
+      "description": "completion token ceiling per runtime.llm.complete when the request names none",
       "category": "llm",
       "sensitive": false,
       "origin": {
@@ -1294,7 +1294,7 @@
     {
       "name": "BOXER_LLM_MODERATORS",
       "type": "string",
-      "description": "comma-separated app ids that may set, list and cancel through llm.ration.* (ADR-0300): the moderators that throttle and refuse model calls; empty means no app may",
+      "description": "comma-separated app ids that may set, list and cancel through runtime.llm.ration.* (ADR-0300): the moderators that throttle and refuse model calls; empty means no app may",
       "category": "llm",
       "sensitive": false,
       "origin": {
@@ -1321,7 +1321,7 @@
     {
       "name": "BOXER_LLM_REASONING_EFFORT",
       "type": "categorial-string",
-      "description": "reasoning level sent as reasoning_effort on every llm.complete whose request does not set one in its provider-specific extra; unset sends none and leaves the provider's default; each model accepts only some of the values, and a server that does not know the member may reject the call; reasoning tokens count against BOXER_LLM_MAXTOKENS",
+      "description": "reasoning level sent as reasoning_effort on every runtime.llm.complete whose request does not set one in its provider-specific extra; unset sends none and leaves the provider's default; each model accepts only some of the values, and a server that does not know the member may reject the call; reasoning tokens count against BOXER_LLM_MAXTOKENS",
       "category": "llm",
       "sensitive": false,
       "allowed": [
@@ -1342,7 +1342,7 @@
       "name": "BOXER_LLM_RETAIN",
       "type": "categorial-string",
       "default": "off",
-      "description": "ceiling on keeping model message text: off (sizes and counts only), ring (text on this process's keelson('llm_calls') rows), durable (ring, plus the messages of llm.retain.* requests on boxer.facts, kept until removed by hand)",
+      "description": "ceiling on keeping model message text: off (sizes and counts only), ring (text on this process's keelson('llm_calls') rows), durable (ring, plus the messages of runtime.llm.retain.* requests on boxer.facts, kept until removed by hand)",
       "category": "llm",
       "sensitive": false,
       "allowed": [
@@ -1370,7 +1370,7 @@
       "name": "BOXER_LLM_TIMEOUT",
       "type": "duration",
       "default": "120s",
-      "description": "wall-clock bound on one llm.complete; the service cancels the provider call at it, and app clients that name no timeout of their own wait that long plus a few seconds for the reply",
+      "description": "wall-clock bound on one runtime.llm.complete; the service cancels the provider call at it, and app clients that name no timeout of their own wait that long plus a few seconds for the reply",
       "category": "llm",
       "sensitive": false,
       "origin": {
@@ -1403,7 +1403,7 @@
     {
       "name": "BOXER_LLM_TRANSCRIBE_DIARIZE_MODEL",
       "type": "string",
-      "description": "model id a diarized llm.transcribe uses (e.g. gpt-4o-transcribe-diarize, or a diarizing model a vLLM serves); unset refuses requests that ask for speakers",
+      "description": "model id a diarized runtime.llm.transcribe uses (e.g. gpt-4o-transcribe-diarize, or a diarizing model a vLLM serves); unset refuses requests that ask for speakers",
       "category": "llm",
       "sensitive": false,
       "origin": {
@@ -1414,7 +1414,7 @@
     {
       "name": "BOXER_LLM_TRANSCRIBE_ENDPOINT",
       "type": "string",
-      "description": "OpenAI-compatible base URL (OpenAI, vLLM) the host's llm service sends llm.transcribe to, e.g. http://localhost:8000/v1; unset means no transcription is offered to apps",
+      "description": "OpenAI-compatible base URL (OpenAI, vLLM) the host's llm service sends runtime.llm.transcribe to, e.g. http://localhost:8000/v1; unset means no transcription is offered to apps",
       "category": "llm",
       "sensitive": false,
       "origin": {
@@ -1426,7 +1426,7 @@
       "name": "BOXER_LLM_TRANSCRIBE_MAXBYTES",
       "type": "int64",
       "default": "26214400",
-      "description": "most bytes one llm.transcribe request may carry as it leaves, the recording and any known-speaker clips together; larger requests are refused before anything leaves (OpenAI and vLLM's default both take 25 MiB)",
+      "description": "most bytes one runtime.llm.transcribe request may carry as it leaves, the recording and any known-speaker clips together; larger requests are refused before anything leaves (OpenAI and vLLM's default both take 25 MiB)",
       "category": "llm",
       "sensitive": false,
       "origin": {
@@ -1437,7 +1437,7 @@
     {
       "name": "BOXER_LLM_TRANSCRIBE_MODEL",
       "type": "string",
-      "description": "speech-to-text model id llm.transcribe uses (e.g. whisper-1, gpt-4o-transcribe, or the Whisper model a vLLM serves); unset means no transcription is offered even with the endpoint set",
+      "description": "speech-to-text model id runtime.llm.transcribe uses (e.g. whisper-1, gpt-4o-transcribe, or the Whisper model a vLLM serves); unset means no transcription is offered even with the endpoint set",
       "category": "llm",
       "sensitive": false,
       "origin": {
@@ -1448,7 +1448,7 @@
     {
       "name": "BOXER_LLM_TRANSCRIBE_SCRIPT",
       "type": "string",
-      "description": "path to a scripted transcriber (JSON lines, each an answer body as OpenAI or vLLM sends it: json, verbose_json or diarized_json) the llm service answers llm.transcribe from, in order, instead of an endpoint; honoured only on a host a scene launched (headless, under a scene-* BOXER_COMPONENT mark)",
+      "description": "path to a scripted transcriber (JSON lines, each an answer body as OpenAI or vLLM sends it: json, verbose_json or diarized_json) the llm service answers runtime.llm.transcribe from, in order, instead of an endpoint; honoured only on a host a scene launched (headless, under a scene-* BOXER_COMPONENT mark)",
       "category": "llm",
       "sensitive": false,
       "origin": {
@@ -1460,7 +1460,7 @@
       "name": "BOXER_LLM_TRANSCRIBE_TIMEOUT",
       "type": "duration",
       "default": "300s",
-      "description": "wall-clock bound on one llm.transcribe; the service cancels the provider call at it, and app clients that name no timeout of their own wait that long plus a few seconds for the reply",
+      "description": "wall-clock bound on one runtime.llm.transcribe; the service cancels the provider call at it, and app clients that name no timeout of their own wait that long plus a few seconds for the reply",
       "category": "llm",
       "sensitive": false,
       "origin": {
