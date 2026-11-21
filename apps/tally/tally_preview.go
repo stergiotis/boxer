@@ -12,12 +12,12 @@ import (
 
 	"github.com/stergiotis/boxer/public/fs/lading/ladingview"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/semistructured/utfsafe"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imagedecode"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
-	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
 
 // previewKindE is how a file is shown in the Preview pane.

@@ -12,5 +12,5 @@ var PackageProps = packageprops.Props{
 }
 
 func init() {
-	packageprops.Register("github.com/stergiotis/boxer/public/thestack/utfsafe", PackageProps)
+	packageprops.Register("github.com/stergiotis/boxer/public/semistructured/utfsafe", PackageProps)
 }

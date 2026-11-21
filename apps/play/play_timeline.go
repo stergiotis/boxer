@@ -9,10 +9,10 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/semistructured/utfsafe"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
-	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
 
 // Canonical slot names for the timeline panel's column contract. All slots

@@ -3,7 +3,7 @@ package play
 import (
 	"unicode/utf8"
 
-	"github.com/stergiotis/boxer/public/thestack/utfsafe"
+	"github.com/stergiotis/boxer/public/semistructured/utfsafe"
 )
 
 // truncateRunes returns s clamped to at most maxRunes runes, appending an

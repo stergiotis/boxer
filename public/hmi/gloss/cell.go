@@ -10,7 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
-	"github.com/stergiotis/boxer/public/thestack/utfsafe"
+	"github.com/stergiotis/boxer/public/semistructured/utfsafe"
 )
 
 // CellI is a gloss's view of one value. Two implementations ship: ArrowCell

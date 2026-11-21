@@ -11,9 +11,9 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwread"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
+	"github.com/stergiotis/boxer/public/semistructured/utfsafe"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
-	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
 
 // RecordCard draws leeway records as lwread reads them (ADR-0289 §SD3) as

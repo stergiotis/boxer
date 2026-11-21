@@ -18,10 +18,10 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
+	"github.com/stergiotis/boxer/public/semistructured/utfsafe"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
-	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
 
 // play_table_attr.go is the Table pane's per-attribute leeway view — the

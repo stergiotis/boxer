@@ -7,7 +7,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
-	"github.com/stergiotis/boxer/public/thestack/utfsafe"
+	"github.com/stergiotis/boxer/public/semistructured/utfsafe"
 )
 
 // formatCell turns (col, row) of a RecordBatch into a display string.

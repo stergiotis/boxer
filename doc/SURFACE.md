@@ -962,6 +962,7 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 - `public/semistructured/markdown/obsidian/ext/tag`
 - `public/semistructured/markdown/obsidian/ext/wikilink`
 - `public/semistructured/markdown/obsidian/resolver`
+- `public/semistructured/utfsafe` — Package utfsafe coerces arbitrary byte streams into UTF-8-valid strings for the FFFI wire and other UTF-8-strict consumers.
 
 ### sliceconv
 
@@ -1031,7 +1032,6 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 - `public/thestack/imzero2/hostwake` — Package hostwake lets code off the render goroutine ask the imzero2 client for a pass now (ADR-0363 §M4, proposed).
 - `public/thestack/imzero2/imzero2env` — Package imzero2env centralises the IMZERO2_* environment variables consumed across the imzero2 demo carousel, tours, and embedded applications.
 - `public/thestack/imzero2/metrics` — Package metrics tracks per-frame timing budgets for imzero2 — Go render, Rust interpret, and vsync slack.
-- `public/thestack/utfsafe` — Package utfsafe coerces arbitrary byte streams into UTF-8-valid strings for the FFFI wire and other UTF-8-strict consumers.
 
 ### unsafeperf
 

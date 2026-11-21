@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/semistructured/cbor/diag"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian"
+	"github.com/stergiotis/boxer/public/semistructured/utfsafe"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
@@ -22,7 +23,6 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexsummary"
-	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
 
 // play_detail_rich.go is the block-face side of ADR-0186 (née ADR-0123's

@@ -12,11 +12,11 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/semistructured/utfsafe"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/cardgrid"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
-	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
 
 // play_cardgrid_panel.go is the ADR-0245 Cards dock tab: a result set as a

@@ -7,7 +7,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/thestack/utfsafe"
+	"github.com/stergiotis/boxer/public/semistructured/utfsafe"
 )
 
 // The content family: ADR-0123's vocabulary, registered first and in its
