@@ -11,7 +11,7 @@ import (
 func twoWindows(t *testing.T) (h *Inst, a, b WindowKeyT) {
 	t.Helper()
 	reg, _ := mkRegistryWithSingleton(t, "test.a", "test.b")
-	h = NewInst(reg, zerolog.Nop())
+	h = NewInst(t.Context(), reg, zerolog.Nop())
 	var err error
 	a, err = h.Open("test.a")
 	require.NoError(t, err)

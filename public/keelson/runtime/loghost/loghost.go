@@ -21,7 +21,7 @@
 //	// ... in the imzero2 command's Before:
 //	closeLogBridge = loghost.Install(c.Context)
 //	// ... in App.After:
-//	_ = closeLogBridge()
+//	_ = closeLogBridge(shutdownCtx)
 package loghost
 
 import (
@@ -60,10 +60,12 @@ import (
 // ctx scopes the store's setup round-trips (chstore.Ping / SetupTable);
 // hosts typically pass the context their Action received.
 //
-// Returns a closer the caller invokes at shutdown, which drains the Sink
-// when there is one and restores the previous logger. Always safe to
-// call.
-func Install(ctx context.Context) (closer func() error) {
+// Returns a closer the caller invokes at shutdown with the shutdown's ctx,
+// which drains the Sink within it when there is one and restores the
+// previous logger. Always safe to call. The Sink outlives ctx's
+// cancellation — log lines written while the process winds down still
+// land — and ends at the closer.
+func Install(ctx context.Context) (closer func(ctx context.Context) error) {
 	// The run is whatever has been initialised by now, and "" otherwise:
 	// Install does not mint one, since it runs in every imzero2 subcommand
 	// and a minted run would reach the processes they launch through the
@@ -92,7 +94,7 @@ func Install(ctx context.Context) (closer func() error) {
 	}
 	rs := newRunStore(store, cfg)
 	logStore.Store(rs)
-	sink, serr := logbridge.NewSink(rs, logbridge.Config{})
+	sink, serr := logbridge.NewSink(context.WithoutCancel(ctx), rs, logbridge.Config{})
 	if serr != nil {
 		closer = logbridge.InstallGlobal(passthrough, nil)
 		why = "the log bridge could not start: " + serr.Error()
@@ -170,13 +172,13 @@ func (inst *runStore) adopt(runId string) {
 	inst.cur.Store(next)
 }
 
-func (inst *runStore) WriteLog(row factsstore.LogRow) (id uint64, err error) {
-	id, err = inst.cur.Load().WriteLog(row)
+func (inst *runStore) WriteLog(ctx context.Context, row factsstore.LogRow) (id uint64, err error) {
+	id, err = inst.cur.Load().WriteLog(ctx, row)
 	return
 }
 
-func (inst *runStore) WriteLogs(rows []factsstore.LogRow) (ids []uint64, err error) {
-	ids, err = inst.cur.Load().WriteLogs(rows)
+func (inst *runStore) WriteLogs(ctx context.Context, rows []factsstore.LogRow) (ids []uint64, err error) {
+	ids, err = inst.cur.Load().WriteLogs(ctx, rows)
 	return
 }
 

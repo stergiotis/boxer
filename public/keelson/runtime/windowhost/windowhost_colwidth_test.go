@@ -59,7 +59,7 @@ func TestColumnWidth_CapabilityPresentWithState(t *testing.T) {
 	a := mkColWidthApp()
 	reg := app.NewRegistry()
 	require.NoError(t, reg.Register(a))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	h.SetState(statestore.NewMemory())
 
 	ctx := openAndFrameCtx(t, h, "test.colwidth")
@@ -89,7 +89,7 @@ func TestColumnWidth_CapabilityAbsentWithoutState(t *testing.T) {
 	a := mkColWidthApp()
 	reg := app.NewRegistry()
 	require.NoError(t, reg.Register(a))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	h.SetAudit("run-xyz", factsstore.NewInMemoryFactsStore())
 
 	ctx := openAndFrameCtx(t, h, "test.colwidth")
@@ -102,7 +102,7 @@ func TestColumnWidth_WrapperPreservesWindowFocus(t *testing.T) {
 	a := mkColWidthApp()
 	reg := app.NewRegistry()
 	require.NoError(t, reg.Register(a))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	h.SetState(statestore.NewMemory())
 
 	ctx := openAndFrameCtx(t, h, "test.colwidth")

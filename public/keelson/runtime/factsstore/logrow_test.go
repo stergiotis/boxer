@@ -10,9 +10,9 @@ import (
 
 func TestInMemoryFactsStore_WriteLog_AssignsId(t *testing.T) {
 	s := NewInMemoryFactsStore()
-	id1, err := s.WriteLog(LogRow{Level: "info", Message: "first", Ts: time.Now()})
+	id1, err := s.WriteLog(t.Context(), LogRow{Level: "info", Message: "first", Ts: time.Now()})
 	require.NoError(t, err)
-	id2, err := s.WriteLog(LogRow{Level: "info", Message: "second", Ts: time.Now()})
+	id2, err := s.WriteLog(t.Context(), LogRow{Level: "info", Message: "second", Ts: time.Now()})
 	require.NoError(t, err)
 	assert.NotZero(t, id1)
 	assert.NotEqual(t, id1, id2)
@@ -21,7 +21,7 @@ func TestInMemoryFactsStore_WriteLog_AssignsId(t *testing.T) {
 
 func TestInMemoryFactsStore_WriteLog_CapturesFields(t *testing.T) {
 	s := NewInMemoryFactsStore()
-	_, err := s.WriteLog(LogRow{
+	_, err := s.WriteLog(t.Context(), LogRow{
 		AppId:   "play",
 		Level:   "warn",
 		Message: "slow query",
@@ -47,7 +47,7 @@ func TestInMemoryFactsStore_WriteLog_CapturesFields(t *testing.T) {
 func TestInMemoryFactsStore_WriteLog_DefensiveBytesCopy(t *testing.T) {
 	s := NewInMemoryFactsStore()
 	payload := []byte{0xDE, 0xAD, 0xBE, 0xEF}
-	_, err := s.WriteLog(LogRow{
+	_, err := s.WriteLog(t.Context(), LogRow{
 		Level:   "info",
 		Message: "blob field",
 		Fields:  []LogField{{Name: "raw", Kind: LogFieldKindBytes, Bytes: payload}},

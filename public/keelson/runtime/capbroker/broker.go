@@ -1,6 +1,7 @@
 package capbroker
 
 import (
+	"context"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -164,7 +165,9 @@ func (inst *Broker) handleRequest(msg *app.Msg) {
 	fs := inst.factsStore
 	inst.mu.Unlock()
 	if fs != nil {
-		_, fsErr := fs.WriteGrant(factsstore.GrantRow{
+		// The cap is granted already: its record lands whether or not the
+		// requester still waits, under the request's values.
+		_, fsErr := fs.WriteGrant(context.WithoutCancel(msg.Context()), factsstore.GrantRow{
 			AppId: req.AppId,
 			// Which window asked, attributed from the envelope rather than
 			// the payload (ADR-0191 §SD4) — the request DTO has no such

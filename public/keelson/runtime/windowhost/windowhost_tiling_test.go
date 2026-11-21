@@ -156,7 +156,7 @@ func TestParseLayoutRoundTrips(t *testing.T) {
 // The host's layout API: unknown layouts are refused, parameters are
 // clamped, and a change marks the plan dirty for the next Frame.
 func TestHostLayoutAPI(t *testing.T) {
-	inst := NewInst(nil, zerolog.Nop())
+	inst := NewInst(t.Context(), nil, zerolog.Nop())
 	assert.Equal(t, LayoutFloating, inst.Layout())
 	assert.Equal(t, DefaultLayoutParams, inst.LayoutParams())
 	assert.Error(t, inst.SetLayout(LayoutE(99)))
@@ -178,7 +178,7 @@ func TestHostLayoutAPI(t *testing.T) {
 // A pinned window holds the slot behind the main one as windows open, so it
 // stays at the top of the stack instead of being pushed down it.
 func TestAPinnedWindowHoldsItsSlotBehindTheMain(t *testing.T) {
-	inst := NewInst(nil, zerolog.Nop())
+	inst := NewInst(t.Context(), nil, zerolog.Nop())
 	require.NoError(t, inst.SetLayout(LayoutMainStack))
 	chat, a := &window{key: 1}, &window{key: 2}
 	inst.windows = []*window{chat, a}
@@ -198,7 +198,7 @@ func TestAPinnedWindowHoldsItsSlotBehindTheMain(t *testing.T) {
 // The order follows the open windows: a new window joins in front, a closed
 // one leaves, unfloating puts a window back in front.
 func TestTileOrderFollowsTheWindows(t *testing.T) {
-	inst := NewInst(nil, zerolog.Nop())
+	inst := NewInst(t.Context(), nil, zerolog.Nop())
 	require.NoError(t, inst.SetLayout(LayoutTile))
 	w2, w5 := &window{key: 2}, &window{key: 5}
 	inst.windows = []*window{w2, w5}

@@ -62,7 +62,7 @@ func TestStore_New_RejectsEmptyConfig(t *testing.T) {
 func TestStore_WriteGrant_LiveCH(t *testing.T) {
 	s, cleanup := newLiveStore(t)
 	defer cleanup()
-	id, err := s.WriteGrant(factsstore.GrantRow{
+	id, err := s.WriteGrant(t.Context(), factsstore.GrantRow{
 		AppId:      "github.com/example/play",
 		Pattern:    "ch.query.boxer",
 		Direction:  app.CapDirectionPub,
@@ -81,15 +81,15 @@ func TestStore_WriteGrant_LiveCH(t *testing.T) {
 func TestStore_AllThreeKinds_OneTable_LiveCH(t *testing.T) {
 	s, cleanup := newLiveStore(t)
 	defer cleanup()
-	_, err := s.WriteGrant(factsstore.GrantRow{
+	_, err := s.WriteGrant(t.Context(), factsstore.GrantRow{
 		AppId: "a", Pattern: "x.y", Direction: app.CapDirectionPub, Reason: "r", Sticky: false, GrantedVia: "auto", Ts: time.Now().UTC(),
 	})
 	require.NoError(t, err)
-	_, err = s.WriteLog(factsstore.LogRow{
+	_, err = s.WriteLog(t.Context(), factsstore.LogRow{
 		AppId: "a", Level: "info", Message: "m", Ts: time.Now().UTC(),
 	})
 	require.NoError(t, err)
-	_, err = s.WriteLaunch(factsstore.LaunchRow{
+	_, err = s.WriteLaunch(t.Context(), factsstore.LaunchRow{
 		RunId: "r1", CallerAppId: "a", TargetAppId: "b", TileKey: 1, Ts: time.Now().UTC(),
 	})
 	require.NoError(t, err)
@@ -101,7 +101,7 @@ func TestStore_AllThreeKinds_OneTable_LiveCH(t *testing.T) {
 func TestStore_WriteLog_LiveCH(t *testing.T) {
 	s, cleanup := newLiveStore(t)
 	defer cleanup()
-	id, err := s.WriteLog(factsstore.LogRow{
+	id, err := s.WriteLog(t.Context(), factsstore.LogRow{
 		AppId:   "github.com/example/play",
 		Level:   "info",
 		Message: "query ok",
@@ -125,7 +125,7 @@ func TestStore_WriteLog_LiveCH(t *testing.T) {
 func TestStore_WriteLog_WithError_LiveCH(t *testing.T) {
 	s, cleanup := newLiveStore(t)
 	defer cleanup()
-	id, err := s.WriteLog(factsstore.LogRow{
+	id, err := s.WriteLog(t.Context(), factsstore.LogRow{
 		AppId:   "github.com/example/play",
 		Level:   "error",
 		Message: "ch query failed",
@@ -239,14 +239,14 @@ func TestStore_StampsRunAndInstance_LiveCH(t *testing.T) {
 		write func(s *chstore.Store) error
 	}{
 		{kind: "grant", want: "7", write: func(s *chstore.Store) error {
-			_, err := s.WriteGrant(factsstore.GrantRow{
+			_, err := s.WriteGrant(t.Context(), factsstore.GrantRow{
 				AppId: "github.com/example/play", InstanceKey: 7,
 				Pattern: "ch.query.boxer", Direction: app.CapDirectionPub, Ts: ts,
 			})
 			return err
 		}},
 		{kind: "log", want: "9", write: func(s *chstore.Store) error {
-			_, err := s.WriteLog(factsstore.LogRow{
+			_, err := s.WriteLog(t.Context(), factsstore.LogRow{
 				AppId: "github.com/example/play", InstanceKey: 9,
 				Level: "info", Message: "hello", Ts: ts,
 			})
@@ -278,31 +278,31 @@ func TestStore_EveryKindReadsAsOrigin_LiveCH(t *testing.T) {
 	ts := time.Now().UTC()
 	writes := []func() error{
 		func() error {
-			_, err := s.WriteGrant(factsstore.GrantRow{AppId: "github.com/example/play", InstanceKey: 7, Pattern: "x.y", Direction: app.CapDirectionPub, Ts: ts})
+			_, err := s.WriteGrant(t.Context(), factsstore.GrantRow{AppId: "github.com/example/play", InstanceKey: 7, Pattern: "x.y", Direction: app.CapDirectionPub, Ts: ts})
 			return err
 		},
 		func() error {
-			_, err := s.WriteLog(factsstore.LogRow{AppId: "github.com/example/play", InstanceKey: 9, Level: "info", Message: "app", Ts: ts})
+			_, err := s.WriteLog(t.Context(), factsstore.LogRow{AppId: "github.com/example/play", InstanceKey: 9, Level: "info", Message: "app", Ts: ts})
 			return err
 		},
 		func() error {
-			_, err := s.WriteLog(factsstore.LogRow{Level: "info", Message: "host", Ts: ts})
+			_, err := s.WriteLog(t.Context(), factsstore.LogRow{Level: "info", Message: "host", Ts: ts})
 			return err
 		},
 		func() error {
-			_, err := s.WriteRuntimeStart(factsstore.RuntimeStartRow{RunId: "run-origin", Hostname: "h", Pid: 1, Ts: ts})
+			_, err := s.WriteRuntimeStart(t.Context(), factsstore.RuntimeStartRow{RunId: "run-origin", Hostname: "h", Pid: 1, Ts: ts})
 			return err
 		},
 		func() error {
-			_, err := s.WriteRuntimeHeartbeat(factsstore.HeartbeatRow{RunId: "run-origin", Ts: ts})
+			_, err := s.WriteRuntimeHeartbeat(t.Context(), factsstore.HeartbeatRow{RunId: "run-origin", Ts: ts})
 			return err
 		},
 		func() error {
-			_, err := s.WriteAppLifecycle(factsstore.AppLifecycleRow{AppId: "github.com/example/play", TileKey: 5, Phase: factsstore.AppLifecyclePhaseStarted, Ts: ts})
+			_, err := s.WriteAppLifecycle(t.Context(), factsstore.AppLifecycleRow{AppId: "github.com/example/play", TileKey: 5, Phase: factsstore.AppLifecyclePhaseStarted, Ts: ts})
 			return err
 		},
 		func() error {
-			_, err := s.WriteLaunch(factsstore.LaunchRow{CallerAppId: "github.com/example/chat", TargetAppId: "github.com/example/play", TileKey: 5, Ts: ts})
+			_, err := s.WriteLaunch(t.Context(), factsstore.LaunchRow{CallerAppId: "github.com/example/chat", TargetAppId: "github.com/example/play", TileKey: 5, Ts: ts})
 			return err
 		},
 	}
@@ -329,7 +329,7 @@ func TestStore_EveryKindReadsAsOrigin_LiveCH(t *testing.T) {
 func TestStore_RowRunIdWinsOverTheStores_LiveCH(t *testing.T) {
 	s, cleanup := newLiveStampedStore(t, "run-of-this-process")
 	defer cleanup()
-	_, err := s.WriteAppLifecycle(factsstore.AppLifecycleRow{
+	_, err := s.WriteAppLifecycle(t.Context(), factsstore.AppLifecycleRow{
 		RunId: "run-being-backfilled", AppId: "github.com/example/play",
 		TileKey: 5, Phase: factsstore.AppLifecyclePhaseStarted, Ts: time.Now().UTC(),
 	})
@@ -348,7 +348,7 @@ func TestStore_RowRunIdWinsOverTheStores_LiveCH(t *testing.T) {
 func TestStore_UnstampedStoreWritesAnUnattributedRun_LiveCH(t *testing.T) {
 	s, cleanup := newLiveStore(t)
 	defer cleanup()
-	_, err := s.WriteGrant(factsstore.GrantRow{
+	_, err := s.WriteGrant(t.Context(), factsstore.GrantRow{
 		AppId: "github.com/example/play", Pattern: "x.y", Direction: app.CapDirectionPub, Ts: time.Now().UTC(),
 	})
 	require.NoError(t, err)
@@ -373,16 +373,16 @@ func TestStore_ListRunEvents_LiveCH(t *testing.T) {
 	defer cleanup()
 	t0 := time.Now().UTC().Truncate(time.Second)
 
-	_, err := s.WriteRuntimeStart(factsstore.RuntimeStartRow{
+	_, err := s.WriteRuntimeStart(t.Context(), factsstore.RuntimeStartRow{
 		RunId: runId, Hostname: "box-1", Pid: 4242, GoVersion: "go1.26.5", Ts: t0,
 	})
 	require.NoError(t, err)
-	_, err = s.WriteAppLifecycle(factsstore.AppLifecycleRow{
+	_, err = s.WriteAppLifecycle(t.Context(), factsstore.AppLifecycleRow{
 		RunId: runId, AppId: "github.com/example/play", TileKey: 2,
 		Phase: factsstore.AppLifecyclePhaseStarted, Ts: t0.Add(time.Second),
 	})
 	require.NoError(t, err)
-	_, err = s.WriteGrant(factsstore.GrantRow{
+	_, err = s.WriteGrant(t.Context(), factsstore.GrantRow{
 		AppId: "github.com/example/play", InstanceKey: 2,
 		Pattern: "ch.query.boxer", Direction: app.CapDirectionPub, Reason: "ok", Ts: t0.Add(2 * time.Second),
 	})
@@ -425,13 +425,13 @@ func TestStore_ListRunEvents_SelectsOneRun_LiveCH(t *testing.T) {
 	t0 := time.Now().UTC().Truncate(time.Second)
 
 	// Another run's lifecycle row: named, and not ours.
-	_, err := s.WriteAppLifecycle(factsstore.AppLifecycleRow{
+	_, err := s.WriteAppLifecycle(t.Context(), factsstore.AppLifecycleRow{
 		RunId: "some-other-run", AppId: "github.com/example/play", TileKey: 1,
 		Phase: factsstore.AppLifecyclePhaseStarted, Ts: t0.Add(time.Second),
 	})
 	require.NoError(t, err)
 	// Ours, named.
-	_, err = s.WriteAppLifecycle(factsstore.AppLifecycleRow{
+	_, err = s.WriteAppLifecycle(t.Context(), factsstore.AppLifecycleRow{
 		RunId: runId, AppId: "github.com/example/play", TileKey: 3,
 		Phase: factsstore.AppLifecyclePhaseStarted, Ts: t0.Add(2 * time.Second),
 	})

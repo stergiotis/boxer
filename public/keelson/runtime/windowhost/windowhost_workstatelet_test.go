@@ -57,7 +57,7 @@ func newWsFixture(t *testing.T) (fx wsFixture) {
 		return
 	}))
 	fx.cat = workstatelet.NewCatalog()
-	fx.h = NewInst(fx.reg, zerolog.Nop())
+	fx.h = NewInst(t.Context(), fx.reg, zerolog.Nop())
 	fx.h.SetWorkstatelets(fx.cat)
 	fx.facts = attachStores(fx.h)
 	return

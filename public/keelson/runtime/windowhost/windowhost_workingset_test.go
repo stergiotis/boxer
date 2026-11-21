@@ -113,7 +113,7 @@ func newWorkingsetHost(t *testing.T, a *wsApp) (h *Inst, facts testStores) {
 	t.Helper()
 	reg := app.NewRegistry()
 	registerSharedInstance(t, reg, a)
-	h = NewInst(reg, zerolog.Nop())
+	h = NewInst(t.Context(), reg, zerolog.Nop())
 	facts = attachStores(h)
 	return
 }
@@ -249,7 +249,7 @@ func TestWorkingset_ReapAllWritesWithSuppliedReason(t *testing.T) {
 	_, err := h.Open("test.ws")
 	require.NoError(t, err)
 	mountOpenWindows(t, h)
-	h.ReapAll("shutdown")
+	h.ReapAll(t.Context(), "shutdown")
 
 	rows := facts.Workingsets()
 	require.Len(t, rows, 1)
@@ -280,7 +280,7 @@ func TestWorkingset_ParticipantWithoutComposerIsDiagnosed(t *testing.T) {
 	reg := app.NewRegistry()
 	ca := &counterApp{manifest: mkWorkingsetManifest("test.ws")}
 	registerSharedInstance(t, reg, ca)
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	facts := attachStores(h)
 
 	k, err := h.Open("test.ws")
@@ -345,7 +345,7 @@ func TestWorkingset_NoFactsStoreSkipsCompose(t *testing.T) {
 	a := &wsApp{manifest: mkWorkingsetManifest("test.ws"), cfg: testCfgBytes, dirty: true}
 	reg := app.NewRegistry()
 	registerSharedInstance(t, reg, a)
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	k, err := h.Open("test.ws")
 	require.NoError(t, err)
@@ -488,7 +488,7 @@ func TestRestore_NoFactsStoreOpensPlain(t *testing.T) {
 	a := &wsApp{manifest: mkWorkingsetManifest("test.ws")}
 	reg := app.NewRegistry()
 	registerSharedInstance(t, reg, a)
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	_, err := h.Open("test.ws")
 	require.NoError(t, err)
@@ -530,7 +530,7 @@ func TestRestore_FactoryAppRestoresPerWindow(t *testing.T) {
 		a = w
 		return
 	}))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	facts := attachStores(h)
 	seedWorkingset(t, facts, "test.factory", testCfgBytes)
 
@@ -559,7 +559,7 @@ func TestRestore_CallerConfigOutranksStoredRecord(t *testing.T) {
 		a = w
 		return
 	}))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	facts := attachStores(h)
 	seedWorkingset(t, facts, "test.factory", []byte("not a valid payload"))
 
@@ -592,7 +592,7 @@ func TestWindowInfos_ReportLaunchProvenance(t *testing.T) {
 
 func TestWindowInfos_PlainOpenAndSharedInstance(t *testing.T) {
 	reg, _ := mkRegistryWithSingleton(t, "test.a")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	_, err := h.Open("test.a")
 	require.NoError(t, err)

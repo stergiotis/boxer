@@ -132,7 +132,7 @@ func newRunCommand() *cli.Command {
 				if !isCh {
 					return
 				}
-				if _, werr := facts.WriteRuntimeStart(row); werr != nil {
+				if _, werr := facts.WriteRuntimeStart(ctx, row); werr != nil {
 					logger.Warn().Err(werr).Msg("watchbill: runtime-start row not written")
 				}
 			}
@@ -143,11 +143,11 @@ func newRunCommand() *cli.Command {
 				// A job child's run row carries the job it claimed — the
 				// driver stamp of ADR-0344 §SD5 — so it is written after
 				// the claim, below.
-				hb, herr := heartbeat.Start(context.Background(), facts, runInst.RunId, heartbeat.DefaultInterval, logger)
+				hb, herr := heartbeat.Start(ctx, facts, runInst.RunId, heartbeat.DefaultInterval, logger)
 				if herr != nil {
 					return eh.Errorf("heartbeat: %w", herr)
 				}
-				defer hb.Stop()
+				defer hb.Stop(cliCtx)
 				if l := watchbill.NewRunEventLiveness(facts); l != nil {
 					cfg.Liveness = l
 				}

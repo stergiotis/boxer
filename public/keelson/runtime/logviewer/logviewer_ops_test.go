@@ -82,7 +82,7 @@ func (inst *fakeStore) lastQuery() (q Query, n int) {
 // removes the source when the test ends.
 func opsFixture(t *testing.T) (store *fakeStore, sink *logbridge.Sink) {
 	t.Helper()
-	sink, err := logbridge.NewSink(factsstore.NewInMemoryFactsStore(), logbridge.Config{})
+	sink, err := logbridge.NewSink(t.Context(), factsstore.NewInMemoryFactsStore(), logbridge.Config{})
 	require.NoError(t, err)
 	const play, imztop = "github.com/example/play", "github.com/example/imztop"
 	t0 := time.Now().UTC().Add(-time.Minute)
@@ -101,7 +101,7 @@ func opsFixture(t *testing.T) (store *fakeStore, sink *logbridge.Sink) {
 	Register(&Source{Sink: sink, Read: store.read, Run: func() string { return fixtureRun }})
 	t.Cleanup(func() {
 		Register(prev)
-		_ = sink.Close()
+		_ = sink.Close(context.Background())
 	})
 	return
 }

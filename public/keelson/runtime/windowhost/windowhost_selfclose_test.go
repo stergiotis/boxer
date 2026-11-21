@@ -15,7 +15,7 @@ import (
 func TestAWindowAsksToBeClosed(t *testing.T) {
 	reg := app.NewRegistry()
 	require.NoError(t, reg.Register(&counterApp{manifest: mkManifest("test.selfclose")}))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	_, err := h.Open("test.selfclose")
 	require.NoError(t, err)
 	_, err = h.Open("test.selfclose")

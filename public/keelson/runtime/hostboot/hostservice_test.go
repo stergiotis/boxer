@@ -34,7 +34,7 @@ func TestHostServicesStartInOrderAndStopAtClose(t *testing.T) {
 	require.NotContains(t, rt.HostServices, "test.hostservice.broken")
 
 	for i := len(rt.cleanups) - 1; i >= 0; i-- {
-		rt.cleanups[i]()
+		rt.cleanups[i](t.Context())
 	}
 	require.Equal(t, "stop a", events[len(events)-1])
 }

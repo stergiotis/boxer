@@ -46,7 +46,7 @@ func TestStore_AppRuns_PairsAcrossRuns_LiveCH(t *testing.T) {
 	defer cleanup()
 	t0 := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
 	write := func(run string, id string, key uint64, phase factsstore.AppLifecyclePhaseE, reason string, at time.Time) {
-		_, err := s.WriteAppLifecycle(factsstore.AppLifecycleRow{RunId: run, AppId: app.AppIdT("github.com/example/" + id),
+		_, err := s.WriteAppLifecycle(t.Context(), factsstore.AppLifecycleRow{RunId: run, AppId: app.AppIdT("github.com/example/" + id),
 			TileKey: key, Phase: phase, StopReason: reason, Ts: at})
 		require.NoError(t, err)
 	}
@@ -63,7 +63,7 @@ func TestStore_AppRuns_PairsAcrossRuns_LiveCH(t *testing.T) {
 	// run-b's process was last heard from after its open session started;
 	// run-a wrote no heartbeat at all.
 	for _, at := range []time.Time{t0.Add(3 * time.Minute), t0.Add(5 * time.Minute)} {
-		_, err := s.WriteRuntimeHeartbeat(factsstore.HeartbeatRow{RunId: "run-b", Ts: at})
+		_, err := s.WriteRuntimeHeartbeat(t.Context(), factsstore.HeartbeatRow{RunId: "run-b", Ts: at})
 		require.NoError(t, err)
 	}
 
@@ -95,11 +95,11 @@ func TestStore_AppLogTail_PerApp_LiveCH(t *testing.T) {
 	defer cleanup()
 	t0 := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
 	for i := range 5 {
-		_, err := s.WriteLog(factsstore.LogRow{AppId: "chatty", InstanceKey: 7, Level: "info",
+		_, err := s.WriteLog(t.Context(), factsstore.LogRow{AppId: "chatty", InstanceKey: 7, Level: "info",
 			Message: string(rune('a' + i)), Caller: "c.go:1", Ts: t0.Add(time.Duration(i) * time.Second)})
 		require.NoError(t, err)
 	}
-	_, err := s.WriteLog(factsstore.LogRow{AppId: "quiet", Level: "error", Message: "only", Error: "boom",
+	_, err := s.WriteLog(t.Context(), factsstore.LogRow{AppId: "quiet", Level: "error", Message: "only", Error: "boom",
 		Stack: "never read", Ts: t0})
 	require.NoError(t, err)
 
@@ -219,7 +219,7 @@ func TestStore_LogRows_RoundTripAndFilters_LiveCH(t *testing.T) {
 			{Name: "y", Kind: factsstore.LogFieldKindBytes, Bytes: []byte{0, 1, 255}},
 			{Name: "t", Kind: factsstore.LogFieldKindTime, Time: at},
 		}}
-	ids, err := s.WriteLogs([]factsstore.LogRow{
+	ids, err := s.WriteLogs(ctx, []factsstore.LogRow{
 		{AppId: "github.com/example/play", Level: "debug", Message: "starting", Ts: t0},
 		{AppId: "github.com/example/imztop", Level: "warn", Message: "high cpu", Ts: t0.Add(time.Second), InstanceKey: 3},
 		{Message: "level-less", Ts: t0.Add(2 * time.Second)},

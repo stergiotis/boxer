@@ -72,7 +72,7 @@ func TestBoot_NoWindowHost_UnsetRunsNoService(t *testing.T) {
 	opts.NoWindowHost = true
 	rt, err := Boot(context.Background(), opts)
 	require.NoError(t, err)
-	defer rt.Close()
+	defer rt.Close(t.Context())
 	assert.Nil(t, rt.Host)
 	row := servicesRow(t, rt, headlessId)
 	assert.False(t, row.Selected)
@@ -93,7 +93,7 @@ func TestBoot_WindowedHostHasServicesAndRefusesWait(t *testing.T) {
 	reg, _ := registryWithService(t)
 	rt, err := Boot(context.Background(), minimalOptions(t, reg))
 	require.NoError(t, err)
-	defer rt.Close()
+	defer rt.Close(t.Context())
 	require.NotNil(t, rt.Host)
 	require.NotNil(t, rt.Services)
 	require.Error(t, rt.Wait(context.Background()))
@@ -110,7 +110,7 @@ func TestBoot_ServicesPredicateWithoutChlocalFails(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "clickhouse-local")
 	if rt != nil {
-		rt.Close()
+		rt.Close(t.Context())
 	}
 }
 
@@ -136,7 +136,7 @@ func TestBoot_ServicesPredicateComposesWithLaunchLimit(t *testing.T) {
 	reg, svc := registryWithService(t)
 	rt, err := Boot(context.Background(), chlocalOptions(t, reg))
 	require.NoError(t, err)
-	defer rt.Close()
+	defer rt.Close(t.Context())
 	assert.False(t, reg.Launchable(headlessId), "the launch limit refused the service")
 	row := servicesRow(t, rt, headlessId)
 	assert.False(t, row.Selected, "selected by the predicate alone, refused by the limit: not run")
@@ -210,7 +210,7 @@ func TestBoot_BadServiceSeedIsAnError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "services")
 	if rt != nil {
-		rt.Close()
+		rt.Close(t.Context())
 	}
 }
 

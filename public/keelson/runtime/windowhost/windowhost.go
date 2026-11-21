@@ -248,6 +248,11 @@ type instMount struct {
 // surfaces themselves (Frame, RenderAppsMenu, the picker/search state)
 // remain single-threaded: render-loop only.
 type Inst struct {
+	// ctx is the host's lifetime, handed to NewInst: the audit writes made
+	// from the render loop (a window opened, paused, closed), which no
+	// request carries, run under it. A write under a ctx without a
+	// deadline is bounded by the store (chstore.WriteTimeout).
+	ctx      context.Context
 	registry *app.Registry
 	logger   zerolog.Logger
 
@@ -453,8 +458,9 @@ func (inst *Inst) SetMountValue(key any, v any) {
 // reapClosed emit app-lifecycle rows so the persistence layer carries
 // a per-window open/close trail correlated with the runtime-start row
 // that runId points at.
-func NewInst(registry *app.Registry, logger zerolog.Logger) (inst *Inst) {
+func NewInst(ctx context.Context, registry *app.Registry, logger zerolog.Logger) (inst *Inst) {
 	inst = &Inst{
+		ctx:          ctx,
 		registry:     registry,
 		logger:       logger,
 		density:      styletokens.ActiveDensity(),
@@ -848,7 +854,7 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	inst.mu.Unlock()
 
 	if facts != nil {
-		_, wErr := facts.WriteAppLifecycle(factsstore.AppLifecycleRow{
+		_, wErr := facts.WriteAppLifecycle(inst.ctx, factsstore.AppLifecycleRow{
 			RunId:   runId,
 			AppId:   m.Id,
 			TileKey: uint64(key),
@@ -868,7 +874,7 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 			// arrived over the bus and then restored writes both rows — the
 			// caller's plain request and this restore — which is the honest
 			// record of what happened. Best-effort, like every audit write.
-			_, lErr := facts.WriteLaunch(factsstore.LaunchRow{
+			_, lErr := facts.WriteLaunch(inst.ctx, factsstore.LaunchRow{
 				RunId:       runId,
 				CallerAppId: WorkingsetCallerAppId,
 				TargetAppId: m.Id,
@@ -906,8 +912,10 @@ func (inst *Inst) CloseAll(reason string) {
 // currently-open window, then empties the slice. Unlike reapClosed
 // (which fires after the render pass), this is the shutdown path —
 // call it from a defer in the carousel main after the render loop
-// has exited so closing-window audit rows still get written.
-func (inst *Inst) ReapAll(reason string) {
+// has exited so closing-window audit rows still get written. ctx is the
+// shutdown's: the drains run within the shutdown budget cut from it and
+// the stop rows are written under it.
+func (inst *Inst) ReapAll(ctx context.Context, reason string) {
 	inst.mu.Lock()
 	wins := inst.windows
 	inst.windows = nil
@@ -921,7 +929,7 @@ func (inst *Inst) ReapAll(reason string) {
 	for _, w := range wins {
 		cls = append(cls, inst.reapWindow(w, reason, "windowhost: unmount on shutdown error"))
 	}
-	inst.releaseAll(cls, facts, runId)
+	inst.releaseAll(ctx, cls, facts, runId)
 }
 
 // releaseMount decrements the shared per-AppI-instance mount refcount for w
@@ -1246,7 +1254,7 @@ func (inst *Inst) reapClosed() {
 		cl := inst.reapWindow(w, defaultStopReason(w), "windowhost: unmount error")
 		if cl.isDrained() {
 			// Nothing to wait for: released now, as before the drain step.
-			inst.drainAndRelease(context.Background(), cl, facts, runId)
+			inst.drainAndRelease(inst.ctx, inst.ctx, cl, facts, runId)
 			continue
 		}
 		inst.releaseLater(cl, facts, runId)
@@ -1271,8 +1279,8 @@ func defaultStopReason(w *window) (reason string) {
 }
 
 // emitStopped writes one app-lifecycle "stopped" row and logs on failure.
-func emitStopped(facts factsstore.FactsStoreI, logger zerolog.Logger, runId string, w *window, reason string) {
-	_, err := facts.WriteAppLifecycle(factsstore.AppLifecycleRow{
+func emitStopped(ctx context.Context, facts factsstore.FactsStoreI, logger zerolog.Logger, runId string, w *window, reason string) {
+	_, err := facts.WriteAppLifecycle(ctx, factsstore.AppLifecycleRow{
 		RunId:      runId,
 		AppId:      w.manifest.Id,
 		TileKey:    uint64(w.key),

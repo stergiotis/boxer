@@ -93,7 +93,7 @@ func TestBoot_MinimalHostSeedsConfiguredWindow(t *testing.T) {
 
 	rt, err := Boot(context.Background(), opts)
 	require.NoError(t, err)
-	defer rt.Close()
+	defer rt.Close(t.Context())
 
 	assert.True(t, hookSeen, "AfterHost runs with host, bus and registry present")
 	assert.False(t, rt.ScreenshotMode)
@@ -114,9 +114,9 @@ func TestBoot_MinimalHostSeedsConfiguredWindow(t *testing.T) {
 	assert.Equal(t, 2, rt.Host.Len(), "one plain seed and one configured seed")
 	assert.Len(t, rt.Renderers, 1)
 
-	rt.Reap()
+	rt.Reap(t.Context())
 	assert.Equal(t, 0, rt.Host.Len(), "Reap leaves no window")
-	rt.Reap() // idempotent
+	rt.Reap(t.Context()) // idempotent
 }
 
 func TestBoot_SeedWindowFailureIsAnError(t *testing.T) {
@@ -128,7 +128,7 @@ func TestBoot_SeedWindowFailureIsAnError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "seed window")
 	if rt != nil {
-		rt.Close()
+		rt.Close(t.Context())
 	}
 }
 
@@ -141,7 +141,7 @@ func TestBoot_ScreenshotModeNeedsLaunchApps(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "screenshot mode")
 	if rt != nil {
-		rt.Close()
+		rt.Close(t.Context())
 	}
 }
 
@@ -155,7 +155,7 @@ func TestBoot_ScreenshotModeBuildsTourRenderers(t *testing.T) {
 
 	rt, err := Boot(context.Background(), opts)
 	require.NoError(t, err)
-	defer rt.Close()
+	defer rt.Close(t.Context())
 	assert.True(t, rt.ScreenshotMode)
 	assert.Nil(t, rt.Host, "screenshot mode has no window host")
 	assert.Len(t, rt.Renderers, 1)
@@ -166,9 +166,9 @@ func TestRuntime_CloseRunsCleanupsInReverseOrder(t *testing.T) {
 	rt, err := Boot(context.Background(), minimalOptions(t, reg))
 	require.NoError(t, err)
 	var order []string
-	rt.OnClose(func() { order = append(order, "first") })
-	rt.OnClose(func() { order = append(order, "second") })
-	rt.Close()
-	rt.Close() // idempotent
+	rt.OnClose(func(context.Context) { order = append(order, "first") })
+	rt.OnClose(func(context.Context) { order = append(order, "second") })
+	rt.Close(t.Context())
+	rt.Close(t.Context()) // idempotent
 	assert.Equal(t, []string{"second", "first"}, order)
 }

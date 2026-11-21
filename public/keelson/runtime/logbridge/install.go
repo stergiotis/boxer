@@ -1,6 +1,7 @@
 package logbridge
 
 import (
+	"context"
 	"io"
 
 	"github.com/rs/zerolog"
@@ -12,8 +13,8 @@ import (
 // through a fan-out that writes every event to both passthroughW (the
 // operator-facing destination — typically os.Stderr or a file) and
 // sink (the boxer.facts capture). Returns a closer that the caller
-// must invoke at process exit to drain the Sink synchronously and
-// restore the previous global.
+// must invoke at process exit, with the shutdown's ctx, to drain the Sink
+// synchronously (Sink.Close) and restore the previous global.
 //
 // Side effect: also swaps zerolog.ErrorMarshalFunc to
 // eh.MarshalError so any .Err(boxerErr) call serializes the wrapped
@@ -40,7 +41,7 @@ import (
 // The caller is responsible for the order: InstallGlobal must run AFTER
 // any boxer-flag Actions that touch log.Logger (otherwise those will
 // overwrite our wrapping); App.Before in urfave/cli is a natural seam.
-func InstallGlobal(passthroughW io.Writer, sink *Sink) (closer func() error) {
+func InstallGlobal(passthroughW io.Writer, sink *Sink) (closer func(ctx context.Context) error) {
 	prev := log.Logger
 	prevErrMarshal := zerolog.ErrorMarshalFunc
 	if w := fanOutWriter(passthroughW, sink); w == nil {
@@ -55,9 +56,9 @@ func InstallGlobal(passthroughW io.Writer, sink *Sink) (closer func() error) {
 		log.Logger = prev.Output(w)
 	}
 	zerolog.ErrorMarshalFunc = eh.MarshalError
-	closer = func() (err error) {
+	closer = func(ctx context.Context) (err error) {
 		if sink != nil {
-			err = sink.Close()
+			err = sink.Close(ctx)
 		}
 		log.Logger = prev
 		zerolog.ErrorMarshalFunc = prevErrMarshal
@@ -69,8 +70,8 @@ func InstallGlobal(passthroughW io.Writer, sink *Sink) (closer func() error) {
 // NopCloser returns a closer that does nothing. Useful when a host's
 // fact-capture is conditionally disabled and the caller wants a
 // uniform deferred Close() call at shutdown.
-func NopCloser() (closer func() error) {
-	closer = func() (err error) { return }
+func NopCloser() (closer func(ctx context.Context) error) {
+	closer = func(context.Context) (err error) { return }
 	return
 }
 

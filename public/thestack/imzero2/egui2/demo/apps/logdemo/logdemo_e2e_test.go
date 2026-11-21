@@ -33,12 +33,12 @@ import (
 // catch it without a GUI.
 func TestE2E_LogdemoEmitsIntoSink(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
-	sink, err := logbridge.NewSink(store, logbridge.Config{
+	sink, err := logbridge.NewSink(t.Context(), store, logbridge.Config{
 		Capacity: 8,
 		FlushN:   1,
 	})
 	require.NoError(t, err)
-	defer func() { _ = sink.Close() }()
+	defer func() { _ = sink.Close(t.Context()) }()
 
 	// Build a host logger over the sink (multi-writer with no
 	// passthrough, mirroring InstallGlobal(nil, sink)).
@@ -56,7 +56,7 @@ func TestE2E_LogdemoEmitsIntoSink(t *testing.T) {
 	// Close drains the sink synchronously; assert the store (boxer.facts
 	// on a host with BOXER_LOG_FACTS, which the logviewer reads) has the
 	// event.
-	require.NoError(t, sink.Close())
+	require.NoError(t, sink.Close(t.Context()))
 	rows := store.Logs()
 	require.Len(t, rows, 1, "the store must hold the emitted event — the logviewer reads it back from boxer.facts")
 	got := rows[0]

@@ -115,7 +115,7 @@ func TestSubscriptionsAndClientCaps_AttributeToInstance(t *testing.T) {
 func TestTasks_ShowInflightAttributedToOwner(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
 	sup := supervisor.New(bus.NewClient(supervisor.AppId, supervisor.Caps()), nil, zerolog.Nop(), supervisor.Opts{})
-	require.NoError(t, sup.Start())
+	require.NoError(t, sup.Start(t.Context()))
 	t.Cleanup(func() { _ = sup.Stop() })
 	r := introspect.NewRegistry()
 	require.NoError(t, RegisterEffects(r, bus, sup))

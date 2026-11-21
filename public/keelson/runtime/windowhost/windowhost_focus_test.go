@@ -81,7 +81,7 @@ func TestPickActiveWindow(t *testing.T) {
 // queued raise naming the window that already shows the app.
 func TestOpenOrRaise(t *testing.T) {
 	reg, _ := mkRegistryWithSingleton(t, "app-a", "app-b")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	k1, opened, err := h.OpenOrRaise("app-a")
 	if err != nil {

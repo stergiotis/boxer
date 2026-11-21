@@ -31,7 +31,7 @@ func TestBoot_AudioOutServesTheConfiguredDevice(t *testing.T) {
 	opts.AudioDevice = namedDevice{name: "fixture"}
 	rt, err := Boot(context.Background(), opts)
 	require.NoError(t, err)
-	defer rt.Close()
+	defer rt.Close(t.Context())
 
 	require.NotNil(t, rt.AudioOut)
 	assert.Equal(t, "fixture", rt.AudioOut.Device().Name())
@@ -52,7 +52,7 @@ func TestBoot_AudioOutDefaultsToThePulseDevice(t *testing.T) {
 	opts.Services.AudioOut = true
 	rt, err := Boot(context.Background(), opts)
 	require.NoError(t, err)
-	defer rt.Close()
+	defer rt.Close(t.Context())
 	require.NotNil(t, rt.AudioOut)
 	assert.Equal(t, audioout.PulseDevice{}.Name(), rt.AudioOut.Device().Name())
 	assert.True(t, AllServices().AudioOut, "the carousel's hosts offer an output")
@@ -67,7 +67,7 @@ func TestBoot_AudioOutFollowsTheLaneBehindACarrier(t *testing.T) {
 	opts.Services.AudioOut = true
 	rt, err := Boot(context.Background(), opts)
 	require.NoError(t, err)
-	defer rt.Close()
+	defer rt.Close(t.Context())
 	require.NotNil(t, rt.AudioOut)
 	assert.Equal(t, "pulse", rt.AudioOut.Device().Name(), "no lane: FIFOs unavailable, or no client launched")
 

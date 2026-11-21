@@ -1,6 +1,7 @@
 package supervisor
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -60,6 +61,8 @@ type entry struct {
 // Start via task.WatchAll and should not be invoked by callers
 // directly (they are exported only because the interface is).
 type Supervisor struct {
+	// ctx is Start's: the lifetime the audit rows are written under.
+	ctx   context.Context
 	bus   app.BusI
 	facts factsstore.FactsStoreI
 	log   zerolog.Logger
@@ -122,8 +125,9 @@ func New(bus app.BusI, facts factsstore.FactsStoreI, log zerolog.Logger, opts Op
 // Start subscribes to task.> and listSubject, then launches the
 // heartbeat watchdog goroutine. Idempotent: a second call returns an
 // error without restarting. Bus errors during subscribe roll back any
-// partial state.
-func (inst *Supervisor) Start() (err error) {
+// partial state. ctx is the supervisor's lifetime: the audit rows are
+// written under it.
+func (inst *Supervisor) Start(ctx context.Context) (err error) {
 	if !inst.started.CompareAndSwap(false, true) {
 		err = eh.Errorf("supervisor: already started")
 		return
@@ -134,6 +138,7 @@ func (inst *Supervisor) Start() (err error) {
 		return
 	}
 
+	inst.ctx = ctx
 	inst.stopCh = make(chan struct{})
 	inst.doneCh = make(chan struct{})
 
@@ -498,7 +503,7 @@ func (inst *Supervisor) writeAudit(row factsstore.LogRow) {
 	if inst.facts == nil {
 		return
 	}
-	_, err := inst.facts.WriteLog(row)
+	_, err := inst.facts.WriteLog(inst.ctx, row)
 	if err != nil {
 		inst.log.Warn().Err(err).Str("message", row.Message).Msg("supervisor: write audit row")
 		return

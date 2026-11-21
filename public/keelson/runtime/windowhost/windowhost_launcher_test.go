@@ -27,7 +27,7 @@ func (inst *fakeLauncher) RenderMenu(ids *c.WidgetIdStack) { inst.menus++ }
 // delegation checkable rather than a comment.
 func TestSetLauncher_EmptyStateDelegates(t *testing.T) {
 	l := &fakeLauncher{}
-	inst := NewInst(app.NewRegistry(), zerolog.Nop())
+	inst := NewInst(t.Context(), app.NewRegistry(), zerolog.Nop())
 	inst.SetLauncher(l)
 
 	ids := c.NewWidgetIdStack()
@@ -60,7 +60,7 @@ func TestOpenAppIds_ReportsWhatTheLauncherBadgesOn(t *testing.T) {
 		a = &noopApp{m: m}
 		return
 	}))
-	inst := NewInst(reg, zerolog.Nop())
+	inst := NewInst(t.Context(), reg, zerolog.Nop())
 	assert.Empty(t, inst.OpenAppIds(), "nothing open yet")
 
 	_, err := inst.Open("test.badged")

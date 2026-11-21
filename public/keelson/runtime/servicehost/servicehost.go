@@ -222,7 +222,7 @@ func (inst *Inst) Start(ctx context.Context, selected []app.AppIdT, seeds []Seed
 		if !s.row.Selected {
 			continue
 		}
-		if mErr := inst.mount(s, cfgs[s.row.Id]); mErr != nil {
+		if mErr := inst.mount(ctx, s, cfgs[s.row.Id]); mErr != nil {
 			// Open failed: the ctor, not the app's Mount. Recorded as a
 			// failed service and left out, like a Mount error.
 			inst.cfg.Log.Warn().Err(mErr).Str("id", string(s.row.Id)).Msg("servicehost: service did not open; continuing without it")
@@ -270,12 +270,13 @@ func (inst *Inst) allocateKey() (key uint64) {
 }
 
 // mount opens the app, builds its mount context as the window host does,
-// writes the "started" row and runs Mount on the service's goroutine.
-func (inst *Inst) mount(s *service, sd Seed) (err error) {
+// writes the "started" row and runs Mount on the service's goroutine. The
+// rows are written under ctx, the host's lifetime.
+func (inst *Inst) mount(ctx context.Context, s *service, sd Seed) (err error) {
 	m := s.manifest
 	a, err := inst.cfg.Registry.Open(m.Id)
 	if err != nil {
-		inst.markFailed(s, 0, err, StopReasonMountError, false)
+		inst.markFailed(ctx, s, 0, err, StopReasonMountError, false)
 		return
 	}
 	key := inst.allocateKey()
@@ -332,7 +333,7 @@ func (inst *Inst) mount(s *service, sd Seed) (err error) {
 	s.row.State = StateStarting
 	s.row.StartedAt = now
 	inst.mu.Unlock()
-	inst.writeLifecycle(s, factsstore.AppLifecyclePhaseStarted, "")
+	inst.writeLifecycle(ctx, s, factsstore.AppLifecyclePhaseStarted, "")
 
 	go func() {
 		pprof.SetGoroutineLabels(s.labels)
@@ -352,14 +353,14 @@ func (inst *Inst) mount(s *service, sd Seed) (err error) {
 			inst.cfg.Log.Warn().Err(mErr).Str("id", string(m.Id)).Uint64("instance_id", key).Msg("servicehost: Mount failed; service left out")
 			inst.leave(s)
 			inst.unload(s)
-			inst.markFailed(s, key, mErr, StopReasonMountError, true)
+			inst.markFailed(ctx, s, key, mErr, StopReasonMountError, true)
 		}
 	}()
 	return
 }
 
 // markFailed records a service that is not running and will not be.
-func (inst *Inst) markFailed(s *service, key uint64, cause error, reason string, writeStop bool) {
+func (inst *Inst) markFailed(ctx context.Context, s *service, key uint64, cause error, reason string, writeStop bool) {
 	inst.mu.Lock()
 	s.row.State = StateFailed
 	s.row.StoppedAt = time.Now()
@@ -372,18 +373,18 @@ func (inst *Inst) markFailed(s *service, key uint64, cause error, reason string,
 	}
 	inst.mu.Unlock()
 	if writeStop {
-		inst.writeLifecycle(s, factsstore.AppLifecyclePhaseStopped, reason)
+		inst.writeLifecycle(ctx, s, factsstore.AppLifecyclePhaseStopped, reason)
 	}
 }
 
-func (inst *Inst) writeLifecycle(s *service, phase factsstore.AppLifecyclePhaseE, reason string) {
+func (inst *Inst) writeLifecycle(ctx context.Context, s *service, phase factsstore.AppLifecyclePhaseE, reason string) {
 	if inst.cfg.Facts == nil {
 		return
 	}
 	inst.mu.Lock()
 	key := s.row.InstanceKey
 	inst.mu.Unlock()
-	_, err := inst.cfg.Facts.WriteAppLifecycle(factsstore.AppLifecycleRow{
+	_, err := inst.cfg.Facts.WriteAppLifecycle(ctx, factsstore.AppLifecycleRow{
 		RunId: inst.cfg.RunId, AppId: s.manifest.Id, TileKey: key, Phase: phase, StopReason: reason,
 	})
 	if err != nil {
@@ -442,7 +443,11 @@ func (inst *Inst) Wait(ctx context.Context) (err error) {
 // reason. A service whose Mount has not returned is given until the drain
 // deadline to return; one that does not is recorded as failed and its
 // resources are released without Unmount. Idempotent.
-func (inst *Inst) ReapAll(reason string) {
+//
+// ctx is the shutdown's: the drain runs within ShutdownDrain of it, and the
+// "stopped" rows are written under ctx itself, so a store that does not
+// answer cannot hold the reap past ctx's deadline.
+func (inst *Inst) ReapAll(ctx context.Context, reason string) {
 	inst.mu.Lock()
 	if inst.reaped {
 		inst.mu.Unlock()
@@ -457,7 +462,7 @@ func (inst *Inst) ReapAll(reason string) {
 	}
 	inst.mu.Unlock()
 	slices.Reverse(live)
-	ctx, cancel := context.WithTimeout(context.Background(), inst.cfg.ShutdownDrain)
+	dctx, cancel := context.WithTimeout(ctx, inst.cfg.ShutdownDrain)
 	defer cancel()
 	// leave: every service sees Cancel() before any Unmount runs, so work
 	// that spans services winds down together.
@@ -467,10 +472,10 @@ func (inst *Inst) ReapAll(reason string) {
 	for _, s := range live {
 		select {
 		case <-s.mounted:
-		case <-ctx.Done():
+		case <-dctx.Done():
 			inst.cfg.Log.Warn().Str("id", string(s.manifest.Id)).Msg("servicehost: Mount did not return before the shutdown drain ended; released without Unmount")
 			inst.unload(s)
-			inst.markFailed(s, 0, ctx.Err(), reason, true)
+			inst.markFailed(ctx, s, 0, dctx.Err(), reason, true)
 			continue
 		}
 		inst.mu.Lock()
@@ -505,7 +510,7 @@ func (inst *Inst) ReapAll(reason string) {
 		go func(s *service) {
 			defer wg.Done()
 			start := time.Now()
-			if dErr := s.scope.Drain(ctx); dErr != nil {
+			if dErr := s.scope.Drain(dctx); dErr != nil {
 				inst.cfg.Log.Warn().Err(dErr).Str("id", string(s.manifest.Id)).Dur("waited", time.Since(start)).Msg("servicehost: the service did not drain before its bus closed")
 			}
 		}(s)
@@ -526,7 +531,7 @@ func (inst *Inst) ReapAll(reason string) {
 		stopReason := s.row.StopReason
 		inst.mu.Unlock()
 		inst.unload(s)
-		inst.writeLifecycle(s, factsstore.AppLifecyclePhaseStopped, stopReason)
+		inst.writeLifecycle(ctx, s, factsstore.AppLifecyclePhaseStopped, stopReason)
 	}
 }
 

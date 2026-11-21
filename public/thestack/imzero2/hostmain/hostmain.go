@@ -26,6 +26,7 @@ import (
 	"context"
 	"os"
 	"slices"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v3"
@@ -59,8 +60,12 @@ type Options struct {
 type Program struct {
 	opts           Options
 	app            *cli.Command
-	closeLogBridge func() error
+	closeLogBridge func(ctx context.Context) error
 }
+
+// logBridgeCloseBudget bounds the log bridge's final drain at exit, which
+// runs after the command returned and so after any ctx of its own ended.
+const logBridgeCloseBudget = 5 * time.Second
 
 // New builds the program around cliApp, which carries the binary's name,
 // version and logging hook; New appends the host's flags and commands and
@@ -107,7 +112,9 @@ func New(opts Options, cliApp *cli.Command) (inst *Program) {
 		}
 		profiling.ProfilingHandleExit(ctx, cmd)
 		tracing.TracingHandleExit(ctx, cmd)
-		_ = inst.closeLogBridge()
+		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), logBridgeCloseBudget)
+		_ = inst.closeLogBridge(closeCtx)
+		cancel()
 		return
 	}
 	return

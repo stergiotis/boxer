@@ -3,6 +3,7 @@
 package logdemo
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -27,12 +28,12 @@ import (
 func scenarioHarness(t *testing.T) (inst *App, logs func() []factsstore.LogRow) {
 	t.Helper()
 	store := factsstore.NewInMemoryFactsStore()
-	s, err := logbridge.NewSink(store, logbridge.Config{
+	s, err := logbridge.NewSink(t.Context(), store, logbridge.Config{
 		Capacity: 32,
 		FlushN:   1,
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = s.Close() })
+	t.Cleanup(func() { _ = s.Close(context.Background()) })
 
 	hostLogger := logbridge.NewLogger(nil, s)
 	appLogger := runtimeapp.AppLogger(hostLogger, manifest.Id)
@@ -41,7 +42,7 @@ func scenarioHarness(t *testing.T) (inst *App, logs func() []factsstore.LogRow) 
 	a := newApp()
 	require.NoError(t, a.Mount(mountCtx))
 	logs = func() []factsstore.LogRow {
-		_ = s.Close()
+		_ = s.Close(t.Context())
 		return store.Logs()
 	}
 	return a, logs

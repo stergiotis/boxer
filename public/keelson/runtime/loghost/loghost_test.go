@@ -37,7 +37,7 @@ func TestInstallReturnsUsableCloser(t *testing.T) {
 
 	log.Info().Str("probe", "loghost").Msg("loghost install smoke test")
 
-	require.NoError(t, closer())
+	require.NoError(t, closer(t.Context()))
 	assert.Equal(t, prev, log.Logger, "closer must restore the previous global logger")
 }
 

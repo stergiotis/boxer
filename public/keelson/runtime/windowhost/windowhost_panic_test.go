@@ -59,7 +59,7 @@ func TestMountPanicBeforeDrawingIsAFailedMount(t *testing.T) {
 	a := &panickyApp{manifest: mkManifest("test.panicky"), mountPanics: true}
 	require.NoError(t, reg.Register(a))
 	var logged strings.Builder
-	h := NewInst(reg, zerolog.New(&logged))
+	h := NewInst(t.Context(), reg, zerolog.New(&logged))
 	w := openPanicky(t, h)
 	var err error
 	assert.NotPanics(t, func() { err = mountGuarded(w, h.logger) })
@@ -74,7 +74,7 @@ func TestFramePanicIsLoggedAndReraised(t *testing.T) {
 	a := &panickyApp{manifest: mkManifest("test.panicky"), framePanics: true}
 	require.NoError(t, reg.Register(a))
 	var logged strings.Builder
-	h := NewInst(reg, zerolog.New(&logged))
+	h := NewInst(t.Context(), reg, zerolog.New(&logged))
 	w := openPanicky(t, h)
 	assert.PanicsWithValue(t, "frame boom", func() { _ = frameReraising(w, h.logger) })
 	assert.Contains(t, logged.String(), "Frame panicked")
@@ -88,7 +88,7 @@ func TestReapAllGoesOnPastAPanickingUnmount(t *testing.T) {
 	good := &panickyApp{manifest: mkManifest("test.good")}
 	require.NoError(t, reg.Register(bad))
 	require.NoError(t, reg.Register(good))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	_, err := h.Open("test.panicky")
 	require.NoError(t, err)
 	_, err = h.Open("test.good")
@@ -99,7 +99,7 @@ func TestReapAllGoesOnPastAPanickingUnmount(t *testing.T) {
 		w.mount.mountCtx = w.mountCtx
 	}
 	h.mu.Unlock()
-	assert.NotPanics(t, func() { h.ReapAll("shutdown") })
+	assert.NotPanics(t, func() { h.ReapAll(t.Context(), "shutdown") })
 	assert.Equal(t, 1, bad.unmountCalls)
 	assert.Equal(t, 1, good.unmountCalls)
 	assert.Equal(t, 0, h.Len())

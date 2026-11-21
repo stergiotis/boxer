@@ -34,7 +34,7 @@ func mkOpenServiceFixture(t *testing.T, reg *app.Registry) (fx openServiceFixtur
 	t.Helper()
 	fx.bus = inprocbus.NewInst(zerolog.Nop())
 	fx.bus.SetRequestTimeout(2 * time.Second)
-	fx.host = NewInst(reg, zerolog.Nop())
+	fx.host = NewInst(t.Context(), reg, zerolog.Nop())
 	fx.host.SetBus(fx.bus)
 	fx.facts = factsstore.NewInMemoryFactsStore()
 	fx.host.SetAudit("run-1", fx.facts)

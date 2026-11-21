@@ -87,7 +87,7 @@ func (inst *Inst) tickLoop(ctx context.Context, store factsstore.FactsStoreI, ru
 		case <-ctx.Done():
 			return
 		case t := <-ticker.C:
-			_, werr := store.WriteRuntimeHeartbeat(factsstore.HeartbeatRow{
+			_, werr := store.WriteRuntimeHeartbeat(ctx, factsstore.HeartbeatRow{
 				RunId: runId,
 				Ts:    t.UTC(),
 			})
@@ -99,14 +99,20 @@ func (inst *Inst) tickLoop(ctx context.Context, store factsstore.FactsStoreI, ru
 }
 
 // Stop cancels the ticker and waits for the in-flight write (if any)
-// to drain. Idempotent — multiple shutdown paths can call this; only
-// the first call cancels, the rest return immediately.
-func (inst *Inst) Stop() {
+// to end, at most until ctx ends: the write runs under the cancelled
+// loop ctx, so a store that honours its ctx returns at once, and one that
+// does not cannot hold Stop past the shutdown's deadline. Idempotent —
+// multiple shutdown paths can call this; only the first call cancels and
+// waits, the rest return immediately.
+func (inst *Inst) Stop(ctx context.Context) {
 	if inst == nil {
 		return
 	}
 	inst.stopped.Do(func() {
 		inst.cancel()
-		<-inst.done
+		select {
+		case <-inst.done:
+		case <-ctx.Done():
+		}
 	})
 }

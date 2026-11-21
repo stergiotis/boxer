@@ -29,7 +29,7 @@ import (
 // logger.
 func TestInstallGlobal_RewiresGlobalAndRestores(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
-	sink, err := logbridge.NewSink(store, logbridge.Config{
+	sink, err := logbridge.NewSink(t.Context(), store, logbridge.Config{
 		Capacity:      16,
 		FlushN:        1,
 		FlushInterval: 20 * time.Millisecond,
@@ -53,7 +53,7 @@ func TestInstallGlobal_RewiresGlobalAndRestores(t *testing.T) {
 	require.Len(t, logs, 1)
 	assert.Equal(t, "hello", logs[0].Message)
 
-	require.NoError(t, closer())
+	require.NoError(t, closer(t.Context()))
 	assert.Equal(t, prev, log.Logger, "closer must restore the previous global")
 }
 
@@ -63,7 +63,7 @@ func TestInstallGlobal_RewiresGlobalAndRestores(t *testing.T) {
 // recover the AppId from the event-encoded `app_id` field.
 func TestInstallGlobal_AppLoggerRoundTrip(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
-	sink, err := logbridge.NewSink(store, logbridge.Config{
+	sink, err := logbridge.NewSink(t.Context(), store, logbridge.Config{
 		Capacity:      16,
 		FlushN:        1,
 		FlushInterval: 20 * time.Millisecond,
@@ -71,7 +71,7 @@ func TestInstallGlobal_AppLoggerRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	closer := logbridge.InstallGlobal(&bytes.Buffer{}, sink)
-	defer closer()
+	defer closer(t.Context())
 
 	playLogger := app.AppLogger(log.Logger, "github.com/example/play")
 	playLogger.Info().Msg("from play")
@@ -88,8 +88,8 @@ func TestInstallGlobal_AppLoggerRoundTrip(t *testing.T) {
 // installed.
 func TestNopCloser_NoPanic(t *testing.T) {
 	closer := logbridge.NopCloser()
-	require.NoError(t, closer())
-	require.NoError(t, closer(), "closer should be idempotent")
+	require.NoError(t, closer(t.Context()))
+	require.NoError(t, closer(t.Context()), "closer should be idempotent")
 }
 
 // sameFunc compares two function values by their reflect.Value.Pointer
@@ -112,7 +112,7 @@ func TestInstallGlobal_SwapsAndRestoresErrorMarshaler(t *testing.T) {
 	prev := zerolog.ErrorMarshalFunc
 
 	store := factsstore.NewInMemoryFactsStore()
-	sink, err := logbridge.NewSink(store, logbridge.Config{
+	sink, err := logbridge.NewSink(t.Context(), store, logbridge.Config{
 		Capacity:      8,
 		FlushN:        1,
 		FlushInterval: 20 * time.Millisecond,
@@ -123,7 +123,7 @@ func TestInstallGlobal_SwapsAndRestoresErrorMarshaler(t *testing.T) {
 	require.True(t, sameFunc(zerolog.ErrorMarshalFunc, eh.MarshalError),
 		"InstallGlobal must point ErrorMarshalFunc at eh.MarshalError so .Err(boxerErr) emits the structured shape the logbridge decoder recognises")
 
-	require.NoError(t, closer())
+	require.NoError(t, closer(t.Context()))
 	assert.True(t, sameFunc(zerolog.ErrorMarshalFunc, prev),
 		"closer must restore the previous ErrorMarshalFunc — otherwise repeated test setups leak the global mutation")
 }
@@ -139,15 +139,15 @@ func TestInstallGlobal_SwapsAndRestoresErrorMarshaler(t *testing.T) {
 // attached fields without manual decoding.
 func TestInstallGlobal_BoxerErrorPopulatesErrorContext(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
-	sink, err := logbridge.NewSink(store, logbridge.Config{
+	sink, err := logbridge.NewSink(t.Context(), store, logbridge.Config{
 		Capacity: 8,
 		FlushN:   1,
 	})
 	require.NoError(t, err)
-	defer sink.Close()
+	defer sink.Close(t.Context())
 
 	closer := logbridge.InstallGlobal(&bytes.Buffer{}, sink)
-	defer closer()
+	defer closer(t.Context())
 
 	// Three-level chain with structured data on the leaf — the same
 	// pattern logdemo's "structured" boxer-err scenario uses.
@@ -226,7 +226,7 @@ func TestInstallGlobal_BoxerErrorPopulatesErrorContext(t *testing.T) {
 // A fresh NewLogger would silently drop it.
 func TestInstallGlobal_PreservesPriorLoggerContext(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
-	sink, err := logbridge.NewSink(store, logbridge.Config{
+	sink, err := logbridge.NewSink(t.Context(), store, logbridge.Config{
 		Capacity:      8,
 		FlushN:        1,
 		FlushInterval: 20 * time.Millisecond,
@@ -241,7 +241,7 @@ func TestInstallGlobal_PreservesPriorLoggerContext(t *testing.T) {
 
 	var passthrough bytes.Buffer
 	closer := logbridge.InstallGlobal(&passthrough, sink)
-	defer closer()
+	defer closer(t.Context())
 
 	log.Info().Msg("ctx-survives")
 	waitFor(t, func() bool { return len(store.Logs()) >= 1 }, time.Second)

@@ -9,9 +9,9 @@ import (
 
 func TestInMemoryFactsStore_WriteGrant_AssignsId(t *testing.T) {
 	s := NewInMemoryFactsStore()
-	id1, err := s.WriteGrant(GrantRow{AppId: "a", Pattern: "x"})
+	id1, err := s.WriteGrant(t.Context(), GrantRow{AppId: "a", Pattern: "x"})
 	require.NoError(t, err)
-	id2, err := s.WriteGrant(GrantRow{AppId: "b", Pattern: "y"})
+	id2, err := s.WriteGrant(t.Context(), GrantRow{AppId: "b", Pattern: "y"})
 	require.NoError(t, err)
 	assert.NotZero(t, id1)
 	assert.NotEqual(t, id1, id2)

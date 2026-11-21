@@ -33,7 +33,7 @@ func TestStart_TicksAtIntervalThenStops(t *testing.T) {
 	// 100ms, 150ms) is the expected modal case under CI scheduling
 	// jitter.
 	time.Sleep(250 * time.Millisecond)
-	inst.Stop()
+	inst.Stop(t.Context())
 	rows := store.Heartbeats()
 	assert.GreaterOrEqual(t, len(rows), 2, "expected ≥2 heartbeats over 250ms at 50ms interval")
 	for _, r := range rows {
@@ -46,13 +46,13 @@ func TestStop_Idempotent(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
 	inst, err := Start(context.Background(), store, "run-x", 100*time.Millisecond, zerolog.Nop())
 	require.NoError(t, err)
-	inst.Stop()
-	inst.Stop() // must not deadlock or panic
+	inst.Stop(t.Context())
+	inst.Stop(t.Context()) // must not deadlock or panic
 }
 
 func TestStop_NilSafe(t *testing.T) {
 	var inst *Inst
-	inst.Stop() // nil receiver path
+	inst.Stop(t.Context()) // nil receiver path
 }
 
 func TestStart_ContextCancelStopsTicker(t *testing.T) {
@@ -62,7 +62,7 @@ func TestStart_ContextCancelStopsTicker(t *testing.T) {
 	require.NoError(t, err)
 	cancel()
 	// Stop waits for the goroutine to acknowledge the cancellation.
-	inst.Stop()
+	inst.Stop(t.Context())
 	pre := len(store.Heartbeats())
 	time.Sleep(120 * time.Millisecond)
 	assert.Equal(t, pre, len(store.Heartbeats()), "no new ticks after context cancellation")
@@ -75,7 +75,7 @@ func TestStart_NormalisesSubMinInterval(t *testing.T) {
 	// minInterval = 100ms; over 250ms we expect ≤3 ticks, definitely not
 	// the millions a 1µs interval would produce.
 	time.Sleep(250 * time.Millisecond)
-	inst.Stop()
+	inst.Stop(t.Context())
 	rows := store.Heartbeats()
 	assert.LessOrEqual(t, len(rows), 4, "interval clamp must prevent runaway tick rate")
 	assert.GreaterOrEqual(t, len(rows), 1)

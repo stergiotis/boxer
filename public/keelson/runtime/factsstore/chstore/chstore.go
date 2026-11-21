@@ -355,8 +355,8 @@ func (inst *Store) qualifiedTable() string {
 }
 
 // WriteGrant lands one boxer.facts row tagged KindGrant.
-func (inst *Store) WriteGrant(row factsstore.GrantRow) (id uint64, err error) {
-	id, err = inst.mintId()
+func (inst *Store) WriteGrant(ctx context.Context, row factsstore.GrantRow) (id uint64, err error) {
+	id, err = inst.mintId(ctx)
 	if err != nil {
 		return
 	}
@@ -390,7 +390,7 @@ func (inst *Store) WriteGrant(row factsstore.GrantRow) (id uint64, err error) {
 	bsec := ent.GetSectionBool()
 	bsec.BeginAttribute(row.Sticky).AddMembershipLowCardRef(vocab.MembGrantSticky.GetId().Value()).EndAttribute()
 	bsec.EndSection()
-	err = inst.commitAndShip(context.Background(), ent)
+	err = inst.commitAndShip(ctx, ent)
 	return
 }
 
@@ -401,14 +401,14 @@ func (inst *Store) WriteGrant(row factsstore.GrantRow) (id uint64, err error) {
 // matching the value, carrying MembLogField as a MixedLowCardRef whose
 // high-card parameter is the field NAME so readers can recover (name,
 // value) pairs without parsing.
-func (inst *Store) WriteLog(row factsstore.LogRow) (id uint64, err error) {
-	id, err = inst.mintId()
+func (inst *Store) WriteLog(ctx context.Context, row factsstore.LogRow) (id uint64, err error) {
+	id, err = inst.mintId(ctx)
 	if err != nil {
 		return
 	}
 	ent := dml.NewInEntityFacts(inst.allocator, 1)
 	inst.encodeLogEntity(ent, id, row)
-	err = inst.commitAndShip(context.Background(), ent)
+	err = inst.commitAndShip(ctx, ent)
 	return
 }
 
@@ -419,14 +419,14 @@ func (inst *Store) WriteLog(row factsstore.LogRow) (id uint64, err error) {
 // time created one ClickHouse part per row (heavy merge pressure) and
 // defeated the batching. ids[i] corresponds to rows[i]. An empty batch is a
 // no-op.
-func (inst *Store) WriteLogs(rows []factsstore.LogRow) (ids []uint64, err error) {
+func (inst *Store) WriteLogs(ctx context.Context, rows []factsstore.LogRow) (ids []uint64, err error) {
 	if len(rows) == 0 {
 		return
 	}
 	ent := dml.NewInEntityFacts(inst.allocator, len(rows))
 	ids = make([]uint64, len(rows))
 	for i := range rows {
-		id, mErr := inst.mintId()
+		id, mErr := inst.mintId(ctx)
 		if mErr != nil {
 			err = mErr
 			return
@@ -438,7 +438,7 @@ func (inst *Store) WriteLogs(rows []factsstore.LogRow) (ids []uint64, err error)
 			return
 		}
 	}
-	err = inst.shipRecords(context.Background(), ent)
+	err = inst.shipRecords(ctx, ent)
 	return
 }
 
@@ -629,8 +629,8 @@ func stampInstance(u64 *dml.InEntityFactsSectionU64Array, instanceKey uint64) {
 // MembRuntimeRun so child app-lifecycle rows can join by equality on a
 // single symbol membership. The run is the host's own work: its origin
 // names no app and no window.
-func (inst *Store) WriteRuntimeStart(row factsstore.RuntimeStartRow) (id uint64, err error) {
-	id, err = inst.mintId()
+func (inst *Store) WriteRuntimeStart(ctx context.Context, row factsstore.RuntimeStartRow) (id uint64, err error) {
+	id, err = inst.mintId(ctx)
 	if err != nil {
 		return
 	}
@@ -699,7 +699,7 @@ func (inst *Store) WriteRuntimeStart(row factsstore.RuntimeStartRow) (id uint64,
 	bsec.BeginAttribute(row.VcsModified).AddMembershipLowCardRef(vocab.MembRunVcsModified.GetId().Value()).EndAttribute()
 	bsec.EndSection()
 
-	err = inst.commitAndShip(context.Background(), ent)
+	err = inst.commitAndShip(ctx, ent)
 	return
 }
 
@@ -710,12 +710,12 @@ func (inst *Store) WriteRuntimeStart(row factsstore.RuntimeStartRow) (id uint64,
 // and no app or window. RunId is required; the natural key includes the
 // timestamp nanoseconds so a hot heartbeat cadence doesn't dedup at
 // insert.
-func (inst *Store) WriteRuntimeHeartbeat(row factsstore.HeartbeatRow) (id uint64, err error) {
+func (inst *Store) WriteRuntimeHeartbeat(ctx context.Context, row factsstore.HeartbeatRow) (id uint64, err error) {
 	if row.RunId == "" {
 		err = eh.Errorf("chstore: WriteRuntimeHeartbeat requires a non-empty RunId")
 		return
 	}
-	id, err = inst.mintId()
+	id, err = inst.mintId(ctx)
 	if err != nil {
 		return
 	}
@@ -734,7 +734,7 @@ func (inst *Store) WriteRuntimeHeartbeat(row factsstore.HeartbeatRow) (id uint64
 	stampInstance(u64, 0)
 	u64.EndSection()
 
-	err = inst.commitAndShip(context.Background(), ent)
+	err = inst.commitAndShip(ctx, ent)
 	return
 }
 
@@ -744,8 +744,8 @@ func (inst *Store) WriteRuntimeHeartbeat(row factsstore.HeartbeatRow) (id uint64
 // and the phase ("started" or "stopped"). The optional StopReason rides
 // on the string section. The tile key rides on the u64 section so two
 // concurrent tiles for the same AppId are distinguishable.
-func (inst *Store) WriteAppLifecycle(row factsstore.AppLifecycleRow) (id uint64, err error) {
-	id, err = inst.mintId()
+func (inst *Store) WriteAppLifecycle(ctx context.Context, row factsstore.AppLifecycleRow) (id uint64, err error) {
+	id, err = inst.mintId(ctx)
 	if err != nil {
 		return
 	}
@@ -772,7 +772,7 @@ func (inst *Store) WriteAppLifecycle(row factsstore.AppLifecycleRow) (id uint64,
 	stampInstance(u64, row.TileKey)
 	u64.EndSection()
 
-	err = inst.commitAndShip(context.Background(), ent)
+	err = inst.commitAndShip(ctx, ent)
 	return
 }
 
@@ -785,8 +785,8 @@ func (inst *Store) WriteAppLifecycle(row factsstore.AppLifecycleRow) (id uint64,
 // on the blob section (nil for a plain open — no blob attribute); a row
 // the host resolved from a kind (ADR-0361 §SD2) carries
 // MembLaunchResolvedFromKind on the bool section.
-func (inst *Store) WriteLaunch(row factsstore.LaunchRow) (id uint64, err error) {
-	id, err = inst.mintId()
+func (inst *Store) WriteLaunch(ctx context.Context, row factsstore.LaunchRow) (id uint64, err error) {
+	id, err = inst.mintId(ctx)
 	if err != nil {
 		return
 	}
@@ -825,7 +825,7 @@ func (inst *Store) WriteLaunch(row factsstore.LaunchRow) (id uint64, err error) 
 		bsec.EndSection()
 	}
 
-	err = inst.commitAndShip(context.Background(), ent)
+	err = inst.commitAndShip(ctx, ent)
 	return
 }
 
@@ -882,22 +882,28 @@ func (inst *Store) commitAndShip(ctx context.Context, ent *dml.InEntityFacts) (e
 	return
 }
 
-// WriteTimeout bounds one insert. The writes run during the host's shutdown
-// drain as well — the heartbeat's last tick, the log bridge's final drain —
-// so a server that stopped answering must cost each write a bounded wait,
-// below the window host's shutdown drain, rather than hold the process
-// past its grace. A write cut short fails as any failed insert does.
-//
-// deferred: the write verbs take a context once the store interfaces carry
-// one; this bound is the stopgap until then.
+// WriteTimeout bounds one insert whose ctx carries no deadline. The writes
+// run during the host's shutdown drain as well — the heartbeat's last tick,
+// the log bridge's final drain — and there the drain's ctx bounds them; a
+// caller that hands a ctx without a deadline still gets a bounded wait, so a
+// server that stopped answering cannot hold a write forever. A write cut
+// short fails as any failed insert does.
 const WriteTimeout = 3 * time.Second
+
+// boundWrite is ctx, with WriteTimeout as its deadline when it has none.
+func boundWrite(ctx context.Context) (bounded context.Context, cancel context.CancelFunc) {
+	if _, has := ctx.Deadline(); has {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, WriteTimeout)
+}
 
 // shipRecords TransferRecords, InsertArrows, and releases the records.
 // Entities must already be committed (commitAndShip commits the single-row
 // case; WriteLogs commits each row before calling this). Returns the first
-// error encountered. The insert is bounded by WriteTimeout.
+// error encountered. The insert runs under ctx, bounded by boundWrite.
 func (inst *Store) shipRecords(ctx context.Context, ent *dml.InEntityFacts) (err error) {
-	ctx, cancel := context.WithTimeout(ctx, WriteTimeout)
+	ctx, cancel := boundWrite(ctx)
 	defer cancel()
 	var records []arrow.RecordBatch
 	records, err = ent.TransferRecords(nil)

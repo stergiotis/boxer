@@ -98,9 +98,9 @@ func TestSchemaContract_JudgesTheLayout(t *testing.T) {
 func TestMintId_FallsBackToTheLocalStream(t *testing.T) {
 	s, err := New(Config{URL: "http://127.0.0.1:1/", Database: "boxer", Table: "facts"})
 	require.NoError(t, err)
-	a, err := s.mintId()
+	a, err := s.mintId(t.Context())
 	require.NoError(t, err)
-	b, err := s.mintId()
+	b, err := s.mintId(t.Context())
 	require.NoError(t, err)
 	for _, id := range []uint64{a, b} {
 		tagged := identifier.TaggedId(id)

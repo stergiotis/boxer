@@ -200,7 +200,7 @@ func registerHostExtras(rt *hostboot.Runtime) (err error) {
 	if storeErr != nil {
 		log.Warn().Err(storeErr).Msg("appletstore: applet store unavailable")
 	} else {
-		rt.OnClose(appletStore.Stop)
+		rt.OnClose(func(gocontext.Context) { appletStore.Stop() })
 	}
 	play.RegisterHostSql(log.Logger)
 	if godepErr := providersgodep.Register(rt.Introspect, providersgodep.Config{Log: log.Logger}); godepErr != nil {

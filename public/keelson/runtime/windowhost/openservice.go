@@ -1,6 +1,7 @@
 package windowhost
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -121,7 +122,7 @@ func (inst *OpenService) handleRequest(msg *app.Msg) {
 		inst.reply(msg.Reply, 0, refusalText(err))
 		return
 	}
-	inst.emitLaunchFact(msg.Sender, target, resolved, req, key)
+	inst.emitLaunchFact(context.WithoutCancel(msg.Context()), msg.Sender, target, resolved, req, key)
 	inst.log.Info().
 		Str("caller", string(msg.Sender)).
 		Str("target", string(target)).
@@ -164,7 +165,7 @@ func (inst *OpenService) reply(subject string, windowKey uint64, reason string) 
 // never bubbles. The caller identity is attributed from the bus
 // envelope (msg.Sender), not from the payload. target is the app that
 // opened: the request's target, or the app resolved from its kind.
-func (inst *OpenService) emitLaunchFact(caller app.AppIdT, target app.AppIdT, resolved bool, req launchrequest.LaunchRequest, key WindowKeyT) {
+func (inst *OpenService) emitLaunchFact(ctx context.Context, caller app.AppIdT, target app.AppIdT, resolved bool, req launchrequest.LaunchRequest, key WindowKeyT) {
 	inst.host.mu.Lock()
 	runId := inst.host.runId
 	facts := inst.host.facts
@@ -176,7 +177,7 @@ func (inst *OpenService) emitLaunchFact(caller app.AppIdT, target app.AppIdT, re
 	if len(cfg) == 0 {
 		cfg = nil // wire round-trips nil as empty; keep the row's plain-open shape
 	}
-	_, err := facts.WriteLaunch(factsstore.LaunchRow{
+	_, err := facts.WriteLaunch(ctx, factsstore.LaunchRow{
 		RunId:            runId,
 		CallerAppId:      caller,
 		TargetAppId:      target,

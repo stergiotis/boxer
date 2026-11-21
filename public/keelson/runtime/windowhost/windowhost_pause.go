@@ -155,7 +155,7 @@ func (inst *Inst) applyPause(w *window, pause bool, from string, now time.Time) 
 	}
 	log.Msg("windowhost: window " + verb)
 	if facts != nil {
-		if _, err := facts.WriteAppLifecycle(factsstore.AppLifecycleRow{RunId: runId, AppId: w.manifest.Id, TileKey: uint64(w.key),
+		if _, err := facts.WriteAppLifecycle(inst.ctx, factsstore.AppLifecycleRow{RunId: runId, AppId: w.manifest.Id, TileKey: uint64(w.key),
 			Phase: phase, StopReason: from, Ts: now}); err != nil {
 			inst.logger.Warn().Err(err).Uint64("windowKey", uint64(w.key)).Msg("windowhost: write app-lifecycle " + verb + " failed")
 		}

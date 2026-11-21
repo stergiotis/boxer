@@ -3,6 +3,7 @@
 package logbridge_test
 
 import (
+	"context"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -35,14 +36,14 @@ func waitFor(t *testing.T, cond func() bool, timeout time.Duration) {
 // in-memory FactsStoreI shim to stay hermetic.
 func TestSink_EndToEnd_ZerologToFacts(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
-	sink, err := logbridge.NewSink(store, logbridge.Config{
+	sink, err := logbridge.NewSink(t.Context(), store, logbridge.Config{
 		AppId:         "play",
 		Capacity:      32,
 		FlushN:        1,
 		FlushInterval: 20 * time.Millisecond,
 	})
 	require.NoError(t, err)
-	defer sink.Close()
+	defer sink.Close(t.Context())
 
 	logger := zerolog.New(sink).With().Timestamp().Logger()
 	logger.Info().Str("subject", "ch.query.boxer").Int("latency_ms", 7).Msg("query ok")
@@ -90,11 +91,11 @@ func TestSink_EndToEnd_ZerologToFacts(t *testing.T) {
 // which wins, which is exactly how app_id is already handled.
 func TestSink_LiftsInstanceKeyToItsOwnColumn(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
-	sink, err := logbridge.NewSink(store, logbridge.Config{
+	sink, err := logbridge.NewSink(t.Context(), store, logbridge.Config{
 		AppId: "play", Capacity: 32, FlushN: 1, FlushInterval: 20 * time.Millisecond,
 	})
 	require.NoError(t, err)
-	defer sink.Close()
+	defer sink.Close(t.Context())
 
 	// The shape windowhost builds: app_id from AppLogger, instance_id added
 	// per window.
@@ -119,11 +120,11 @@ func TestSink_LiftsInstanceKeyToItsOwnColumn(t *testing.T) {
 // wrong number in a column readers filter on. It stays a field.
 func TestSink_KeepsANonNumericInstanceIdAsAField(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
-	sink, err := logbridge.NewSink(store, logbridge.Config{
+	sink, err := logbridge.NewSink(t.Context(), store, logbridge.Config{
 		AppId: "play", Capacity: 32, FlushN: 1, FlushInterval: 20 * time.Millisecond,
 	})
 	require.NoError(t, err)
-	defer sink.Close()
+	defer sink.Close(t.Context())
 
 	logger := zerolog.New(sink).With().Timestamp().
 		Str(logbridge.InstanceKeyFieldName, "not-a-number").Logger()
@@ -153,7 +154,7 @@ func TestSink_RingOverflow_DropsOldest(t *testing.T) {
 	// than in transit to the store.
 	gate := make(chan struct{})
 	store := &blockingStore{gate: gate}
-	sink, err := logbridge.NewSink(store, logbridge.Config{
+	sink, err := logbridge.NewSink(t.Context(), store, logbridge.Config{
 		AppId:         "play",
 		Capacity:      4,
 		FlushN:        4,
@@ -162,7 +163,7 @@ func TestSink_RingOverflow_DropsOldest(t *testing.T) {
 	require.NoError(t, err)
 	defer func() {
 		close(gate)
-		sink.Close()
+		sink.Close(t.Context())
 	}()
 
 	logger := zerolog.New(sink)
@@ -196,23 +197,27 @@ type blockingStore struct {
 
 var _ factsstore.FactsStoreI = (*blockingStore)(nil)
 
-func (s *blockingStore) WriteGrant(_ factsstore.GrantRow) (uint64, error) { return 0, nil }
-func (s *blockingStore) WriteRuntimeStart(_ factsstore.RuntimeStartRow) (uint64, error) {
+func (s *blockingStore) WriteGrant(_ context.Context, _ factsstore.GrantRow) (uint64, error) {
 	return 0, nil
 }
-func (s *blockingStore) WriteRuntimeHeartbeat(_ factsstore.HeartbeatRow) (uint64, error) {
+func (s *blockingStore) WriteRuntimeStart(_ context.Context, _ factsstore.RuntimeStartRow) (uint64, error) {
 	return 0, nil
 }
-func (s *blockingStore) WriteAppLifecycle(_ factsstore.AppLifecycleRow) (uint64, error) {
+func (s *blockingStore) WriteRuntimeHeartbeat(_ context.Context, _ factsstore.HeartbeatRow) (uint64, error) {
 	return 0, nil
 }
-func (s *blockingStore) WriteLaunch(_ factsstore.LaunchRow) (uint64, error) { return 0, nil }
-func (s *blockingStore) WriteLog(_ factsstore.LogRow) (id uint64, err error) {
+func (s *blockingStore) WriteAppLifecycle(_ context.Context, _ factsstore.AppLifecycleRow) (uint64, error) {
+	return 0, nil
+}
+func (s *blockingStore) WriteLaunch(_ context.Context, _ factsstore.LaunchRow) (uint64, error) {
+	return 0, nil
+}
+func (s *blockingStore) WriteLog(_ context.Context, _ factsstore.LogRow) (id uint64, err error) {
 	<-s.gate
 	id = s.n.Add(1)
 	return
 }
-func (s *blockingStore) WriteLogs(rows []factsstore.LogRow) (ids []uint64, err error) {
+func (s *blockingStore) WriteLogs(_ context.Context, rows []factsstore.LogRow) (ids []uint64, err error) {
 	// Park the whole batch on the gate, matching WriteLog, so the flusher
 	// stalls and the ring overflows during the burst.
 	<-s.gate
@@ -228,7 +233,7 @@ func (s *blockingStore) WriteLogs(rows []factsstore.LogRow) (ids []uint64, err e
 // already accepted on the writer.
 func TestSink_Close_DrainsPending(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
-	sink, err := logbridge.NewSink(store, logbridge.Config{
+	sink, err := logbridge.NewSink(t.Context(), store, logbridge.Config{
 		Capacity:      64,
 		FlushN:        100,            // never reach
 		FlushInterval: 24 * time.Hour, // never tick
@@ -239,13 +244,13 @@ func TestSink_Close_DrainsPending(t *testing.T) {
 	for i := range 5 {
 		logger.Info().Int("i", i).Msg("pending")
 	}
-	require.NoError(t, sink.Close())
+	require.NoError(t, sink.Close(t.Context()))
 	assert.Len(t, store.Logs(), 5)
 }
 
 // TestSink_NilStore rejects construction without a store — eh.Errorf
 // path matches the rest of the runtime.
 func TestSink_NilStore(t *testing.T) {
-	_, err := logbridge.NewSink(nil, logbridge.Config{})
+	_, err := logbridge.NewSink(t.Context(), nil, logbridge.Config{})
 	require.Error(t, err)
 }

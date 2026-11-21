@@ -180,7 +180,7 @@ func TestReapAll_LeaveUnmountDrainUnload(t *testing.T) {
 	require.Equal(t, 1, len(f.bus.Subscriptions()), "the app's subscription is live")
 
 	done := make(chan struct{})
-	go func() { h.ReapAll(StopReasonShutdown); close(done) }()
+	go func() { h.ReapAll(t.Context(), StopReasonShutdown); close(done) }()
 	// Unmount ran, after leave; the bus still answered inside it; the
 	// client is not closed while the tail runs.
 	require.Eventually(t, func() bool { return a.unmountCalls.Load() == 1 }, time.Second, 5*time.Millisecond)
@@ -204,7 +204,7 @@ func TestReapAll_LeaveUnmountDrainUnload(t *testing.T) {
 	require.Len(t, lc, 2)
 	assert.Equal(t, factsstore.AppLifecyclePhaseStopped, lc[1].Phase)
 	assert.Equal(t, StopReasonShutdown, lc[1].StopReason)
-	h.ReapAll(StopReasonShutdown) // idempotent
+	h.ReapAll(t.Context(), StopReasonShutdown) // idempotent
 	assert.Len(t, f.facts.Lifecycles(), 2)
 }
 
@@ -215,7 +215,7 @@ func TestReapAll_TheDrainDeadlineReleasesAnyway(t *testing.T) {
 	require.NoError(t, h.Start(context.Background(), []app.AppIdT{"test.a"}, nil))
 	require.NoError(t, h.Wait(context.Background()))
 	start := time.Now()
-	h.ReapAll(StopReasonShutdown)
+	h.ReapAll(t.Context(), StopReasonShutdown)
 	assert.Less(t, time.Since(start), time.Second)
 	assert.Equal(t, 0, len(f.bus.Subscriptions()))
 	assert.Equal(t, StateStopped, rowOf(t, h, "test.a").State)
@@ -236,7 +236,7 @@ func TestMountError_IsRecordedAndReleased(t *testing.T) {
 	require.Eventually(t, func() bool { return len(f.bus.Subscriptions()) == 0 }, time.Second, 5*time.Millisecond)
 	require.Eventually(t, func() bool { return len(f.facts.Lifecycles()) == 2 }, time.Second, 5*time.Millisecond)
 	assert.Equal(t, StopReasonMountError, f.facts.Lifecycles()[1].StopReason)
-	h.ReapAll(StopReasonShutdown)
+	h.ReapAll(t.Context(), StopReasonShutdown)
 	assert.Equal(t, int32(0), a.unmountCalls.Load(), "a failed Mount is not unmounted")
 	assert.Len(t, f.facts.Lifecycles(), 2)
 }
@@ -247,7 +247,7 @@ func TestUnmountError_IsFailedWithItsReason(t *testing.T) {
 	h := f.host(t)
 	require.NoError(t, h.Start(context.Background(), []app.AppIdT{"test.a"}, nil))
 	require.NoError(t, h.Wait(context.Background()))
-	h.ReapAll(StopReasonShutdown)
+	h.ReapAll(t.Context(), StopReasonShutdown)
 	row := rowOf(t, h, "test.a")
 	assert.Equal(t, StateFailed, row.State)
 	assert.Equal(t, StopReasonUnmountError, row.StopReason)
@@ -268,7 +268,7 @@ func TestPanics_AreFailuresOfTheirService(t *testing.T) {
 	require.Eventually(t, func() bool { return rowOf(t, h, "test.a").State == StateFailed }, time.Second, 5*time.Millisecond)
 	assert.Equal(t, StopReasonMountError, rowOf(t, h, "test.a").StopReason)
 	assert.Contains(t, rowOf(t, h, "test.a").LastError, "panic")
-	h.ReapAll(StopReasonShutdown)
+	h.ReapAll(t.Context(), StopReasonShutdown)
 	assert.Equal(t, StateFailed, rowOf(t, h, "test.b").State)
 	assert.Equal(t, StopReasonUnmountError, rowOf(t, h, "test.b").StopReason)
 	assert.Equal(t, StateStopped, rowOf(t, h, "test.c").State)
@@ -282,7 +282,7 @@ func TestReapAll_WhileStartingWaitsForMountThenUnmounts(t *testing.T) {
 	require.NoError(t, h.Start(context.Background(), []app.AppIdT{"test.a"}, nil))
 	<-a.mounted
 	assert.Equal(t, StateStarting, rowOf(t, h, "test.a").State)
-	h.ReapAll(StopReasonShutdown)
+	h.ReapAll(t.Context(), StopReasonShutdown)
 	assert.Equal(t, int32(1), a.unmountCalls.Load(), "leave let Mount return, then Unmount ran")
 	assert.Equal(t, StateStopped, rowOf(t, h, "test.a").State)
 }

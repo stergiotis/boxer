@@ -20,13 +20,13 @@ import (
 // stdout + Sink — and asserts both writers receive every event.
 func TestNewLogger_FansOutToBaseAndSink(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
-	sink, err := logbridge.NewSink(store, logbridge.Config{
+	sink, err := logbridge.NewSink(t.Context(), store, logbridge.Config{
 		Capacity:      16,
 		FlushN:        1,
 		FlushInterval: 20 * time.Millisecond,
 	})
 	require.NoError(t, err)
-	defer sink.Close()
+	defer sink.Close(t.Context())
 
 	var base bytes.Buffer
 	logger := logbridge.NewLogger(&base, sink)
@@ -49,13 +49,13 @@ func TestNewLogger_FansOutToBaseAndSink(t *testing.T) {
 // retention without writing to disk.
 func TestNewLogger_NilBaseSinkOnly(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
-	sink, err := logbridge.NewSink(store, logbridge.Config{
+	sink, err := logbridge.NewSink(t.Context(), store, logbridge.Config{
 		Capacity:      8,
 		FlushN:        1,
 		FlushInterval: 20 * time.Millisecond,
 	})
 	require.NoError(t, err)
-	defer sink.Close()
+	defer sink.Close(t.Context())
 
 	logger := logbridge.NewLogger(nil, sink)
 	logger.Info().Msg("captured")
@@ -90,7 +90,7 @@ func TestNewLogger_BothNil(t *testing.T) {
 // any extra wiring on the Sink itself.
 func TestAppLogger_RoundTripsAppId(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
-	sink, err := logbridge.NewSink(store, logbridge.Config{
+	sink, err := logbridge.NewSink(t.Context(), store, logbridge.Config{
 		// Deliberately leave Config.AppId empty so a passing test
 		// proves the event-encoded app_id is the source of truth.
 		Capacity:      16,
@@ -98,7 +98,7 @@ func TestAppLogger_RoundTripsAppId(t *testing.T) {
 		FlushInterval: 20 * time.Millisecond,
 	})
 	require.NoError(t, err)
-	defer sink.Close()
+	defer sink.Close(t.Context())
 
 	base := logbridge.NewLogger(nil, sink)
 	playLogger := app.AppLogger(base, "github.com/example/play")
@@ -125,14 +125,14 @@ func TestAppLogger_RoundTripsAppId(t *testing.T) {
 // without AppLogger), the Sink's Config.AppId still applies.
 func TestAppLogger_FallbackToConfigAppId(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
-	sink, err := logbridge.NewSink(store, logbridge.Config{
+	sink, err := logbridge.NewSink(t.Context(), store, logbridge.Config{
 		AppId:         "runtime", // fallback when event has no app_id
 		Capacity:      8,
 		FlushN:        1,
 		FlushInterval: 20 * time.Millisecond,
 	})
 	require.NoError(t, err)
-	defer sink.Close()
+	defer sink.Close(t.Context())
 
 	logger := zerolog.New(sink)
 	logger.Info().Msg("no app_id in event")

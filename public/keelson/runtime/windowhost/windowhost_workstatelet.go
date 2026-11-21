@@ -196,7 +196,7 @@ func (inst *Inst) writeWorkstateletLaunch(caller app.AppIdT, target app.AppIdT, 
 	if len(w.Config) > 0 {
 		row.ConfigKind, row.Config = w.Kind, w.Config
 	}
-	if _, wErr := facts.WriteLaunch(row); wErr != nil {
+	if _, wErr := facts.WriteLaunch(inst.ctx, row); wErr != nil {
 		inst.logger.Warn().Err(wErr).Str("workstatelet", string(caller)).Uint64("windowKey", uint64(key)).
 			Msg("windowhost: write workstatelet launch fact failed")
 	}

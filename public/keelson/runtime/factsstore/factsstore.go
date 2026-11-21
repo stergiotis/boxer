@@ -572,17 +572,17 @@ type LogReaderI interface {
 // column-width rows written here before that move stay readable as trail
 // and are no longer read.
 type FactsStoreI interface {
-	WriteGrant(row GrantRow) (id uint64, err error)
-	WriteLog(row LogRow) (id uint64, err error)
+	WriteGrant(ctx context.Context, row GrantRow) (id uint64, err error)
+	WriteLog(ctx context.Context, row LogRow) (id uint64, err error)
 	// WriteLogs persists a batch of log rows. Implementations should land
 	// the whole batch in one transport operation (e.g. a single Arrow
 	// insert) so a batching producer like logbridge is not silently
 	// de-batched into one round-trip per row. ids[i] corresponds to rows[i].
-	WriteLogs(rows []LogRow) (ids []uint64, err error)
-	WriteRuntimeStart(row RuntimeStartRow) (id uint64, err error)
-	WriteRuntimeHeartbeat(row HeartbeatRow) (id uint64, err error)
-	WriteAppLifecycle(row AppLifecycleRow) (id uint64, err error)
-	WriteLaunch(row LaunchRow) (id uint64, err error)
+	WriteLogs(ctx context.Context, rows []LogRow) (ids []uint64, err error)
+	WriteRuntimeStart(ctx context.Context, row RuntimeStartRow) (id uint64, err error)
+	WriteRuntimeHeartbeat(ctx context.Context, row HeartbeatRow) (id uint64, err error)
+	WriteAppLifecycle(ctx context.Context, row AppLifecycleRow) (id uint64, err error)
+	WriteLaunch(ctx context.Context, row LaunchRow) (id uint64, err error)
 }
 
 // InMemoryFactsStore is the M2.5 backend. Stores each kind in its own
@@ -606,7 +606,7 @@ func NewInMemoryFactsStore() (inst *InMemoryFactsStore) {
 	return
 }
 
-func (inst *InMemoryFactsStore) WriteGrant(row GrantRow) (id uint64, err error) {
+func (inst *InMemoryFactsStore) WriteGrant(ctx context.Context, row GrantRow) (id uint64, err error) {
 	id = inst.nextId.Add(1)
 	inst.mu.Lock()
 	inst.grants = append(inst.grants, row)
@@ -617,7 +617,7 @@ func (inst *InMemoryFactsStore) WriteGrant(row GrantRow) (id uint64, err error) 
 // WriteLog appends one captured zerolog event. Fields and Bytes payloads
 // are defensively copied so the caller (typically logbridge's decode loop
 // reusing scratch buffers) can recycle its inputs.
-func (inst *InMemoryFactsStore) WriteLog(row LogRow) (id uint64, err error) {
+func (inst *InMemoryFactsStore) WriteLog(ctx context.Context, row LogRow) (id uint64, err error) {
 	id = inst.nextId.Add(1)
 	if len(row.Fields) > 0 {
 		copied := make([]LogField, len(row.Fields))
@@ -640,13 +640,13 @@ func (inst *InMemoryFactsStore) WriteLog(row LogRow) (id uint64, err error) {
 // WriteLogs appends a batch of captured zerolog events. Each row is
 // defensively copied via WriteLog. WriteLog never errors in the in-memory
 // store, so the loop runs to completion; ids[i] corresponds to rows[i].
-func (inst *InMemoryFactsStore) WriteLogs(rows []LogRow) (ids []uint64, err error) {
+func (inst *InMemoryFactsStore) WriteLogs(ctx context.Context, rows []LogRow) (ids []uint64, err error) {
 	if len(rows) == 0 {
 		return
 	}
 	ids = make([]uint64, len(rows))
 	for i := range rows {
-		ids[i], err = inst.WriteLog(rows[i])
+		ids[i], err = inst.WriteLog(ctx, rows[i])
 		if err != nil {
 			return
 		}
@@ -655,7 +655,7 @@ func (inst *InMemoryFactsStore) WriteLogs(rows []LogRow) (ids []uint64, err erro
 }
 
 // WriteRuntimeStart appends one process-boot record.
-func (inst *InMemoryFactsStore) WriteRuntimeStart(row RuntimeStartRow) (id uint64, err error) {
+func (inst *InMemoryFactsStore) WriteRuntimeStart(ctx context.Context, row RuntimeStartRow) (id uint64, err error) {
 	id = inst.nextId.Add(1)
 	if row.Ts.IsZero() {
 		row.Ts = time.Now().UTC()
@@ -669,7 +669,7 @@ func (inst *InMemoryFactsStore) WriteRuntimeStart(row RuntimeStartRow) (id uint6
 // WriteRuntimeHeartbeat appends one liveness-tick record. Empty RunId
 // is rejected so the audit trail can rely on every heartbeat being
 // joinable back to a runtime-start row.
-func (inst *InMemoryFactsStore) WriteRuntimeHeartbeat(row HeartbeatRow) (id uint64, err error) {
+func (inst *InMemoryFactsStore) WriteRuntimeHeartbeat(ctx context.Context, row HeartbeatRow) (id uint64, err error) {
 	if row.RunId == "" {
 		err = errEmptyRunId
 		return
@@ -685,7 +685,7 @@ func (inst *InMemoryFactsStore) WriteRuntimeHeartbeat(row HeartbeatRow) (id uint
 }
 
 // WriteAppLifecycle appends one app-tile open/close record.
-func (inst *InMemoryFactsStore) WriteAppLifecycle(row AppLifecycleRow) (id uint64, err error) {
+func (inst *InMemoryFactsStore) WriteAppLifecycle(ctx context.Context, row AppLifecycleRow) (id uint64, err error) {
 	id = inst.nextId.Add(1)
 	if row.Ts.IsZero() {
 		row.Ts = time.Now().UTC()
@@ -698,7 +698,7 @@ func (inst *InMemoryFactsStore) WriteAppLifecycle(row AppLifecycleRow) (id uint6
 
 // WriteLaunch appends one accepted app-launch record. Config bytes are
 // defensively copied so the caller can recycle its buffer.
-func (inst *InMemoryFactsStore) WriteLaunch(row LaunchRow) (id uint64, err error) {
+func (inst *InMemoryFactsStore) WriteLaunch(ctx context.Context, row LaunchRow) (id uint64, err error) {
 	id = inst.nextId.Add(1)
 	if row.Ts.IsZero() {
 		row.Ts = time.Now().UTC()

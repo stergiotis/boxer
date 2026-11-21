@@ -70,7 +70,7 @@ func TestFactsLayout_CreateWriteRead_Local(t *testing.T) {
 	ts := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
 	var ids []uint64
 	for _, at := range []time.Time{ts, ts.AddDate(-2, 0, 0)} {
-		id, err := s.mintId()
+		id, err := s.mintId(t.Context())
 		require.NoError(t, err)
 		require.Equal(t, vocab.IdStreamFactsRow.Value(), identifier.TaggedId(id).GetTag().GetValue(), "leased, not local")
 		ent := dml.NewInEntityFacts(s.allocator, 1)

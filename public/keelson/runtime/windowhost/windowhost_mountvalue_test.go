@@ -34,7 +34,7 @@ func TestTheHostHandsItsMountValuesToEveryApp(t *testing.T) {
 	reg := app.NewRegistry()
 	va := &valueApp{manifest: mkManifest("test.value")}
 	require.NoError(t, reg.Register(va))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	v := &struct{ n int }{n: 7}
 	h.SetMountValue(mountValueKey{}, v)
 	_, err := h.Open("test.value")

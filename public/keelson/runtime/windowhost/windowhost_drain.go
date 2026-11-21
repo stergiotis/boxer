@@ -85,14 +85,16 @@ func (inst closing) isDrained() (drained bool) {
 }
 
 // drainAndRelease waits for the lifetime scopes of the windows to unload,
-// bounded by ctx, then closes their bus clients and writes the stop row.
-func (inst *Inst) drainAndRelease(ctx context.Context, cl closing, facts factsstore.FactsStoreI, runId string) {
+// bounded by drainCtx, then closes their bus clients and writes the stop
+// row under writeCtx. The two are apart so a drain that uses up its budget
+// does not also cost the window its stop row.
+func (inst *Inst) drainAndRelease(drainCtx context.Context, writeCtx context.Context, cl closing, facts factsstore.FactsStoreI, runId string) {
 	for _, uw := range cl.unload {
 		if uw.lifetime == nil {
 			continue
 		}
 		start := time.Now()
-		if err := uw.lifetime.Drain(ctx); err != nil {
+		if err := uw.lifetime.Drain(drainCtx); err != nil {
 			inst.logger.Warn().Err(err).
 				Str("id", string(uw.manifest.Id)).
 				Uint64("windowKey", uint64(uw.key)).
@@ -104,7 +106,7 @@ func (inst *Inst) drainAndRelease(ctx context.Context, cl closing, facts factsst
 		uw.unload(inst.logger)
 	}
 	if facts != nil {
-		emitStopped(facts, inst.logger, runId, cl.w, cl.reason)
+		emitStopped(writeCtx, facts, inst.logger, runId, cl.w, cl.reason)
 	}
 }
 
@@ -114,24 +116,25 @@ func (inst *Inst) releaseLater(cl closing, facts factsstore.FactsStoreI, runId s
 	inst.drains.pending.Add(1)
 	go func() {
 		defer inst.drains.pending.Done()
-		ctx, cancel := context.WithTimeout(context.Background(), onClose)
+		ctx, cancel := context.WithTimeout(inst.ctx, onClose)
 		defer cancel()
-		inst.drainAndRelease(ctx, cl, facts, runId)
+		inst.drainAndRelease(ctx, inst.ctx, cl, facts, runId)
 	}()
 }
 
 // releaseAll drains every closing in parallel and waits, together with the
-// window-close drains already running, within the shutdown budget.
-func (inst *Inst) releaseAll(cls []closing, facts factsstore.FactsStoreI, runId string) {
+// window-close drains already running, within the shutdown budget cut from
+// shutdownCtx; the stop rows are written under shutdownCtx itself.
+func (inst *Inst) releaseAll(shutdownCtx context.Context, cls []closing, facts factsstore.FactsStoreI, runId string) {
 	_, onShutdown := inst.drainDeadlines()
-	ctx, cancel := context.WithTimeout(context.Background(), onShutdown)
+	ctx, cancel := context.WithTimeout(shutdownCtx, onShutdown)
 	defer cancel()
 	var wg sync.WaitGroup
 	for _, cl := range cls {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			inst.drainAndRelease(ctx, cl, facts, runId)
+			inst.drainAndRelease(ctx, shutdownCtx, cl, facts, runId)
 		}()
 	}
 	wg.Wait()

@@ -15,7 +15,7 @@ import (
 // service's launch reports what OpsInstances says (ADR-0269 §SD3).
 func TestOpsInstancesReportsHowFarAWindowHasLoaded(t *testing.T) {
 	reg, _ := mkRegistryWithSingleton(t, "test.a")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	_, err := h.Open("test.a")
 	require.NoError(t, err)
 
@@ -40,7 +40,7 @@ func TestOpsInstancesReportsHowFarAWindowHasLoaded(t *testing.T) {
 // A window that never draws its body — collapsed — stops asking for frames.
 func TestAnOpeningWindowAsksForFramesOnlyForABoundedTime(t *testing.T) {
 	reg, _ := mkRegistryWithSingleton(t, "test.a")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	_, err := h.Open("test.a")
 	require.NoError(t, err)
 	h.windows[0].opened = time.Now().Add(-openingFrames)

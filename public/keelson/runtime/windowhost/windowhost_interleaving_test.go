@@ -122,7 +122,7 @@ func newEffWorld(t *testing.T) (w *effWorld) {
 	sm := mkManifest(effSingletonId)
 	sm.Caps = caps
 	require.NoError(t, appReg.Register(&effApp{manifest: sm, svc: svc}))
-	w.host = NewInst(appReg, zerolog.Nop())
+	w.host = NewInst(t.Context(), appReg, zerolog.Nop())
 	w.host.SetBus(w.bus)
 	return
 }

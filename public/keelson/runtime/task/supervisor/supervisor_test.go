@@ -38,7 +38,7 @@ func newFixture(t *testing.T, opts Opts) (f *fixture) {
 
 	supC := bus.NewClient(AppId, Caps())
 	sup := New(supC, facts, zerolog.Nop(), opts)
-	require.NoError(t, sup.Start())
+	require.NoError(t, sup.Start(t.Context()))
 
 	producer := bus.NewClient("test.producer", task.ProducerCaps())
 	// Requester client doubles as a canceler — most real UI consumers
@@ -88,7 +88,7 @@ func findField(row factsstore.LogRow, name string) (f factsstore.LogField, ok bo
 
 func TestSupervisor_StartStopIdempotent(t *testing.T) {
 	f := newFixture(t, Opts{})
-	require.Error(t, f.sup.Start(), "second Start must error")
+	require.Error(t, f.sup.Start(t.Context()), "second Start must error")
 	require.NoError(t, f.sup.Stop())
 	require.NoError(t, f.sup.Stop(), "second Stop is a no-op")
 }
@@ -314,7 +314,7 @@ func TestSupervisor_NilFactsStoreStillObserves(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
 	supC := bus.NewClient(AppId, Caps())
 	sup := New(supC, nil, zerolog.Nop(), Opts{})
-	require.NoError(t, sup.Start())
+	require.NoError(t, sup.Start(t.Context()))
 	defer func() { _ = sup.Stop() }()
 
 	producer := bus.NewClient("test.producer", task.ProducerCaps())

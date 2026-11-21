@@ -400,9 +400,12 @@ type Runtime struct {
 	Renderers      []func() error
 	ScreenshotMode bool
 
+	// ctx is Boot's: the runtime's lifetime. The shutdown's ctx is cut
+	// from it (shutdownCtx), keeping its values and not its cancellation.
+	ctx       context.Context
 	opts      Options
 	heartbeat *heartbeat.Inst
-	cleanups  []func()
+	cleanups  []func(ctx context.Context)
 	reapOnce  sync.Once
 	closeOnce sync.Once
 	// showRunning opens the app center on its Running tab, for the Window
@@ -430,7 +433,7 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 	if err != nil {
 		return nil, eh.Errorf("the run's driver stamp: %w", err)
 	}
-	rt = &Runtime{opts: opts}
+	rt = &Runtime{ctx: ctx, opts: opts}
 	logger := opts.Log
 	if !opts.KeepCoreDumps {
 		disableCoreDumps(logger)
@@ -490,13 +493,13 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 			Ts:           runInst.StartedAt,
 		}
 		stampDriver(&row, take)
-		_, wErr := rt.Facts.WriteRuntimeStart(row)
+		_, wErr := rt.Facts.WriteRuntimeStart(ctx, row)
 		if wErr != nil {
 			logger.Warn().Err(wErr).Msg("runtime-start audit write failed")
 		}
 		// Liveness signal: a crashed process is told from a clean shutdown by
 		// the absence of a recent heartbeat. Stopped by Reap.
-		hbInst, hbErr := heartbeat.Start(context.Background(), rt.Facts, runInst.RunId, heartbeat.DefaultInterval, logger)
+		hbInst, hbErr := heartbeat.Start(ctx, rt.Facts, runInst.RunId, heartbeat.DefaultInterval, logger)
 		if hbErr != nil {
 			logger.Warn().Err(hbErr).Msg("heartbeat: start failed")
 		} else {
@@ -517,11 +520,11 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 
 	taskSupBus := rt.Bus.NewClient(tasksupervisor.AppId, tasksupervisor.Caps())
 	taskSup := tasksupervisor.New(taskSupBus, rt.Facts, logger, tasksupervisor.Opts{})
-	if startErr := taskSup.Start(); startErr != nil {
+	if startErr := taskSup.Start(ctx); startErr != nil {
 		logger.Warn().Err(startErr).Msg("task supervisor: start failed; task.* observable but un-audited")
 	} else {
 		rt.Tasks = taskSup
-		rt.cleanups = append(rt.cleanups, func() { _ = taskSup.Stop() })
+		rt.onClose(func() { _ = taskSup.Stop() })
 	}
 
 	rt.bootHostServices(ctx)
@@ -618,7 +621,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	persistCtx, persistCancel := context.WithTimeout(ctx, persistOpenTimeout)
 	backend, label, backendClose, exec := selectPersistBackend(persistCtx, factsCfg, rt.IsChStore, logger)
 	persistCancel()
-	rt.cleanups = append(rt.cleanups, backendClose)
+	rt.onClose(backendClose)
 	rt.State = stateStoreFor(backend)
 	rt.persistStore = backend
 	if svc.Persist {
@@ -629,7 +632,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			rt.Persist = persistSvc
 			rt.PersistBackend = label
 			rt.PersistExec = exec
-			rt.cleanups = append(rt.cleanups, persistSvc.Close)
+			rt.onClose(persistSvc.Close)
 		}
 	}
 	// The audit trail (ADR-0277), durable where the persist backend is the
@@ -653,7 +656,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	// nothing asks to land.
 	rt.Trail = trail.NewRecorder(rt.PersistExec, runId, logger, trail.WithOriginBy(evidence.OriginByHost), trail.WithAnchors(rt.Anchors),
 		trail.WithFlushInterval(trailFlushInterval))
-	rt.cleanups = append(rt.cleanups, rt.Trail.Close)
+	rt.onClose(rt.Trail.Close)
 	// The settings the trail starts under, as its first row: the baseline
 	// its later rows are read against (ADR-0296, the Update of 2026-10-31).
 	recordTrailConfig(ctx, rt.Trail, trailSettingsOf(rt.Anchors, rt.RunInfo), logger)
@@ -662,7 +665,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	// Request never waits on the recorder's lock. The sink closes before the
 	// trail — cleanups run in reverse — so what it drains still lands.
 	auditSink := audit.NewAsyncSink(trail.AsAuditSink(rt.Trail), 0)
-	rt.cleanups = append(rt.cleanups, auditSink.Close)
+	rt.onClose(auditSink.Close)
 	sinks := make(audit.MultiSink, 0, 1+len(rt.opts.ExtraAuditSinks))
 	sinks = append(sinks, auditSink)
 	sinks = append(sinks, rt.opts.ExtraAuditSinks...)
@@ -675,7 +678,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	if auditSvc, aerr := trail.NewAuditService(rt.Bus, logger, rt.Trail); aerr != nil {
 		logger.Warn().Err(aerr).Msg("trail: audit service start failed; runtime.audit.* will be unbound")
 	} else {
-		rt.cleanups = append(rt.cleanups, auditSvc.Close)
+		rt.onClose(auditSvc.Close)
 	}
 	rt.bootAgentRun(ctx)
 	// After the journal's tables are provisioned, so the views over them
@@ -697,7 +700,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			logger.Warn().Err(aErr).Msg("appstate: service start failed; runtime.appstate.* will be unbound")
 		} else {
 			rt.AppState = asSvc
-			rt.cleanups = append(rt.cleanups, asSvc.Close)
+			rt.onClose(asSvc.Close)
 		}
 	}
 	// The cell (ADR-0307 §SD1, ADR-0312 §SD1): one declaration — the
@@ -768,7 +771,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			logger.Warn().Err(lErr).Msg("llm: service start failed; llm.* will be unbound")
 		} else {
 			rt.LLM = llmSvc
-			rt.cleanups = append(rt.cleanups, llmSvc.Close)
+			rt.onClose(llmSvc.Close)
 			d := llmSvc.Describe()
 			logger.Info().Bool("configured", d.Configured).Str("model", d.Model).Str("endpointHost", d.EndpointHost).
 				Bool("local", d.Local).Bool("durable", llmSvc.Durable()).Msg("llm: service listening on llm.*")
@@ -784,7 +787,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			logger.Warn().Err(hErr).Msg("httpegress: service start failed; net.http.fetch.* will be unbound")
 		} else {
 			rt.HTTP = httpSvc
-			rt.cleanups = append(rt.cleanups, httpSvc.Close)
+			rt.onClose(httpSvc.Close)
 			for _, d := range httpSvc.Destinations() {
 				ev := logger.Info()
 				if d.Error != "" {
@@ -803,8 +806,8 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			logger.Warn().Err(chErr).Msg("chlocalbroker: service start failed; ch.local.* will be unbound")
 		} else {
 			rt.ChLocal = chlocalSvc
-			rt.cleanups = append(rt.cleanups, func() {
-				stopCtx, cancel := context.WithTimeout(context.Background(), serviceStopTimeout)
+			rt.OnClose(func(ctx context.Context) {
+				stopCtx, cancel := context.WithTimeout(ctx, serviceStopTimeout)
 				defer cancel()
 				_ = chlocalSvc.Stop(stopCtx)
 			})
@@ -830,8 +833,8 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			logger.Warn().Err(adhocErr).Msg("adhocdata: service start failed; adhoc.* will be unbound")
 		} else {
 			rt.Adhoc = adhocSvc
-			rt.cleanups = append(rt.cleanups, func() {
-				stopCtx, cancel := context.WithTimeout(context.Background(), serviceStopTimeout)
+			rt.OnClose(func(ctx context.Context) {
+				stopCtx, cancel := context.WithTimeout(ctx, serviceStopTimeout)
 				defer cancel()
 				_ = adhocSvc.Close(stopCtx)
 			})
@@ -854,7 +857,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			logger.Warn().Err(ladingErr).Msg("ladingpublish: service start failed; lading.publish.* will be unbound")
 		} else {
 			rt.Lading = ladingSvc
-			rt.cleanups = append(rt.cleanups, ladingSvc.Close)
+			rt.onClose(ladingSvc.Close)
 		}
 	}
 	if svc.Clipboard {
@@ -867,7 +870,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			logger.Warn().Err(clipErr).Msg("clipboardbroker: service start failed; clipboard.* will be unbound")
 		} else {
 			rt.Clipboard = clipSvc
-			rt.cleanups = append(rt.cleanups, clipSvc.Close)
+			rt.onClose(clipSvc.Close)
 		}
 	}
 	if svc.AudioOut {
@@ -878,7 +881,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			lane, closeLane := hostaudio.NewLaneDevice(hostaudio.Traced(lanesink.Options{}, logger), func(err error) {
 				logger.Warn().Err(err).Msg("audioout: audio lane message refused")
 			})
-			rt.cleanups = append(rt.cleanups, closeLane)
+			rt.onClose(closeLane)
 			dev = &laneOrPulse{lane: lane}
 		default:
 			dev = audioout.PulseDevice{}
@@ -888,7 +891,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			logger.Warn().Err(audioErr).Msg("audioout: service start failed; audio.out.open will be unbound")
 		} else {
 			rt.AudioOut = audioSvc
-			rt.cleanups = append(rt.cleanups, audioSvc.Close)
+			rt.onClose(audioSvc.Close)
 		}
 	}
 	if svc.Coverage {
@@ -913,7 +916,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 				// takes its last sample (ADR-0344 §SD5), the trail writer
 				// finishes its build rows, and the recorder, registered
 				// earlier, closes after.
-				rt.cleanups = append(rt.cleanups, func() {
+				rt.onClose(func() {
 					if serr := stop(); serr != nil {
 						logger.Debug().Err(serr).Msg("hostboot: coverage sampler stop")
 					}
@@ -945,7 +948,7 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	if reg == nil {
 		reg = app.DefaultRegistry
 	}
-	host := windowhost.NewInst(reg, logger)
+	host := windowhost.NewInst(rt.ctx, reg, logger)
 	host.SetBus(rt.Bus)
 	if l, ok := windowhost.ParseLayout(imzero2env.DesktopLayout.Get()); ok && l.Tiled() {
 		// The desktop's layout at launch (ADR-0346 §SD7); the Window menu
@@ -975,7 +978,7 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	// The services (ADR-0352 §SD2) start before the first window
 	// opens, with instance keys from the window host's allocator so no
 	// window and service share one.
-	if err = rt.bootServiceHost(context.Background(), reg, host.AllocateInstanceKey); err != nil {
+	if err = rt.bootServiceHost(rt.ctx, reg, host.AllocateInstanceKey); err != nil {
 		return
 	}
 	// The launcher (ADR-0214 §SD1/§SD3). Registered at init like every other
@@ -1233,7 +1236,7 @@ func (rt *Runtime) bootAgent() {
 				logger.Warn().Err(fErr).Str("path", path).Msg("agent: BOXER_AGENT_ACTIONS_FILE does not open; no action file")
 			} else {
 				cfg.ActionsLog = f
-				rt.cleanups = append(rt.cleanups, func() { _ = f.Close() })
+				rt.onClose(func() { _ = f.Close() })
 			}
 		} else {
 			logger.Warn().Msg("agent: BOXER_AGENT_ACTIONS_FILE is honoured only on a host a scene launched; refused here")
@@ -1245,7 +1248,7 @@ func (rt *Runtime) bootAgent() {
 		if oErr != nil {
 			logger.Warn().Err(oErr).Msg("windowhost: ops service start failed; operation calls will go unanswered")
 		} else {
-			rt.cleanups = append(rt.cleanups, ops.Close)
+			rt.onClose(ops.Close)
 		}
 	}
 	// The person's decisions wait in a queue in host chrome, not in modals
@@ -1285,7 +1288,7 @@ func (rt *Runtime) bootAgent() {
 	if qs, qerr := attention.NewBusService(rt.Bus, cfg.Attention, logger); qerr != nil {
 		logger.Warn().Err(qerr).Msg("attention: question service start failed; apps' questions stay in their windows")
 	} else {
-		rt.cleanups = append(rt.cleanups, qs.Close)
+		rt.onClose(qs.Close)
 	}
 	svc, err := agent.NewService(rt.Bus, logger, cfg)
 	if err != nil {
@@ -1293,7 +1296,7 @@ func (rt *Runtime) bootAgent() {
 		return
 	}
 	rt.Agent = svc
-	rt.cleanups = append(rt.cleanups, svc.Close)
+	rt.onClose(svc.Close)
 	if rt.Status != nil {
 		rt.Status.Unattended = unattendedStatus(svc.Unattended())
 	}
@@ -1495,8 +1498,8 @@ func (rt *Runtime) bootIntrospect() {
 		logger.Warn().Err(ierr).Msg("introspect: table source unavailable")
 		return
 	}
-	rt.cleanups = append(rt.cleanups, func() {
-		stopCtx, cancel := context.WithTimeout(context.Background(), serviceStopTimeout)
+	rt.OnClose(func(ctx context.Context) {
+		stopCtx, cancel := context.WithTimeout(ctx, serviceStopTimeout)
 		defer cancel()
 		_ = stop(stopCtx)
 	})
@@ -1678,7 +1681,7 @@ func (rt *Runtime) bootAgentRun(ctx context.Context) {
 			// (ADR-0327 §SD9); the SQL store holds both.
 			sql := agentrun.NewSqlStore(rt.PersistExec, layout)
 			sql.Log = logger
-			rt.cleanups = append(rt.cleanups, sql.Close)
+			rt.onClose(sql.Close)
 			store = sql
 		}
 	}
@@ -1695,7 +1698,7 @@ func (rt *Runtime) bootAgentRun(ctx context.Context) {
 		return
 	}
 	rt.AgentRuns = store
-	rt.cleanups = append(rt.cleanups, svc.Close)
+	rt.onClose(svc.Close)
 	// runtime.anchor.* over the host's anchor store.
 	asvc, aerr := headstore.NewService(rt.Bus, logger, rt.Anchors)
 	if aerr != nil {
@@ -1705,7 +1708,7 @@ func (rt *Runtime) bootAgentRun(ctx context.Context) {
 	// Heads are scoped to the run's owner as the journal records it, so an
 	// app cannot read or pre-anchor another app's run.
 	asvc.Owners = headstore.RunOwners(store)
-	rt.cleanups = append(rt.cleanups, asvc.Close)
+	rt.onClose(asvc.Close)
 }
 
 // bootWatchbill starts the process's worker (ADR-0223 §SD8) over the
@@ -1758,7 +1761,7 @@ func (rt *Runtime) bootWatchbill(ctx context.Context) {
 		presence := watchbill.NewPresence(rt.PersistExec)
 		cfg.Presence = presence
 		rt.WatchbillPresence = presence
-		rt.cleanups = append(rt.cleanups, presence.Close)
+		rt.onClose(presence.Close)
 	}
 	worker, err := watchbill.New(cfg)
 	if err != nil {
@@ -1773,7 +1776,7 @@ func (rt *Runtime) bootWatchbill(ctx context.Context) {
 	}
 	rt.Watchbill = worker
 	rt.WatchbillStore = store
-	rt.cleanups = append(rt.cleanups, func() {
+	rt.onClose(func() {
 		worker.Stop()
 		store.Close()
 	})
@@ -1809,7 +1812,7 @@ func (rt *Runtime) bootWatchbillLane(store *watchbill.SqlStore) {
 		return
 	}
 	rt.WatchbillLane = coord
-	rt.cleanups = append(rt.cleanups, coord.Stop)
+	rt.onClose(coord.Stop)
 }
 
 // stateStoreFor is the workingset and column-width store over the persist
@@ -1856,26 +1859,54 @@ func selectPersistBackend(ctx context.Context, cfg chstore.Config, isChStore boo
 // OnClose registers fn to run at Close, after the window host is reaped and
 // before the services started earlier stop (cleanups run in reverse
 // registration order). For callers that start something of their own on the
-// bus, typically from AfterHost.
-func (rt *Runtime) OnClose(fn func()) {
+// bus, typically from AfterHost. fn receives Close's ctx, the shutdown's: a
+// cleanup that does I/O does it under that ctx and so within the grace.
+func (rt *Runtime) OnClose(fn func(ctx context.Context)) {
 	rt.cleanups = append(rt.cleanups, fn)
 }
 
+// onClose registers a cleanup that does no I/O of its own worth bounding.
+func (rt *Runtime) onClose(fn func()) {
+	rt.cleanups = append(rt.cleanups, func(context.Context) { fn() })
+}
+
+// shutdownBudget is the part of the grace the shutdown's ctx gets: the
+// rest is the margin before the forced exit, which stays the backstop for
+// work that does not honour a ctx.
+func shutdownBudget(grace time.Duration) (budget time.Duration) {
+	return grace - grace/5
+}
+
+// shutdownCtx is the ctx a shutdown runs under: Boot's values without its
+// cancellation — Boot's ctx may be what ended — and the shutdown budget as
+// its deadline.
+func (rt *Runtime) shutdownCtx() (ctx context.Context, cancel context.CancelFunc) {
+	grace := rt.opts.ShutdownGrace
+	if grace <= 0 {
+		grace = DefaultShutdownGrace
+	}
+	base := rt.ctx
+	if base == nil {
+		base = context.Background() //boxer:lint disable=CS020 reason="a Runtime not made by Boot has no lifetime; the shutdown still needs a root"
+	}
+	return context.WithTimeout(context.WithoutCancel(base), shutdownBudget(grace))
+}
+
 // Reap runs the closing edge once: every window is left, unmounted and
-// unloaded (ADR-0188), then the heartbeat stops. Safe to call more than once
-// and before Close.
-func (rt *Runtime) Reap() {
+// unloaded (ADR-0188), then the heartbeat stops, all under ctx, the
+// shutdown's. Safe to call more than once and before Close.
+func (rt *Runtime) Reap(ctx context.Context) {
 	rt.reapOnce.Do(func() {
 		if rt.Host != nil {
-			rt.Host.ReapAll("shutdown")
+			rt.Host.ReapAll(ctx, "shutdown")
 		}
 		// Windows first, services after: a window may still be talking to a
 		// service while it unmounts, the reverse never (ADR-0352
 		// (proposed) §SD2).
 		if rt.Services != nil {
-			rt.Services.ReapAll(servicehost.StopReasonShutdown)
+			rt.Services.ReapAll(ctx, servicehost.StopReasonShutdown)
 		}
-		rt.heartbeat.Stop()
+		rt.heartbeat.Stop(ctx)
 	})
 }
 
@@ -1976,21 +2007,36 @@ func (rt *Runtime) Wait(ctx context.Context) (err error) {
 		logger.Warn().Dur("grace", grace).Msg("hostboot: shutdown did not complete within the grace period, forcing exit")
 		os.Exit(1)
 	})
-	rt.Close()
+	rt.closeForShutdown()
 	forced.Stop()
 	return
 }
 
 // Close reaps, then stops the services in reverse start order: the bus's
 // audit sink drains into the trail just before the trail's final flush.
-// Idempotent.
-func (rt *Runtime) Close() {
+// Everything runs under ctx, the shutdown's: a store that does not answer
+// costs the shutdown at most ctx's deadline. Idempotent.
+func (rt *Runtime) Close(ctx context.Context) {
 	rt.closeOnce.Do(func() {
-		rt.Reap()
+		rt.Reap(ctx)
 		for i := len(rt.cleanups) - 1; i >= 0; i-- {
-			rt.cleanups[i]()
+			rt.cleanups[i](ctx)
 		}
 	})
+}
+
+// closeForShutdown is Close under a fresh shutdown ctx.
+func (rt *Runtime) closeForShutdown() {
+	ctx, cancel := rt.shutdownCtx()
+	defer cancel()
+	rt.Close(ctx)
+}
+
+// reapForShutdown is Reap under a fresh shutdown ctx.
+func (rt *Runtime) reapForShutdown() {
+	ctx, cancel := rt.shutdownCtx()
+	defer cancel()
+	rt.Reap(ctx)
 }
 
 // shutdownOnSignal waits for one signal, asks the loop to stop, and leaves
@@ -2032,7 +2078,7 @@ func shutdownOnSignal(sigCh <-chan os.Signal, loopDone <-chan struct{}, grace ti
 // goroutine, the one case where Unmount runs off the render goroutine, so
 // that state is still saved before the forced exit a grace period later.
 func (rt *Runtime) Run(cfg *application.Config) (err error) {
-	defer rt.Close()
+	defer rt.closeForShutdown()
 	logger := rt.opts.Log
 	u := runtime.NewUnmarshaller(nil, binary.NativeEndian, nil, nil)
 	application_, err := application.NewApplication(cfg, u)
@@ -2053,7 +2099,7 @@ func (rt *Runtime) Run(cfg *application.Config) (err error) {
 				logger.Error().Dur("grace", grace).Msg("hostboot: the reap after a panic did not complete within the grace period, forcing exit")
 				os.Exit(2)
 			})
-			rt.Close()
+			rt.closeForShutdown()
 			forced.Stop()
 			panic(r)
 		}
@@ -2065,7 +2111,7 @@ func (rt *Runtime) Run(cfg *application.Config) (err error) {
 	// path, so a signal after a failed Launch does not wait out the grace.
 	loopDone := make(chan struct{})
 	defer close(loopDone)
-	go shutdownOnSignal(sigCh, loopDone, grace, logger, application_.Shutdown, rt.Reap, func() { os.Exit(1) })
+	go shutdownOnSignal(sigCh, loopDone, grace, logger, application_.Shutdown, rt.reapForShutdown, func() { os.Exit(1) })
 
 	application_.FffiEstablishedHandler = func(fffi *runtime.Fffi2[*runtime.Unmarshaller]) error {
 		typed.SetCurrentFffiVar(fffi)

@@ -9,8 +9,8 @@
 //
 // Intended composition (per ADR-0026 §SD6):
 //
-//	sink, _ := logbridge.NewSink(store, logbridge.Config{AppId: "play"})
-//	defer sink.Close()
+//	sink, _ := logbridge.NewSink(ctx, store, logbridge.Config{AppId: "play"})
+//	defer sink.Close(drainCtx)
 //	tee := zerolog.MultiLevelWriter(os.Stdout, sink)
 //	logger := zerolog.New(tee).With().Timestamp().Logger()
 //
@@ -20,6 +20,7 @@
 package logbridge
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -130,7 +131,13 @@ type Sink struct {
 	parseErrs atomic.Uint64
 	writeErrs atomic.Uint64
 
-	stopCh chan struct{}
+	// runCtx is NewSink's ctx, the flusher's periodic writes run under it;
+	// stopRun cancels it when Close's ctx ends first.
+	runCtx  context.Context
+	stopRun context.CancelFunc
+	// stopCh carries Close's ctx to the flusher: the final drain runs
+	// under it.
+	stopCh chan context.Context
 	doneCh chan struct{}
 	closed atomic.Bool
 }
@@ -141,8 +148,9 @@ var (
 
 // NewSink wires a Sink. The flusher goroutine starts immediately so the
 // caller can install the Sink as a zerolog writer and expect it to drain
-// from the first event onward.
-func NewSink(store factsstore.FactsStoreI, cfg Config) (inst *Sink, err error) {
+// from the first event onward. ctx is the sink's lifetime: the flusher's
+// writes run under it until Close.
+func NewSink(ctx context.Context, store factsstore.FactsStoreI, cfg Config) (inst *Sink, err error) {
 	if store == nil {
 		err = eh.Errorf("logbridge: store must not be nil")
 		return
@@ -167,9 +175,10 @@ func NewSink(store factsstore.FactsStoreI, cfg Config) (inst *Sink, err error) {
 		cfg:       cfg,
 		ring:      make([]factsstore.LogRow, cfg.Capacity),
 		wakeFlush: make(chan struct{}, 1),
-		stopCh:    make(chan struct{}),
+		stopCh:    make(chan context.Context, 1),
 		doneCh:    make(chan struct{}),
 	}
+	inst.runCtx, inst.stopRun = context.WithCancel(ctx)
 	inst.notFull = sync.NewCond(&inst.mu)
 	go inst.flushLoop()
 	return
@@ -241,13 +250,13 @@ func (inst *Sink) flushLoop() {
 	defer ticker.Stop()
 	for {
 		select {
-		case <-inst.stopCh:
-			inst.drain()
+		case ctx := <-inst.stopCh:
+			inst.drain(ctx)
 			return
 		case <-inst.wakeFlush:
-			inst.drain()
+			inst.drain(inst.runCtx)
 		case <-ticker.C:
-			inst.drain()
+			inst.drain(inst.runCtx)
 		}
 	}
 }
@@ -255,7 +264,7 @@ func (inst *Sink) flushLoop() {
 // drain pulls up to FlushN rows from the ring and writes them via the
 // store. We hold the lock only for the slice-copy; the writes happen
 // unlocked so a slow store doesn't stall producers.
-func (inst *Sink) drain() {
+func (inst *Sink) drain(ctx context.Context) {
 	for {
 		inst.mu.Lock()
 		take := min(inst.count, inst.cfg.FlushN)
@@ -275,7 +284,7 @@ func (inst *Sink) drain() {
 		// single insert; the prior per-row loop turned a FlushN-sized batch
 		// into FlushN round-trips (one ClickHouse part each), defeating the
 		// ring's batching.
-		_, werr := inst.store.WriteLogs(batch)
+		_, werr := inst.store.WriteLogs(ctx, batch)
 		if werr != nil {
 			// Store-write failures are their own counter, NOT parseErrs: a
 			// ClickHouse outage must not read as "wrong zerolog build tag".
@@ -286,14 +295,25 @@ func (inst *Sink) drain() {
 	}
 }
 
-// Close stops the flusher and drains any pending rows synchronously.
-// Subsequent Write/WriteLevel calls are no-ops. Safe to call once.
-func (inst *Sink) Close() (err error) {
+// Close stops the flusher and drains any pending rows synchronously,
+// under ctx: a store that does not answer cannot hold Close past ctx's
+// end. When ctx ends first, the write in flight is cancelled, the rows
+// not yet written are counted as write errors, and ctx's error is
+// returned. Subsequent Write/WriteLevel calls are no-ops. Safe to call
+// once.
+func (inst *Sink) Close(ctx context.Context) (err error) {
 	if inst.closed.Swap(true) {
 		return
 	}
-	close(inst.stopCh)
-	<-inst.doneCh
+	inst.stopCh <- ctx
+	select {
+	case <-inst.doneCh:
+	case <-ctx.Done():
+		inst.stopRun()
+		<-inst.doneCh
+		err = ctx.Err()
+	}
+	inst.stopRun()
 	return
 }
 

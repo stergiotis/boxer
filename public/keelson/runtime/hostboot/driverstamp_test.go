@@ -20,7 +20,7 @@ func bootRunRow(t *testing.T) (row factsstore.RuntimeStartRow) {
 	opts.Facts = facts
 	rt, err := Boot(context.Background(), opts)
 	require.NoError(t, err)
-	t.Cleanup(rt.Close)
+	t.Cleanup(func() { rt.Close(context.Background()) })
 	runs := facts.Runs()
 	require.Len(t, runs, 1)
 	return runs[0]

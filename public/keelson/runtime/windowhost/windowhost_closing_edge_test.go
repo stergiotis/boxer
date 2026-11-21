@@ -87,7 +87,7 @@ func TestClosingEdge_LeaveUnmountUnload_FactoryApp(t *testing.T) {
 		return
 	}))
 	bus := inprocbus.NewInst(zerolog.Nop())
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	h.SetBus(bus)
 
 	k, err := h.Open("test.edge")
@@ -127,7 +127,7 @@ func TestClosingEdge_NeverMountedWindowReleasesItsOwnClient(t *testing.T) {
 		return
 	}))
 	bus := inprocbus.NewInst(zerolog.Nop())
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	h.SetBus(bus)
 
 	_, err := h.Open("test.edge")
@@ -147,7 +147,7 @@ func TestClosingEdge_SingletonSharedMount_CarriesMountingWindowToLastRelease(t *
 	single := &edgeApp{manifest: edgeManifest("test.single")}
 	require.NoError(t, reg.Register(single))
 	bus := inprocbus.NewInst(zerolog.Nop())
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	h.SetBus(bus)
 
 	k1, err := h.Open("test.single")
@@ -189,7 +189,7 @@ func TestClosingEdge_SingletonSharedMount_NonMountingWindowClosesOwnResources(t 
 	single := &edgeApp{manifest: edgeManifest("test.single")}
 	require.NoError(t, reg.Register(single))
 	bus := inprocbus.NewInst(zerolog.Nop())
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	h.SetBus(bus)
 
 	k1, err := h.Open("test.single")
@@ -243,7 +243,7 @@ func TestClosingEdge_TaskSpawnedViaForAppIsCancelledOnClose(t *testing.T) {
 		return
 	}))
 	bus := inprocbus.NewInst(zerolog.Nop())
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	h.SetBus(bus)
 
 	k, err := h.Open("test.task")

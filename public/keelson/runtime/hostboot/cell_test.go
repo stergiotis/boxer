@@ -22,7 +22,7 @@ func TestBootTakesTheCallersDeclaration(t *testing.T) {
 	opts.Cell = &supplied
 	rt, err := Boot(context.Background(), opts)
 	require.NoError(t, err)
-	defer rt.Close()
+	defer rt.Close(t.Context())
 	require.NotNil(t, rt.Cell)
 	assert.NotSame(t, &supplied, rt.Cell)
 	assert.Equal(t, agentrun.TierRed, rt.Cell.ConfinedTier)

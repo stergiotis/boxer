@@ -17,7 +17,7 @@ import (
 func TestStore_WriteRuntimeHeartbeat_RejectsEmptyRunId_LiveCH(t *testing.T) {
 	s, cleanup := newLiveStore(t)
 	defer cleanup()
-	_, err := s.WriteRuntimeHeartbeat(factsstore.HeartbeatRow{})
+	_, err := s.WriteRuntimeHeartbeat(t.Context(), factsstore.HeartbeatRow{})
 	require.Error(t, err)
 }
 
@@ -39,7 +39,7 @@ func TestStore_AppLaunchStats_RoundTrip_LiveCH(t *testing.T) {
 		{RunId: "run00000000000b", AppId: "github.com/x/imztop", TileKey: 2, Phase: factsstore.AppLifecyclePhaseStopped, Ts: now.Add(-20 * time.Minute)},
 	}
 	for _, r := range rows {
-		_, err := s.WriteAppLifecycle(r)
+		_, err := s.WriteAppLifecycle(ctx, r)
 		require.NoError(t, err)
 	}
 
@@ -116,7 +116,7 @@ func TestStore_EveryWrittenValueIsInTheRow_LiveCH(t *testing.T) {
 		{
 			name: "runtime start",
 			write: func(s *chstore.Store) (err error) {
-				_, err = s.WriteRuntimeStart(factsstore.RuntimeStartRow{
+				_, err = s.WriteRuntimeStart(t.Context(), factsstore.RuntimeStartRow{
 					RunId: "run-zq1", Hostname: "host-zq2", Pid: 4242421,
 					GoVersion: "go-zq3", VcsRevision: "rev-zq4", VcsBuildInfo: "info-zq5",
 					ModulePath: "mod-zq6", BuildId: "build-zq7",
@@ -133,7 +133,7 @@ func TestStore_EveryWrittenValueIsInTheRow_LiveCH(t *testing.T) {
 		{
 			name: "heartbeat",
 			write: func(s *chstore.Store) (err error) {
-				_, err = s.WriteRuntimeHeartbeat(factsstore.HeartbeatRow{RunId: "run-zq12", Ts: ts})
+				_, err = s.WriteRuntimeHeartbeat(t.Context(), factsstore.HeartbeatRow{RunId: "run-zq12", Ts: ts})
 				return
 			},
 			values: []string{"run-zq12"},
@@ -141,7 +141,7 @@ func TestStore_EveryWrittenValueIsInTheRow_LiveCH(t *testing.T) {
 		{
 			name: "app lifecycle",
 			write: func(s *chstore.Store) (err error) {
-				_, err = s.WriteAppLifecycle(factsstore.AppLifecycleRow{
+				_, err = s.WriteAppLifecycle(t.Context(), factsstore.AppLifecycleRow{
 					RunId: "run-zq13", AppId: "app.zq14", TileKey: 9990003,
 					Phase: factsstore.AppLifecyclePhaseStopped, StopReason: "reason-zq15", Ts: ts,
 				})

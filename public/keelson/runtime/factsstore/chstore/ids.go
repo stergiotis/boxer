@@ -64,12 +64,13 @@ func (inst *Store) leaseLayout() rowalloc.Layout {
 // mintId draws the next row id: leased when a block is in hand or can be
 // leased, process-local otherwise. A failed lease is logged and not
 // retried for leaseRetryInterval; the write it happened in goes on with a
-// local id. The lease's round trip is bounded by WriteTimeout.
-func (inst *Store) mintId() (id uint64, err error) {
+// local id. The lease's round trip runs under the write's ctx, bounded by
+// WriteTimeout when ctx carries no deadline of its own.
+func (inst *Store) mintId(ctx context.Context) (id uint64, err error) {
 	now := time.Now().UnixNano()
 	if now >= inst.ids.retryAt.Load() {
-		ctx, cancel := context.WithTimeout(context.Background(), WriteTimeout)
-		t, _, lerr := inst.ids.leased.GetId(ctx, nil)
+		lctx, cancel := boundWrite(ctx)
+		t, _, lerr := inst.ids.leased.GetId(lctx, nil)
 		cancel()
 		if lerr == nil {
 			id = t.Value()
@@ -79,7 +80,7 @@ func (inst *Store) mintId() (id uint64, err error) {
 		log.Warn().Err(lerr).Str("leaseTable", inst.leaseLayout().Table()).Dur("retryIn", leaseRetryInterval).
 			Msg("chstore: no block of row ids could be leased; rows get process-local ids until a lease succeeds")
 	}
-	t, _, err := inst.ids.local.GetId(context.Background(), nil)
+	t, _, err := inst.ids.local.GetId(ctx, nil)
 	if err != nil {
 		err = eh.Errorf("chstore: mint a process-local row id: %w", err)
 		return

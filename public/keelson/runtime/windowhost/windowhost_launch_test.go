@@ -56,7 +56,7 @@ func mkLaunchManifest(id app.AppIdT, launchKind string) (m app.Manifest) {
 
 func TestOpenWithConfig_UnknownApp(t *testing.T) {
 	reg, _ := mkRegistryWithSingleton(t, "test.a")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	_, err := h.OpenWithConfig("test.absent", testCfgKind, testCfgBytes)
 	require.Error(t, err)
@@ -66,7 +66,7 @@ func TestOpenWithConfig_UnknownApp(t *testing.T) {
 func TestOpenWithConfig_RefusesArgsForNoArgsApp(t *testing.T) {
 	// mkRegistryWithSingleton registers manifests with an empty LaunchKind.
 	reg, apps := mkRegistryWithSingleton(t, "test.noargs")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	_, err := h.OpenWithConfig("test.noargs", testCfgKind, testCfgBytes)
 	require.Error(t, err)
@@ -79,7 +79,7 @@ func TestOpenWithConfig_RefusesKindMismatch(t *testing.T) {
 	reg := app.NewRegistry()
 	la := &launchApp{manifest: mkLaunchManifest("test.launch", "someOtherKind")}
 	require.NoError(t, reg.Register(la))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	_, err := h.OpenWithConfig("test.launch", testCfgKind, testCfgBytes)
 	require.Error(t, err)
@@ -91,7 +91,7 @@ func TestOpenWithConfig_RefusesOversize(t *testing.T) {
 	reg := app.NewRegistry()
 	la := &launchApp{manifest: mkLaunchManifest("test.launch", testCfgKind)}
 	require.NoError(t, reg.Register(la))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	big := make([]byte, maxLaunchConfigBytes+1)
 	_, err := h.OpenWithConfig("test.launch", testCfgKind, big)
@@ -104,7 +104,7 @@ func TestOpenWithConfig_RefusesGarbageEnvelope(t *testing.T) {
 	reg := app.NewRegistry()
 	la := &launchApp{manifest: mkLaunchManifest("test.launch", testCfgKind)}
 	require.NoError(t, reg.Register(la))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	_, err := h.OpenWithConfig("test.launch", testCfgKind, []byte("not a valid payload"))
 	require.Error(t, err)
@@ -116,7 +116,7 @@ func TestOpenWithConfig_RefusesInconsistentKindConfigPair(t *testing.T) {
 	reg := app.NewRegistry()
 	la := &launchApp{manifest: mkLaunchManifest("test.launch", testCfgKind)}
 	require.NoError(t, reg.Register(la))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	_, err := h.OpenWithConfig("test.launch", "", testCfgBytes)
 	require.Error(t, err, "config bytes without a kind must refuse")
@@ -131,7 +131,7 @@ func TestOpenWithConfig_DeliversBytesToMount(t *testing.T) {
 	reg := app.NewRegistry()
 	la := &launchApp{manifest: mkLaunchManifest("test.launch", testCfgKind)}
 	require.NoError(t, reg.Register(la))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	// Hand in a mutable copy so the defensive-copy contract is testable.
 	caller := append([]byte(nil), testCfgBytes...)
@@ -154,7 +154,7 @@ func TestOpen_PlainOpenOfLaunchKindAppUnchanged(t *testing.T) {
 	reg := app.NewRegistry()
 	la := &launchApp{manifest: mkLaunchManifest("test.launch", testCfgKind)}
 	require.NoError(t, reg.Register(la))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	_, err := h.Open("test.launch")
 	require.NoError(t, err, "declaring LaunchKind must not affect plain opens")
@@ -170,7 +170,7 @@ func TestOpenWithConfig_SingletonSecondConfigRefused(t *testing.T) {
 	reg := app.NewRegistry()
 	la := &launchApp{manifest: mkLaunchManifest("test.launch", testCfgKind)}
 	require.NoError(t, reg.Register(la))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	_, err := h.OpenWithConfig("test.launch", testCfgKind, testCfgBytes)
 	require.NoError(t, err)
@@ -199,7 +199,7 @@ func TestOpenWithConfig_FactorySecondWindowEachGetsOwnConfig(t *testing.T) {
 		a = la
 		return
 	}))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	_, err := h.OpenWithConfig("test.factory", testCfgKind, testCfgBytes)
 	require.NoError(t, err)

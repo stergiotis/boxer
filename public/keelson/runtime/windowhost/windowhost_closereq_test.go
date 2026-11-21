@@ -16,7 +16,7 @@ import (
 func TestCloseRequested_ConcurrentWithClose(t *testing.T) {
 	reg := app.NewRegistry()
 	require.NoError(t, reg.Register(&counterApp{manifest: mkManifest("test.closereq")}))
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	k, err := h.Open("test.closereq")
 	require.NoError(t, err)
 	h.mu.Lock()

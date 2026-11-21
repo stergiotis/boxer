@@ -71,7 +71,7 @@ func (rt *Runtime) bootModerator() {
 		return
 	}
 	rt.Moderator = svc
-	rt.cleanups = append(rt.cleanups, svc.Close)
+	rt.onClose(svc.Close)
 	if rt.Agent == nil {
 		logger.Warn().Msg("moderator: the agent dispatcher is off; the moderator slows and denies but cannot stop tasks")
 	}

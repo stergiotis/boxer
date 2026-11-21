@@ -41,7 +41,7 @@ func TestNextTiledLayoutWraps(t *testing.T) {
 
 // Swap and promote move a window along the order and mark the plan dirty.
 func TestSwapAndPromoteInOrder(t *testing.T) {
-	inst := NewInst(nil, zerolog.Nop())
+	inst := NewInst(t.Context(), nil, zerolog.Nop())
 	inst.tileOrder = []WindowKeyT{1, 2, 3}
 	inst.swapInOrderLocked(2, 1)
 	assert.Equal(t, []WindowKeyT{1, 3, 2}, inst.tileOrder)
@@ -55,7 +55,7 @@ func TestSwapAndPromoteInOrder(t *testing.T) {
 // The focus ring is the order on a tiled desktop and the stacking, front
 // first, on a floating one.
 func TestFocusRing(t *testing.T) {
-	inst := NewInst(nil, zerolog.Nop())
+	inst := NewInst(t.Context(), nil, zerolog.Nop())
 	inst.tileOrder = []WindowKeyT{3, 1, 2}
 	a := &window{key: 1, geom: WindowGeom{Stack: 5}}
 	b := &window{key: 2, geom: WindowGeom{Stack: 9}}
@@ -68,7 +68,7 @@ func TestFocusRing(t *testing.T) {
 // Snapping places the window in a half of the work area; the same chord
 // again steps through the half's quarters and back to the half.
 func TestSnapStepsHalfThenQuarters(t *testing.T) {
-	inst := NewInst(nil, zerolog.Nop())
+	inst := NewInst(t.Context(), nil, zerolog.Nop())
 	inst.desktop = DesktopInfo{WorkShown: true, Work: Rect{MinX: 0, MinY: 20, MaxX: 1000, MaxY: 820}}
 	w := &window{key: 7}
 	inst.windows = []*window{w}
@@ -114,14 +114,14 @@ func TestSnapStepsHalfThenQuarters(t *testing.T) {
 // the first tiled layout when the desktop started in monocle; on a floating
 // desktop the parameter chords are dropped.
 func TestMonocleReturnsToATiledLayout(t *testing.T) {
-	inst := NewInst(nil, zerolog.Nop())
+	inst := NewInst(t.Context(), nil, zerolog.Nop())
 	require.NoError(t, inst.SetLayout(LayoutColumns))
 	require.NoError(t, inst.SetLayout(LayoutMonocle))
 	assert.Equal(t, LayoutColumns, inst.layoutBeforeMonocle, "entering monocle by any route remembers the layout")
 	inst.setLayoutLocked(inst.layoutBeforeMonocle)
 	assert.Equal(t, LayoutColumns, inst.Layout())
 
-	fresh := NewInst(nil, zerolog.Nop())
+	fresh := NewInst(t.Context(), nil, zerolog.Nop())
 	require.NoError(t, fresh.SetLayout(LayoutMonocle))
 	assert.False(t, fresh.layoutBeforeMonocle.Tiled())
 }

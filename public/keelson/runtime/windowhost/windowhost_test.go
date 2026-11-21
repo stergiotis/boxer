@@ -65,7 +65,7 @@ func mkRegistryWithSingleton(t *testing.T, ids ...app.AppIdT) (reg *app.Registry
 
 func TestInst_Open_AllocatesFreshKeyPerCall(t *testing.T) {
 	reg, _ := mkRegistryWithSingleton(t, "test.a", "test.b")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	k1, err := h.Open("test.a")
 	require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestInst_Open_AllocatesFreshKeyPerCall(t *testing.T) {
 
 func TestInst_Open_UnknownId(t *testing.T) {
 	reg, _ := mkRegistryWithSingleton(t, "test.a")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	_, err := h.Open("test.absent")
 	require.Error(t, err)
@@ -97,7 +97,7 @@ func TestInst_Open_CtorError(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	_, err = h.Open("test.bad")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "open")
@@ -105,7 +105,7 @@ func TestInst_Open_CtorError(t *testing.T) {
 
 func TestInst_Close_MarksForReaping(t *testing.T) {
 	reg, _ := mkRegistryWithSingleton(t, "test.a")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	k, err := h.Open("test.a")
 	require.NoError(t, err)
@@ -122,7 +122,7 @@ func TestInst_Close_MarksForReaping(t *testing.T) {
 
 func TestInst_Close_UnknownKey_NoOp(t *testing.T) {
 	reg, _ := mkRegistryWithSingleton(t, "test.a")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	k, err := h.Open("test.a")
 	require.NoError(t, err)
@@ -135,7 +135,7 @@ func TestInst_Close_UnknownKey_NoOp(t *testing.T) {
 
 func TestInst_ReapClosed_CallsUnmount(t *testing.T) {
 	reg, apps := mkRegistryWithSingleton(t, "test.a")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	k, err := h.Open("test.a")
 	require.NoError(t, err)
@@ -157,7 +157,7 @@ func TestInst_ReapClosed_SkipsUnmountForUnmountedWindow(t *testing.T) {
 	// reapClosed must not call Unmount. We check that by spying via
 	// mountCalls staying zero.
 	reg, apps := mkRegistryWithSingleton(t, "test.a")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	k, err := h.Open("test.a")
 	require.NoError(t, err)
@@ -183,7 +183,7 @@ func TestInst_FactoryRegistered_OpenYieldsDistinctInstances(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	_, err = h.Open("test.factory")
 	require.NoError(t, err)
 	_, err = h.Open("test.factory")
@@ -205,7 +205,7 @@ func TestInst_SingletonRegistered_OpenSharesInstance(t *testing.T) {
 	// captured in EXPLANATION.md.
 	reg, apps := mkRegistryWithSingleton(t, "test.singleton")
 	singleton := apps["test.singleton"]
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	_, err := h.Open("test.singleton")
 	require.NoError(t, err)
@@ -221,7 +221,7 @@ func TestInst_SingletonRegistered_OpenSharesInstance(t *testing.T) {
 
 func TestSetAudit_OpenEmitsStartedRow(t *testing.T) {
 	reg, _ := mkRegistryWithSingleton(t, "test.a")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	facts := factsstore.NewInMemoryFactsStore()
 	h.SetAudit("run-xyz", facts)
 
@@ -239,7 +239,7 @@ func TestSetAudit_OpenEmitsStartedRow(t *testing.T) {
 
 func TestSetAudit_ReapEmitsStoppedRowWithReason(t *testing.T) {
 	reg, _ := mkRegistryWithSingleton(t, "test.a")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	facts := factsstore.NewInMemoryFactsStore()
 	h.SetAudit("run-xyz", facts)
 
@@ -259,7 +259,7 @@ func TestSetAudit_ReapEmitsStoppedRowWithReason(t *testing.T) {
 func TestSetAudit_ReapEmitsMountErrorWhenSticky(t *testing.T) {
 	reg, apps := mkRegistryWithSingleton(t, "test.a")
 	apps["test.a"].mountErr = errors.New("boom")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	facts := factsstore.NewInMemoryFactsStore()
 	h.SetAudit("run-xyz", facts)
 
@@ -281,7 +281,7 @@ func TestSetAudit_ReapEmitsMountErrorWhenSticky(t *testing.T) {
 
 func TestReapAll_EmitsShutdownRows(t *testing.T) {
 	reg, _ := mkRegistryWithSingleton(t, "test.a", "test.b")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	facts := factsstore.NewInMemoryFactsStore()
 	h.SetAudit("run-xyz", facts)
 
@@ -291,7 +291,7 @@ func TestReapAll_EmitsShutdownRows(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, h.Len())
 
-	h.ReapAll("shutdown")
+	h.ReapAll(t.Context(), "shutdown")
 	assert.Equal(t, 0, h.Len(), "all windows reaped")
 
 	rows := facts.Lifecycles()
@@ -317,7 +317,7 @@ func TestSetBus_WiresInprocClientThroughMountCtx(t *testing.T) {
 	require.NoError(t, reg.Register(ca))
 
 	bus := inprocbus.NewInst(zerolog.Nop())
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	h.SetBus(bus)
 
 	k, err := h.Open("test.bus")
@@ -353,7 +353,7 @@ func TestSetBus_NilDefaultsToNoopBus(t *testing.T) {
 	// available in M1" wording so apps fail fast rather than
 	// silently dropping requests.
 	reg, _ := mkRegistryWithSingleton(t, "test.nob")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	_, err := h.Open("test.nob")
 	require.NoError(t, err)
@@ -389,7 +389,7 @@ func TestSetBus_FsBrokerEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	defer svc.Close()
 
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	h.SetBus(bus)
 	_, err = h.Open("test.fsclient")
 	require.NoError(t, err)
@@ -463,7 +463,7 @@ func TestSetBus_PersistStorageEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	defer svc.Close()
 
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	h.SetBus(bus)
 	_, err = h.Open("github.com/example/test.persist")
 	require.NoError(t, err)
@@ -509,7 +509,7 @@ func TestSetBus_PersistWithoutPersistedKeys_PermissionDenied(t *testing.T) {
 	require.NoError(t, err)
 	defer svc.Close()
 
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 	h.SetBus(bus)
 	_, err = h.Open("github.com/example/test.nopersist")
 	require.NoError(t, err)
@@ -528,13 +528,13 @@ func TestSetAudit_NilFactsStoreIsNoOp(t *testing.T) {
 	// Calling Open without SetAudit (or with a nil facts store) must
 	// not crash; the audit wiring is optional.
 	reg, _ := mkRegistryWithSingleton(t, "test.a")
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	k, err := h.Open("test.a")
 	require.NoError(t, err)
 	h.Close(k, "")
 	h.reapClosed()
-	h.ReapAll("shutdown")
+	h.ReapAll(t.Context(), "shutdown")
 }
 
 // ADR-0272 §SD3: every open path ends in OpenWithConfig, which refuses an
@@ -542,7 +542,7 @@ func TestSetAudit_NilFactsStoreIsNoOp(t *testing.T) {
 func TestInst_Open_RefusesUnlaunchable(t *testing.T) {
 	reg, apps := mkRegistryWithSingleton(t, "test.a", "test.b")
 	reg.LimitLaunches([]app.AppIdT{"test.b"})
-	h := NewInst(reg, zerolog.Nop())
+	h := NewInst(t.Context(), reg, zerolog.Nop())
 
 	_, err := h.Open("test.a")
 	require.Error(t, err)

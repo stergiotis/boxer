@@ -60,7 +60,7 @@ func (rt *Runtime) bootHostServices(ctx context.Context) {
 		}
 		rt.HostServices = append(rt.HostServices, names[i])
 		if stop != nil {
-			rt.cleanups = append(rt.cleanups, stop)
+			rt.onClose(stop)
 		}
 	}
 }

@@ -50,7 +50,7 @@ func openTailApp(t *testing.T) (h *Inst, bus *inprocbus.Inst, made *tailApp, k W
 	made = &tailApp{manifest: edgeManifest("test.tail"), release: make(chan struct{}), tailErr: make(chan error, 1)}
 	require.NoError(t, reg.RegisterFactory(made.manifest, func() (a app.AppI, err error) { return made, nil }))
 	bus = inprocbus.NewInst(zerolog.Nop())
-	h = NewInst(reg, zerolog.Nop())
+	h = NewInst(t.Context(), reg, zerolog.Nop())
 	h.SetBus(bus)
 	k, err := h.Open("test.tail")
 	require.NoError(t, err)
@@ -104,14 +104,14 @@ func TestDrain_ReapAllWaitsWithinTheShutdownBudget(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		close(made.release)
 	}()
-	h.ReapAll("shutdown")
+	h.ReapAll(t.Context(), "shutdown")
 	assert.NoError(t, <-made.tailErr)
 	assert.Empty(t, bus.Subscriptions(), "released when ReapAll returns")
 
 	h2, bus2, made2, _ := openTailApp(t)
 	h2.SetDrainDeadlines(0, 30*time.Millisecond)
 	start := time.Now()
-	h2.ReapAll("shutdown")
+	h2.ReapAll(t.Context(), "shutdown")
 	assert.Less(t, time.Since(start), time.Second, "the budget bounds the wait")
 	assert.Empty(t, bus2.Subscriptions())
 	// The abandoned tail's publish races the bus closing; only its arrival is
