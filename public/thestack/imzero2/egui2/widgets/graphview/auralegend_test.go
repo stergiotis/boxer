@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/legend"
 )
 
@@ -15,7 +15,7 @@ import (
 func auraView(t *testing.T, ap AuraParams) (*View, AuraParams) {
 	t.Helper()
 	// AuraLegendInside paints, which needs a channel behind the lane.
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	v := New(c.NewWidgetIdStack(), "t", Options{})
 	v.style = DefaultStyle()
 	nodes := []NodeSpec{

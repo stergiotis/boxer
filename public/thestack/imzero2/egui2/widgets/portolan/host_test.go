@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // A hosted guest asks for the handles every frame, before the map renders
@@ -42,7 +42,7 @@ func TestPointerVetoIsClearedByTheRenderItAppliesTo(t *testing.T) {
 // are derived in a different place than the frame derives them, inside a
 // different nesting of scopes, so only a rendered frame can say they agree.
 func TestHandlesAreTheOnesARenderReads(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	ids := c.NewWidgetIdStack()
 	m := New(ids, "", Options{NoTiles: true, Center: LL(10, 20), Zoom: 3})
@@ -74,7 +74,7 @@ func TestHandlesAreTheOnesARenderReads(t *testing.T) {
 // down shows what lies below — and leaves the zoom alone; the zoom a
 // modifier makes of the wheel, which arrives as a zoom, still zooms.
 func TestTheWheelPansWhenAsked(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	for _, pans := range []bool{false, true} {
 		ids := c.NewWidgetIdStack()
@@ -119,7 +119,7 @@ func TestTheWheelPansWhenAsked(t *testing.T) {
 // The box being dragged is reported while it is dragged, not only when it
 // is released.
 func TestTheBoxIsReportedWhileItIsDragged(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	ids := c.NewWidgetIdStack()
 	m := New(ids, "", Options{NoTiles: true, CRS: Simple, Center: LL(-150, 200), Zoom: 0})

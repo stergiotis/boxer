@@ -6,7 +6,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 func approx(a, b float32) bool { return math.Abs(float64(a-b)) < 1e-3 }
@@ -306,7 +306,7 @@ func TestApproxReadoutWidthCountsRunes(t *testing.T) {
 // TestRenderHeadless is the W19 smoke test: one frame under the discard
 // channel, from a zero State, without a host.
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	var st State
 	res := Render(Input{Ids: ids, ScopeKey: "t", Value: 42, Label: "cpu", Suffix: "%", Zones: TrafficLight(0, 100), State: &st})

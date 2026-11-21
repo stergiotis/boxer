@@ -8,7 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/science/audio/pcm"
 	"github.com/stergiotis/boxer/public/science/audio/peaks"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +16,7 @@ import (
 // whatever the recording's length, and turns a click into a seek fraction
 // (ADR-0245 §SD6).
 func TestRenderThumbnail(t *testing.T) {
-	messages, zero, reset := scenetest.InstallCounting()
+	messages, zero, reset := egui2test.InstallCounting()
 	defer reset()
 	sm := c.CurrentApplicationState.StateManager
 	ids := c.NewWidgetIdStack()

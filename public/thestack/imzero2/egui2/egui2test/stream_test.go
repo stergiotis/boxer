@@ -1,4 +1,4 @@
-package scenetest
+package egui2test
 
 import (
 	"encoding/binary"

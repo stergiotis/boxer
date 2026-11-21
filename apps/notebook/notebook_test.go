@@ -19,7 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook/samples"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 func TestTheCatalogRegisters(t *testing.T) {
@@ -68,7 +68,7 @@ func read(t *testing.T, inst *App) {
 // written back changes the record cells alone, and the check then names
 // what collection owes.
 func TestASampleIsReadCheckedAndItsRecordsSet(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	inst := newApp()
 	h := inst.Operations()
 
@@ -145,7 +145,7 @@ func TestSnapshotRef(t *testing.T) {
 // turns to the snapshot that was written. The server and the store's write
 // path are stood in for: what is checked is what the window asks of them.
 func TestCollectPublishesTheNotebookUnderTheStatedTier(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	inst := newApp()
 	h := inst.Operations()
 	require.ErrorContains(t, command(t, h, opCollectNotebook, CollectArgs{Tier: "AMBER"}), "no notebook is open")
@@ -243,7 +243,7 @@ func TestCollectPublishesTheNotebookUnderTheStatedTier(t *testing.T) {
 // with no stored result, a snapshot is opened with the text that came
 // along kept for when it lands, and bytes that do not decode fail the open.
 func TestALaunchConfigHandsANotebookOver(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	text, err := fs.ReadFile(samples.FS(), "minimal.md")
 	require.NoError(t, err)
 
@@ -287,7 +287,7 @@ func TestALaunchConfigHandsANotebookOver(t *testing.T) {
 // and played by the window's player; a window that turns to another
 // document stops it.
 func TestARecordingIsPlayedFromTheNotebooksFiles(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	inst := newApp()
 	assert.Nil(t, inst.recordings(), "a window that was not mounted plays nothing")
 	inst.player = nowplaying.New(nil, nil)

@@ -7,7 +7,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/semistructured/cbor/diag"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // TestKeyMovesWithEveryOption pins the memo key to the options that change
@@ -55,7 +55,7 @@ func TestStateMemo(t *testing.T) {
 }
 
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	var st State
 	res := Render(Input{Ids: ids, ScopeKey: "t", State: &st, Item: []byte{0xa1, 0x01, 0x02}, Options: diag.Options{}})

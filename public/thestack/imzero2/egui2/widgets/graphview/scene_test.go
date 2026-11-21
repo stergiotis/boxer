@@ -10,11 +10,11 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // scene is a headless widget under a scripted state manager (package
-// scenetest): the handles are the widget's own, so a scripted register
+// egui2test): the handles are the widget's own, so a scripted register
 // lands on its canvas and area.
 type scene struct {
 	t      *testing.T
@@ -27,10 +27,10 @@ type scene struct {
 }
 
 func newScene(t *testing.T, key string, o Options, w, h float32) *scene {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	s := &scene{t: t, ids: ids, sm: c.CurrentApplicationState.StateManager, w: w, h: h}
-	s.canvas, s.area = scenetest.Handles(ids, key)
+	s.canvas, s.area = egui2test.Handles(ids, key)
 	s.v = New(ids, key, o)
 	return s
 }

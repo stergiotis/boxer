@@ -11,7 +11,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook/fixture"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // snapshotOf is the fixture notebook as a snapshot holds it: under a
@@ -46,7 +46,7 @@ func notebookFrame(inst *App) (drawn bool) {
 // mode, once a lane has read its blobs; in the other modes, and for any
 // other document, the preview is markdown.
 func TestASnapshotNotebookIsDrawnInTheReadingMode(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	snap, text := snapshotOf(t, "reports")
 	inst := &App{ids: c.NewWidgetIdStack()}
 	defer inst.resetNotebook()
@@ -92,7 +92,7 @@ func TestASnapshotNotebookIsDrawnInTheReadingMode(t *testing.T) {
 // drawn meanwhile: one line in its place would cost the reader their place
 // in the scroll area.
 func TestAnEditedNotebookStaysDrawnWhileItIsRead(t *testing.T) {
-	messages, zero, reset := scenetest.InstallCounting()
+	messages, zero, reset := egui2test.InstallCounting()
 	t.Cleanup(reset)
 	snap, text := snapshotOf(t, "reports")
 	inst := &App{ids: c.NewWidgetIdStack()}

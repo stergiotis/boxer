@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/worldmap"
 )
@@ -55,7 +55,7 @@ func TestPlanePathPaintsWhatTheDegreePathPaints(t *testing.T) {
 	zerolog.SetGlobalLevel(zerolog.ErrorLevel)
 	defer zerolog.SetGlobalLevel(level)
 	a := atlas(t)
-	sum, zero, reset := scenetest.InstallHashing()
+	sum, zero, reset := egui2test.InstallHashing()
 	t.Cleanup(reset)
 
 	views := append(benchViews[:len(benchViews):len(benchViews)],

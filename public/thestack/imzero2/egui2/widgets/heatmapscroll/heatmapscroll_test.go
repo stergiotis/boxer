@@ -1,7 +1,7 @@
 package heatmapscroll
 
 import (
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"math"
 	"testing"
 
@@ -174,7 +174,7 @@ func TestSize(t *testing.T) {
 // panic, must report a quiet frame, and a ring-shape change through Opts must
 // restart the ring.
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	hs := newFixture(t, 4, 3)
 	hs.PushColumn([]float32{0.1, 0.5, 0.9})
 	ev := hs.Render(0, 0)

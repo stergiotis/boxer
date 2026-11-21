@@ -12,7 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/view"
 )
@@ -63,7 +63,7 @@ func centreOf(lay *layeredgraph.Layout, id string, w, h float32) (x, y float32) 
 }
 
 func TestRenderFromAFreshDiagram(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	d := New(ids, "", Options{})
 	ev := d.Render(prototypeModel(t), 900, 420)
@@ -89,7 +89,7 @@ func (failingEngine) Layout(context.Context, layeredgraph.GraphModel, layeredgra
 }
 
 func TestLayoutFailureIsReportedNotPanicked(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	d := New(c.NewWidgetIdStack(), "fail", Options{Engine: failingEngine{}})
 	ev := d.Render(prototypeModel(t), 900, 420)
 	require.Error(t, ev.Err)
@@ -100,7 +100,7 @@ func TestLayoutFailureIsReportedNotPanicked(t *testing.T) {
 // reports it hovered and clicked, and the hit region it declares carries its
 // name and evidence.
 func TestHoverAndClickABarrier(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	ids := c.NewWidgetIdStack()
 	const key, w, h = "hover", 900, 420
@@ -140,7 +140,7 @@ func TestHoverAndClickABarrier(t *testing.T) {
 // back as its hit region's click, with no pointer on the canvas, and the
 // Diagram reports it like a pointer click.
 func TestKeyboardActivationIsAClick(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	ids := c.NewWidgetIdStack()
 	const key = "keys"

@@ -26,7 +26,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // testApp is an unmounted window, as the tour and the catalog tests have it:
@@ -270,7 +270,7 @@ func TestSetRecipeSetsTheWholeRecipeAndNeverToggles(t *testing.T) {
 
 	args.Limits, args.PercentLo, args.PercentHi = limitsPercentile, 1, 99
 	require.NoError(t, command(t, inst, opSetRecipe, args))
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	settle(t, inst, func() bool {
 		inst.viewer.Render(400, 300) // a frame adopts the counted histogram
 		c.CurrentApplicationState.StateManager.ScriptReset()
@@ -526,7 +526,7 @@ func TestAFloatRegionCountsItsInvalidSamplesAndAScaledOneIsInValues(t *testing.T
 // last frame becomes the recipe's; a transfer function without a parameter
 // draws no slider and sets nothing.
 func TestTheParameterSliderAndTheRecipeStayInStep(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	inst := withSample(t, samples.NameFloat)
 	args := recipeArgs(inst.viewer.Recipe())
@@ -626,7 +626,7 @@ func TestAnImageIsShownWhileItIsRead(t *testing.T) {
 // The frame is the render goroutine's, so a nil it reads is a crash of the
 // host.
 func TestTheWindowRendersInEveryPhase(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	inst := testApp(t)
 	frame := func() {

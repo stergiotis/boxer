@@ -4,13 +4,13 @@ import (
 	"testing"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // A label hidden through the API drops its series from the frame, as a
 // click on its legend row does, and the flag is retained across frames.
 func TestSetSeriesHiddenDropsSeries(t *testing.T) {
-	messages, zero, reset := scenetest.InstallCounting()
+	messages, zero, reset := egui2test.InstallCounting()
 	t.Cleanup(reset)
 	ids := c.NewWidgetIdStack()
 	xs := []float64{0, 1, 2}

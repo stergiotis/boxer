@@ -15,7 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/notebookview"
 )
 
@@ -68,7 +68,7 @@ func bind(everyone arrow.RecordBatch, row int64) (records map[string]arrow.Recor
 // A notebook over records its host holds draws without a blob: nothing is
 // wrong with it, it is not sealed, and a figure reads as its value.
 func TestABoundNotebookDrawsWhatItsHostHolds(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	everyone := people(t, "ada", "bo")
 	defer everyone.Release()
 	records, release := bind(everyone, 1)
@@ -132,7 +132,7 @@ func TestABoundNotebookSealed(t *testing.T) {
 // keeps each unchanged cell's renderer and fold: the renderer is handed the
 // new result.
 func TestSetAgainKeepsWhatDidNotChange(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	everyone := people(t, "ada", "bo", "cy")
 	defer everyone.Release()
 	v := notebookview.New(c.NewWidgetIdStack(), "t", notebookview.Options{Plain: true, Statements: notebookview.StatementsHidden})
@@ -180,7 +180,7 @@ func TestSetAgainKeepsWhatDidNotChange(t *testing.T) {
 // A URL in a `kv` cell that the host claims is reported as a click, not
 // opened.
 func TestAClaimedLinkInAKVCell(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	everyone := people(t, "ada")
 	defer everyone.Release()
 	records, release := bind(everyone, 0)
@@ -216,7 +216,7 @@ func TestAClaimedLinkInAKVCell(t *testing.T) {
 // hand a generated notebook its records: bound, and stored as blobs to be
 // read back. Both arms write the text, read it, prepare and set it.
 func BenchmarkShowNextRow(b *testing.B) {
-	_, _, reset := scenetest.InstallCounting()
+	_, _, reset := egui2test.InstallCounting()
 	defer reset()
 	everyone := people(b, "ada", "bo", "cy", "di")
 	defer everyone.Release()

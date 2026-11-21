@@ -9,14 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // Every region renders under the discard channel — controls, verdicts,
 // strip, facets, table (flat and grouped) and each detail tab — over the
 // fixture rows, without an id-stack mismatch.
 func TestTheWindowRendersEveryRegion(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	inst, _ := opsFixture(t)
 	inst.cache.buckets = []Bucket{{Bucket: t0.Unix(), Key: "auditEvent", N: 2}, {Bucket: t0.Unix() + 60, Key: "llmCall", N: 1}}
 	inst.cache.step = time.Minute

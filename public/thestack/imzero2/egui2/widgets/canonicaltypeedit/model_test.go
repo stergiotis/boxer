@@ -5,7 +5,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -99,7 +99,7 @@ func TestFirstLine(t *testing.T) {
 // discard channel from a zero State, with the form disclosed, and pins the
 // W17 nil-input path (ADR-0267 W19).
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	m := NewModel()
 	st := &State{}

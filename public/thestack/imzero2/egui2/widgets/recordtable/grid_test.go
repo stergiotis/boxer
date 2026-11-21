@@ -10,7 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -52,7 +52,7 @@ func gridColumns() []Column {
 // One frame renders under the discard channel from a zero State, with and
 // without a resolver, and a click on nothing reports nothing.
 func TestRenderGridHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	rec := sortRec(t, []string{"pear", "apple"}, []bool{false, true}, []int64{2, 1})
 	defer rec.Release()
 	var sort SortState
@@ -82,7 +82,7 @@ func TestRenderGridHeadless(t *testing.T) {
 
 // An unusable input draws a message and says why, rather than panicking.
 func TestRenderGridRefusesBrokenInput(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	rec := sortRec(t, []string{"a"}, []bool{false}, []int64{1})
 	defer rec.Release()
 	ids := c.NewWidgetIdStack()
@@ -97,7 +97,7 @@ func TestRenderGridRefusesBrokenInput(t *testing.T) {
 // The grid fits its columns once per column set, and only once it has rows:
 // fitted on an empty grid a column would be as wide as its header.
 func TestRenderGridFitsOncePerColumnSet(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	rec := sortRec(t, []string{"a", "b"}, []bool{false, false}, []int64{1, 2})
 	defer rec.Release()
 	var st State
@@ -169,7 +169,7 @@ func TestGridDisplayRows(t *testing.T) {
 // a changed selection or a cell with a response rebuilds — and the rebuild
 // is what reads a click.
 func TestRenderGridCellsCache(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	rec := sortRec(t, []string{"pear", "apple"}, []bool{false, false}, []int64{2, 1})
 	defer rec.Release()
@@ -245,7 +245,7 @@ func TestGridSelection(t *testing.T) {
 
 // A missing id stack is refused like a missing State, not a panic.
 func TestRenderGridRefusesNilIds(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	var st State
 	assert.Error(t, frame(Input{State: &st}).Err)
 }
@@ -253,7 +253,7 @@ func TestRenderGridRefusesNilIds(t *testing.T) {
 // Without the "#" column the width identities and the table positions start
 // at the first column, and a capped grid renders like a filling one.
 func TestRenderGridNoRowNumbers(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	rec := sortRec(t, []string{"a", "b"}, []bool{false, false}, []int64{1, 2})
 	defer rec.Release()
 	in := Input{Ids: c.NewWidgetIdStack(), Record: rec, Columns: gridColumns(), NoRowNumbers: true, MaxHeight: 120}

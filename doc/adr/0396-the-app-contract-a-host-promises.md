@@ -112,8 +112,12 @@ an app outside this module relied on it:
    pattern whose first token is a wildcard or another word is refused.
    Every runtime service moves under `runtime.`, and each service package
    exports one helper per capability taking the reason text
-   (`llm.CompleteCap(reason)`), the shape `windowopen.OpenCap` set. A
-   wildcard constant covers exactly its family (`…All` is `….>`).
+   (`fsbroker.DialogReadCap(reason)`), the shape `windowopen.OpenCap` set.
+   A wildcard constant covers exactly the family it names: `*` over the
+   one-token verbs below its prefix, so a grant of it never reaches a
+   deeper, more privileged family (`runtime.llm.*` does not reach
+   `runtime.llm.ration.set`); `>` only where everything below is granted
+   alike.
 7. **Scenes never touch live app state.** A host a scene launched — the
    `sceneLaunched` predicate: headless and under a `scene-` component mark
    — always selects the in-memory persist backend. Apps carry no scene
@@ -215,6 +219,9 @@ an app outside this module relied on it:
 - A queued command's context takes cancellation from the window and values
   from the request, rather than the request's own (already ended) context.
 - `ext` as the reserved root for other modules' services.
+- Every runtime service keeps its old name under `runtime.` (`llm.complete`
+  → `runtime.llm.complete`) rather than being renamed further: one rule a
+  migrating module applies mechanically.
 - Topics extended by registration rather than kept closed by policy.
 - A registration failure stops the host rather than the app.
 

@@ -11,7 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/notebookview"
 )
 
@@ -52,7 +52,7 @@ func TestEveryPhaseIsReachable(t *testing.T) {
 	for _, ph := range allPhases[1:] {
 		assert.True(t, m.CanReach(phaseEmpty, ph), ph.String())
 	}
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	inst := newApp()
 	require.NoError(t, inst.openSample("minimal"))
 	inst.mirrorPhase()
@@ -81,7 +81,7 @@ func TestTheNotebookMachineIsMounted(t *testing.T) {
 // The workingset is the launch config that opens the window's notebook
 // again, and only when the person did something in the window.
 func TestTheWorkingsetOpensTheNotebookAgain(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	inst := newApp()
 	_, dirty, err := inst.ComposeWorkingset()
 	require.NoError(t, err)
@@ -120,7 +120,7 @@ func TestTheWorkingsetOpensTheNotebookAgain(t *testing.T) {
 
 // The tour entry mounts a window with no host and draws it on the sample.
 func TestTheTourEntryDrawsTheSample(t *testing.T) {
-	_, zero, reset := scenetest.InstallCounting()
+	_, zero, reset := egui2test.InstallCounting()
 	t.Cleanup(reset)
 	zero()
 	state := tourInit(c.NewWidgetIdStack())

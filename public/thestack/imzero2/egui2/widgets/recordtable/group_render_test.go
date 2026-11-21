@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,7 +14,7 @@ import (
 // reports no gesture; a toggle applied between frames re-flattens; a
 // broken level is drawn as a message, not a panic.
 func TestRenderGridGroupedHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	rec := groupRec(t, []int64{2, 1, 2, 1}, []string{"/m/a", "/m/a", "/m/b", "/x"}, []float64{1, 2, 3, 4})
 	defer rec.Release()
 	var st State

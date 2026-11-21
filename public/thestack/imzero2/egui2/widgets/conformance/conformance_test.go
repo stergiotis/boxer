@@ -30,7 +30,6 @@ var exempt = map[string]string{
 	"conformance":               "this package",
 	"ecdfdigest":                "bridge",
 	"gohighlight":               "tokenizer",
-	"graphview/scenetest":       "test harness",
 	"icicle":                    "layout engine",
 	"icicle/view":               "painter over a layout engine",
 	"imagedecode":               "decoder",

@@ -7,7 +7,7 @@ import (
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 func TestMeasureFollowsWidestLabelAndRowCount(t *testing.T) {
@@ -34,7 +34,7 @@ func TestItemKeyDefaultsToLabel(t *testing.T) {
 // Every labelled row is named — a hit region beside its sense region — and a
 // row with no label has nothing to be named by.
 func TestEmitSenseNamesLabelledRows(t *testing.T) {
-	messages, zero, reset := scenetest.InstallCounting()
+	messages, zero, reset := egui2test.InstallCounting()
 	t.Cleanup(reset)
 	ids := c.NewWidgetIdStack()
 	zero()

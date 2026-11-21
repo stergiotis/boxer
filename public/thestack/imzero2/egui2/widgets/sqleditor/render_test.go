@@ -7,14 +7,14 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlcomplete"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // TestEditorRenderHeadless renders one frame of the editor without a host:
 // Bind then Render, the result returned from the frame, and nothing drawn
 // before a Bind or without ids.
 func TestEditorRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	ed := New(ids, "t")
 	buf := "SELECT 1;\nSELECT 2"
@@ -36,7 +36,7 @@ func TestEditorRenderHeadless(t *testing.T) {
 
 // TestFieldRenderHeadless renders a field and a multi-line field once.
 func TestFieldRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	f := NewField(ids, "t")
 	v := "a = 1"
@@ -50,7 +50,7 @@ func TestFieldRenderHeadless(t *testing.T) {
 // TestRenderPaneHeadless renders the completion pane once, and refuses a
 // missing State.
 func TestRenderPaneHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	var st PaneState
 	res := sqlcomplete.Result{

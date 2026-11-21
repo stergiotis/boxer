@@ -8,7 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // crumbHandle derives trail item i's button handle the way the breadcrumbs
@@ -25,7 +25,7 @@ func crumbHandle(ids *c.WidgetIdStack, i int) (h widgethandle.WidgetHandle) {
 // A click on a trail item goes to the directory it names: the root, or the
 // path up to that segment.
 func TestATrailClickGoesToThatDirectory(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	ids := c.NewWidgetIdStack()
 	in := Input{Ids: ids}

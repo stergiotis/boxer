@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/videopipeline"
 )
 
@@ -44,7 +44,7 @@ func TestHostReactive(t *testing.T) {
 // RenderStatus is not exercised: it fetches the host's capabilities
 // synchronously, which only a live host can answer (imzero2-fetchers).
 func TestGalleryRendersOneFrameHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	res := RenderGallery(Input{Ids: ids, ScopeKey: "t", State: NewGalleryState(videopipeline.Model{})})
 	if res.Err != nil {

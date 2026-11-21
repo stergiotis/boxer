@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 )
 
@@ -69,7 +69,7 @@ func gvDriverScene(t *testing.T, d *GraphviewDriver) {
 // The seeded channels follow the seed: a `size_by = 'distance'` is derived
 // again when the selection moves, without a rebuild.
 func TestSeededChannelFollowsTheSelection(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	m := gvModel(t, []string{"a", "b", "c"}, []string{"b", "c", "d"})
 	d := NewGraphviewDriver(bindings.NewWidgetIdStack(), nil)
 	d.sizeBy, d.sizeBySet = "distance", true
@@ -105,7 +105,7 @@ func TestSeededChannelFollowsTheSelection(t *testing.T) {
 // A declared selection is applied silently, withdrawn on the next
 // declaration, and never published as a gesture (§SD8).
 func TestDeclaredSelectionIsNeitherPublishedNorAccumulated(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	d := NewGraphviewDriver(bindings.NewWidgetIdStack(), nil)
 	sel := func(ids ...string) netModel {
 		vr := seamVerts(t, []string{"a", "b"}, map[string]any{
@@ -181,7 +181,7 @@ func (inst *recordingEmitter) Emit(id SignalID, value any) {
 // A start position is spent on a node that was not there before, not on a
 // survivor the reader may have moved.
 func TestStartPositionIsSpentOnceOnANewNode(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	d := NewGraphviewDriver(bindings.NewWidgetIdStack(), nil)
 	starts := func(ids []string, xs []float64) netModel {
 		x := make([]*float64, len(xs))

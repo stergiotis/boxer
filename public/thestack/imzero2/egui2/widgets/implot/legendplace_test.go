@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/legend"
 )
 
@@ -14,7 +14,7 @@ import (
 // given placement and returns its plot area and the handle.
 func legendFrame(t *testing.T, place LegendPlacementE, labels []string, noLegend bool) (x, y, w, h float32, p *Plot) {
 	t.Helper()
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	p = Begin(ids, "##legend-place-test", 400, 300)
 	p.SetupAxisLimits(AxisX1, 0, 1, CondAlways).SetupAxisLimits(AxisY1, 0, 1, CondAlways).SetupLegend(place)

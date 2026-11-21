@@ -11,7 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 func stopNames(set stopSet) (names []string) {
@@ -184,7 +184,7 @@ func TestEditingAStopsStatement(t *testing.T) {
 // statement editors with an edit pending, and the form with its editor. A
 // mismatched id stack compiles and vets clean and panics here.
 func TestTheStopsTabRendersInEveryShape(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	p := auditTrailPreset()
 	p.Stops = []Stop{{Name: "box", Then: "ask", After: "15m"}, {Name: "ddl", Then: "pause", ToolMatch: "^query$", ArgumentsMatch: `(?i)\bdrop\b`}}
 	a, err := NewPreset(p)

@@ -14,7 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook/fixture"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/notebookview"
 )
 
@@ -47,7 +47,7 @@ func init() {
 // A fresh view draws nothing much, and the fixture draws for several frames
 // with every kind of cell, under the discard channel.
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	v := notebookview.New(c.NewWidgetIdStack(), "t", notebookview.Options{})
 	defer v.Close()
 	assert.Empty(t, frame(v).Vals)
@@ -87,7 +87,7 @@ func TestRenderHeadless(t *testing.T) {
 // A host whose files take time prepares the notebook on a goroutine of its
 // own and hands the result to the view on the render goroutine.
 func TestPrepareOffTheRenderGoroutine(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	src, err := fs.ReadFile(fixture.FS(), fixture.Name)
 	require.NoError(t, err)
 	nb, err := mdnotebook.Read(src)
@@ -109,7 +109,7 @@ func TestPrepareOffTheRenderGoroutine(t *testing.T) {
 // A label that is no longer its value's rendering, and a statement edited
 // since collection, are both reported.
 func TestProblemsAndStaleness(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	src, err := fs.ReadFile(fixture.FS(), fixture.Name)
 	require.NoError(t, err)
 	edited := []byte(replaceOnce(t, string(src), "[412.3 ms](val:stats.p99_ms", "[400 ms](val:stats.p99_ms"))
@@ -127,7 +127,7 @@ func TestProblemsAndStaleness(t *testing.T) {
 // A picture under an ordinary name is read as the file it is, as in any
 // markdown; one that cannot be read or decoded is a problem the view lists.
 func TestPicturesUnderOrdinaryNames(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	var picture bytes.Buffer
 	require.NoError(t, png.Encode(&picture, image.NewNRGBA(image.Rect(0, 0, 4, 3))))
 	fsys := fstest.MapFS{
@@ -165,7 +165,7 @@ func indexOf(s, sub string) int {
 // One frame of the fixture, Go side only: what the view emits into a
 // channel that discards it.
 func BenchmarkRenderFixture(b *testing.B) {
-	messages, zero, reset := scenetest.InstallCounting()
+	messages, zero, reset := egui2test.InstallCounting()
 	defer reset()
 	src, err := fs.ReadFile(fixture.FS(), fixture.Name)
 	require.NoError(b, err)
@@ -188,7 +188,7 @@ func BenchmarkRenderFixture(b *testing.B) {
 // called. The fold is kept when the notebook is set again, and FoldAll
 // folds and unfolds every cell that has a header.
 func TestAFoldedCellBuildsNothing(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	v := notebookview.New(c.NewWidgetIdStack(), "fold", notebookview.Options{Statements: notebookview.StatementsHidden})
 	defer v.Close()
 	src, err := fs.ReadFile(fixture.FS(), fixture.Name)

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // longModel is a dialogue of n short messages, two senders alternating a
@@ -47,7 +47,7 @@ func renderCounting(t *testing.T, m *Model, st *State) (drawn []int) {
 // The cost M5 removes: a 300-message window following its tail lays out
 // only the rows near the tail, not every message of the window.
 func TestRenderLaysOutOnlyRowsNearTheViewport(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	m := longModel(1000)
 	var st State
 	drawn := renderCounting(t, m, &st)
@@ -61,7 +61,7 @@ func TestRenderLaysOutOnlyRowsNearTheViewport(t *testing.T) {
 // scroll can be asked from its position, while the rows between stand in
 // as space.
 func TestRenderJumpLaysOutItsTarget(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	m := longModel(1000)
 	var st State
 	renderCounting(t, m, &st)

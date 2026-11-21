@@ -11,7 +11,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // viewerFrame renders a viewer of a w × h image with the colour bar,
@@ -19,7 +19,7 @@ import (
 // 300.
 func viewerWith(t *testing.T, opts Options, w, h int) (*Viewer, func() Events) {
 	t.Helper()
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	opts.HideColorBar, opts.HideReadout, opts.HideHistogram = true, true, true
 	v := New(c.NewWidgetIdStack(), "", opts)

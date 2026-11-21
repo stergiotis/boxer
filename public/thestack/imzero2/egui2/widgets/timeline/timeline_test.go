@@ -1,7 +1,7 @@
 package timeline
 
 import (
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"math"
 	"strings"
 	"testing"
@@ -1249,7 +1249,7 @@ func TestSelectionInfo_LaneIsASnapshotNotAnAlias(t *testing.T) {
 // TestRenderHeadless renders one frame without a host and checks that the
 // frame's Events are returned and a quiet frame reports nothing.
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	tl := newTestTimeline(t, []*layout.IntervalEvent{{FromMS: 0, ToMS: 1000, LaneHint: "a"}},
 		withOptions(func(o *Options) { o.NowLine = true; o.Brush = true }))
 	ev := tl.Render()

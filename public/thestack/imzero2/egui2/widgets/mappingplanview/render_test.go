@@ -4,14 +4,14 @@ import (
 	"testing"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // TestRenderHeadless renders one frame of the playground without a host: the
 // recompute runs on the dirty seed, a second frame is quiet, and a removed
 // row's inspector view is pruned.
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	sm := c.CurrentApplicationState.StateManager
 	m := NewModel("k", "p", "T")

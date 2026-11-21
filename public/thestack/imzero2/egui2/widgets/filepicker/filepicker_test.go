@@ -13,7 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsbrowser"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // testIds is the id stack every dialog in these tests is built on; only the
@@ -848,7 +848,7 @@ func TestCanCommit_SaveRejectsDirectoryAndEscapingNames(t *testing.T) {
 // must not panic, a hidden dialog draws nothing, and a quiet frame reports
 // ActionNone.
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	fsys := fstest.MapFS{"docs/a.go": {}, "docs/b.md": {}}
 	inst := New(ids, "t", Options{Mode: ModeOpen, FS: fsys, StartDir: "docs", Extensions: []string{".go"}})

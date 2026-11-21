@@ -3,7 +3,7 @@ package spectrumdisplay
 import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -108,7 +108,7 @@ func TestRegionBand(t *testing.T) {
 // TestRenderHeadless renders one frame without a host: the composite must
 // not panic, must report a quiet frame, and must follow its Opts.
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	cfg := colormap.NewConfig(colormap.Viridis8, -110, -20)
 	sd := New(ids, "t", cfg, Options{WidthSlots: 8, HeightSlots: 4})

@@ -7,14 +7,14 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // TestRenderHeadless renders one frame without a host: the widget must not
 // panic, must refuse a nil State, and a State must follow a swapped table by
 // resetting its selection while keeping its filter.
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	var st State
 	if res := Render(Input{Ids: ids, ScopeKey: "t", Table: detailFixture(), State: &st}); res.Err != nil {

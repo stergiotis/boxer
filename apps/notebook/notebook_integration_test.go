@@ -31,7 +31,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // scratchServer starts a ClickHouse server of the test's own in a temporary
@@ -119,7 +119,7 @@ func scratchServer(t *testing.T) (url string) {
 // mount again.
 func TestCollectAgainstAServerAndTheLadingStore(t *testing.T) {
 	url := scratchServer(t)
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	exec, err := storeexec.ConnectFromEnv(ctx)
@@ -264,7 +264,7 @@ func TestCollectAgainstAServerAndTheLadingStore(t *testing.T) {
 // that would write is refused by the server, not only by the class gate.
 func TestRunLiveAgainstAServer(t *testing.T) {
 	url := scratchServer(t)
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	inst := newApp()
 	h := inst.Operations()
 	inst.run = serverRun(chclient.Config{URL: url, User: "default"}, string(AppId), "run-live", 1, LiveMaxBytes)

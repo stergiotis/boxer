@@ -10,7 +10,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // scene drives a scrubber with no host behind it: a frame's input is
@@ -29,7 +29,7 @@ const sceneW = 1000
 
 func newScene(t *testing.T, steps []Step, opts Options) (s *scene) {
 	const scopeKey = "scene"
-	reset := scenetest.Install()
+	reset := egui2test.Install()
 	t.Cleanup(reset)
 	ids := c.NewWidgetIdStack()
 	opts.NoKeyboard = true // no key frame, so the handles derive as below
@@ -209,7 +209,7 @@ func TestEveryFormDraws(t *testing.T) {
 // What a crowded strip costs follows its width, not its step count (survey
 // row 40).
 func TestACrowdedStripCostsItsWidth(t *testing.T) {
-	messages, zero, reset := scenetest.InstallCounting()
+	messages, zero, reset := egui2test.InstallCounting()
 	t.Cleanup(reset)
 	count := func(n int) int {
 		hours := make([]float64, n)

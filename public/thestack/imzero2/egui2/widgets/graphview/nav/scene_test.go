@@ -9,7 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // The headless scene of ADR-0224's 2026-09-12 update, driven through the
@@ -17,10 +17,10 @@ import (
 // frame renders the grown declaration, and a stub at the frontier lands on
 // the pending list.
 func TestSceneDoubleClickExpandsThroughApply(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	ids := c.NewWidgetIdStack()
-	canvas, area := scenetest.Handles(ids, "nav")
+	canvas, area := egui2test.Handles(ids, "nav")
 	gv := graphview.New(ids, "nav", graphview.Options{Layout: graphview.LayoutRadial, NodeClicking: true})
 
 	nv := New(Options{Mode: ModeManual, ExpandDepth: 3})

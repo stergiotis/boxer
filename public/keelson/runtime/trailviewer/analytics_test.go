@@ -14,7 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/trailviewer/launchcfg"
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // chainRows are a task's rows, newest first: a model call, the action it
@@ -497,7 +497,7 @@ func TestMountSeedsFromTheLaunchConfig(t *testing.T) {
 
 // The analytic views and the tree render under the discard channel.
 func TestTheAnalyticViewsRender(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	inst, _ := opsFixture(t)
 	inst.applyCase(Case{Kind: CaseTask, Value: "task-1"})
 	hold(inst, chainRows())

@@ -1,4 +1,4 @@
-package scenetest
+package egui2test
 
 import "github.com/stergiotis/boxer/public/packageprops"
 
@@ -11,5 +11,5 @@ var PackageProps = packageprops.Props{
 }
 
 func init() {
-	packageprops.Register("github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest", PackageProps)
+	packageprops.Register("github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test", PackageProps)
 }

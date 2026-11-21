@@ -12,7 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -350,7 +350,7 @@ func TestProbeSlotsArePerScope(t *testing.T) {
 // TestRenderWithoutStateReportsAnError: a nil State or Ids is a host bug the
 // widget names in Result.Err instead of panicking (ADR-0267 W17).
 func TestRenderWithoutStateReportsAnError(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	res := Render(Input{Ids: c.NewWidgetIdStack()})
 	require.Error(t, res.Err)
 	res = Render(Input{State: &State{}})
@@ -360,7 +360,7 @@ func TestRenderWithoutStateReportsAnError(t *testing.T) {
 // TestRenderOneFrameHeadless renders the level-1 anchor and, pinned, the
 // inspector window under the discard channel (ADR-0267 W19).
 func TestRenderOneFrameHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	d := tdigest.NewTDigest()
 	rnd := rand.New(rand.NewSource(9))
 	for range 2_000 {

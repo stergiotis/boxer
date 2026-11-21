@@ -9,7 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // services is four services under three scenarios, one estimate missing.
@@ -29,7 +29,7 @@ func services() *Model {
 
 // One frame renders from a zero State, its height following the rows.
 func TestRendersAFrame(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	var st State
 	res := Render(Input{Ids: ids, Model: services(), State: &st})
@@ -45,7 +45,7 @@ func TestRendersAFrame(t *testing.T) {
 
 // A chart that cannot be drawn says why instead of drawing nothing.
 func TestBrokenInputIsReported(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	var st State
 	assert.Error(t, Render(Input{Model: services(), State: &st}).Err, "no id stack")
@@ -95,7 +95,7 @@ func TestAxisRange(t *testing.T) {
 // A pointer over an estimate comes back as its hit region's hover, a click
 // on it as the region's click.
 func TestHoverAndClickOnAPoint(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	var st State
 	in := Input{Ids: ids, ScopeKey: "t", Model: services(), State: &st}

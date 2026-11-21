@@ -564,7 +564,7 @@ Helpers and conformance suites meant to be imported by tests. Outside the promis
 
 ### thestack
 
-- `public/thestack/imzero2/egui2/widgets/graphview/scenetest` — Package scenetest is the headless scene support of ADR-0224's 2026-09-12 update, shared by the graphview and nav tests: a fffi2 channel with no host behind it, so Render runs without a client, and the canvas and area handles a View derives, so a scripted register lands on the widget's own surfaces.
+- `public/thestack/imzero2/egui2/egui2test` — Package egui2test is the headless frame harness (ADR-0224's 2026-09-12 update, ADR-0396 §8): a fffi2 channel with no host behind it, so a widget's Render or an app's Frame runs without a client, and the canvas and area handles a View derives, so a scripted register lands on the widget's own surfaces.
 - `public/thestack/imzero2/scene/scenetest` — Package scenetest launches scenes from Go tests (ADR-0248 §SD5): the scenes whose oracle is a computation, which live in the integration lane beside the widget they check.
 
 ### unittest

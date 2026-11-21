@@ -9,7 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 func TestNearestSample(t *testing.T) {
@@ -53,7 +53,7 @@ type readoutRig struct {
 }
 
 func newReadoutRig(t *testing.T) *readoutRig {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	r := &readoutRig{ids: c.NewWidgetIdStack(), sm: c.CurrentApplicationState.StateManager, pl: map[string]*Plot{}}
 	t.Cleanup(func() {
 		for _, p := range r.pl {

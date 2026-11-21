@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // TestTruncatePatternShort exercises the "no truncation needed" branch:
@@ -95,7 +95,7 @@ func TestCompileStatusColorInvalid(t *testing.T) {
 // TestRenderHeadless renders one frame under the discard channel from a
 // zero State, closed and open, and pins the W17 nil-Ids path (ADR-0267 W19).
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	var st State
 	res := Render(Input{Ids: ids, ScopeKey: "t", Pattern: `\w+`, State: &st})

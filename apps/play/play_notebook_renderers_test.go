@@ -11,7 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook/fixture"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/notebookview"
 )
 
@@ -40,7 +40,7 @@ func TestNotebookRenderersAreRegisteredUnderTheirPanelIds(t *testing.T) {
 // them over: the cell's relation as `main`, a WITH member as the channel of
 // its name. Two cells of one panel are two panels.
 func TestNotebookCellsAreDrawnByPlaysPanels(t *testing.T) {
-	messages, zero, reset := scenetest.InstallCounting()
+	messages, zero, reset := egui2test.InstallCounting()
 	t.Cleanup(reset)
 	records := fixtureRecords(t)
 	draw := func(panel PanelI, statement string) (reason string, painted int) {
@@ -93,7 +93,7 @@ func TestNotebookCellsAreDrawnByPlaysPanels(t *testing.T) {
 // Every registered panel is built without a play instance and answers a
 // result it does not read with a reason, not a panic.
 func TestNotebookPanelsRefuseWhatTheyDoNotRead(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	records := fixtureRecords(t)
 	res, err := mdnotebook.Evaluate("SELECT samples FROM stats", records)
 	require.NoError(t, err)

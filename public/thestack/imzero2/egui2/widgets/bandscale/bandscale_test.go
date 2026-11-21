@@ -8,7 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 func ladder() []Band {
@@ -20,7 +20,7 @@ func ladder() []Band {
 
 // One frame renders with no host behind it, from nothing but its input.
 func TestRendersAFrame(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	res := Render(Input{Ids: ids, ScopeKey: "scale", Bands: ladder(),
 		Markers: []Marker{{Position: 0.9, Label: "may", Hollow: true}, {Position: 0.3, Label: "now"}}})
@@ -36,7 +36,7 @@ func TestRendersAFrame(t *testing.T) {
 
 // A scale that cannot be drawn says so instead of drawing nothing.
 func TestBrokenInputIsReported(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	assert.Error(t, Render(Input{Bands: ladder()}).Err, "no id stack")
 	assert.Error(t, Render(Input{Ids: c.NewWidgetIdStack()}).Err, "no bands")
 }

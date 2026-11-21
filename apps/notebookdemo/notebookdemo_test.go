@@ -18,7 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook/samples"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // fakeServer answers the report sample's records with what it stores, and
@@ -63,7 +63,7 @@ func command(t *testing.T, h app.OperationsHandlerI, op string, args any) error 
 // The host builds both panes under composed identities, reads their state,
 // and runs one through its own catalog.
 func TestTheHostEmbedsBothWays(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	inst := newApp()
 	inst.run = fakeServer(t)
 	h := inst.Operations()

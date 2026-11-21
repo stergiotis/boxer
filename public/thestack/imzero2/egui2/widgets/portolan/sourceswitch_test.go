@@ -13,7 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // snapPixels answers with the colour it read when the call began, as a
@@ -186,7 +186,7 @@ func TestHostKeysAreReportedAndNotActedOn(t *testing.T) {
 	press := func(code keycodes.Code) c.CapturedKey { return c.CapturedKey{Code: code, Edges: 1} }
 	for _, noKeyboard := range []bool{false, true} {
 		t.Run(map[bool]string{false: "with the map's keys", true: "NoKeyboard"}[noKeyboard], func(t *testing.T) {
-			t.Cleanup(scenetest.Install())
+			t.Cleanup(egui2test.Install())
 			m := New(c.NewWidgetIdStack(), "", Options{NoTiles: true, CRS: Simple, Center: LL(-500, 500), Zoom: 0, NoKeyboard: noKeyboard,
 				HostKeys: keycodes.MaskOf(keycodes.PageDown, keycodes.ArrowDown)})
 			defer m.Close()

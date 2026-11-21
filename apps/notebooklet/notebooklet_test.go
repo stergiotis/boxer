@@ -20,7 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // Every notebook of every registered book reads, composes its buffer and
@@ -120,7 +120,7 @@ func command(t *testing.T, h app.OperationsHandlerI, op string) error {
 // The window is the pane over its notebook: a run through its catalog
 // shows the records computed, and get_reading says so.
 func TestTheWindowRunsItsNotebookLive(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	def, err := Find("report")
 	require.NoError(t, err)
 	w := newWindow(def)

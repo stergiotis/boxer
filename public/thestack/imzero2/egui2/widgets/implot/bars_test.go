@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 func TestBarsFitIncludesBodyAndZero(t *testing.T) {
@@ -109,7 +109,7 @@ func TestBarRectsHorizontalDiverging(t *testing.T) {
 // under a counting discard channel and returns the messages it sent.
 func renderBarsFrame(t *testing.T, decl func(p *Plot)) int {
 	t.Helper()
-	messages, zero, reset := scenetest.InstallCounting()
+	messages, zero, reset := egui2test.InstallCounting()
 	t.Cleanup(reset)
 	ids := c.NewWidgetIdStack()
 	zero()

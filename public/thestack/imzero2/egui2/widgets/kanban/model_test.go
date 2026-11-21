@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // orderIn returns the ids of the cards in column cid, in render (slice) order —
@@ -264,7 +264,7 @@ func TestDotKindLookup(t *testing.T) {
 // widget must not panic, must refuse a nil State, and must key its rect probes
 // per board so two boards under different scopes never share a slot (W7).
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	m := board()
 	var st State

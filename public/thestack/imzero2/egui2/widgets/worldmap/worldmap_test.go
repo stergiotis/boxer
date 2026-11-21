@@ -2,7 +2,7 @@ package worldmap
 
 import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"hash/fnv"
 	"math"
 	"testing"
@@ -691,7 +691,7 @@ func TestRasterizeFillMatchesIndex(t *testing.T) {
 // panic, must report a quiet frame, and the fill variant must key its probe
 // per instance.
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	m := New(ids, "t", Options{})
 	if m.Atlas() == nil {

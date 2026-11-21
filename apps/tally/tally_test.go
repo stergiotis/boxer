@@ -18,7 +18,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
 )
 
@@ -309,7 +309,7 @@ func TestStringTableCellsAndRecord(t *testing.T) {
 // A populated table renders headless, a click on nothing reports nothing,
 // and a ceiling or none both draw.
 func TestStringTableRenders(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	tb := stringTable{scopeKey: "find-table", selected: -1, headers: []string{"path", "size"},
 		rows: [][]string{{"/a", "1 KiB"}, {"/b", "2 KiB"}}}

@@ -7,13 +7,13 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
 
 func newTestEditor(t *testing.T, src string) *Editor {
 	t.Helper()
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	e := New(c.NewWidgetIdStack(), "t", Opts{})
 	e.SetSource(src)
 	return e

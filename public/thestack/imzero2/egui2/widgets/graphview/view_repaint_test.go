@@ -6,14 +6,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // A layout still moving asks for the next frame, so its animation runs
 // under the reactive cadence without input; a held or static one stops
 // asking once the fit latch has counted its frames.
 func TestWantsFrame_WhileTheLayoutMoves(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	nodes := []NodeSpec{{Id: 1}, {Id: 2}, {Id: 3}}
 	edges := []EdgeSpec{{From: 1, To: 2}, {From: 2, To: 3}}
 	settle := func(v *View) {
@@ -41,7 +41,7 @@ func TestWantsFrame_WhileTheLayoutMoves(t *testing.T) {
 // The request reaches the wire: a moving layout sends one message more
 // per frame than the same picture held.
 func TestStepAndPaint_RequestsARepaintWhileMoving(t *testing.T) {
-	messages, zero, reset := scenetest.InstallCounting()
+	messages, zero, reset := egui2test.InstallCounting()
 	t.Cleanup(reset)
 	nodes := []NodeSpec{{Id: 1}, {Id: 2}, {Id: 3}}
 	edges := []EdgeSpec{{From: 1, To: 2}, {From: 2, To: 3}}

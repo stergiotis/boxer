@@ -7,7 +7,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // A released box asks for the range under it on each axis, through last
@@ -95,7 +95,7 @@ type gestureRig struct {
 const gestureTitle = "##gesture-test"
 
 func newGestureRig(t *testing.T, decl func(p *Plot)) *gestureRig {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	r := &gestureRig{t: t, ids: c.NewWidgetIdStack(), sm: c.CurrentApplicationState.StateManager, decl: decl}
 	for range c.IdScope(r.ids.PrepareStr(gestureTitle)) {
 		r.canvas = widgethandle.Make(r.ids.PrepareStr("implot-canvas").Derive())

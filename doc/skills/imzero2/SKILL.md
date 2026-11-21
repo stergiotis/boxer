@@ -2104,7 +2104,7 @@ its knobs as a `Style` embedded in its `Input` (`boxenplot`, `ecdf`,
   widget (ADR-0267)") and the ADR that decided the widget, and states the
   one-frame lag of its readbacks once.
 - Two tests at least: one frame renders under the discard channel from a
-  zero `State` or a fresh `New` (`scenetest.Install()`), and a widget that
+  zero `State` or a fresh `New` (`egui2test.Install()`), and a widget that
   reacts to input has one scripted-input test in the
-  `graphview/scenetest` pattern. A multi-frame test calls
+  `egui2test` pattern. A multi-frame test calls
   `StateManager.ScriptReset()` between frames.

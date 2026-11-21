@@ -4,14 +4,14 @@ import (
 	"testing"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // TestRenderHeadless renders one frame of a pager without a host: the widget
 // must not panic, a quiet frame reports no change, and a programmatic page
 // move is the next frame's change.
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	sm := c.CurrentApplicationState.StateManager
 	p := New(ids, "t", Options{PageSize: 10, Unit: "items"})

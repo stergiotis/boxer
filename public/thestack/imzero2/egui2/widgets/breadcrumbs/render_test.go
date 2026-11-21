@@ -8,7 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 func steps() *Model {
@@ -30,7 +30,7 @@ type scene struct {
 const sceneKey = "scene"
 
 func newScene(t *testing.T, m *Model) (s *scene) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	s = &scene{sm: c.CurrentApplicationState.StateManager, ids: c.NewWidgetIdStack(), model: m, state: &State{}}
 	return
 }

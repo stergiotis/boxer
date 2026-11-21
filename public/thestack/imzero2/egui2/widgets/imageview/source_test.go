@@ -13,7 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/science/imaging"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 )
 
@@ -252,7 +252,7 @@ func (inst *heldSource) Tile(ctx context.Context, level, col, row int) (TileData
 // new source. A call under way for the old page used to be answered for the
 // new one, which then never asked for the tile.
 func TestASourceReplacedWhileItsTilesAreUnderWayIsNotShownForTheNext(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	v := New(c.NewWidgetIdStack(), "", Options{HideColorBar: true, HideReadout: true, HideHistogram: true})
 	defer v.Close()

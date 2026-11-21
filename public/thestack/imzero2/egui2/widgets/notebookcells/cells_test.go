@@ -12,7 +12,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/notebookcells"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/notebookview"
 )
@@ -61,7 +61,7 @@ func places(t *testing.T) arrow.RecordBatch {
 // Both renderers draw a relation fitted to them by a cell's aliases, and
 // say what they read when the columns are not there.
 func TestMarksAndPointsDraw(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	d, p := dates(t), places(t)
 	defer d.Release()
 	defer p.Release()

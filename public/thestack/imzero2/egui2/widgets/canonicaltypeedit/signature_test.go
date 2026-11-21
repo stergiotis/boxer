@@ -5,7 +5,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -138,7 +138,7 @@ func TestSignatureInvalidElement(t *testing.T) {
 // under the discard channel — a grown signature so the chip strip draws —
 // and pins the W17 nil-input path (ADR-0267 W19).
 func TestRenderSignatureHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	sm := NewSignatureModel()
 	sm.SetCanonical("u32-s_vc")

@@ -21,7 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/science/imaging/samples"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 )
 
@@ -95,7 +95,7 @@ func tileAt(t *testing.T, v *Viewer, x, y, k int) []uint32 {
 }
 
 func TestRendersWithoutAHostFromAFreshViewer(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	v := New(c.NewWidgetIdStack(), "", Options{})
 	defer v.Close()
@@ -120,7 +120,7 @@ func TestRendersWithoutAHostFromAFreshViewer(t *testing.T) {
 }
 
 func TestThePointerReadsTheStoredSamplesWhateverTheRecipe(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	ids := c.NewWidgetIdStack()
 	v := New(ids, "probe", Options{HideReadout: true})
@@ -345,7 +345,7 @@ func TestATileBelowFullResolutionIsTheRecipeAppliedToTheLevelsMeans(t *testing.T
 }
 
 func TestTheViewSaysWhichLevelItDraws(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	v := New(c.NewWidgetIdStack(), "", Options{})
 	defer v.Close()
@@ -469,7 +469,7 @@ func waitForHistogram(t *testing.T, v *Viewer) {
 }
 
 func TestDraggingALimitHandleChangesTheRecipeAndNothingElse(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	ids := c.NewWidgetIdStack()
 	v := New(ids, "h", Options{})

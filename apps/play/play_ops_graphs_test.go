@@ -8,7 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 	sankeyview "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sankey/view"
 )
@@ -79,7 +79,7 @@ func TestNetworkSelectAndOptions(t *testing.T) {
 // as a render leaves it.
 func graphviewPane(t *testing.T, p *PlayApp) *netModel {
 	t.Helper()
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	m := gvModel(t, []string{"a", "b", "c"}, []string{"b", "c", "d"})
 	d := p.graphviewDriver
 	d.rebuild(&m)

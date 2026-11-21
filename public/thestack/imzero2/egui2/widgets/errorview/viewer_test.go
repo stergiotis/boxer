@@ -7,7 +7,7 @@ import (
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // TestContext_IsEmpty matches the Renderer's short-circuit
@@ -64,7 +64,7 @@ func TestInputDefaults(t *testing.T) {
 }
 
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	chain := Context{Streams: []Stream{{Name: "s", Facts: []Fact{{Msg: "boom", Source: "a.go", Line: "1", Function: "f", DataDiag: "{1: 2}"}}}}}
 	if !Render(Input{Ids: ids, ScopeKey: "t", Chain: chain}).Drawn {

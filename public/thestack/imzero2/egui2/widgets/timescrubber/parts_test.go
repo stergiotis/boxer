@@ -7,7 +7,7 @@ import (
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // A hidden part takes its keys with it; Home and End stay while either of
@@ -28,7 +28,7 @@ func TestAHiddenPartTakesItsKeys(t *testing.T) {
 // Hiding every part leaves the strip alone: the frame costs fewer messages,
 // and hiding the parts of one row only costs fewer still than hiding none.
 func TestHiddenPartsAreNotDrawn(t *testing.T) {
-	messages, zero, reset := scenetest.InstallCounting()
+	messages, zero, reset := egui2test.InstallCounting()
 	t.Cleanup(reset)
 	steps := stepsAt(0, 1, 2, 3, 4, 5)
 	count := func(opts Options) int {

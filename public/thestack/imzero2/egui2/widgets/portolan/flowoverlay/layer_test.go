@@ -11,7 +11,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/science/geo/vectorfield"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 )
 
@@ -50,7 +50,7 @@ func newScene(t *testing.T, src vectorfield.SourceI, opts Options) *scene {
 // newBenchScene is newScene for a test or a benchmark.
 func newBenchScene(t testing.TB, src vectorfield.SourceI, opts Options) *scene {
 	t.Helper()
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	s := &scene{clock: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 	s.m = portolan.New(c.NewWidgetIdStack(), "", portolan.Options{NoTiles: true, Center: portolan.LL(45, 10), Zoom: 4})
 	s.layer = New(src, opts)
@@ -148,7 +148,7 @@ func TestStallIsNotCaughtUpOn(t *testing.T) {
 func TestFixedTicksPaintTheSameBytes(t *testing.T) {
 	paint := func(seed uint64) (sum uint64, ticks uint64) {
 		src := globalSource(t, vectorfield.Swirl(0), 1)
-		sumFn, zero, reset := scenetest.InstallHashing()
+		sumFn, zero, reset := egui2test.InstallHashing()
 		defer reset()
 		m := portolan.New(c.NewWidgetIdStack(), "", portolan.Options{NoTiles: true, Center: portolan.LL(45, 10), Zoom: 4})
 		layer := New(src, Options{Seed: seed, FixedTicks: 100})

@@ -3,7 +3,7 @@ package taskmonitor
 import (
 	"context"
 	"errors"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"testing"
 	"time"
 
@@ -222,7 +222,7 @@ func TestProgressInput(t *testing.T) {
 // TestMonitor_RenderHeadless renders one frame without a host: an empty
 // monitor draws its two headers and reports no cancel.
 func TestMonitor_RenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	f := newBusFixture(t)
 	m := newMonitor(t, f, Options{DefaultOpen: true})
 	if ev := m.Render(); len(ev.CancelRequested) != 0 {

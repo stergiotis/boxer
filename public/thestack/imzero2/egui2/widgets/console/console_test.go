@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // screenId derives the id Render gives the console's screen under scopeKey.
@@ -29,7 +29,7 @@ func size(cols, rows uint16) c.ConsoleRow {
 }
 
 func TestAFreshConsoleRendersUnderTheDiscardChannel(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	con := New(ids, "", Options{})
 	ev := con.Render(0, 0)
@@ -40,7 +40,7 @@ func TestAFreshConsoleRendersUnderTheDiscardChannel(t *testing.T) {
 }
 
 func TestOutputIsKeptUntilAcknowledgedAndInputComesBack(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	ids := c.NewWidgetIdStack()
 	con := New(ids, "shell", Options{})
@@ -79,7 +79,7 @@ func TestOutputIsKeptUntilAcknowledgedAndInputComesBack(t *testing.T) {
 }
 
 func TestWriteBlocksUntilTheClientCatchesUp(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	ids := c.NewWidgetIdStack()
 	con := New(ids, "shell", Options{MaxPending: 4})
@@ -138,7 +138,7 @@ func TestRowAccessorsDecodeTheirPayloads(t *testing.T) {
 }
 
 func TestTheLastReportedScreenIsKept(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	ids := c.NewWidgetIdStack()
 	con := New(ids, "shell", Options{})

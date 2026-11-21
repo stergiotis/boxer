@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -130,7 +130,7 @@ func TestFrontmatterSpanEdgeCases(t *testing.T) {
 }
 
 func TestRenderBlockHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	doc := Parse([]byte(blocksSample))
 	ids := c.NewWidgetIdStack()
 	for i := range doc.Blocks() {

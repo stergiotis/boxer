@@ -20,7 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook/samples"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // storedServer answers a record's statement with what the notebook stores
@@ -75,7 +75,7 @@ func ran(t *testing.T, inst *App) {
 // A sample is run live: what collection would send is sent, the Read face
 // shows the records computed, and show_stored returns to what is stored.
 func TestASampleRunsLiveAndReturnsToWhatItStores(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	inst := newApp()
 	h := inst.Operations()
 	var asked []string
@@ -117,7 +117,7 @@ func TestASampleRunsLiveAndReturnsToWhatItStores(t *testing.T) {
 // A run that fails names the record and leaves the earlier reading on
 // screen (ADR-0380 §SD4).
 func TestAFailedRunKeepsTheEarlierReading(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	inst := newApp()
 	h := inst.Operations()
 	var asked []string
@@ -140,7 +140,7 @@ func TestAFailedRunKeepsTheEarlierReading(t *testing.T) {
 // A text that changes drops the live reading: its records were computed
 // from statements the text no longer holds.
 func TestAnEditedTextDropsTheLiveReading(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	inst := newApp()
 	h := inst.Operations()
 	var asked []string
@@ -196,7 +196,7 @@ func mustRead(t *testing.T, text []byte) *mdnotebook.Notebook {
 // An embedded pane runs under its composed identity and declares what a
 // run needs, and nothing of collection.
 func TestAnEmbeddedPaneRunsUnderItsHostsName(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	text := sampleText(t, "minimal")
 	var asked []string
 	pane, err := NewEmbedded(text, EmbedConfig{Host: "demo.host", Key: "minimal", Files: samples.FS(),

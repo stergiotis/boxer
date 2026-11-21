@@ -7,7 +7,7 @@ import (
 	fffi "github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 const renderSrc = "# Title\n\nprose with [a link](/in-doc)\n\n" +
@@ -17,7 +17,7 @@ const renderSrc = "# Title\n\nprose with [a link](/in-doc)\n\n" +
 // discard channel: the widget must not panic, and a quiet frame reports no
 // actions and no links.
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	doc := Parse([]byte("---\nk: v\n---\n" + renderSrc))
 	res := Render(Input{

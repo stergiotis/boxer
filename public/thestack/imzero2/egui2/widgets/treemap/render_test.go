@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
 )
 
@@ -20,7 +20,7 @@ func renderTestTree() (root, dir *layout.Node) {
 // nothing, the size given to Render is the container, and a host-driven
 // navigation between frames arrives in the next frame's Events.Nav.
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	root, dir := renderTestTree()
 	tm := New(c.NewWidgetIdStack(), "t", root, Options{LeafClickSensing: true})

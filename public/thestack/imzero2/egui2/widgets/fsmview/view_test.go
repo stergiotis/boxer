@@ -4,14 +4,14 @@ import (
 	"testing"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // TestRenderHeadless renders the chip and the open popup without a host —
 // plain, tethered and every level-2 renderer — and checks a quiet frame
 // reports no events.
 func TestRenderHeadless(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	sm := c.CurrentApplicationState.StateManager
 	m := NewMachine("red", 16, MachineOptions[string]{StateOrder: []string{"red", "green"}}).

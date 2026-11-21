@@ -8,7 +8,7 @@ import (
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 var nan = float32(math.NaN())
@@ -132,7 +132,7 @@ func TestColumnsAndSpecsReconcileAndPaintIdentically(t *testing.T) {
 	// Each form runs against a fresh runtime, so what the two streams may
 	// differ by is the declaration alone.
 	opts := Options{Layout: LayoutForceDirected, Auras: AuraParams{Enabled: true, Legend: AuraLegendInside}}
-	sum, zero, reset := scenetest.InstallHashing()
+	sum, zero, reset := egui2test.InstallHashing()
 	t.Cleanup(reset)
 	rows := New(c.NewWidgetIdStack(), "same", opts)
 	var rowSum []uint64
@@ -142,7 +142,7 @@ func TestColumnsAndSpecsReconcileAndPaintIdentically(t *testing.T) {
 		rowSum = append(rowSum, sum())
 		reset()
 	}
-	sum, zero, reset = scenetest.InstallHashing()
+	sum, zero, reset = egui2test.InstallHashing()
 	t.Cleanup(reset)
 	cols := New(c.NewWidgetIdStack(), "same", opts)
 	var colSum []uint64
@@ -303,7 +303,7 @@ func TestPositionColumnsFollowTheDeclaration(t *testing.T) {
 }
 
 func TestRenderColumnsRefusesAMalformedDeclaration(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	v := New(c.NewWidgetIdStack(), "bad", Options{})
 	require.NoError(t, errOf(v.RenderColumns(&NodeColumns{Ids: []uint64{1, 2}}, &EdgeColumns{}, 100, 100)))
 	require.Equal(t, uint32(2), v.Metrics().NodeCount)
@@ -332,7 +332,7 @@ func TestRenderColumnsRefusesAMalformedDeclaration(t *testing.T) {
 // A declared LabelAlways paints the node's label under the label budget:
 // one more paint message than the same node without it.
 func TestLabelAlwaysPaintsUnderTheBudget(t *testing.T) {
-	messages, zero, reset := scenetest.InstallCounting()
+	messages, zero, reset := egui2test.InstallCounting()
 	t.Cleanup(reset)
 	render := func(always bool) int {
 		v := New(c.NewWidgetIdStack(), "label", Options{Layout: LayoutRandom})
@@ -350,7 +350,7 @@ func TestLabelAlwaysPaintsUnderTheBudget(t *testing.T) {
 // An undirected picture paints no arrow heads — the one triangle batch that
 // carries every head is gone (ADR-0338) — and picks its edges as before.
 func TestSceneUndirectedPaintsNoHeadAndStillPicks(t *testing.T) {
-	messages, zero, reset := scenetest.InstallCounting()
+	messages, zero, reset := egui2test.InstallCounting()
 	t.Cleanup(reset)
 	nodes := []NodeSpec{{Id: 1, Pinned: true, PinX: 0, PinY: 0}, {Id: 2, Pinned: true, PinX: 200, PinY: 0}, {Id: 3, Pinned: true, PinX: 100, PinY: 100}}
 	edges := []EdgeSpec{{From: 1, To: 2}, {From: 2, To: 3}, {From: 3, To: 3}}
@@ -433,7 +433,7 @@ func TestEdgeRowsFollowTheDeclaration(t *testing.T) {
 // A non-nil empty column is absent, as Validate treats it: rendering it
 // must not index past its end.
 func TestEmptyNonNilColumnIsAbsent(t *testing.T) {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	v := New(c.NewWidgetIdStack(), "empty", Options{})
 	nc := NodeColumns{
 		Ids:         []uint64{1, 2},

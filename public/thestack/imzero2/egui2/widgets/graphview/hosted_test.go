@@ -11,7 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	cam "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/camera"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // hostScene drives a View through the hosted pair against registers scripted
@@ -26,7 +26,7 @@ type hostScene struct {
 }
 
 func newHostScene(t *testing.T, o Options, w, h float32) *hostScene {
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	ids := c.NewWidgetIdStack()
 	// Handles of a canvas this view never emits: the host's.
 	canvas := widgethandle.Make(ids.PrepareStr("host-canvas").Derive())
@@ -187,7 +187,7 @@ func TestHostedWheelAndBackgroundDragDoNotMoveTheGuestsCamera(t *testing.T) {
 func TestHostedPaintEmitsLessThanRender(t *testing.T) {
 	// The canvas and the drag-owning region are what a hosted render leaves
 	// out, so it must emit strictly fewer messages for the same declaration.
-	messages, zero, reset := scenetest.InstallCounting()
+	messages, zero, reset := egui2test.InstallCounting()
 	t.Cleanup(reset)
 	ids := c.NewWidgetIdStack()
 	nodes := hostedNodes()
@@ -217,7 +217,7 @@ func TestHostedDrawsNoLegendEvenWhenAskedInside(t *testing.T) {
 	// could never be clicked; the rows are still published (ADR-0224 §SD15).
 	// A hosted frame asked for the inside legend emits exactly what one
 	// asked for none emits.
-	messages, zero, reset := scenetest.InstallCounting()
+	messages, zero, reset := egui2test.InstallCounting()
 	t.Cleanup(reset)
 	ids := c.NewWidgetIdStack()
 	host := HostCanvas{

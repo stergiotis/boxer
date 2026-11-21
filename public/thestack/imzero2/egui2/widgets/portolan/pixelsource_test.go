@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 // solidPixels answers every tile with one colour, which the test changes
@@ -219,7 +219,7 @@ func TestMap_UploadBudgetSpreadsABurstOverFrames(t *testing.T) {
 	// 40 bytes a frame ships three tiles — the third passes the bound — and
 	// the rest wait their turn; after a content change the same holds, and
 	// a tile still waiting keeps the version the host has.
-	t.Cleanup(scenetest.Install())
+	t.Cleanup(egui2test.Install())
 	sm := c.CurrentApplicationState.StateManager
 	src := &solidPixels{}
 	src.colour.Store(0xaaaaaaff)
