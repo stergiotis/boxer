@@ -114,9 +114,16 @@ type CallEvent struct {
 	Op    CallOpE
 	// Class classifies an exec; it is unspecified for query and insert.
 	Class StatementClassE
-	// Table is exact for an insert and best effort otherwise ("" when the
-	// statement's head names none the lexer recognises).
+	// Table is exact for an insert — the table the caller named — and best
+	// effort otherwise ("" when the statement's head names none the lexer
+	// recognises).
 	Table string
+	// Target is the table an insert's rows were sent to when an insert
+	// transform below this observer rewrote it (ADR-0402 §SD1), and "" when
+	// the insert went to Table. It is known once the transform ran: an
+	// intent event carries none, and neither does the done event of an
+	// insert that failed before or in its transform.
+	Target string
 	// Rows and Batches are what an insert sent, or what a query's consumer
 	// received; zero for an exec, and in an intent event.
 	Rows    int64
@@ -377,7 +384,11 @@ func (inst *ObservingExecutor) insert(ctx context.Context, table string, records
 	for _, rec := range records {
 		ev.Rows += rec.NumRows()
 	}
-	applied, err = InsertArrowWith(ctx, inst.inner, table, records, settings)
+	ictx, route := withInsertRoute(ctx)
+	applied, err = InsertArrowWith(ictx, inst.inner, table, records, settings)
+	if route.target != table {
+		ev.Target = route.target
+	}
 	inst.done(ctx, &ev, err)
 	return
 }

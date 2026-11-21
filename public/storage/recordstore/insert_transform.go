@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"iter"
+	"regexp"
+	"slices"
+	"strings"
 	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -43,7 +46,19 @@ func (inst InsertTransformFunc) TransformInsert(table string, records []arrow.Re
 	return inst(table, records)
 }
 
-// insertTransforms is the process-wide registry: table reference → transform.
+// ErrUnqualifiedTransformedTable is what an insert returns when it names a
+// table without its database while an insert transform is registered for a
+// table of that name in some database (ADR-0402 §SD2). Which database a bare
+// name resolves in is the server session's, which the registry does not
+// know: the insert might be one the transform must rewrite, so it is refused
+// rather than sent untransformed. Match with errors.Is.
+var ErrUnqualifiedTransformedTable = errors.New("the insert names a table without its database, and an insert transform is registered for a table of that name; name the database")
+
+// bareIdentRe is one unquoted identifier.
+var bareIdentRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// insertTransforms is the process-wide registry: canonical table reference
+// ([CanonicalTableRef]) → transform.
 var insertTransforms struct {
 	mu sync.RWMutex
 	m  map[string]*registeredTransform
@@ -53,53 +68,230 @@ var insertTransforms struct {
 // one for the same table, which a func-typed transform could not.
 type registeredTransform struct{ t InsertTransformI }
 
+// CanonicalTableRef is the one spelling a table reference is registered and
+// looked up under (ADR-0402 §SD2): each part without the backticks or double
+// quotes ClickHouse allows around an identifier, the parts joined by a dot.
+// So boxer.facts, `boxer`.`facts` and "boxer"."facts" are one table. Case is
+// kept — ClickHouse identifiers are case-sensitive.
+//
+// qualified reports whether the reference names its database. ok is false
+// for text that is not one or two identifiers: an empty part, an unclosed
+// quote, a quoted part holding a quote or a backslash, a third part. Such a
+// reference matches no registration, and the server judges it.
+func CanonicalTableRef(ref string) (canon string, qualified bool, ok bool) {
+	rest := strings.TrimSpace(ref)
+	var parts [2]string
+	n := 0
+	for {
+		if n == len(parts) || rest == "" {
+			return "", false, false
+		}
+		var part string
+		if q := rest[0]; q == '`' || q == '"' {
+			end := strings.IndexByte(rest[1:], q)
+			if end < 0 {
+				return "", false, false
+			}
+			part, rest = rest[1:1+end], rest[2+end:]
+			if strings.ContainsAny(part, "`\"\\") {
+				return "", false, false
+			}
+		} else {
+			end := strings.IndexByte(rest, '.')
+			if end < 0 {
+				end = len(rest)
+			}
+			part, rest = rest[:end], rest[end:]
+			if !bareIdentRe.MatchString(part) {
+				return "", false, false
+			}
+		}
+		if part == "" {
+			return "", false, false
+		}
+		parts[n] = part
+		n++
+		if rest == "" {
+			break
+		}
+		if rest[0] != '.' {
+			return "", false, false
+		}
+		rest = rest[1:]
+	}
+	if n == 1 {
+		return parts[0], false, true
+	}
+	return parts[0] + "." + parts[1], true, true
+}
+
 // RegisterInsertTransform registers t for every insert into table, for the
 // whole process (ADR-0402 §SD2). A binary registers before it builds any
 // store: the executors boxer constructs consult the registry on each insert,
 // and a writer that ran before the registration wrote the untransformed
-// shape. table is compared as written, so it is the reference the writers
-// use — "boxer.facts" for the facts table.
+// shape. table names its database — "boxer.facts" for the facts table — and
+// an insert matches it under any spelling [CanonicalTableRef] makes equal.
 //
-// It panics on a malformed reference, a nil t, or a second registration for
-// the same table: a registration is wiring, and two transforms for one table
-// would make which one ran depend on the order of init. unregister removes
-// the registration; a binary does not call it, a test does.
+// It panics on a malformed or unqualified reference, a nil t, or a second
+// registration for the same table: a registration is wiring, and two
+// transforms for one table would make which one ran depend on the order of
+// init. unregister removes the registration; a binary does not call it, a
+// test does.
 func RegisterInsertTransform(table string, t InsertTransformI) (unregister func()) {
 	if err := CheckTableRef(table); err != nil {
 		panic("recordstore.RegisterInsertTransform: " + err.Error())
+	}
+	key, qualified, _ := CanonicalTableRef(table)
+	if !qualified {
+		panic("recordstore.RegisterInsertTransform: " + table + " does not name its database; a bare name resolves in whatever database a session starts in")
 	}
 	if t == nil {
 		panic("recordstore.RegisterInsertTransform: nil transform")
 	}
 	insertTransforms.mu.Lock()
 	defer insertTransforms.mu.Unlock()
-	if _, dup := insertTransforms.m[table]; dup {
-		panic("recordstore.RegisterInsertTransform: a transform is already registered for " + table)
+	if _, dup := insertTransforms.m[key]; dup {
+		panic("recordstore.RegisterInsertTransform: a transform is already registered for " + key)
 	}
 	if insertTransforms.m == nil {
 		insertTransforms.m = make(map[string]*registeredTransform, 1)
 	}
 	reg := &registeredTransform{t: t}
-	insertTransforms.m[table] = reg
+	insertTransforms.m[key] = reg
 	unregister = func() {
 		insertTransforms.mu.Lock()
 		defer insertTransforms.mu.Unlock()
-		if insertTransforms.m[table] == reg {
-			delete(insertTransforms.m, table)
+		if insertTransforms.m[key] == reg {
+			delete(insertTransforms.m, key)
 		}
 	}
 	return
 }
 
-// RegisteredInsertTransform is the transform registered for table, if any.
+// RegisteredInsertTransform is the transform registered for table, if any,
+// whatever spelling of the reference table is ([CanonicalTableRef]). A
+// reference that does not name its database has none: see
+// [ErrUnqualifiedTransformedTable] for what an insert naming one gets.
 func RegisteredInsertTransform(table string) (t InsertTransformI, ok bool) {
+	t, _ = lookupRegistered(table)
+	return t, t != nil
+}
+
+// RegisteredInsertTransformTables lists the tables a transform is registered
+// for, in their canonical spelling, sorted.
+func RegisteredInsertTransformTables() (tables []string) {
 	insertTransforms.mu.RLock()
 	defer insertTransforms.mu.RUnlock()
-	reg, ok := insertTransforms.m[table]
-	if ok {
-		t = reg.t
+	tables = make([]string, 0, len(insertTransforms.m))
+	for k := range insertTransforms.m {
+		tables = append(tables, k)
+	}
+	slices.Sort(tables)
+	return
+}
+
+// lookupRegistered resolves an insert's table against the registry: the
+// transform, nil when the table has none, or an error for a bare name that
+// a registration's table part matches.
+func lookupRegistered(table string) (t InsertTransformI, err error) {
+	insertTransforms.mu.RLock()
+	defer insertTransforms.mu.RUnlock()
+	if len(insertTransforms.m) == 0 {
+		return
+	}
+	canon, qualified, ok := CanonicalTableRef(table)
+	if !ok {
+		return
+	}
+	if qualified {
+		if reg := insertTransforms.m[canon]; reg != nil {
+			t = reg.t
+		}
+		return
+	}
+	for key := range insertTransforms.m {
+		if _, name, _ := strings.Cut(key, "."); name == canon {
+			err = eb.Build().Str("table", table).Str("registered", key).Errorf("recordstore: %w", ErrUnqualifiedTransformedTable)
+			return
+		}
 	}
 	return
+}
+
+// lookupOne is lookupRegistered for the one table of [TransformExecutor].
+func lookupOne(key string, t InsertTransformI) func(table string) (InsertTransformI, error) {
+	_, name, _ := strings.Cut(key, ".")
+	return func(table string) (InsertTransformI, error) {
+		canon, qualified, ok := CanonicalTableRef(table)
+		switch {
+		case !ok:
+			return nil, nil
+		case qualified && canon == key:
+			return t, nil
+		case !qualified && canon == name:
+			return nil, eb.Build().Str("table", table).Str("registered", key).Errorf("recordstore: %w", ErrUnqualifiedTransformedTable)
+		}
+		return nil, nil
+	}
+}
+
+// transformCtxKey carries, on the context of one insert, that a transform
+// already rewrote it and where an observer wants the rewrite reported.
+type transformCtxKey struct{}
+
+type transformCtx struct {
+	// applied: the insert under this context is a transform's output.
+	applied bool
+	// route, when not nil, receives the table a transform sent the insert to.
+	route *insertRoute
+}
+
+// insertRoute is what [ObservingExecutor] learns about one insert from the
+// executor below it that applied a transform.
+type insertRoute struct{ target string }
+
+func transformCtxFrom(ctx context.Context) (tc transformCtx) {
+	tc, _ = ctx.Value(transformCtxKey{}).(transformCtx)
+	return
+}
+
+// WithTransformApplied marks ctx as carrying an insert a transform already
+// rewrote, so that no executor below applies the registry to it again. A
+// transform applies once per insert: the wrapping executor sets this before
+// it calls its inner one, and a caller that applies a transform by hand
+// ([TransformInsert]) and sends the result through an executor that
+// consults the registry does the same. Without it, a transform whose target
+// is itself a registered table would be rewritten twice.
+func WithTransformApplied(ctx context.Context) context.Context {
+	tc := transformCtxFrom(ctx)
+	if tc.applied {
+		return ctx
+	}
+	tc.applied = true
+	return context.WithValue(ctx, transformCtxKey{}, tc)
+}
+
+// TransformApplied reports whether ctx carries [WithTransformApplied].
+func TransformApplied(ctx context.Context) bool {
+	return transformCtxFrom(ctx).applied
+}
+
+// withInsertRoute asks the executors below to report where a transform sent
+// the insert made under the returned context.
+func withInsertRoute(ctx context.Context) (out context.Context, route *insertRoute) {
+	tc := transformCtxFrom(ctx)
+	route = &insertRoute{}
+	tc.route = route
+	out = context.WithValue(ctx, transformCtxKey{}, tc)
+	return
+}
+
+// reportRoute tells the observer of ctx's insert, if there is one, that a
+// transform sent it to target.
+func reportRoute(ctx context.Context, target string) {
+	if r := transformCtxFrom(ctx).route; r != nil {
+		r.target = target
+	}
 }
 
 // TransformInsert applies t to one insert into table. release must be
@@ -135,14 +327,26 @@ func TransformInsert(t InsertTransformI, table string, records []arrow.RecordBat
 }
 
 // ApplyRegisteredTransform is [TransformInsert] with the transform registered
-// for table, and a pass-through when there is none. It is what an executor
-// that consults the registry calls on each insert.
-func ApplyRegisteredTransform(table string, records []arrow.RecordBatch) (target string, out []arrow.RecordBatch, release func(), err error) {
-	t, ok := RegisteredInsertTransform(table)
-	if !ok {
-		return table, records, func() {}, nil
+// for table, and a pass-through when there is none or when ctx says a
+// transform already rewrote this insert ([WithTransformApplied]). It is what
+// an executor that consults the registry calls on each insert, with the
+// insert's context. A bare table name that a registration's table part
+// matches fails with [ErrUnqualifiedTransformedTable] before anything is
+// sent. The target is reported to an observing executor above.
+func ApplyRegisteredTransform(ctx context.Context, table string, records []arrow.RecordBatch) (target string, out []arrow.RecordBatch, release func(), err error) {
+	release = func() {}
+	if TransformApplied(ctx) {
+		return table, records, release, nil
 	}
-	return TransformInsert(t, table, records)
+	t, err := lookupRegistered(table)
+	if err != nil || t == nil {
+		return table, records, release, err
+	}
+	target, out, release, err = TransformInsert(t, table, records)
+	if err == nil {
+		reportRoute(ctx, target)
+	}
+	return
 }
 
 // TransformingExecutor is the decorator [TransformExecutor] and
@@ -150,27 +354,30 @@ func ApplyRegisteredTransform(table string, records []arrow.RecordBatch) (target
 // through the transform, and every other call — statements, queries, inserts
 // into other tables — reaches the inner executor untouched. The settings of
 // an insert, its deduplication token among them, pass through to the
-// transformed insert. It is safe for concurrent use when its inner executor
-// and its transform are.
+// transformed insert. The inner insert runs under [WithTransformApplied], so
+// an inner executor that consults the registry itself does not rewrite the
+// insert a second time. It is safe for concurrent use when its inner
+// executor and its transform are.
 type TransformingExecutor struct {
 	inner  ExecutorI
-	lookup func(table string) (InsertTransformI, bool)
+	lookup func(table string) (InsertTransformI, error)
 }
 
 var _ ExecutorI = (*TransformingExecutor)(nil)
 var _ InsertSettingsI = (*TransformingExecutor)(nil)
 
 // TransformExecutor decorates inner so that inserts into table go through t.
+// table names its database and is matched as the registry matches
+// ([CanonicalTableRef]); it panics on a reference that is not one.
 func TransformExecutor(inner ExecutorI, table string, t InsertTransformI) (inst *TransformingExecutor) {
 	if inner == nil || t == nil {
 		panic("recordstore.TransformExecutor: nil inner executor or transform")
 	}
-	return &TransformingExecutor{inner: inner, lookup: func(tbl string) (InsertTransformI, bool) {
-		if tbl == table {
-			return t, true
-		}
-		return nil, false
-	}}
+	key, qualified, ok := CanonicalTableRef(table)
+	if !ok || !qualified {
+		panic("recordstore.TransformExecutor: " + table + " is not a database-qualified table reference")
+	}
+	return &TransformingExecutor{inner: inner, lookup: lookupOne(key, t)}
 }
 
 // RegisteredTransforms decorates inner so that each insert goes through the
@@ -181,7 +388,7 @@ func RegisteredTransforms(inner ExecutorI) (inst *TransformingExecutor) {
 	if inner == nil {
 		panic("recordstore.RegisteredTransforms: nil inner executor")
 	}
-	return &TransformingExecutor{inner: inner, lookup: RegisteredInsertTransform}
+	return &TransformingExecutor{inner: inner, lookup: lookupRegistered}
 }
 
 func (inst *TransformingExecutor) Exec(ctx context.Context, sql string) error {
@@ -204,8 +411,14 @@ func (inst *TransformingExecutor) InsertArrowWith(ctx context.Context, table str
 }
 
 func (inst *TransformingExecutor) insert(ctx context.Context, table string, records []arrow.RecordBatch, settings InsertSettings) (applied bool, err error) {
-	t, ok := inst.lookup(table)
-	if !ok {
+	if TransformApplied(ctx) {
+		return InsertArrowWith(ctx, inst.inner, table, records, settings)
+	}
+	t, err := inst.lookup(table)
+	if err != nil {
+		return
+	}
+	if t == nil {
 		return InsertArrowWith(ctx, inst.inner, table, records, settings)
 	}
 	target, out, release, err := TransformInsert(t, table, records)
@@ -213,7 +426,8 @@ func (inst *TransformingExecutor) insert(ctx context.Context, table string, reco
 		return
 	}
 	defer release()
-	applied, err = InsertArrowWith(ctx, inst.inner, target, out, settings)
+	reportRoute(ctx, target)
+	applied, err = InsertArrowWith(WithTransformApplied(ctx), inst.inner, target, out, settings)
 	if err != nil {
 		err = eh.Errorf("recordstore: transformed insert: %w", err)
 	}

@@ -7,7 +7,9 @@
 // servers — each call pays process startup.
 //
 // Like the HTTP executor, it stamps the context's call identity and batch id
-// into log_comment (ADR-0295 §SD3).
+// into log_comment (ADR-0295 §SD3), and sends an insert through the transform
+// registered for its table (recordstore.RegisterInsertTransform, ADR-0402
+// §SD2).
 package chexec
 
 import (
@@ -158,10 +160,18 @@ func (inst *LocalExecutor) InsertArrowWith(ctx context.Context, table string, re
 	return true, inst.insert(ctx, table, records, settings)
 }
 
+// insert sends records to table, or, when an insert transform is registered
+// for table, what the transform returns to the table it names (ADR-0402
+// §SD2), as the HTTP executor does.
 func (inst *LocalExecutor) insert(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (err error) {
 	if len(records) == 0 {
 		return
 	}
+	table, records, release, err := recordstore.ApplyRegisteredTransform(ctx, table, records)
+	if err != nil {
+		return
+	}
+	defer release()
 	var buf bytes.Buffer
 	w, err := ipc.NewFileWriter(&buf, ipc.WithSchema(records[0].Schema()), ipc.WithAllocator(inst.alloc))
 	if err != nil {

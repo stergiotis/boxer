@@ -77,8 +77,9 @@ func (inst RoundTripReport) Ok() bool {
 // caller has created the transform's target table and the read relation on
 // it, and RoundTrip creates [RoundTripReferenceTable] there for the rows as
 // written. `boxer schema roundtrip` runs it on clickhouse-local in a fresh
-// directory. It inserts through exec as it is, so exec must not apply a
-// transform of its own.
+// directory. Its inserts run under recordstore.WithTransformApplied, so an
+// exec that consults the registry sends them as they are: the reference rows
+// untransformed, the transformed rows once.
 //
 // The rows of the kinds this store writes come from its own encoders with
 // every optional field set. Every other kind gets a synthetic row: the
@@ -135,7 +136,8 @@ func RoundTrip(ctx context.Context, exec recordstore.ExecutorI, opts RoundTripOp
 	for _, r := range records {
 		report.Written += uint64(r.NumRows())
 	}
-	if err = exec.InsertArrow(ctx, RoundTripReferenceTable, records); err != nil {
+	ictx := recordstore.WithTransformApplied(ctx)
+	if err = exec.InsertArrow(ictx, RoundTripReferenceTable, records); err != nil {
 		err = eh.Errorf("chstore: round trip: insert the reference rows: %w", err)
 		return
 	}
@@ -145,7 +147,7 @@ func RoundTrip(ctx context.Context, exec recordstore.ExecutorI, opts RoundTripOp
 		return
 	}
 	report.Target = target
-	err = exec.InsertArrow(ctx, target, out)
+	err = exec.InsertArrow(ictx, target, out)
 	release()
 	if err != nil {
 		err = eb.Build().Str("target", target).Errorf("chstore: round trip: insert the transformed rows: %w", err)

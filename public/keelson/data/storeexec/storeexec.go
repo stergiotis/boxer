@@ -60,7 +60,9 @@
 // rather than [New] returning a wrapper, so every executor built here — in a
 // host, a daemon or a command — carries it, and callers keep the concrete type
 // [Executor.QueryArrowParams] needs. A process that registers nothing sees no
-// change.
+// change. The table is matched under any spelling of its reference
+// ([recordstore.CanonicalTableRef]); an insert already rewritten by a
+// transform above ([recordstore.WithTransformApplied]) is sent as it is.
 //
 // # Concurrency
 //
@@ -254,7 +256,7 @@ func (inst *Executor) InsertArrowWith(ctx context.Context, table string, records
 // insert applies the transform registered for table, if any, and sends the
 // result with settings.
 func (inst *Executor) insert(ctx context.Context, table string, records []arrow.RecordBatch, settings map[string]string) (err error) {
-	target, out, release, err := recordstore.ApplyRegisteredTransform(table, records)
+	target, out, release, err := recordstore.ApplyRegisteredTransform(ctx, table, records)
 	if err != nil {
 		err = eh.Errorf("storeexec: %w", err)
 		return

@@ -165,3 +165,167 @@ func TestRegisterInsertTransform(t *testing.T) {
 	assert.Equal(t, []string{"scratch.facts", "scratch.carrier", "scratch.facts"}, []string{sent[0].table, sent[1].table, sent[2].table},
 		"the registry is read at each insert")
 }
+
+func TestCanonicalTableRef(t *testing.T) {
+	for _, c := range []struct {
+		ref       string
+		canon     string
+		qualified bool
+		ok        bool
+	}{
+		{"boxer.facts", "boxer.facts", true, true},
+		{"`boxer`.`facts`", "boxer.facts", true, true},
+		{`"boxer"."facts"`, "boxer.facts", true, true},
+		{"`boxer`.facts", "boxer.facts", true, true},
+		{`boxer."facts"`, "boxer.facts", true, true},
+		{"  boxer.facts\n", "boxer.facts", true, true},
+		{"facts", "facts", false, true},
+		{"`facts`", "facts", false, true},
+		{"Boxer.Facts", "Boxer.Facts", true, true},
+		{"`my db`.`my table`", "my db.my table", true, true},
+		{"", "", false, false},
+		{"boxer.", "", false, false},
+		{".facts", "", false, false},
+		{"a.b.c", "", false, false},
+		{"`boxer.facts", "", false, false},
+		{"`bo\\`xer`.facts", "", false, false},
+		{"boxer .facts", "", false, false},
+		{"boxer.facts; DROP TABLE x", "", false, false},
+		{"`boxer`x.facts", "", false, false},
+	} {
+		canon, qualified, ok := recordstore.CanonicalTableRef(c.ref)
+		assert.Equal(t, c.ok, ok, "ok of %q", c.ref)
+		assert.Equal(t, c.canon, canon, "canonical form of %q", c.ref)
+		assert.Equal(t, c.qualified, qualified, "qualified of %q", c.ref)
+	}
+}
+
+// Every spelling of the registered table is transformed, by the registry and
+// by the one-table decorator alike; a bare name that could be the table is
+// refused before anything is sent; other tables pass.
+func TestInsertTransform_MatchesEverySpellingOfTheTable(t *testing.T) {
+	alloc := memory.NewCheckedAllocator(memory.NewGoAllocator())
+	defer alloc.AssertSize(t, 0)
+	in := oneColumn(alloc, "id", 7)
+	defer in.Release()
+
+	unregister := recordstore.RegisterInsertTransform("scratch_spell.facts", renameTo(alloc, "scratch_spell.carrier"))
+	defer unregister()
+	assert.Equal(t, []string{"scratch_spell.facts"}, recordstore.RegisteredInsertTransformTables())
+
+	var viaRegistry, viaOne []sentInsert
+	for name, c := range map[string]struct {
+		exec recordstore.ExecutorI
+		sent *[]sentInsert
+	}{
+		"registry":  {recordstore.RegisteredTransforms(recorder(&viaRegistry)), &viaRegistry},
+		"one table": {recordstore.TransformExecutor(recorder(&viaOne), "`scratch_spell`.facts", renameTo(alloc, "scratch_spell.carrier")), &viaOne},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			for _, spelling := range []string{"scratch_spell.facts", "`scratch_spell`.`facts`", `"scratch_spell"."facts"`, " scratch_spell.`facts` "} {
+				require.NoError(t, c.exec.InsertArrow(ctx, spelling, []arrow.RecordBatch{in}), spelling)
+			}
+			require.Len(t, *c.sent, 4)
+			for _, s := range *c.sent {
+				assert.Equal(t, "scratch_spell.carrier", s.table)
+				assert.Equal(t, []string{"carried"}, s.columns)
+			}
+			*c.sent = nil
+
+			err := c.exec.InsertArrow(ctx, "facts", []arrow.RecordBatch{in})
+			require.ErrorIs(t, err, recordstore.ErrUnqualifiedTransformedTable)
+			err = c.exec.InsertArrow(ctx, "`facts`", []arrow.RecordBatch{in})
+			require.ErrorIs(t, err, recordstore.ErrUnqualifiedTransformedTable)
+			assert.Empty(t, *c.sent, "a bare name that could be the transformed table sends nothing")
+
+			for _, other := range []string{"carrier", "other_db.facts", "scratch_spell.facts2", "Scratch_Spell.facts"} {
+				require.NoError(t, c.exec.InsertArrow(ctx, other, []arrow.RecordBatch{in}), other)
+			}
+			require.Len(t, *c.sent, 4)
+			for i, other := range []string{"carrier", "other_db.facts", "scratch_spell.facts2", "Scratch_Spell.facts"} {
+				assert.Equal(t, other, (*c.sent)[i].table, "another table is sent as named")
+				assert.Equal(t, []string{"id"}, (*c.sent)[i].columns)
+			}
+		})
+	}
+
+	_, ok := recordstore.RegisteredInsertTransform("`scratch_spell`.`facts`")
+	assert.True(t, ok)
+	_, ok = recordstore.RegisteredInsertTransform("facts")
+	assert.False(t, ok, "a bare name has no registration")
+	assert.Panics(t, func() { recordstore.RegisterInsertTransform("facts", renameTo(alloc, "x.y")) }, "a registration names its database")
+	assert.Panics(t, func() { recordstore.TransformExecutor(recorder(&viaOne), "facts", renameTo(alloc, "x.y")) })
+}
+
+// A transform applies once per insert however many executors on the way
+// consult it, including when its target is the registered table itself.
+func TestInsertTransform_AppliesOnce(t *testing.T) {
+	alloc := memory.NewCheckedAllocator(memory.NewGoAllocator())
+	defer alloc.AssertSize(t, 0)
+	in := oneColumn(alloc, "id", 7)
+	defer in.Release()
+
+	calls := 0
+	inPlace := recordstore.InsertTransformFunc(func(table string, records []arrow.RecordBatch) (string, []arrow.RecordBatch, error) {
+		calls++
+		return renameTo(alloc, "scratch_once.facts")(table, records)
+	})
+	unregister := recordstore.RegisterInsertTransform("scratch_once.facts", inPlace)
+	defer unregister()
+
+	var sent []sentInsert
+	exec := recordstore.RegisteredTransforms(recordstore.RegisteredTransforms(recorder(&sent)))
+	require.NoError(t, exec.InsertArrow(context.Background(), "scratch_once.facts", []arrow.RecordBatch{in}))
+	assert.Equal(t, 1, calls)
+	require.Len(t, sent, 1)
+	assert.Equal(t, []string{"carried"}, sent[0].columns)
+
+	// By hand: the caller that transformed marks the context.
+	target, out, release, err := recordstore.TransformInsert(inPlace, "scratch_once.facts", []arrow.RecordBatch{in})
+	require.NoError(t, err)
+	require.NoError(t, exec.InsertArrow(recordstore.WithTransformApplied(context.Background()), target, out))
+	release()
+	assert.Equal(t, 2, calls, "the marked insert was not transformed again")
+
+	// ApplyRegisteredTransform, the consulting executors' call, honours it too.
+	gotTarget, gotOut, rel, err := recordstore.ApplyRegisteredTransform(recordstore.WithTransformApplied(context.Background()), "scratch_once.facts", []arrow.RecordBatch{in})
+	require.NoError(t, err)
+	rel()
+	assert.Equal(t, "scratch_once.facts", gotTarget)
+	assert.Same(t, in, gotOut[0])
+	assert.Equal(t, 2, calls)
+}
+
+// An observer above the transform is told the table the caller named and the
+// table the rows went to.
+func TestInsertTransform_ObserverLearnsTheTarget(t *testing.T) {
+	alloc := memory.NewCheckedAllocator(memory.NewGoAllocator())
+	defer alloc.AssertSize(t, 0)
+	in := oneColumn(alloc, "id", 1, 2)
+	defer in.Release()
+	unregister := recordstore.RegisterInsertTransform("scratch_obs.facts", renameTo(alloc, "scratch_obs.carrier"))
+	defer unregister()
+
+	var events []recordstore.CallEvent
+	var sent []sentInsert
+	observer := recordstore.ObserverFunc(func(ev recordstore.CallEvent) error { events = append(events, ev); return nil })
+	exec := recordstore.ObserveExecutor(recordstore.RegisteredTransforms(recorder(&sent)), observer)
+
+	require.NoError(t, exec.InsertArrow(context.Background(), "scratch_obs.facts", []arrow.RecordBatch{in}))
+	require.NoError(t, exec.InsertArrow(context.Background(), "scratch_obs.other", []arrow.RecordBatch{in}))
+	require.Len(t, events, 2)
+	assert.Equal(t, "scratch_obs.facts", events[0].Table)
+	assert.Equal(t, "scratch_obs.carrier", events[0].Target)
+	assert.EqualValues(t, 2, events[0].Rows)
+	assert.Equal(t, "scratch_obs.other", events[1].Table)
+	assert.Empty(t, events[1].Target, "an insert that was not transformed names no target")
+
+	// Below the transform the observer sees the insert as it is sent.
+	events = nil
+	below := recordstore.RegisteredTransforms(recordstore.ObserveExecutor(recorder(&sent), observer))
+	require.NoError(t, below.InsertArrow(context.Background(), "scratch_obs.facts", []arrow.RecordBatch{in}))
+	require.Len(t, events, 1)
+	assert.Equal(t, "scratch_obs.carrier", events[0].Table)
+	assert.Empty(t, events[0].Target)
+}
