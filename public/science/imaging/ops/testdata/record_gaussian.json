@@ -26,7 +26,7 @@
     }
   ],
   "notes": [
-    "The Gaussian is truncated at a radius of 4 px (⌈4σ⌉), its 9 taps normalised to sum to one; it is applied down the columns, then along the rows."
+    "The Gaussian is truncated at a radius of 4 px (ceil(4σ)), its 9 taps normalised to sum to one; it is applied down the columns, then along the rows."
   ],
   "output": {
     "width": 4,

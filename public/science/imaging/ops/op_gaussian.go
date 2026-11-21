@@ -10,7 +10,7 @@ type gaussianOperator struct{}
 
 var gaussianDeclaration = Declaration{
 	Id: "gaussian", Version: 1,
-	Summary:   "Smooths each plane with a Gaussian of a stated standard deviation, truncated at a radius of ⌈4σ⌉ pixels.",
+	Summary:   "Smooths each plane with a Gaussian of a stated standard deviation, truncated at a radius of ceil(4σ) pixels.",
 	MinInputs: 1, MaxInputs: 1,
 	InputsDoc: "One image without an alpha plane; each plane is smoothed apart from the others.",
 	Params: []Param{
@@ -49,7 +49,7 @@ func (gaussianOperator) Plan(inputs []InputDesc, params Params) (plan Plan, k Ke
 	r := len(w) / 2
 	plan = Plan{Model: in.Model, Kind: valueKind(inputs), PlaneLabels: in.PlaneLabels, Halo: r,
 		Border: parseBorder(params.text("border")),
-		Notes: []string{"The Gaussian is truncated at a radius of " + strconv.Itoa(r) + " px (⌈4σ⌉), its " +
+		Notes: []string{"The Gaussian is truncated at a radius of " + strconv.Itoa(r) + " px (ceil(4σ)), its " +
 			strconv.Itoa(len(w)) + " taps normalised to sum to one; it is applied down the columns, then along the rows."}}
 	return plan, gaussianKernel{w: w, planes: in.PlaneCount()}, nil
 }
