@@ -1,7 +1,6 @@
 package gen
 
 import (
-	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -1179,11 +1178,11 @@ func (inst Input) evidencePreconditions(keyGoType, orderGoType string) (err erro
 	}
 	switch {
 	case keyGoType != "uint64":
-		err = fmt.Errorf("Evidence.Chain needs a uint64 Key as the scope; this schema's Key is %s", keyGoType)
+		err = eh.Errorf("Evidence.Chain needs a uint64 Key as the scope; this schema's Key is %s", keyGoType)
 	case orderGoType != "uint64":
-		err = fmt.Errorf("Evidence.Chain needs a uint64 Order as the ordinal (Roles.Order on a plain uint64 column); this schema's Order is %s", orderGoType)
+		err = eh.Errorf("Evidence.Chain needs a uint64 Order as the ordinal (Roles.Order on a plain uint64 column); this schema's Order is %s", orderGoType)
 	case inst.Cas:
-		err = fmt.Errorf("Evidence.Chain is refused with Cas: a row rewritten in place has no chain")
+		err = eh.Errorf("Evidence.Chain is refused with Cas: a row rewritten in place has no chain")
 	}
 	return
 }
@@ -1191,7 +1190,7 @@ func (inst Input) evidencePreconditions(keyGoType, orderGoType string) (err erro
 // sealPreconditions are the seal component's generation-time gates.
 func (inst Input) sealPreconditions() (err error) {
 	if inst.evidenceSeals() && !inst.CanonWire {
-		err = fmt.Errorf("Evidence.Seals needs CanonWire: a seal names rows by the digest of their canonical items")
+		err = eh.Errorf("Evidence.Seals needs CanonWire: a seal names rows by the digest of their canonical items")
 	}
 	return
 }
@@ -1203,9 +1202,9 @@ func (inst Input) vaultPreconditions() (err error) {
 	}
 	switch {
 	case !inst.evidenceChain():
-		err = fmt.Errorf("Evidence.Vault needs Evidence.Chain: the commitments ride the chain component")
+		err = eh.Errorf("Evidence.Vault needs Evidence.Chain: the commitments ride the chain component")
 	case inst.SharedRA != nil:
-		err = fmt.Errorf("Evidence.Vault is refused with SharedRA: the vault is a table of the store's own, with scaffolding of its own")
+		err = eh.Errorf("Evidence.Vault is refused with SharedRA: the vault is a table of the store's own, with scaffolding of its own")
 	}
 	if err != nil || !inst.evidenceShredded() {
 		return
@@ -1216,7 +1215,7 @@ func (inst Input) vaultPreconditions() (err error) {
 	}
 	for _, name := range shredderSections {
 		if !have[name] {
-			err = fmt.Errorf("Evidence.Shredded needs the shredder's sections on the table, each taking the mixed verbatim name + parameters channel; %q is missing", name)
+			err = eh.Errorf("Evidence.Shredded needs the shredder's sections on the table, each taking the mixed verbatim name + parameters channel; %q is missing", name)
 			return
 		}
 	}
