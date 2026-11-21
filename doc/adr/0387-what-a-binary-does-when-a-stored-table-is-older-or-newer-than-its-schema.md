@@ -164,6 +164,14 @@ token is not sent.
   without the per-insert settings seam — would be deduplicated.
 - Asynchronous inserts deduplicate under their own setting; a store
   configured for them does not get SD6.
+- An executor that answers no catalog read — a test fake, an in-memory
+  backend — makes every table judge absent, and a check that requires an
+  ok verdict refuses to open the store. `recordstoretest.CatalogExecutor`
+  answers the two reads from the `CREATE TABLE` statements it was sent.
+- The per-insert settings seam is a second insert method: a wrapper that
+  embeds a concrete executor and overrides `InsertArrow` alone is bypassed,
+  because the store calls the promoted `InsertArrowWith`.
+  `recordstoretest.HookExecutor` routes both seams through one hook.
 
 ### Neutral
 

@@ -11,23 +11,26 @@ import (
 
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
+	"github.com/stergiotis/boxer/public/storage/recordstore/recordstoretest"
 )
 
-// landsThenFails inserts through the inner executor and then reports the
-// first insert as failed: the ambiguous failure — the server took the rows,
-// the client never heard — that a retry must not turn into duplicates.
-type landsThenFails struct {
-	*chexec.LocalExecutor
-	failed bool
-}
-
-func (inst *landsThenFails) InsertArrowWith(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (applied bool, err error) {
-	applied, err = inst.LocalExecutor.InsertArrowWith(ctx, table, records, settings)
-	if err == nil && !inst.failed {
-		inst.failed = true
-		err = errors.New("synthetic timeout after the insert landed")
+// landsThenFails inserts through local and then reports the first insert
+// as failed: the ambiguous failure — the server took the rows, the client
+// never heard — that a retry must not turn into duplicates. The hook takes
+// both insert seams, so the store reaches it whichever one it calls.
+func landsThenFails(local *chexec.LocalExecutor) *recordstoretest.HookExecutor {
+	failed := false
+	return &recordstoretest.HookExecutor{
+		Inner: local,
+		OnInsertArrowWith: func(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (applied bool, err error) {
+			applied, err = local.InsertArrowWith(ctx, table, records, settings)
+			if err == nil && !failed {
+				failed = true
+				err = errors.New("synthetic timeout after the insert landed")
+			}
+			return
+		},
 	}
-	return
 }
 
 // TestRetryOfALandedInsertIsDeduplicated: a table the store created keeps a
@@ -40,7 +43,7 @@ func TestRetryOfALandedInsertIsDeduplicated(t *testing.T) {
 		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	ctx := context.Background()
-	exec := &landsThenFails{LocalExecutor: local}
+	exec := landsThenFails(local)
 	st := NewDeviceStore(exec, nil, DeviceStoreConfig{})
 	defer st.Close()
 	require.NoError(t, st.EnsureTable(ctx))

@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit/auditrec"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit/auditrec/auditrectest"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit/auditrec/testdata/example"
+	"github.com/stergiotis/boxer/public/storage/recordstore/recordstoretest"
 )
 
 // The example binding passes the conformance test on clickhouse-local.
@@ -105,31 +106,32 @@ func TestNodeScopesReadsAndBackstop(t *testing.T) {
 	assert.Equal(t, 1, n)
 }
 
-// tokenGate is gateExec with the per-insert settings seam, so the store's
-// deduplication token reaches the server.
-type tokenGate struct {
-	*gateExec
-	inner *chexec.LocalExecutor
-}
-
-func (inst *tokenGate) InsertArrowWith(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (bool, error) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	if _, err := inst.inner.InsertArrowWith(ctx, table, records, settings); err != nil {
-		return true, err
+// tokenGate is gate with the per-insert settings seam, so the store's
+// deduplication token reaches inner. The hook takes both insert seams, so
+// no insert bypasses the gate's lost acknowledgements.
+func tokenGate(gate *gateExec, inner *chexec.LocalExecutor) *recordstoretest.HookExecutor {
+	return &recordstoretest.HookExecutor{
+		Inner: gate,
+		OnInsertArrowWith: func(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (bool, error) {
+			gate.mu.Lock()
+			defer gate.mu.Unlock()
+			if _, err := inner.InsertArrowWith(ctx, table, records, settings); err != nil {
+				return true, err
+			}
+			if gate.lostAcks > 0 {
+				gate.lostAcks--
+				return true, errors.New("acknowledgement lost")
+			}
+			return true, nil
+		},
 	}
-	if inst.lostAcks > 0 {
-		inst.lostAcks--
-		return true, errors.New("acknowledgement lost")
-	}
-	return true, nil
 }
 
 // A batch whose acknowledgement was lost is retried with the token of its
 // first attempt, so a table keeping a deduplication window stores it once.
 func TestRetriedBatchIsStoredOnce(t *testing.T) {
 	inner := localExec(t)
-	exec := &tokenGate{gateExec: &gateExec{open: true, lostAcks: 1}, inner: inner}
+	exec := tokenGate(&gateExec{open: true, lostAcks: 1}, inner)
 	rec := newRecorder(t, exec)
 	defer rec.Close()
 	ctx := context.Background()

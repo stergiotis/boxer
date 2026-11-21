@@ -25,7 +25,7 @@ itself; ADR-0389 states its tier.
 | [Stable](#stable) | 76 |
 | [Experimental](#experimental) | 282 |
 | [Internal](#internal) | 16 |
-| [Test support](#test-support) | 14 |
+| [Test support](#test-support) | 15 |
 | [Tools](#tools) | 90 |
 | [Demos and examples](#demos-and-examples) | 40 |
 | [Unclassified](#unclassified) | 208 |
@@ -559,6 +559,7 @@ Helpers and conformance suites meant to be imported by tests. Outside the promis
 ### storage
 
 - `public/storage/recordstore/evidence/audit/auditrec/auditrectest` — Package auditrectest holds the conformance test every binding of package auditrec runs against its store on a server: what the recorder writes through the binding reads back unchanged, a run's rows and seals are selected and verify, and the reads narrow on the right columns.
+- `public/storage/recordstore/recordstoretest` — Package recordstoretest holds executor building blocks for code that runs a generated record store over something other than a ClickHouse server: unit tests, and in-memory backends.
 
 ### thestack
 

@@ -221,6 +221,24 @@ a second copy of all three.
   verdict of `JudgeSchema`, as an error) matters more here than elsewhere for
   the same reason — nothing in the store guarantees the live table's shape.
 
+## Running a store over a fake or an in-memory executor
+
+Two properties of the executor seam catch code that runs a store over
+anything but a ClickHouse server
+([ADR-0387](../adr/0387-what-a-binary-does-when-a-stored-table-is-older-or-newer-than-its-schema.md)):
+
+- Judging a table reads `system.tables` and `system.columns`. An executor that
+  answers no catalog read makes the table look absent, so `VerifySchema`, and
+  any check that requires an ok verdict before it opens a store, refuses.
+  `recordstoretest.CatalogExecutor` remembers the `CREATE TABLE` statements
+  it is sent and answers the two reads from them.
+- A store inserts through `recordstore.InsertArrowWith`, which prefers an
+  executor's own `InsertArrowWith`. A wrapper that embeds a concrete executor
+  and overrides only `InsertArrow` is bypassed by the promoted
+  `InsertArrowWith`. `recordstoretest.HookExecutor` forwards every seam to an
+  inner executor and routes both insert seams through whichever insert hook
+  is set.
+
 ## Two regeneration lanes, one schema
 
 `factsschema`'s own artifacts regenerate **only** via `boxer runtimecodegen
