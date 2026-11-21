@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
@@ -19,15 +18,11 @@ const (
 	simpleViewOff = "off"
 )
 
-// sceneMarkPrefix begins the component mark of a host a scene launched.
-const sceneMarkPrefix = "scene-"
-
 // simpleStoreFor is where a window keeps the choice, nil for one that does
-// not. A preset's document says what its view is. A scene shares the store of
-// the machine it runs on, so it would otherwise draw what someone last ticked
-// there, and its own ticks would reach that person's next window.
-func simpleStoreFor(storage app.StorageI, preset bool, mark string) app.StorageI {
-	if preset || strings.HasPrefix(mark, sceneMarkPrefix) {
+// not: a preset's document says what its view is. A scene's host keeps app
+// state away from the live store itself (ADR-0396 §7).
+func simpleStoreFor(storage app.StorageI, preset bool) app.StorageI {
+	if preset {
 		return nil
 	}
 	return storage

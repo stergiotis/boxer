@@ -626,8 +626,17 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	// workingsets and column widths rode the facts store, which every host
 	// has, before they moved to the state table, and a host that runs
 	// without runtime.persist keeps them.
+	//
+	// A host a scene launched never opens the state table (ADR-0396 §7): it
+	// shares the server of the machine it runs on, so its reads would show
+	// what that person last left and its writes would reach their next
+	// window. It keeps its app state in memory, which ends with it.
 	persistCtx, persistCancel := context.WithTimeout(ctx, persistOpenTimeout)
-	backend, label, backendClose, exec := selectPersistBackend(persistCtx, factsCfg, rt.IsChStore, logger)
+	scene := sceneLaunched()
+	if scene && rt.IsChStore {
+		logger.Info().Msg("persist: a scene's host keeps app state in memory, away from the live state table")
+	}
+	backend, label, backendClose, exec := selectPersistBackend(persistCtx, factsCfg, rt.IsChStore && !scene, logger)
 	persistCancel()
 	rt.onClose(backendClose)
 	rt.State = stateStoreFor(backend)

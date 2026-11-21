@@ -28,7 +28,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
-	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
@@ -324,7 +323,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.cli, inst.bus = cli, bus
 	inst.storage = ctx.Storage()
 	inst.ioCtx = app.ContextOf(ctx)
-	inst.simpleStore = simpleStoreFor(inst.storage, inst.preset != nil, topo.Self())
+	inst.simpleStore = simpleStoreFor(inst.storage, inst.preset != nil)
 	inst.loadSimpleView()
 	inst.startLevels()
 	inst.tasks = task.ForApp(ctx)

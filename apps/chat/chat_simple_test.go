@@ -91,12 +91,10 @@ func TestATickBeforeTheStoreAnswersStands(t *testing.T) {
 	assert.True(t, inst.simple)
 }
 
-func TestAPresetAndASceneDoNotUseTheStore(t *testing.T) {
+func TestAPresetDoesNotUseTheStore(t *testing.T) {
 	storage, _ := simpleRig(t)
-	assert.Equal(t, storage, simpleStoreFor(storage, false, ""), "a plain window keeps it")
-	assert.Equal(t, storage, simpleStoreFor(storage, false, "imzero2-demo"), "as does one with a viewer")
-	assert.Nil(t, simpleStoreFor(storage, true, ""), "a preset's document says")
-	assert.Nil(t, simpleStoreFor(storage, false, "scene-chat-stream"), "a scene shares the machine's store")
+	assert.Equal(t, storage, simpleStoreFor(storage, false), "a plain window keeps it")
+	assert.Nil(t, simpleStoreFor(storage, true), "a preset's document says")
 }
 
 // With no store the setting still works for the window, and nothing is read.
