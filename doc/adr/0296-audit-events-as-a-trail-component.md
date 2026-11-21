@@ -596,6 +596,22 @@ Capability-grant rows (`chstore.WriteGrant`) set the lifecycle lane
 (`chstore.defaultEngineClause`) has no TTL on that lane, so grant rows
 expire only where an operator adds a TTL in their own engine clause.
 
+### 2026-11-21 — §SD9 (d): the read table reaches every reader; the facts row id is leased
+
+[ADR-0402](./0402-facts-stored-in-a-deployments-own-table-a-write-transform-at-the-insert-seam-and-one-read-table-setting.md)
+§SD3 completes §SD9 (d): one setting, `BOXER_FACTS_READ_TABLE`, names the
+relation every read of facts goes to — the hand-written readers, the
+recorder, the generated stores over the facts table and the trail views —
+and a relation that is not the table written to is judged by its columns
+only. It serves a `Merge` over storage tables as it serves a deployment's
+view. Whether boxer takes the storage switch for itself stays undecided
+there as here.
+
+The facts store's row ids no longer come from a counter each process
+starts at one: they are leased from a tagged stream
+([ADR-0397](./0397-the-facts-tables-partition-key-row-id-and-engine-clause.md)
+§SD2). Both ADRs are proposed.
+
 ## References
 
 - [ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md) — the trail: components, `Origin`, the backlog, the read store.

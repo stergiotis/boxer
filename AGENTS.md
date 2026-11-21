@@ -35,6 +35,7 @@ the linked document wins.
 | Run a task end to end | [doc/howto/](./doc/howto/) |
 | Persist a new kind of fact to `boxer.facts` | [doc/explanation/facts-bound-record-stores.md](./doc/explanation/facts-bound-record-stores.md) |
 | Know when a ClickHouse SQL UDF can prune the primary key — inlining, constant folding, `KeyCondition` | [doc/explanation/clickhouse-udf-primary-key-pruning.md](./doc/explanation/clickhouse-udf-primary-key-pruning.md) |
+| Keep the facts in a ClickHouse table of your own — a write transform, a view back, the order of adoption | [doc/howto/facts-in-your-own-table.md](./doc/howto/facts-in-your-own-table.md) |
 | Give an app or a headless binary durable work to do | [doc/howto/watchbill-jobs.md](./doc/howto/watchbill-jobs.md) |
 | Run an ingestion processor under a streaming framework, and land its items | [doc/howto/stevedore-processors.md](./doc/howto/stevedore-processors.md) |
 | Hand a table an app computed to SQL without storing it — publish, read from an applet or a play window | [doc/howto/adhoc-datasets.md](./doc/howto/adhoc-datasets.md) |

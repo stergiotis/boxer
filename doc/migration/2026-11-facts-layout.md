@@ -7,7 +7,8 @@ status: draft
 ---
 
 > **Status: draft — pre-human-review.** The statements below have been run
-> against clickhouse-local only (the `integration`-tagged layout test of
+> against clickhouse-local and against one ClickHouse server release, on a
+> table of a few thousand rows (the `integration`-tagged tests of
 > `factsstore/chstore`), not against a deployment.
 
 # How to move boxer.facts into the monthly-partitioned layout
@@ -104,6 +105,10 @@ state the same engine clause.
 
 Start the processes again. A host's query-run service recreates its
 refreshable view over the table at start.
+
+Leave `boxer.idlease` as it is throughout. It keeps the next unleased row
+id of each stream and nothing else does: dropped and created again, it
+hands out ids that rows already carry.
 
 ## Checking the result
 

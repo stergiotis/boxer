@@ -344,6 +344,20 @@ table's setup provisions. Where no block can be leased it mints under
 has a lease table but cannot reach it. The watchbill job ids stay as SD8
 left them.
 
+### 2026-11-21 — §SD1: the one-server assumption confirmed; the lease table is state
+
+The code owner confirmed on 2026-11-21 that one ClickHouse server per
+deployment is the assumption to build on. Replication is not designed for
+and is not carried as an open risk of this decision.
+
+A server test added that day pins a property §SD3 implies and nothing
+stated: the lease row is the only place a stream's next unleased body is
+kept, so a lease table dropped and provisioned again starts every stream
+over. It is backed up, restored and moved together with the tables whose
+ids it leased. No guard exists
+([ADR-0397](./0397-the-facts-tables-partition-key-row-id-and-engine-clause.md),
+*Negative*).
+
 ## References
 
 - [ADR-0106](./0106-identity-fibonacci-tags-build-tag-retirement.md) — the tagged id scheme, the planning API, the pruning function.

@@ -6,7 +6,7 @@ date: 2026-11-21
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration. SD1–SD6 are built (2026-11-21) as the sections below describe; what is left out is under *Deferred*. The ClickHouse behaviour the tests lean on has run on clickhouse-local only, never on a server.
+> **Status: proposed — pre-human-review.** Decision under consideration. SD1–SD6 are built (2026-11-21) as the sections below describe; what is left out is under *Deferred*. The tests have run on clickhouse-local and on one ClickHouse server release (26.9), against a reference carrier; no deployment has adopted it.
 
 # ADR-0402: Facts stored in a deployment's own table — a write transform at the insert seam, and one read-table setting
 
@@ -146,10 +146,17 @@ built.** Every process that writes facts to the server must carry it — a
 host, a daemon, a command-line ingestor — so it is registered by the
 binary (`recordstore.RegisterInsertTransform`), not passed to one host,
 and the executors that reach a server or a clickhouse-local directory
-consult the registry on each insert. A binary without it sends
-facts-shaped batches to `boxer.facts`. A second registration for one table
+consult the registry on each insert. A second registration for one table
 panics: two transforms for one table would make which one ran depend on
 the order of init.
+
+A binary without it sends facts-shaped batches to `boxer.facts`. Where
+that name is a deployment's view, the facts store finds at setup that it
+takes no insert and fails setup
+(`chstore.ErrFactsTableTakesNoInsert`); a host then falls back to the
+in-memory store, as after any failed setup, and reports its trail as not
+durable. `CREATE TABLE IF NOT EXISTS` over a view succeeds, so the DDL
+alone would not tell.
 
 A registration names the table with its database, and an insert matches it
 under any spelling of that reference — quoted or not
@@ -194,6 +201,13 @@ Columns it returns beyond the facts columns are tolerated, since reads
 select by name. `schema plan` proposes no statement for such a relation.
 A deployment may name its view `boxer.facts` and leave the variable unset.
 
+A generated store judges the relation it reads the same way whenever that
+relation is not the table it writes, or a transform sends the table's
+inserts elsewhere (`recordstore.ReadRelationContract`). The other way
+round, a table a store does write to is incompatible when it is a view, a
+`Merge` or a dictionary, whatever its columns
+(`recordstore.TakesNoInsert`).
+
 **SD5 — With a transform registered, boxer issues no DDL for the facts
 table and refuses what assumes one.** Setup does not create `boxer.facts`:
 an empty table of that name beside the real storage is one that reads
@@ -204,7 +218,8 @@ change or empty stored rows by the facts table's name — the removal of
 kept conversation text, `Truncate`, `DropTable` — refuse with
 `recordstore.ErrTransformedTable`; the removal is recorded on the trail
 as a failed ditch. The query-run view is not installed: it appends on the
-server, where no transform runs, so its reconcile refuses. Setup still
+server, where no transform runs, so its reconcile refuses, after dropping
+a view an earlier binary left behind. Setup still
 installs the SQL read surface, and provisions the id lease table unless
 the store was given an allocator.
 
@@ -225,10 +240,16 @@ change to the facts columns.
 
 - The query-run capture under a transform: the service would serve
   transformed batches and the view would be composed against the
-  deployment's table. A view installed before the transform was
-  registered is left in place, not dropped.
+  deployment's table.
 - A hook for the in-place statements of SD5, so that the removal of kept
-  text can run against a deployment's storage.
+  text can run against a deployment's storage. Until then the operator
+  writes the statement for the carrier
+  ([how-to](../howto/facts-in-your-own-table.md)), and it leaves no trail
+  row.
+- A copy of existing rows through the Go transform. Adoption on a server
+  that holds facts copies them with SQL the deployment writes, which the
+  round trip does not check.
+- A guard for the id lease table (see *Negative*).
 - Whether boxer takes the storage switch of ADR-0296 §SD9 for itself. SD3
   serves either outcome; nothing here decides it.
 - The IPC capture executor writes the store's own shape to its stream,
@@ -238,8 +259,6 @@ change to the facts columns.
 - The round trip's synthetic rows carry the kind and generic memberships,
   not the memberships each generated store writes; a transform that
   routes by one of those is exercised by the hand-written kinds only.
-- The migration note for adopting this (order, stopping writers) is not
-  written.
 
 ## Surfaces — Tier 1
 
@@ -249,6 +268,8 @@ change to the facts columns.
 | registration | `RegisterInsertTransform`, one call a binary makes before stores are built; `CanonicalTableRef` | the executors boxer constructs |
 | call observation | `CallEvent.Target` | — |
 | codelint | `CS021`, an insert through the ClickHouse client outside the HTTP executor | `CODINGSTANDARDS.md` |
+| schema verdict | `recordstore.ReadRelationContract`, `recordstore.TakesNoInsert`; `chstore.ErrFactsTableTakesNoInsert` at setup | the generated stores' `SchemaContract`, regenerated |
+| test support | `chstoretest`, a reference carrier | — |
 | env registry | `BOXER_FACTS_READ_TABLE` | `doc/env-vars.md` |
 | facts store configuration, host boot | `chstore.Config.ReadTable`; the host refuses a malformed setting | the hand-written readers' composed SQL; the recorder and presence |
 | record-store generator | `gen.Input.ReadTableDefault`, set by the facts-bound generator | the stores over the facts table, regenerated; their schema checks and scans |
@@ -292,8 +313,13 @@ change to the facts columns.
 
 - Only processes that carry the transform can write facts. A stock binary,
   a hand-written `INSERT`, and the query-run view cannot; where
-  `boxer.facts` is a view or absent their inserts fail at the server, and
-  where a table of that name was left behind they land in it unseen.
+  `boxer.facts` is a view their inserts fail, a host among them saying so
+  at setup, and where the name is unused or a table of that name was left
+  behind they land in a table nothing reads.
+- The `boxer` database still holds state under a transform: the id lease
+  table. It looks disposable — a view, the trail views — and is not: a
+  lease table dropped and created again starts its streams over and hands
+  out ids rows already carry (ADR-0397).
 - An `INSERT` composed as SQL text and sent as a statement — an
   `INSERT … SELECT` among them — passes no insert seam. Neither the
   registry nor `CS021` sees it; it reaches whatever the name is on the
@@ -306,9 +332,11 @@ change to the facts columns.
   as far as the round-trip check is run.
 - The transform is coupled to the facts columns: a change to them is a
   change to the deployment's code and view.
-- Reads go through the deployment's view. Whether a time-bounded read
-  still prunes by the carrier's key depends on that view and is not
-  measured here.
+- Reads go through the deployment's view, and what a time-bounded read
+  costs is then the carrier's design: the
+  [read-cost trial](../trials/facts-read-through-a-view/README.md) §0
+  states under which carrier keys such a read prunes as it does on the
+  facts table and under which it does not.
 - Removing kept conversation text and capturing query runs are not
   available under a transform until their deferrals are built.
 
@@ -326,8 +354,8 @@ change to the facts columns.
   runs `boxer schema roundtrip` from a binary that registers the
   transform, copies existing rows into its carrier, replaces
   `boxer.facts` with the view (or sets the variable), and ships binaries
-  that register the transform. The order, and stopping writers for it,
-  is the subject of a migration note, deferred (see *Deferred*).
+  that register the transform. The order, and stopping writers for it:
+  [how to keep facts in a table of your own](../howto/facts-in-your-own-table.md).
 - **Regeneration.** The gen tests of the stores over the facts table; a
   consumer regenerates its own to have them follow the read table.
 - **Old shape.** One table, read and written, stays the default.
@@ -346,13 +374,22 @@ change to the facts columns.
   transform into a table with a different column set and a view back
   named as the read table, the round trip passing over every registered
   kind, failing on a view missing a column and on a transform that loses
-  a value, and a re-sent transformed batch landing once.
+  a value, and a re-sent transformed batch landing once. The same lane, on
+  a server: setup failing over a view under the written name and passing
+  under a transform; a leftover query-run view dropped; and, on a
+  throwaway server only, since they use the runtime's own names, child
+  hosts booted over a reference carrier (`chstoretest`) with the view
+  named `boxer.facts` and with the view named by the setting, a host
+  whose binary lacks the transform, a view lacking a column with and
+  without `BOXER_SCHEMA_STRICT`, and a malformed setting.
 - **What would fail.** A facts insert that bypasses the wrapper; a reader
   that returns rows from another relation than the read table; a `CREATE`
   for the facts table under a transform; a kind whose row does not survive
   the round trip.
-- **Gap.** No server has run any of it; the integration lane ran on
-  clickhouse-local 26.9. Read pruning through a view is not measured.
+- **Gap.** One server release, 26.9, and a reference carrier whose
+  transform renames columns and adds one; no deployment's transform. The
+  copy of existing rows and the operator's removal of kept text have no
+  test.
 
 ## Choices for review
 
@@ -376,6 +413,13 @@ change to the facts columns.
   target.
 - `CS021` covers the client's Arrow and stream inserts and is an error;
   the copy of stored blocks between servers is exempted by a directive.
+- A stock binary on a deployment's server fails setup and its host falls
+  back to memory, rather than refusing to start.
+- A written table that is a view is `incompatible`, not a layout note.
+- A reconcile under a transform drops the query-run view it finds, without
+  asking.
+- The tests that need the runtime's own names recognise a throwaway server
+  by a marker database its start script creates.
 - The transform takes no context and returns batches the caller releases.
 - The read relation must return every facts column with its type; extra
   columns are tolerated, since reads select by name.

@@ -291,6 +291,15 @@ packages; the nightly run keeps it with a per-package table from
   26.8 LTS static build, pinned by version and SHA-256, with `query_log` on and
   a passwordless default user. The same binary serves `clickhouse local`.
 
+  The script takes its ports (`CLICKHOUSE_SERVER_HTTP_PORT`,
+  `CLICKHOUSE_SERVER_TCP_PORT`), so a throwaway server can run beside the
+  workstation's own; `CLICKHOUSE_URL` then points the tests that read it at
+  the throwaway one. A server it started carries an empty database,
+  `boxer_throwaway_server`. The few tests that need the runtime's own
+  names — a host booted where `boxer.facts` is a deployment's view — drop
+  and create the `boxer` database, look for that marker first, and skip on
+  a server without it.
+
   The default `go test ./...` neither compiles nor runs them. A test belongs in
   the lane for either of two reasons:
 

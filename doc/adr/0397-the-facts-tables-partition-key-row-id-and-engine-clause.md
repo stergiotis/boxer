@@ -186,6 +186,10 @@ lacks.
   store's write timeout.
 - Rows written while no lease could be had carry ids that repeat across
   processes, as every row did before.
+- The lease table is state and nothing guards it: the next unleased id of
+  a stream is kept nowhere else, so a lease table dropped and provisioned
+  again starts over and hands out ids that rows already carry. It is
+  backed up, restored and moved with the facts.
 
 ### Neutral
 
@@ -215,12 +219,20 @@ lacks.
   on clickhouse-local: a table created with the default clause takes a log
   row whose id is leased and lands in its month's partition; a table with
   the old clause is ok with the note, and the recipe's statements copy it
-  into the new layout with every row.
+  into the new layout with every row. The same lane, on a server, each
+  test in a scratch database: the layout, window and stamp of a fresh
+  table as `system.tables` reports them; the recipe on a legacy table,
+  through `EXCHANGE TABLES`, with one partition per month afterwards;
+  stores in one process and other processes leasing small blocks at once
+  with no id repeated; a lease table out of reach and back; a re-sent
+  batch folded by the window, and landing twice in a table without it; a
+  table in a third layout.
 - **What would fail.** A golden whose engine clause differs from the
   applied one; a facts store minting an id under no stream; a differing
   layout reported as anything but a note.
-- **Gap.** Nothing has run against a server; the comparison's normalisation
-  is checked against the spellings of one ClickHouse release.
+- **Gap.** One server release, 26.9, on one machine; the comparison's
+  normalisation is checked against the spellings of that release. No
+  table of a deployment's size, and no restore from a backup.
 
 ## Choices for review
 
@@ -247,6 +259,9 @@ lacks.
 - The env var's name `BOXER_FACTS_ENGINE` and its category `database`.
 - The recipe stops every writer for the copy instead of copying behind live
   writes.
+- A lost lease table is documented, not guarded. A guard would seed a
+  stream's first lease from the largest id of that stream the table
+  holds.
 
 ## Status
 

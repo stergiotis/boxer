@@ -17,6 +17,13 @@ status: draft
 > criteria and §7 lists the forks an ADR has to settle. §2 says where the tree stood on the compile
 > date and goes stale as it moves; the ADRs it cites are authoritative.
 >
+> **Stale since 2026-11-21 on two points**, left as compiled: row ids (§2
+> describes a counter per process; the facts store leases them,
+> [ADR-0397](../adr/0397-the-facts-tables-partition-key-row-id-and-engine-clause.md))
+> and read tables (§2 lists readers that name the fixed table; one setting
+> reaches them all,
+> [ADR-0402](../adr/0402-facts-stored-in-a-deployments-own-table-a-write-transform-at-the-insert-seam-and-one-read-table-setting.md)).
+>
 > **Provenance.** Every statement about this repository was read in the
 > working tree on 2026-10-30, paths linked. Statements about ClickHouse
 > server behaviour come from two places: those [ADR-0296](../adr/0296-audit-events-as-a-trail-component.md)
