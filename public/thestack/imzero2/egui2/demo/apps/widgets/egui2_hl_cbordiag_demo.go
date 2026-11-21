@@ -42,7 +42,7 @@ type cbordiagDemoState struct {
 }
 
 // copyDenied logs once per process that the broker refused the copy: the
-// manifest grants clipboard.write, so a refusal is a wiring fault, not a
+// manifest grants runtime.clipboard.write, so a refusal is a wiring fault, not a
 // state the person can change by pressing again.
 var copyDenied sync.Once
 

@@ -82,7 +82,7 @@ type HelpHost struct {
 	lib      help.LibraryI
 
 	// bus is the per-instance BusI captured at Mount. Used only for the
-	// clipboard.write copy affordance on rendered code blocks (the
+	// runtime.clipboard.write copy affordance on rendered code blocks (the
 	// manifest declares that single cap); nil on M1 hosts (NoopBus),
 	// in which case the copy button is still shown but the request is a
 	// no-op that errors silently.
@@ -237,7 +237,7 @@ func (inst *HelpHost) Manifest() (m app.Manifest) {
 // Mount picks up the host-supplied per-instance WidgetIdStack and the
 // BusI. The host has already pre-pushed a window-unique salt onto the
 // stack so widget ids derived during Frame() can't collide with another
-// open app's ids in the same frame. The bus carries the clipboard.write
+// open app's ids in the same frame. The bus carries the runtime.clipboard.write
 // requests issued by the code-block copy buttons (ADR-0026 Update
 // 2026-05-30); on an M1 host it is a NoopBus and copies error silently.
 func (inst *HelpHost) Mount(ctx app.MountContextI) (err error) {
@@ -600,7 +600,7 @@ func (inst *HelpHost) renderViewToggle() {
 //
 // bus, when non-nil, enables a "Copy" button on each rendered
 // code/verbatim block via [markdown.Input.ActionLabels]; a click copies
-// the block's verbatim source to the clipboard over clipboard.write. On
+// the block's verbatim source to the clipboard over runtime.clipboard.write. On
 // an M1 host (nil bus) the plain [markdown.Doc.Render] path is used and
 // no button is shown.
 //
@@ -633,7 +633,7 @@ func renderRendered(ctx context.Context, ids *c.WidgetIdStack, doc *markdown.Doc
 		if scrollTop {
 			c.ScrollToCursor(0)
 		}
-		// Copy a clicked block's verbatim source over clipboard.write, off
+		// Copy a clicked block's verbatim source over runtime.clipboard.write, off
 		// the frame goroutine: Request blocks until the broker acks, and the
 		// frame thread must not block. Errors are swallowed — a failed copy
 		// isn't worth interrupting a reader.

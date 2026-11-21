@@ -88,7 +88,7 @@ func (inst *RuleCS014) run(pass *analysis.Pass) (res any, err error) {
 			pass.Report(analysis.Diagnostic{
 				Pos:     id.Pos(),
 				End:     id.End(),
-				Message: "CS014: " + clipboardOpcodeFunc + " outside the clipboard broker and the host's drain — request clipboard.write on the bus, which the audit records",
+				Message: "CS014: " + clipboardOpcodeFunc + " outside the clipboard broker and the host's drain — request runtime.clipboard.write on the bus, which the audit records",
 			})
 			return
 		})

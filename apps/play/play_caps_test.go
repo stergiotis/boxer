@@ -170,7 +170,7 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// evaluator + runtime.windowhost.open for the Save-as-applet launch (ADR-0135
 	// §SD7) + runtime.adhoc.publish for the timeseries fixture lab (ADR-0163 §SD7) +
 	// runtime.adhoc.resolve and runtime.adhoc.event.> for a launched window that follows
-	// dataset aliases (ADR-0240 §SD7) + clipboard.write for the Copy buttons
+	// dataset aliases (ADR-0240 §SD7) + runtime.clipboard.write for the Copy buttons
 	// + the regex explorer's own chlocalbroker pool, which gloss/regexp's
 	// block face embeds. The applet-store save cap moved
 	// out with the O4 authoring form (now apps/sqlappletcreator); the
@@ -215,7 +215,7 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	assert.Contains(t, patterns, adhocdata.SubjectBundleEventAll)
 	assert.Contains(t, patterns, adhocdata.SubjectResolve)
 	assert.Contains(t, patterns, adhocdata.SubjectEventAll)
-	// clipboard.write — the Definition pane's per-fence Copy buttons and
+	// runtime.clipboard.write — the Definition pane's per-fence Copy buttons and
 	// gloss/taggedid's block face both request it. It was missing until
 	// 2026-08-16, which made those Copy buttons render and then be denied;
 	// CanCopy gates the affordance on the bus, not on the grant, so an

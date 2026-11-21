@@ -47,7 +47,7 @@ var manifest = app.Manifest{
 	Operations: ops.Catalog(),
 	// The reader's one capability: copy a rendered code/verbatim block to
 	// the clipboard via the per-block copy button (ADR-0026 Update
-	// 2026-05-30). Pub only — the broker subscribes to clipboard.write and
+	// 2026-05-30). Pub only — the broker subscribes to runtime.clipboard.write and
 	// the windowed host drains the queued text into an egui copy_text op.
 	Caps: []app.SubjectFilter{
 		{

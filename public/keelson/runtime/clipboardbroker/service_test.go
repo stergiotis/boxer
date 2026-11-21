@@ -12,7 +12,7 @@ import (
 )
 
 // writerCaps is the minimal cap set a consumer needs to issue a copy: Pub on
-// clipboard.write. The reply lands on an ephemeral _INBOX.* that bypasses cap
+// runtime.clipboard.write. The reply lands on an ephemeral _INBOX.* that bypasses cap
 // checks, so no Sub cap is required — matching every runtime.fs.dialog.* consumer.
 func writerCaps() []app.SubjectFilter {
 	return []app.SubjectFilter{
@@ -83,7 +83,7 @@ func TestDrainPreservesArrivalOrder(t *testing.T) {
 }
 
 // TestWriteWithoutCapDenied pins the hygiene contract: an app that did not
-// declare clipboard.write is refused at the bus, and nothing is enqueued. This
+// declare runtime.clipboard.write is refused at the bus, and nothing is enqueued. This
 // is the audited-denial path (§SD5 / Update 2026-05-30).
 func TestWriteWithoutCapDenied(t *testing.T) {
 	bus, svc := newServedBus(t)

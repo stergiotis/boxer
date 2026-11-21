@@ -27,7 +27,7 @@ var helpFS embed.FS
 // Three declared capabilities, and the interesting one is the capability that
 // is NOT here.
 //
-// clipboard.write is the document's way out to the clipboard; the way IN is
+// runtime.clipboard.write is the document's way out to the clipboard; the way IN is
 // egui's own paste, which happens inside the TextEdit and needs no capability
 // at all — the asymmetry is the broker's, which serves no read subject
 // (ADR-0178 §Context).

@@ -19,7 +19,7 @@ import (
 // the agentic tier it carries is unknown. CS014 covers the opcode built
 // below the broker; this rule covers the request built beside it.
 const (
-	clipboardWriteSubject  = "clipboard.write" // mirrors clipboardbroker.SubjectWrite
+	clipboardWriteSubject  = "runtime.clipboard.write" // mirrors clipboardbroker.SubjectWrite
 	clipboardWriteTextFunc = "WriteText"
 )
 
@@ -46,7 +46,7 @@ func (inst *RuleCS015) DefaultSeverity() (sev FindingSeverityE) {
 func (inst *RuleCS015) Analyzer() (a *analysis.Analyzer) {
 	a = &analysis.Analyzer{
 		Name: "cs015",
-		Doc:  "CS015: copy to the clipboard through clipboardbroker.Write with a Payload, not a raw clipboard.write request or WriteText",
+		Doc:  "CS015: copy to the clipboard through clipboardbroker.Write with a Payload, not a raw runtime.clipboard.write request or WriteText",
 		Run:  inst.run,
 	}
 	return

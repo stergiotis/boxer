@@ -14,7 +14,7 @@ func viaConst(ctx context.Context, b app.BusI, text string) {
 
 // The subject spelled out.
 func viaLiteral(ctx context.Context, b app.BusI, text string) {
-	_, _ = b.Request(ctx, "clipboard.write", []byte(text)) // want a CS015 finding here
+	_, _ = b.Request(ctx, "runtime.clipboard.write", []byte(text)) // want a CS015 finding here
 }
 
 // The subject through a local constant.

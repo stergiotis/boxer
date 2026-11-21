@@ -22,7 +22,7 @@ scope, with its outcome drawn as a badge on the next frame.
 | --- | --- | --- |
 | `runtime.fs.dialog.read` | publish | ask the broker to open the file picker |
 | `runtime.fs.dialog.watch` | publish | ask the broker to open the folder-watch picker |
-| `clipboard.write` | publish | copy a code block to the clipboard, labelled |
+| `runtime.clipboard.write` | publish | copy a code block to the clipboard, labelled |
 | `runtime.persist.<own alias>.>` | publish, injected by the host | the one persisted key, `scratchpad`, named in `PersistedKeys` |
 
 The persist subject is not written in the manifest: naming the key in
@@ -65,7 +65,7 @@ backend* asks for polling at 250 ms; *Recursive* watches the subtree.
 *Stop watching* unsubscribes and keeps the handle, so a watch can start
 again; *Close handle* releases it.
 
-**clipboard.write** — a rendered document with a *Copy* button on each
+**runtime.clipboard.write** — a rendered document with a *Copy* button on each
 fenced block. A click hands the block's text to the clipboard broker as a
 labelled payload whose source is `capdemo.clipboard-doc`, so the broker's
 record and the journal's copy entry say what left and from where. The

@@ -68,7 +68,7 @@ type WatchSection struct {
 	Status    string `desc:"the last error, empty when none"`
 }
 
-// ClipboardSection is the clipboard.write section.
+// ClipboardSection is the runtime.clipboard.write section.
 type ClipboardSection struct {
 	Status string `desc:"the broker's answer to the last copy, empty before one"`
 }
@@ -79,7 +79,7 @@ type View struct {
 	File      FileSection      `desc:"runtime.fs.dialog.read"`
 	Persist   PersistSection   `desc:"runtime.persist.scratchpad"`
 	Watch     WatchSection     `desc:"runtime.fs.dialog.watch"`
-	Clipboard ClipboardSection `desc:"clipboard.write"`
+	Clipboard ClipboardSection `desc:"runtime.clipboard.write"`
 	Bus       bool             `desc:"true when the window has a bus; without one every verb shows the no-bus line"`
 	Storage   bool             `desc:"true when the window has storage for the persist section"`
 }

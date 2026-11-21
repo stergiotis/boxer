@@ -12,7 +12,7 @@
 //
 // The first cut has no file I/O by design. Text arrives through egui's own
 // paste, which is the widget's business and needs no capability, and leaves
-// through clipboard.write. The buffer is persisted to the app's own keelson
+// through runtime.clipboard.write. The buffer is persisted to the app's own keelson
 // store — not the filesystem — so it survives the window.
 //
 // Two constraints shape the implementation and are easy to undo by accident:

@@ -68,7 +68,7 @@ const noBusRemedy = "no bus wired — the broker needs the app runtime; open the
 // returned iter.Seq and routed to a labelled clipboardbroker.Write. The
 // Go block teaches that shape, so what the person copies is the idiom.
 var clipboardDoc = markdown.Parse([]byte("" +
-	"`clipboard.write` copies text to the viewport clipboard through the broker: a\n" +
+	"`runtime.clipboard.write` copies text to the viewport clipboard through the broker: a\n" +
 	"labelled `Payload` names what left and from where, and the record that comes\n" +
 	"back says how it left — as plaintext or by handle. Click the Copy button above\n" +
 	"either block below.\n\n" +
@@ -260,7 +260,7 @@ func (inst *App) renderNote(key string, text string, tone badge.ToneE) {
 	badge.New(inst.ids.PrepareStr(key), text).Tone(tone).Variant(badge.VariantSoft).Send()
 }
 
-// renderClipboardSection demonstrates the clipboard.write capability via
+// renderClipboardSection demonstrates the runtime.clipboard.write capability via
 // the markdown widget's code-block action buttons (ADR-0026 Update
 // 2026-05-30). Doc.RenderActions draws a small "Copy" button on each
 // fenced block and yields the clicked blocks; each click hands a labelled
@@ -269,7 +269,7 @@ func (inst *App) renderNote(key string, text string, tone badge.ToneE) {
 // as runPick). The record the broker returns is shown on the next frame.
 func (inst *App) renderClipboardSection() {
 	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-clipboard"),
-		c.WidgetText().Text("clipboard.write — copy code blocks to the clipboard").Keep()).
+		c.WidgetText().Text("runtime.clipboard.write — copy code blocks to the clipboard").Keep()).
 		DefaultOpen(true).KeepIter() {
 		res := markdown.Render(markdown.Input{Ids: inst.ids, ScopeKey: "clipboard-doc", Doc: clipboardDoc, ActionLabels: []string{"Copy"}})
 		for _, act := range res.Actions {

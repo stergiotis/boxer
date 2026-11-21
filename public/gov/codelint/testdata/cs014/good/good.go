@@ -7,5 +7,5 @@ type bus interface {
 }
 
 func copyIt(b bus, text string) {
-	_, _ = b.Request("clipboard.write", []byte(text))
+	_, _ = b.Request("runtime.clipboard.write", []byte(text))
 }

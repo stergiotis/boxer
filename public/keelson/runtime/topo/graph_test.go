@@ -15,7 +15,7 @@ func fixtureInput() topo.Input {
 			Id: "imztop",
 			Caps: []app.SubjectFilter{
 				{Pattern: "sysmetrics.>", Direction: app.CapDirectionSub},
-				{Pattern: "clipboard.write", Direction: app.CapDirectionBoth},
+				{Pattern: "runtime.clipboard.write", Direction: app.CapDirectionBoth},
 			},
 		}},
 		SelfComponent: topo.ImZero2Demo.Token,
@@ -92,8 +92,8 @@ func TestAssembleEdges(t *testing.T) {
 		{Kind: topo.EdgeKindComponentNeeds, SrcKey: topo.ComponentKey(topo.Caddy.Token), DstKey: topo.ComponentKey(topo.ImZero2Demo.Token), Origin: topo.OriginDeclared, Source: topo.SourceRegistry},
 		// Sub-only cap yields exactly app-sub; Both yields both.
 		{Kind: topo.EdgeKindAppSub, SrcKey: "app:imztop", DstKey: "subject:sysmetrics.>", Origin: topo.OriginDeclared, Source: topo.SourceManifest},
-		{Kind: topo.EdgeKindAppPub, SrcKey: "app:imztop", DstKey: "subject:clipboard.write", Origin: topo.OriginDeclared, Source: topo.SourceManifest},
-		{Kind: topo.EdgeKindAppSub, SrcKey: "app:imztop", DstKey: "subject:clipboard.write", Origin: topo.OriginDeclared, Source: topo.SourceManifest},
+		{Kind: topo.EdgeKindAppPub, SrcKey: "app:imztop", DstKey: "subject:runtime.clipboard.write", Origin: topo.OriginDeclared, Source: topo.SourceManifest},
+		{Kind: topo.EdgeKindAppSub, SrcKey: "app:imztop", DstKey: "subject:runtime.clipboard.write", Origin: topo.OriginDeclared, Source: topo.SourceManifest},
 		// The carrier stamps its apps (observed: depends on the runtime mark).
 		{Kind: topo.EdgeKindAppInComponent, SrcKey: "app:imztop", DstKey: topo.ComponentKey(topo.ImZero2Demo.Token), Host: "box-a", Origin: topo.OriginObserved, Source: topo.SourceMark},
 		// Observed containment, ancestry, listener.

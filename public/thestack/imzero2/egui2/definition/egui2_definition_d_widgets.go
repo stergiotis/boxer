@@ -121,7 +121,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 		Build())
 	// copyTextToClipboard — copy a UTF-8 string to the viewport clipboard via
 	// egui's Context::copy_text (egui >=0.34, resolved here to 0.34.2). This is
-	// the mechanism half of the clipboard.write capability (ADR-0026 Update
+	// the mechanism half of the runtime.clipboard.write capability (ADR-0026 Update
 	// 2026-05-30): the only way to reach the OS clipboard from this stack, since
 	// Go is CGO-free and the real clipboard belongs to the egui/winit viewport,
 	// not the Go process. The clipboardbroker accumulates copy requests off the

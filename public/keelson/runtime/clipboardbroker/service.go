@@ -5,7 +5,7 @@
 // the bus. The broker therefore splits the copy into a cold half and a hot
 // half.
 //
-// Cold half (this package): an app publishes a request to clipboard.write with
+// Cold half (this package): an app publishes a request to runtime.clipboard.write with
 // the raw UTF-8 bytes to copy as the payload. The broker enqueues the text and
 // replies with an empty ack. The copy is a request/reply — not a fire-and-
 // forget publish — specifically so the bus AuditSink records it: the sink fires
@@ -43,7 +43,7 @@ import (
 // to the viewport clipboard (ADR-0026 §SD3, Update 2026-05-30). The request
 // payload is the raw UTF-8 text, or a labelled Payload (ADR-0317 §SD1);
 // the reply is an empty ack for raw text and a CopyRecord for a payload.
-const SubjectWrite = "clipboard.write"
+const SubjectWrite = "runtime.clipboard.write"
 
 // deferred: nothing in the tree asks the broker to resolve a handle yet
 // (a paste inside boxer that restores the labels, ADR-0317 §SD3), so a
@@ -53,7 +53,7 @@ const SubjectWrite = "clipboard.write"
 // SubjectResolve answers a copy handle with its payload (ADR-0317 §SD3):
 // the request is the handle's id, the reply the encoded payload, or empty
 // for a handle the broker does not hold.
-const SubjectResolve = "clipboard.resolve"
+const SubjectResolve = "runtime.clipboard.resolve"
 
 // PolicyModeE is how the clipboard policy applies on this host (ADR-0317
 // §SD4, ADR-0307 §SD6).
@@ -123,7 +123,7 @@ const ServiceAppId app.AppIdT = "runtime.clipboard"
 // Drops are logged, never silent (ADR-0026 audit posture).
 const maxPending = 256
 
-// Service subscribes to clipboard.write, accumulates requested text off-frame,
+// Service subscribes to runtime.clipboard.write, accumulates requested text off-frame,
 // and acks each request so the requester's Request returns and is audited. The
 // host frame loop drains the accumulated text via DrainPending and emits the
 // egui copy opcode for each entry.
@@ -151,7 +151,7 @@ type Service struct {
 
 // NewService constructs and subscribes the service. The returned Service holds
 // a bus client scoped to ServiceAppId with just the two caps it needs: receive
-// on clipboard.write and reply on inboxes.
+// on runtime.clipboard.write and reply on inboxes.
 func NewService(inst *inprocbus.Inst, log zerolog.Logger) (s *Service, err error) {
 	return NewServiceWithPolicy(inst, log, DefaultPolicy())
 }
@@ -170,7 +170,7 @@ func NewServiceWithPolicy(inst *inprocbus.Inst, log zerolog.Logger, policy Polic
 		handles: make(map[string]Payload),
 	}
 	s.busClient = inst.NewClient(ServiceAppId, []app.SubjectFilter{
-		{Pattern: SubjectWrite, Direction: app.CapDirectionBoth, Reason: "clipboard Powerbox serves clipboard.write"},
+		{Pattern: SubjectWrite, Direction: app.CapDirectionBoth, Reason: "clipboard Powerbox serves runtime.clipboard.write"},
 		{Pattern: SubjectResolve, Direction: app.CapDirectionBoth, Reason: "clipboard Powerbox resolves copy handles (ADR-0317 §SD3)"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "clipboard acks replies to inboxes"},
 	})
@@ -323,7 +323,7 @@ func (inst *Service) DrainPending() (texts []string) {
 // inline cannot deadlock. The service mutex is released before the ack publish
 // so no lock is held across a re-entrant bus call.
 func (inst *Service) handleWrite(msg *app.Msg) {
-	// Defensive self-skip: acks go to _INBOX.* not clipboard.write, but a
+	// Defensive self-skip: acks go to _INBOX.* not runtime.clipboard.write, but a
 	// future broadcast on the served subject would otherwise loop back in.
 	// Mirrors fsbroker's guard.
 	if msg.Sender == ServiceAppId {
