@@ -6,7 +6,7 @@ import (
 )
 
 // Windowhost narrow memberships — the launch request/reply DTOs
-// (LaunchRequest, LaunchReply) for the audited `windowhost.open` subject
+// (LaunchRequest, LaunchReply) for the audited `runtime.windowhost.open` subject
 // (ADR-0135). Shared columns live in keelson_dimdata_shared.go: appId
 // (the launch target), tileKey (the opened window's key in the reply —
 // the same identifier the app-lifecycle rows carry), reason (the reply's
@@ -97,7 +97,7 @@ var (
 // AppletCreate config columns (ADR-0132 Update "O4" / ADR-0135 §SD7) — the
 // launch config the applet creator accepts (apps/sqlappletcreator/appletcreatecfg,
 // kind appletCreate). The playground hands its buffer to a standalone
-// authoring window over `windowhost.open` instead of composing the applet
+// authoring window over `runtime.windowhost.open` instead of composing the applet
 // document inline. textArray for the SQL buffer (open-cardinality), symbol
 // for the endpoint id (small closed set). Appended after the PlayLaunch
 // columns per the id-ordering note above; a new dimdata file must sort

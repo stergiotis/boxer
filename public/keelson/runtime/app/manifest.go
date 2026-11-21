@@ -326,7 +326,7 @@ type Manifest struct {
 	PersistedKeys []string
 
 	// LaunchKind names the launch-config vocabulary kind this app accepts
-	// when opened via `windowhost.open` (ADR-0135 §SD3), e.g. "playLaunch".
+	// when opened via `runtime.windowhost.open` (ADR-0135 §SD3), e.g. "playLaunch".
 	// Kinds are boxer.facts vocabulary names whose codec the app owns
 	// (§SD2); the app decodes MountContextI.LaunchConfig() with that
 	// codec's generated Unmarshal in Mount. Empty means the app accepts no

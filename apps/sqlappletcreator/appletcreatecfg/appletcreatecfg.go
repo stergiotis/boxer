@@ -1,7 +1,7 @@
 // Package appletcreatecfg is the launch contract of the SQL applet creator
 // (ADR-0132 Update "O4" / ADR-0135 §SD7): the target app id, the config
 // kind, and the typed arguments an app opens a creator window with over
-// `windowhost.open`. It is the neutral leaf both sides import — the
+// `runtime.windowhost.open`. It is the neutral leaf both sides import — the
 // playground (apps/play) encodes and sends; the creator
 // (apps/sqlappletcreator) declares it as its manifest LaunchKind and decodes
 // it in Mount — so play never imports the creator app itself, only this
@@ -21,7 +21,7 @@ package appletcreatecfg
 import "time"
 
 // AppId is the applet creator's registered manifest id — the target an app
-// names in a `windowhost.open` request. Kept here (not in the creator app's
+// names in a `runtime.windowhost.open` request. Kept here (not in the creator app's
 // package) so a requester imports the contract without importing the app.
 // Untyped so it flows into app.AppIdT contexts (Manifest.Id, RequestOpen)
 // without this leaf depending on the app package.

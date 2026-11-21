@@ -390,7 +390,7 @@ func parseSurfaceHints(raw string) (h app.SurfaceHints) {
 // applet's prose page is reachable through the Help center; narrowing Help
 // to the single document is a recorded nicety for later. The cap list is the attenuation in manifest form (ADR-0132 §SD8):
 // the two escape hatches only — clipboard.write for the per-fence Copy in
-// the Definition drawer and windowhost.open for Open in Playground
+// the Definition drawer and runtime.windowhost.open for Open in Playground
 // (ADR-0135 §SD7) — and no persisted keys, because the buffer is committed
 // definition.
 func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {

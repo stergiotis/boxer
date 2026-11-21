@@ -167,7 +167,7 @@ func TestPlayApp_RestorePersistedSql_EmptyValue_KeepsDefault(t *testing.T) {
 func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	m := (&PlayLauncher{}).Manifest()
 	// Ten declared Caps: fs dialog + chlocalbroker pool for the time-range
-	// evaluator + windowhost.open for the Save-as-applet launch (ADR-0135
+	// evaluator + runtime.windowhost.open for the Save-as-applet launch (ADR-0135
 	// §SD7) + runtime.adhoc.publish for the timeseries fixture lab (ADR-0163 §SD7) +
 	// runtime.adhoc.resolve and runtime.adhoc.event.> for a launched window that follows
 	// dataset aliases (ADR-0240 §SD7) + clipboard.write for the Copy buttons

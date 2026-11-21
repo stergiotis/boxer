@@ -8,7 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
-// Open opens the playground on launch over the audited `windowhost.open`
+// Open opens the playground on launch over the audited `runtime.windowhost.open`
 // subject. It names the kind and no app, so the host resolves which app
 // opens — the launchable app taking the kind, the one designated at the
 // wiring site if several do, or a refusal naming them (ADR-0361 §SD2). The

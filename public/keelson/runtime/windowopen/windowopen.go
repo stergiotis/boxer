@@ -21,7 +21,7 @@ import (
 // manifest Caps (Pub direction, OpenCap) and send a
 // launchrequest.LaunchRequest; the reply is a launchreply.LaunchReply.
 // Refusals are replies with a Reason, never silent drops.
-const OpenSubject = "windowhost.open"
+const OpenSubject = "runtime.windowhost.open"
 
 // RaiseSubject is the request/reply subject an app uses to bring one of its
 // own windows to the front: the chat's roster raises the chat window that
@@ -29,7 +29,7 @@ const OpenSubject = "windowhost.open"
 // attributes it (Msg.Sender); another app's window is refused, so an app
 // cannot pull the person away to someone else's. The reply is a
 // launchreply.LaunchReply, its Reason set on refusal.
-const RaiseSubject = "windowhost.raise"
+const RaiseSubject = "runtime.windowhost.raise"
 
 // RaiseRequest is the payload sent on RaiseSubject.
 type RaiseRequest struct {
@@ -55,7 +55,7 @@ func RaiseCap(reason string) (c app.SubjectFilter) {
 // config is its facts-CBOR (encode with the config's generated codec, e.g.
 // buscodec.Encode(playground.Launch{…})); pass "" and nil for a plain
 // open. It is the client half of the window host's open service — the
-// mirror of adhocdata.PublishRequest — so an app drives windowhost.open
+// mirror of adhocdata.PublishRequest — so an app drives runtime.windowhost.open
 // without re-deriving the request/reply codec dance.
 //
 // The caller's bus client needs Pub on OpenSubject; the caller identity is

@@ -180,7 +180,7 @@ type AppLifecycleRow struct {
 	Ts         time.Time
 }
 
-// LaunchRow records one accepted `windowhost.open` request (ADR-0135
+// LaunchRow records one accepted `runtime.windowhost.open` request (ADR-0135
 // §SD6): which app asked which app to open, with which typed config.
 // Maps to a boxer.facts row with KindLaunch + AppRefPrefix(target) +
 // RunRef(runId) + LaunchCaller + LifecycleTileKey + LaunchConfigKind +

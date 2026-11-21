@@ -1,7 +1,7 @@
 // Package playground is the runtime's contract for "the playground" — the
 // window another window hands its data to for composition (ADR-0361). It
 // holds the launch config, its kind, the endpoint constants, the helper
-// that opens the playground over `windowhost.open` by kind, and the
+// that opens the playground over `runtime.windowhost.open` by kind, and the
 // producer side of an ad-hoc bundle: BundleSpec, the composer and publisher,
 // the parsed applet document and the slot its parser is installed into. It
 // has no app and registers none: importing it links the contract, not an

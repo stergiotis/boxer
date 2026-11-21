@@ -499,7 +499,7 @@ All of it is in this repository; no downstream consumer needs a change.
    classification; `(?i)` versus `(?i:` depth behaviour; per-line independence in
    `HighlightLines`; Arrow record shape for both datasets; seeded-SQL contents;
    publish/open against a fake bus (the downstream `fakeEvalBus` pattern — route
-   `Request` by subject, answer `runtime.adhoc.publish` and `windowhost.open` — is the
+   `Request` by subject, answer `runtime.adhoc.publish` and `runtime.windowhost.open` — is the
    template).
 3. Regression: the existing `regex_explorer` suite (781 lines) must stay green.
    Demo scenes are already flagged `NonDeterministic`, so the new affordance row

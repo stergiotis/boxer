@@ -20,7 +20,7 @@ import (
 const testCallerAppId app.AppIdT = "test.caller"
 
 // openServiceFixture wires bus + host + audit + service + a caller
-// client holding the windowhost.open Pub cap — the caller-side shape
+// client holding the runtime.windowhost.open Pub cap — the caller-side shape
 // M6's applet manifests declare.
 type openServiceFixture struct {
 	bus    *inprocbus.Inst

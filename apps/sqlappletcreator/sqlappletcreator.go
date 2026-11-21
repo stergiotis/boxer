@@ -1,7 +1,7 @@
 // Package sqlappletcreator is the standalone SQL-applet authoring window
 // (ADR-0132 Update "O4" / ADR-0135 §SD7). It was the "Save applet" menu
 // inlined in the SQL Playground's toolbar; factored into its own app, the
-// playground opens it over `windowhost.open` with the current buffer, and it
+// playground opens it over `runtime.windowhost.open` with the current buffer, and it
 // composes the ADR-0132 §SD1 document. Two outputs (O4 "A+B"): Save publishes
 // it on `applet.store.save` — the store service (apps/sqlapplet) validates,
 // persists, and mints a live manifest; Export writes it to a user-chosen file

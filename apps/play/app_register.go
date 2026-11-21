@@ -215,7 +215,7 @@ var _ app.AppI = (*PlayLauncher)(nil)
 var editCaps = externaledit.ClientCaps("hand the SQL buffer to the host's editor app and take each save back")
 
 // AppId is play's registered manifest id — the target another app names
-// in a `windowhost.open` request (ADR-0135 §SD7).
+// in a `runtime.windowhost.open` request (ADR-0135 §SD7).
 //
 // The value lives in the leaf [launchcfg] package so a requester can name
 // play without importing it (ADR-0017 §SD4); this re-export keeps the
@@ -353,7 +353,7 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		// and this entry one release on — the cap is what the read needs.
 		PersistedKeys: []string{persistKeyLastSql, persistKeyTimelineBandsSql},
 		// Launch config (ADR-0135 §SD7): windows opened over
-		// `windowhost.open` may carry a launchcfg.PlayLaunch; Mount
+		// `runtime.windowhost.open` may carry a launchcfg.PlayLaunch; Mount
 		// decodes it and seeds the editor above the env/persisted chain.
 		LaunchKind: playground.Kind,
 		// Workingset participation (ADR-0148 §SD7): the host pulls a
@@ -371,7 +371,7 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	inst.ioCtx = app.ContextOf(ctx)
 	// Precedence for the initial SQL buffer, highest first:
 	//   1. Caller launch config (ADR-0135 §SD7) — another app opened this
-	//      window over `windowhost.open` with a playLaunch config;
+	//      window over `runtime.windowhost.open` with a playLaunch config;
 	//      per-window intent beats process-wide defaults.
 	//   2. BOXER_PLAY_SQL env var — explicit user override (one-shot
 	//      screenshots, scripted runs).

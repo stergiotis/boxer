@@ -193,7 +193,7 @@ var (
 	MembQueryRunProfileEvent    = NkRegistry.MustBegin("runtimeQueryRunProfileEvent", 60).End()
 
 	// App-launch (kind + per-request fields), ADR-0135 §SD6 — one row per
-	// accepted `windowhost.open` request, written beside the app-lifecycle
+	// accepted `runtime.windowhost.open` request, written beside the app-lifecycle
 	// "started" row. Target app / run identity reuse MembRuntimeApp /
 	// MembRuntimeRun; the opened window's key reuses MembLifecycleTileKey
 	// so the launch row joins its lifecycle row on the same column.

@@ -197,7 +197,7 @@ func AllServices() Services {
 }
 
 // SeedWindow is one window opened with a typed launch config at boot
-// (ADR-0211 §SD3): the window-host form of ADR-0135's `windowhost.open`
+// (ADR-0211 §SD3): the window-host form of ADR-0135's `runtime.windowhost.open`
 // request. Kind must match the app manifest's LaunchKind and Config must
 // pass that kind's registered probe; a failure is a boot error, unlike the
 // best-effort LaunchApps seeds, because the caller asked for this exact
@@ -1053,7 +1053,7 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	// App-launch requests (ADR-0135): apps holding the cap open other apps
 	// with typed launch configs.
 	if _, osErr := windowhost.NewOpenService(rt.Bus, host, logger); osErr != nil {
-		logger.Warn().Err(osErr).Msg("hostboot: windowhost open service unavailable; windowhost.open requests will time out")
+		logger.Warn().Err(osErr).Msg("hostboot: windowhost open service unavailable; runtime.windowhost.open requests will time out")
 	}
 	for _, a := range rt.opts.LaunchApps {
 		id := a.Manifest().Id

@@ -9,7 +9,7 @@ title: Opening the creator from another app
 
 # Opening the creator from another app
 
-The creator is opened over `windowhost.open` (ADR-0135 §SD7) with a
+The creator is opened over `runtime.windowhost.open` (ADR-0135 §SD7) with a
 launch config of kind `appletCreate`, targeting the app id
 `github.com/stergiotis/boxer/apps/sqlappletcreator`. The contract is the
 leaf package `apps/sqlappletcreator/appletcreatecfg`, which a caller

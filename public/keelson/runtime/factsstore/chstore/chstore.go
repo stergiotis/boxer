@@ -777,7 +777,7 @@ func (inst *Store) WriteAppLifecycle(ctx context.Context, row factsstore.AppLife
 }
 
 // WriteLaunch lands one boxer.facts row tagged KindLaunch (ADR-0135
-// §SD6): the accepted `windowhost.open` request beside its app-lifecycle
+// §SD6): the accepted `runtime.windowhost.open` request beside its app-lifecycle
 // "started" row. Target app / run reuse the MembRuntimeApp /
 // MembRuntimeRun identities; the caller rides MembLaunchCaller as a
 // mixed-low-card-ref; the tile key reuses MembLifecycleTileKey so the

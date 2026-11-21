@@ -61,7 +61,7 @@ var manifest = app.Manifest{
 	// The operations catalog (ADR-0345), in launcher_ops.go.
 	Operations: ops.Catalog(),
 	// No declared caps. The launcher opens apps through the host interface it
-	// is handed (§SD3), not by publishing to windowhost.open — a host-mediated
+	// is handed (§SD3), not by publishing to runtime.windowhost.open — a host-mediated
 	// capability in the ADR-0382 §SD4 sense rather than a subject the cap
 	// broker arbitrates. An app that wanted to open others *over the bus*
 	// would declare windowopen.OpenSubject; this one is the host's own

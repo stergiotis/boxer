@@ -3,7 +3,7 @@ package regex_explorer
 // Tests for the ADR-0017 extraction hand-off.
 //
 // The publish/open tests run a real adhocdata.Service over an inprocbus
-// with a stub key registrar and a stub windowhost.open subscriber, so
+// with a stub key registrar and a stub runtime.windowhost.open subscriber, so
 // they exercise the actual wire codecs without needing clickhouse-local.
 
 import (
@@ -283,7 +283,7 @@ func (c *capturedOpen) all() (out []launchrequest.LaunchRequest) {
 }
 
 // evalTestRig wires an inprocbus, a real adhocdata.Service, and a stub
-// windowhost.open subscriber, and hands back an App bound to a client
+// runtime.windowhost.open subscriber, and hands back an App bound to a client
 // carrying the three caps the manifest declares.
 type evalTestRig struct {
 	app   *App

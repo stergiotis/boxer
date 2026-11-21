@@ -113,7 +113,7 @@ func (inst *PlayApp) SetOpenPlaygroundBundle(alias string) {
 }
 
 // requestOpenPlayground asks the window host for a full play window
-// seeded with cfg over `windowhost.open` (ADR-0135 §SD7 — the ADR-0132
+// seeded with cfg over `runtime.windowhost.open` (ADR-0135 §SD7 — the ADR-0132
 // §SD3 escape-hatch upgrade rendered as the minimal toolbar's "Open in
 // play" button). Blocks on the bus round-trip, so call it from a goroutine
 // off the frame loop — the clipboard rule. The outcome lands after the
@@ -192,7 +192,7 @@ func (inst *PlayApp) openPlayground(cfg launchcfg.PlayLaunch) (err error) {
 }
 
 // requestSaveApplet opens the standalone applet creator (apps/sqlappletcreator)
-// seeded with cfg over `windowhost.open` (ADR-0135 §SD7 — the ADR-0132 "O4"
+// seeded with cfg over `runtime.windowhost.open` (ADR-0135 §SD7 — the ADR-0132 "O4"
 // authoring surface, now a launched window instead of an inline menu). Blocks
 // on the bus round-trip, so call it from a goroutine off the frame loop — the
 // requestOpenPlayground rule. The outcome lands in saveAppletErr (empty on

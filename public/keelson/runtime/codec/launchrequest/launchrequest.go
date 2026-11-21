@@ -1,5 +1,5 @@
 // Package launchrequest is the leeway-coded wire form of the app-launch
-// request payload published on `windowhost.open` (ADR-0135 §SD1). The
+// request payload published on `runtime.windowhost.open` (ADR-0135 §SD1). The
 // request names a target app, or carries a kind and no target (ADR-0361
 // §SD2) so the host resolves the app that takes the kind, and optionally
 // carries a launch config as facts-CBOR bytes produced by the target

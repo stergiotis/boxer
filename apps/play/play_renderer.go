@@ -805,7 +805,7 @@ type PlayApp struct {
 
 	// saveAppletMu guards the Save-as-applet launch request state (ADR-0135
 	// §SD7): the "Save as applet…" button opens the standalone creator
-	// window (apps/sqlappletcreator) over windowhost.open, seeded with the
+	// window (apps/sqlappletcreator) over runtime.windowhost.open, seeded with the
 	// current buffer; the goroutine holds the bus round-trip and the toolbar
 	// reads busy + err under the lock (the openPlay pattern). The authoring
 	// form itself moved out of play with the ADR-0132 "O4" seam.
@@ -2440,7 +2440,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 
 		// Save as applet (ADR-0132 "O4" / ADR-0135 §SD7) — opens the
 		// standalone authoring window (apps/sqlappletcreator) over
-		// windowhost.open, seeded with the current buffer; the slug/title/icon
+		// runtime.windowhost.open, seeded with the current buffer; the slug/title/icon
 		// form that used to live inline here moved out with the O4 seam.
 		// Authoring surface only: attenuated windows are consumers, and the
 		// launch needs the bus. Off the frame goroutine, the clipboard rule.

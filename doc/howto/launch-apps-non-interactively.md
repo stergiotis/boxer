@@ -74,7 +74,7 @@ does. Two ways carry a config into a seeded window:
 
 - **`--launch-config <alias>=<path>`** (repeatable). The file holds the
   config encoded for the app's manifest `LaunchKind` (the same bytes a
-  `windowhost.open` request would carry, [ADR-0135](../adr/0135-app-launch-requests.md)
+  `runtime.windowhost.open` request would carry, [ADR-0135](../adr/0135-app-launch-requests.md)
   §SD2); the kind's registered probe validates it at open and the window
   mounts with `LaunchReasonCaller`. A failed open is a boot error, unlike
   an unresolved `--launch` ref, because the config was asked for

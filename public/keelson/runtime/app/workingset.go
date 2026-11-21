@@ -12,7 +12,7 @@ package app
 // iff dirty.
 //
 // cfg is an instance of the app's Manifest.LaunchKind DTO, encoded exactly
-// as a caller would encode it for `windowhost.open` (§SD2): restore is
+// as a caller would encode it for `runtime.windowhost.open` (§SD2): restore is
 // definitionally OpenWithConfig, so there is no second serialization to
 // maintain. The host validates the bytes against the manifest's kind and
 // the launch-config size cap before storing them, and never stores bytes

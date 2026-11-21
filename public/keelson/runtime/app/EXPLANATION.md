@@ -106,7 +106,7 @@ type Manifest struct {
 
     PersistedKeys []string  // state keys; the host adds the persist capability
 
-    LaunchKind string  // config kind accepted over windowhost.open (ADR-0135)
+    LaunchKind string  // config kind accepted over runtime.windowhost.open (ADR-0135)
     Workingset bool    // participates in workingsets (ADR-0148); needs LaunchKind
 }
 ```
@@ -516,7 +516,7 @@ malicious code. ADR-0026 §SD10 documents the trade-off explicitly.
 - [ADR-0026](../../../../doc/adr/0026-app-runtime-and-capability-subjects.md)
   — architecture, subject taxonomy, phasing.
 - [ADR-0135](../../../../doc/adr/0135-app-launch-requests.md) — launch
-  configs, the `windowhost.open` subject, `kindcheck`.
+  configs, the `runtime.windowhost.open` subject, `kindcheck`.
 - [ADR-0148](../../../../doc/adr/0148-app-workingsets.md) — workingsets:
   the compose contract, the intent gate, the restore precedence.
 - [`registry.go`](./registry.go), [`manifest.go`](./manifest.go),
