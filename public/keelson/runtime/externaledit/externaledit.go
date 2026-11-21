@@ -23,15 +23,15 @@ import (
 // The subjects the service answers.
 const (
 	// SubjectOffer takes a text and answers its id.
-	SubjectOffer = "externaledit.offer"
+	SubjectOffer = "runtime.externaledit.offer"
 	// SubjectResolve tells an editor where a text's file is.
-	SubjectResolve = "externaledit.resolve"
+	SubjectResolve = "runtime.externaledit.resolve"
 	// SubjectWait answers the offering window the next revision.
-	SubjectWait = "externaledit.wait"
+	SubjectWait = "runtime.externaledit.wait"
 	// SubjectClose ends an edit and removes its file.
-	SubjectClose = "externaledit.close"
+	SubjectClose = "runtime.externaledit.close"
 	// SubjectAll covers the four subjects, for the service's declaration.
-	SubjectAll = "externaledit.*"
+	SubjectAll = "runtime.externaledit.*"
 )
 
 // MaxText bounds an offered text and each revision.

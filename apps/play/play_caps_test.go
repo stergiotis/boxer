@@ -189,7 +189,7 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// publish_result and the Publish menu, runtime.adhoc.read for the column values
 	// list_bundles shows (ADR-0288 §SD4, §SD5). runtime.task.> for the query runs,
 	// write runs, projector, vector-field builds and publishes the window
-	// starts, which run as keelson tasks owned by it. externaledit.offer,
+	// starts, which run as keelson tasks owned by it. runtime.externaledit.offer,
 	// .wait and .close for the Editor's buffer handed to the host's editor
 	// app (the window open is the applet creator's). audio.out.open for the
 	// audio/wav gloss's play button (ADR-0372).
