@@ -32,9 +32,24 @@ func (s *Service) Reconcile(ctx context.Context) (err error) {
 	// the facts stored in a deployment's own table its rows would land in a
 	// relation that does not keep them, or fail there. It is not installed
 	// (ADR-0402 §SD5; the capture under a transform is deferred).
+	//
+	// A view a binary installed before the transform was registered is
+	// still on the server, refreshing: appending by the facts table's name
+	// where a table of that name was left, failing where the name became
+	// the deployment's view. It is this service's own object, which every
+	// reconcile drops and recreates, so it is dropped here too.
 	factsCfg := chstore.Config{Database: s.cfg.Database, Table: s.cfg.Table}
 	if chstore.WriteTransformed(factsCfg) {
-		err = eb.Build().Str("table", s.FactsTable()).Errorf("queryrunsvc: reconcile: the query-run view is not installed: %w", recordstore.ErrTransformedTable)
+		dropped, derr := s.dropLeftoverView(ctx)
+		b := eb.Build().Str("table", s.FactsTable())
+		switch {
+		case derr != nil:
+			err = b.Str("leftoverView", derr.Error()).Errorf("queryrunsvc: reconcile: the query-run view is not installed, and whether an earlier binary left one behind could not be settled: %w", recordstore.ErrTransformedTable)
+		case dropped:
+			err = b.Str("dropped", s.MvName()).Errorf("queryrunsvc: reconcile: the query-run view is not installed; one an earlier binary left behind was dropped: %w", recordstore.ErrTransformedTable)
+		default:
+			err = b.Errorf("queryrunsvc: reconcile: the query-run view is not installed: %w", recordstore.ErrTransformedTable)
+		}
 		return
 	}
 	// chstore's own setup — the table and the read surface its reads need —
@@ -100,6 +115,35 @@ func (s *Service) Reconcile(ctx context.Context) (err error) {
 		return
 	}
 	return
+}
+
+// dropLeftoverView drops the query-run view when the server holds one,
+// and reports whether it did.
+func (s *Service) dropLeftoverView(ctx context.Context) (dropped bool, err error) {
+	body, err := s.cli.Query(ctx, "SELECT count() FROM system.tables WHERE database = "+quoteLit(s.cfg.Database)+" AND name = "+quoteLit(queryrunfacts.MvBaseName)+" FORMAT TabSeparated")
+	if err != nil {
+		return
+	}
+	raw, err := io.ReadAll(body)
+	_ = body.Close()
+	if err != nil || strings.TrimSpace(string(raw)) == "0" {
+		return
+	}
+	// A refresh in flight would make the DROP wait for it.
+	_ = s.cli.Exec(ctx, "SYSTEM CANCEL VIEW "+s.MvName())
+	drop, err := queryrunfacts.ComposeDropMvSql(s.MvName())
+	if err != nil {
+		return
+	}
+	if err = s.cli.Exec(ctx, drop); err != nil {
+		return
+	}
+	return true, nil
+}
+
+// quoteLit renders v as a ClickHouse string literal.
+func quoteLit(v string) string {
+	return "'" + strings.NewReplacer("\\", "\\\\", "'", "\\'").Replace(v) + "'"
 }
 
 // checkDestinationSchema verifies the destination carries every column

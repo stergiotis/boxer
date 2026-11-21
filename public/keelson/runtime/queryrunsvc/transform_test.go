@@ -12,9 +12,10 @@ import (
 )
 
 // With an insert transform registered for the destination the view is not
-// installed, and nothing is sent: the view appends on the server, where no
-// transform runs (ADR-0402 §SD5). The client points at a closed port, so a
-// statement that was sent would fail with another error.
+// installed: the view appends on the server, where no transform runs
+// (ADR-0402 §SD5). The client points at a closed port: the refusal stands
+// whether or not the server could be asked about a leftover view, and no
+// setup statement is attempted.
 func TestReconcileRefusesUnderATransform(t *testing.T) {
 	s, err := New(Config{Database: "scratch_qr", Table: "facts", ChURL: "http://127.0.0.1:1/"}, zerolog.Nop())
 	require.NoError(t, err)

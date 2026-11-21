@@ -12,9 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
@@ -28,6 +30,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // scratchDb isolates the pipeline objects; dropped at test end. The
@@ -435,4 +438,50 @@ func pullRowCount(t *testing.T, pullURL string) (n int64) {
 	}
 	require.NoError(t, rd.Err())
 	return
+}
+
+// A query-run view installed before a deployment registered its transform
+// is dropped by the first reconcile under the transform, which still
+// refuses to install one (ADR-0402 §SD5).
+func TestReconcileDropsAViewLeftFromBeforeTheTransform(t *testing.T) {
+	ctx := context.Background()
+	cfg := chclient.ConfigFromEnv()
+	cli := chclient.New(cfg, nil)
+	if cli.Ping(ctx) != nil {
+		t.Skipf("no live ClickHouse at %s", cfg.URL)
+	}
+	const db = "queryruns_it_leftover"
+	require.NoError(t, cli.Exec(ctx, "DROP DATABASE IF EXISTS "+db+" SYNC"))
+	t.Cleanup(func() { _ = cli.Exec(context.Background(), "DROP DATABASE IF EXISTS "+db+" SYNC") })
+
+	// The service is not started: the view only has to exist, and the
+	// endpoint its refreshes would read is a closed port.
+	svc, err := New(Config{Listen: "127.0.0.1:1", ChURL: cfg.URL, ChUser: cfg.User, Password: cfg.Password,
+		Cadence: time.Hour, Scope: queryrunfacts.ScopeAll, Database: db, BackfillFrom: time.Now()}, zerolog.Nop())
+	require.NoError(t, err)
+	// The binary before the transform: the view is installed.
+	require.NoError(t, svc.Reconcile(ctx))
+	count := func() string {
+		body, qerr := cli.Query(ctx, "SELECT count() FROM system.tables WHERE database = '"+db+"' AND name = '"+queryrunfacts.MvBaseName+"' FORMAT TabSeparated")
+		require.NoError(t, qerr)
+		defer func() { _ = body.Close() }()
+		raw, rerr := io.ReadAll(body)
+		require.NoError(t, rerr)
+		return strings.TrimSpace(string(raw))
+	}
+	require.Equal(t, "1", count())
+
+	// The deployment's binary: the transform is registered.
+	unregister := recordstore.RegisterInsertTransform(db+".facts", recordstore.InsertTransformFunc(
+		func(_ string, records []arrow.RecordBatch) (string, []arrow.RecordBatch, error) {
+			return db + ".carrier", records, nil
+		}))
+	defer unregister()
+	err = svc.Reconcile(ctx)
+	require.ErrorIs(t, err, recordstore.ErrTransformedTable)
+	assert.Contains(t, err.Error(), "left behind was dropped")
+	assert.Equal(t, "0", count(), "the leftover view is gone")
+	err = svc.Reconcile(ctx)
+	require.ErrorIs(t, err, recordstore.ErrTransformedTable)
+	assert.NotContains(t, err.Error(), "dropped")
 }
