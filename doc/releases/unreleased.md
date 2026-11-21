@@ -12,14 +12,30 @@ generator: boxer gov releasenotes
 
 # Release notes: v0.0.23..HEAD
 
-2081 commit(s) in the range.
+2104 commit(s) in the range.
 
 ## Build requirements
 
 - `go` directive: 1.27.0 → 1.27.3.
 - `toolchain` line: absent at both ends.
 
-## Breaking changes (53)
+## Breaking changes (57)
+
+### fix(leeway)!: drop the module version from the canonical-type and DDL headers
+
+`5021c59c05bd` — files these generators write change their header line; a module that commits them regenerates once.
+
+### fix(canonwire)!: drop the module version from the generated header
+
+`316b938689e3` — every file the canonwire generator writes changes its header. A module that commits canonwire output regenerates it once.
+
+### fix(readaccess)!: name the ABI generation in the header, not the module version
+
+`e1092a597b4f` — every file the read-access generator writes changes its header and its location comments. A module that commits read-access output regenerates it once.
+
+### fix(dml)!: name the ABI generation in the header, not the module version
+
+`809f3d8d258b` — every file the DML generator writes changes its header and its location comments. A module that commits DML output regenerates it once; nothing it compiles against changes.
 
 ### refactor(trail)!: the trail verbs take the context their row is written under
 
@@ -347,11 +363,12 @@ generator: boxer gov releasenotes
 
 ## Migration notes added
 
-- [2026-10-watchbill-delegation.md](../../doc/migration/2026-10-watchbill-delegation.md)
-- [2026-11-facts-layout.md](../../doc/migration/2026-11-facts-layout.md)
-- [2026-11-io-context.md](../../doc/migration/2026-11-io-context.md)
-- [2026-11-library-layering.md](../../doc/migration/2026-11-library-layering.md)
-- [README.md](../../doc/migration/README.md)
+- [2026-10-watchbill-delegation.md](doc/migration/2026-10-watchbill-delegation.md)
+- [2026-11-behaviour-changes.md](doc/migration/2026-11-behaviour-changes.md)
+- [2026-11-facts-layout.md](doc/migration/2026-11-facts-layout.md)
+- [2026-11-io-context.md](doc/migration/2026-11-io-context.md)
+- [2026-11-library-layering.md](doc/migration/2026-11-library-layering.md)
+- [README.md](doc/migration/README.md)
 
 ## API differences in Stable packages
 
