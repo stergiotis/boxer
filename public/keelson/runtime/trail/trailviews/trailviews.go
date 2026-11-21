@@ -739,11 +739,25 @@ func Compose(database string, table string) (views []View, err error) {
 	if table == "" {
 		table = factsschema.TableName
 	}
+	return ComposeFrom(database, database+"."+table)
+}
+
+// ComposeFrom is [Compose] with the views in database reading source, a
+// database-qualified relation that returns the facts columns — the read
+// table of ADR-0402 §SD3, which may be a view in another database. Empty
+// arguments select the facts table's defaults.
+func ComposeFrom(database string, source string) (views []View, err error) {
+	if database == "" {
+		database = factsschema.DatabaseName
+	}
+	if source == "" {
+		source = factsschema.QualifiedTableName
+	}
 	m, err := newMinter()
 	if err != nil {
 		return nil, err
 	}
-	inst := &composer{database: database, table: database + "." + table, mint: m, schemas: map[string][]Column{}}
+	inst := &composer{database: database, table: source, mint: m, schemas: map[string][]Column{}}
 	for _, kv := range kindViews {
 		var v View
 		v, err = inst.kindView(kv)
@@ -791,7 +805,19 @@ func Compose(database string, table string) (views []View, err error) {
 // as bare statements, for an executor that posts one at a time: a view may
 // call a function, and ClickHouse resolves it when the view is created.
 func Statements(database string, table string) (stmts []string, err error) {
-	views, err := Compose(database, table)
+	if database == "" {
+		database = factsschema.DatabaseName
+	}
+	if table == "" {
+		table = factsschema.TableName
+	}
+	return StatementsFrom(database, database+"."+table)
+}
+
+// StatementsFrom is [Statements] with the views in database reading source
+// ([ComposeFrom]).
+func StatementsFrom(database string, source string) (stmts []string, err error) {
+	views, err := ComposeFrom(database, source)
 	if err != nil {
 		return nil, err
 	}

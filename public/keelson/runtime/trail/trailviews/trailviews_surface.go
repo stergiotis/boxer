@@ -31,15 +31,23 @@ func init() {
 // not keelson's, and a family over a table that is absent does not belong
 // there.
 //
-// The facts table is the fixed one (factsschema), as chstore.ConfigFromEnv
-// keeps it; an installation at another location re-creates its views with
-// `keelsonddl --trail-views --database … --table …`.
+// The views go into the fixed facts database (factsschema), as
+// chstore.ConfigFromEnv keeps it, and read the read table
+// BOXER_FACTS_READ_TABLE names (ADR-0402 §SD3), boxer.facts when it is
+// empty; the relation must exist, as a table or a view. An installation at
+// another location re-creates its views with `keelsonddl --trail-views
+// --database … --table …` or `--read-table …`.
 func surfaceStatements(ctx context.Context, conn lwsqlsurface.Conn) (stmts []string, err error) {
-	present, err := tableExists(ctx, conn, factsschema.DatabaseName, factsschema.TableName)
+	source, err := factsschema.ReadTable()
+	if err != nil {
+		return nil, err
+	}
+	database, table, _ := strings.Cut(source, ".")
+	present, err := tableExists(ctx, conn, database, table)
 	if err != nil || !present {
 		return nil, err
 	}
-	return Statements(factsschema.DatabaseName, factsschema.TableName)
+	return StatementsFrom(factsschema.DatabaseName, source)
 }
 
 // tableExists asks the server whether database.table exists.

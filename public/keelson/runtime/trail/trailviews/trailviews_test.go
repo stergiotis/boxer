@@ -136,6 +136,20 @@ func TestComposeOtherTable(t *testing.T) {
 	}
 }
 
+// The views can read a relation in another database — a read table over a
+// deployment's own storage (ADR-0402 §SD3) — and stay in theirs.
+func TestComposeFromAReadTable(t *testing.T) {
+	views, err := ComposeFrom("boxer", "carrier.facts_view")
+	require.NoError(t, err)
+	for i, v := range views {
+		require.NotContains(t, v.Sql, "boxer.facts", v.Name)
+		require.True(t, strings.HasPrefix(v.Sql, "CREATE OR REPLACE VIEW boxer."+v.Name+" AS\n"), v.Name)
+		if i < len(kindViews) {
+			require.Contains(t, v.Sql, "FROM carrier.facts_view\n", v.Name)
+		}
+	}
+}
+
 func TestStampNamesBothRevisions(t *testing.T) {
 	require.Equal(t, "keelson trail views v"+strconv.Itoa(ViewsVersion)+" over leeway SQL read surface v"+
 		strconv.Itoa(lwsqlsurface.Version), string(Stamp()))

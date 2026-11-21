@@ -25,6 +25,10 @@
 //
 //	app keelsonddl --trail-views --with-surface | clickhouse-client -mn
 //
+// The views read the facts table, or the read table --read-table or
+// BOXER_FACTS_READ_TABLE names (ADR-0402 §SD3), and are created in
+// --database either way.
+//
 // Re-running the views half after a surface upgrade is what refreshes them:
 // every view is CREATE OR REPLACE and stamped in its COMMENT with the
 // revisions it was built from (trailviews.Stamp).
@@ -42,6 +46,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
 
@@ -49,8 +54,11 @@ import (
 type options struct {
 	cfg          chstore.Config
 	engineClause string
-	trailViews   bool
-	withSurface  bool
+	// readTable is the relation the trail views read (ADR-0402 §SD3);
+	// empty reads cfg's table.
+	readTable   string
+	trailViews  bool
+	withSurface bool
 }
 
 // compose renders the script: the facts DDL, then — when asked — the read
@@ -79,7 +87,11 @@ func compose(opts options) (sql string, err error) {
 		}
 	}
 	var views []string
-	views, err = trailviews.Statements(opts.cfg.Database, opts.cfg.Table)
+	source := opts.readTable
+	if source == "" {
+		source = opts.cfg.Database + "." + opts.cfg.Table
+	}
+	views, err = trailviews.StatementsFrom(opts.cfg.Database, source)
 	if err != nil {
 		return "", eh.Errorf("keelsonddl: trail views: %w", err)
 	}
@@ -118,6 +130,10 @@ func NewCliCommand() *cli.Command {
 				Value: "",
 				Usage: "override the engine clause, without SETTINGS (empty selects BOXER_FACTS_ENGINE, by default time-sorted and partitioned by month, no TTL)",
 			},
+			&cli.StringFlag{
+				Name:  "read-table",
+				Usage: "with --trail-views: the database-qualified relation the views read (ADR-0402); empty takes BOXER_FACTS_READ_TABLE for the facts table, else database.table",
+			},
 			&cli.BoolFlag{
 				Name:  "trail-views",
 				Usage: "append the audit-trail functions and the read-only views over database.table (CREATE OR REPLACE, stamped); not part of first-run setup",
@@ -128,12 +144,20 @@ func NewCliCommand() *cli.Command {
 			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			database, table := cmd.String("database"), cmd.String("table")
+			readTable := cmd.String("read-table")
+			if readTable == "" {
+				if readTable, err = factsschema.ReadTableFor(database + "." + table); err != nil {
+					return eh.Errorf("keelsonddl: %w", err)
+				}
+			}
 			var sql string
 			sql, err = compose(options{
 				cfg: chstore.Config{
-					Database: cmd.String("database"),
-					Table:    cmd.String("table"),
+					Database: database,
+					Table:    table,
 				},
+				readTable:    readTable,
 				engineClause: cmd.String("engine"),
 				trailViews:   cmd.Bool("trail-views"),
 				withSurface:  cmd.Bool("with-surface"),

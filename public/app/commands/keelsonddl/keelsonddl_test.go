@@ -60,6 +60,15 @@ func TestTrailViewsAreAppended(t *testing.T) {
 	require.NotContains(t, bare, marker, "the surface is printed only when asked for")
 }
 
+// With a read table the views read it and stay in --database (ADR-0402
+// §SD3).
+func TestTrailViewsReadTheReadTable(t *testing.T) {
+	have, err := compose(options{cfg: defaults(), trailViews: true, readTable: "carrier.facts_view"})
+	require.NoError(t, err)
+	require.Contains(t, have, "FROM carrier.facts_view\n")
+	require.Contains(t, have, "CREATE OR REPLACE VIEW boxer.")
+}
+
 func TestWithSurfaceNeedsTrailViews(t *testing.T) {
 	_, err := compose(options{cfg: defaults(), withSurface: true})
 	require.Error(t, err)
