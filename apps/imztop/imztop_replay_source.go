@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 )
 
 // StoreSource is the production [BundleSourceI]: stored history read from
@@ -87,7 +88,12 @@ func NewStoreSource(ctx context.Context, opts StoreSourceOptions) (inst *StoreSo
 		err = eh.Errorf("imztop: replay needs ClickHouse: %w", err)
 		return
 	}
-	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{})
+	readTable, err := factsschema.ReadTableFor(sysmfacts.SysmetricsTableName)
+	if err != nil {
+		err = eh.Errorf("imztop: %w", err)
+		return
+	}
+	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{ReadTable: readTable})
 	if verr := store.VerifySchema(ctx); verr != nil {
 		store.Close()
 		err = eb.Build().Str("url", env.RedactURL(cfg.URL)).Errorf("imztop: no stored metric history — "+

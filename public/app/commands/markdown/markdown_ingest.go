@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/runinfo"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mddocfacts"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdextract"
 )
@@ -69,7 +70,12 @@ func runIngest(cliCtx context.Context, cmd *cli.Command) (err error) {
 		if err != nil {
 			return
 		}
-		store = mddocfacts.NewMddocStore(exec, nil, mddocfacts.MddocStoreConfig{})
+		// The schema check reads the read table (ADR-0402 §SD3).
+		var readTable string
+		if readTable, err = factsschema.ReadTableFor(mddocfacts.MddocTableName); err != nil {
+			return
+		}
+		store = mddocfacts.NewMddocStore(exec, nil, mddocfacts.MddocStoreConfig{ReadTable: readTable})
 		defer store.Close()
 		if err = store.VerifySchema(ctx); err != nil {
 			return eh.Errorf("verify facts schema (chstore provisions it; this command never does): %w", err)

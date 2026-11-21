@@ -28,6 +28,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mddocfacts"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -156,7 +157,11 @@ func uploadDoc(ctx context.Context, src, fileName string, origin mddocfacts.Orig
 	if err != nil {
 		return
 	}
-	store := mddocfacts.NewMddocStore(exec, nil, mddocfacts.MddocStoreConfig{})
+	readTable, err := factsschema.ReadTableFor(mddocfacts.MddocTableName)
+	if err != nil {
+		return
+	}
+	store := mddocfacts.NewMddocStore(exec, nil, mddocfacts.MddocStoreConfig{ReadTable: readTable})
 	defer store.Close()
 	if err = store.VerifySchema(ctx); err != nil {
 		return

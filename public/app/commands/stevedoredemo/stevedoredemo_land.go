@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/runinfo"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	pkafka "github.com/stergiotis/boxer/public/streaming/persisted/kafka"
 	"github.com/stergiotis/boxer/public/streaming/stevedore"
 	"github.com/stergiotis/boxer/public/streaming/stevedore/deadletter"
@@ -94,6 +95,15 @@ func openDeadLetters(ctx context.Context, cmd *cli.Command) (dead deadletter.Sto
 		cfg := stevedorefacts.StevedoreStoreConfig{}
 		if db := cmd.String("database"); db != "" {
 			cfg.Table = db + ".facts"
+		}
+		table := cfg.Table
+		if table == "" {
+			table = stevedorefacts.StevedoreTableName
+		}
+		// The open's schema check reads the read table (ADR-0402 §SD3).
+		var terr error
+		if cfg.ReadTable, terr = factsschema.ReadTableFor(table); terr != nil {
+			return nil, closeFn, eh.Errorf("read table: %w", terr)
 		}
 		store, oerr := stevedorefacts.OpenStevedoreStore(ctx, exec, nil, cfg)
 		if oerr != nil {

@@ -29,6 +29,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/runinfo"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/urfave/cli/v3"
 )
 
@@ -84,7 +85,13 @@ func startTee(ctx context.Context, bus app.BusI, host string, flushInterval time
 		err = eh.Errorf("sysmetricsd: tee needs ClickHouse: %w", err)
 		return
 	}
-	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{})
+	// The schema check reads the read table (ADR-0402 §SD3).
+	readTable, err := factsschema.ReadTableFor(sysmfacts.SysmetricsTableName)
+	if err != nil {
+		err = eh.Errorf("sysmetricsd: %w", err)
+		return
+	}
+	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{ReadTable: readTable})
 	err = store.VerifySchema(ctx)
 	if err != nil {
 		store.Close()

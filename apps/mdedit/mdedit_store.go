@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
@@ -67,10 +68,16 @@ func connectLading(ctx context.Context) (sc *storeConn, err error) {
 		err = eh.Errorf("lading store: %w", err)
 		return
 	}
+	// The mount list reads the policies from the read table (ADR-0402 §SD3).
+	policyRead, err := factsschema.ReadTableFor(ladingpolicy.PolicyTableName)
+	if err != nil {
+		err = eh.Errorf("lading store: %w", err)
+		return
+	}
 	sc = &storeConn{
 		client:   client,
 		exec:     exec,
-		policies: ladingpolicy.NewPolicyStore(exec, nil, ladingpolicy.PolicyStoreConfig{}),
+		policies: ladingpolicy.NewPolicyStore(exec, nil, ladingpolicy.PolicyStoreConfig{ReadTable: policyRead}),
 		views:    make(map[viewKey]*ladingadapter.FS, 4),
 	}
 	sc.stores = lading.Stores{

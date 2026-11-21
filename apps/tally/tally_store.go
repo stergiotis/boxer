@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
@@ -76,12 +77,19 @@ func connect(ctx context.Context, layout ladingschema.Layout) (sc *storeConn, er
 		err = eb.Build().Str("database", layout.DatabaseName()).Errorf("lading store: %w", err)
 		return
 	}
+	// The mount list reads the policies from the read table when the
+	// layout's policy table is the facts table (ADR-0402 §SD3).
+	policyRead, err := factsschema.ReadTableFor(layout.PolicyTable())
+	if err != nil {
+		err = eh.Errorf("lading store: %w", err)
+		return
+	}
 	sc = &storeConn{
 		layout:   layout,
 		sql:      sqlConfig(layout),
 		client:   client,
 		exec:     exec,
-		policies: ladingpolicy.NewPolicyStore(exec, nil, ladingpolicy.PolicyStoreConfig{Table: layout.PolicyTable()}),
+		policies: ladingpolicy.NewPolicyStore(exec, nil, ladingpolicy.PolicyStoreConfig{Table: layout.PolicyTable(), ReadTable: policyRead}),
 		views:    make(map[viewKey]*ladingadapter.FS, 8),
 		stores:   lading.NewStores(exec, layout),
 	}
