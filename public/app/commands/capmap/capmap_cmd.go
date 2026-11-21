@@ -45,6 +45,7 @@ import (
 	"github.com/stergiotis/boxer/public/gov/capmapanchors"
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
 	"github.com/stergiotis/boxer/public/gov/capmapfacts"
+	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -318,11 +319,17 @@ func actionLoad(cliCtx context.Context, cmd *cli.Command) (err error) {
 		}
 	}
 
-	sink := chclient.New(chclient.Config{
+	// Through the record-store executor rather than the bare client, so an
+	// insert transform the binary registered for the facts table applies
+	// (ADR-0402 §SD2).
+	sink, err := storeexec.New(chclient.New(chclient.Config{
 		URL:      cmd.String("clickhouse-url"),
 		User:     cmd.String("user"),
 		Password: cmd.String("password"),
-	}, nil)
+	}, nil), nil)
+	if err != nil {
+		return eh.Errorf("unable to build the executor: %w", err)
+	}
 
 	// The rows carry this process's run as their origin (ADR-0330 §SD3); a
 	// CLI has no window.
