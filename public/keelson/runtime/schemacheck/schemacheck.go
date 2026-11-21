@@ -88,6 +88,12 @@ func Report(vs []recordstore.SchemaVerdict, log zerolog.Logger, strict bool) (er
 	var bad []string
 	for _, v := range vs {
 		if v.IsOk() {
+			if v.LayoutDiffers {
+				// Informational (ADR-0397): the store works over either
+				// layout, so this is said once and is never strict.
+				log.Info().Str("table", v.Table).Strs("notes", v.Notes).Msg("schema: " + v.Summary())
+				continue
+			}
 			if len(v.Extra) > 0 {
 				log.Debug().Str("table", v.Table).Strs("extra", v.Extra).Msg("schema: " + v.Summary())
 			}

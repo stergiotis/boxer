@@ -100,6 +100,14 @@ type TableContract struct {
 	// Stamp is the COMMENT the store's CREATE TABLE writes; empty when its
 	// creator does not stamp.
 	Stamp string
+	// Layout is the engine, partition key and sorting key the store creates
+	// the table with; zero when the contract does not declare one. A table
+	// with another layout is still judged by its columns: the difference is
+	// a note, since none of the three can change in place (ADR-0397).
+	Layout TableLayout
+	// LayoutRecipe is where a note on a differing layout points: the
+	// doc/migration recipe that copies the table into the declared layout.
+	LayoutRecipe string
 }
 
 // ColumnRename is a column present under a name that differs from the
@@ -119,11 +127,13 @@ type LiveColumn struct {
 
 // TableFacts is what the server says about one table.
 type TableFacts struct {
-	Exists      bool
-	Engine      string
-	Comment     string
-	CreateQuery string
-	Columns     []LiveColumn
+	Exists       bool
+	Engine       string
+	PartitionKey string
+	SortingKey   string
+	Comment      string
+	CreateQuery  string
+	Columns      []LiveColumn
 }
 
 // SchemaVerdict is the judgement of one table.
@@ -150,6 +160,10 @@ type SchemaVerdict struct {
 	// insert's deduplication token is ignored.
 	Engine      string `json:"engine,omitempty"`
 	DedupWindow bool   `json:"dedupWindow"`
+	// LayoutDiffers is set when the contract declares a layout and the
+	// table has another. It is informational and leaves the verdict as it
+	// is: the store reads and writes either layout (ADR-0397).
+	LayoutDiffers bool `json:"layoutDiffers,omitempty"`
 }
 
 // IsOk reports whether the store reads and writes the table as it is.
@@ -189,6 +203,9 @@ func (inst SchemaVerdict) Summary() string {
 		b.WriteString(" (written by a newer schema)")
 	case StampAgeOther:
 		b.WriteString(" (stamped by another schema)")
+	}
+	if inst.LayoutDiffers {
+		b.WriteString(" — layout differs (informational)")
 	}
 	return b.String()
 }
@@ -329,6 +346,18 @@ func JudgeFacts(c TableContract, facts TableFacts) (v SchemaVerdict) {
 	if IsPlainMergeTree(facts.Engine) && !v.DedupWindow {
 		v.Notes = append(v.Notes, "the table keeps no insert deduplication window, so a retried insert that had landed is written twice; `boxer schema plan` proposes the setting")
 	}
+	if !c.Layout.IsZero() {
+		live := TableLayout{Engine: facts.Engine, PartitionKey: facts.PartitionKey, SortingKey: facts.SortingKey}
+		if !live.Equal(c.Layout) {
+			v.LayoutDiffers = true
+			note := "layout differs (informational): the table is " + live.String() + "; this build creates " + c.Layout.String() +
+				". The store reads and writes either; a partition or sorting key cannot change in place"
+			if c.LayoutRecipe != "" {
+				note += ", and " + c.LayoutRecipe + " copies the table into the new layout"
+			}
+			v.Notes = append(v.Notes, note)
+		}
+	}
 	if ts, ok := ParseTableStamp(facts.Comment); ok {
 		if ws, wok := ParseTableStamp(c.Stamp); wok && ts.Vocab != ws.Vocab && ts.Vocab != "" && ws.Vocab != "" {
 			v.Notes = append(v.Notes, "the stamp's vocabulary digest differs from this build's: rows written under another membership-id assignment decode as absent")
@@ -369,8 +398,8 @@ func SplitTableRef(ref string) (db string, name string) {
 	return "", ref
 }
 
-// ReadTableFacts reads one table's engine, comment, CREATE statement and
-// columns from system.tables and system.columns. A bare reference resolves
+// ReadTableFacts reads one table's engine, keys, comment, CREATE statement
+// and columns from system.tables and system.columns. A bare reference resolves
 // in the executor's current database.
 func ReadTableFacts(ctx context.Context, exec ExecutorI, table string) (facts TableFacts, err error) {
 	if err = CheckTableRef(table); err != nil {
@@ -383,10 +412,11 @@ func ReadTableFacts(ctx context.Context, exec ExecutorI, table string) (facts Ta
 	}
 	const settings = " SETTINGS output_format_arrow_string_as_string=1, output_format_arrow_low_cardinality_as_dictionary=0"
 	err = forEachRow(ctx, exec,
-		"SELECT engine, comment, create_table_query FROM system.tables WHERE database = "+dbExpr+" AND name = "+quoteLiteral(name)+settings,
-		[]string{"engine", "comment", "create_table_query"}, func(vals []string) {
+		"SELECT engine, partition_key, sorting_key, comment, create_table_query FROM system.tables WHERE database = "+dbExpr+" AND name = "+quoteLiteral(name)+settings,
+		[]string{"engine", "partition_key", "sorting_key", "comment", "create_table_query"}, func(vals []string) {
 			facts.Exists = true
-			facts.Engine, facts.Comment, facts.CreateQuery = vals[0], vals[1], vals[2]
+			facts.Engine, facts.PartitionKey, facts.SortingKey = vals[0], vals[1], vals[2]
+			facts.Comment, facts.CreateQuery = vals[3], vals[4]
 		})
 	if err != nil || !facts.Exists {
 		return

@@ -90,7 +90,11 @@ func Derive(c recordstore.TableContract, facts recordstore.TableFacts) (p Plan) 
 	if recordstore.IsPlainMergeTree(facts.Engine) && !v.DedupWindow {
 		p.Statements = append(p.Statements, "ALTER TABLE "+ref+" MODIFY SETTING "+recordstore.DedupWindowSetting+" = "+strconv.Itoa(recordstore.DedupWindowBlocks))
 	}
-	if c.Stamp != "" && facts.Comment != c.Stamp {
+	if c.Stamp != "" && facts.Comment != c.Stamp && v.LayoutDiffers {
+		// The build's stamp records the build's layout, which this table
+		// does not have (ADR-0397).
+		p.Verdict.Notes = append(p.Verdict.Notes, "the table is not stamped: the stamp would record a layout the table does not have")
+	} else if c.Stamp != "" && facts.Comment != c.Stamp {
 		if _, stamped := recordstore.ParseTableStamp(facts.Comment); stamped || strings.TrimSpace(facts.Comment) == "" {
 			p.Statements = append(p.Statements, "ALTER TABLE "+ref+" MODIFY COMMENT "+jackstay.QuoteString(c.Stamp))
 		} else {

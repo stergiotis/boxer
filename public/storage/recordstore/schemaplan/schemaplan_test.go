@@ -113,3 +113,16 @@ func TestNothingToDoAndAForeignComment(t *testing.T) {
 	assert.Empty(t, p.Statements, "a replicated table keeps its own window, and the note stays")
 	assert.NotEmpty(t, p.Verdict.Notes)
 }
+
+// A table in another layout keeps its stamp off: the build's stamp names
+// the build's layout. The window is still proposed.
+func TestADifferingLayoutIsNotStamped(t *testing.T) {
+	ddl, cols := fixture(t, "persiststate_after.sql")
+	c := contract("boxer.persiststate", cols)
+	c.Layout = recordstore.TableLayout{Engine: "MergeTree", PartitionKey: "toYYYYMM(ts)", SortingKey: "ts"}
+	p := Derive(c, recordstore.TableFacts{Exists: true, Engine: "MergeTree", SortingKey: "ts", CreateQuery: ddl, Columns: live(cols)})
+	require.False(t, p.IsRefused(), p.Refused)
+	assert.True(t, p.Verdict.LayoutDiffers)
+	assert.Equal(t, []string{"ALTER TABLE `boxer`.`persiststate` MODIFY SETTING non_replicated_deduplication_window = 1000"}, p.Statements)
+	assert.Contains(t, strings.Join(p.Verdict.Notes, "\n"), "not stamped")
+}

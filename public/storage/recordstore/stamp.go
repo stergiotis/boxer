@@ -41,6 +41,9 @@ type TableStamp struct {
 	// Vocab is [VocabDigest] of the membership-id assignment, "" when the
 	// store binds none.
 	Vocab string
+	// Layout is [TableLayout.Digest] of the layout the table was created
+	// with, "" when its creator does not record one.
+	Layout string
 }
 
 // String renders the stamp: the prefix, then space-separated key=value.
@@ -48,6 +51,9 @@ func (inst TableStamp) String() string {
 	parts := []string{TableStampPrefix, "kind=" + inst.Kind, "columns=" + inst.Columns, "naming=" + inst.Naming}
 	if inst.Vocab != "" {
 		parts = append(parts, "vocab="+inst.Vocab)
+	}
+	if inst.Layout != "" {
+		parts = append(parts, "layout="+inst.Layout)
 	}
 	return strings.Join(parts, " ")
 }
@@ -73,6 +79,8 @@ func ParseTableStamp(comment string) (s TableStamp, ok bool) {
 			s.Naming = v
 		case "vocab":
 			s.Vocab = v
+		case "layout":
+			s.Layout = v
 		}
 	}
 	ok = s.Columns != ""
