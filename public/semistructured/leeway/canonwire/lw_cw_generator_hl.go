@@ -7,14 +7,18 @@ import (
 
 	"github.com/stergiotis/boxer/public/code/synthesis/golang"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/gocodegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/unsafeperf"
 )
 
-var CodeGeneratorName = "Leeway canonwire (" + vcs.BoxerModuleVersion() + ")"
+// CodeGeneratorName is stamped into the header of every file this generator
+// writes. It names the generator and no module version: the version a binary
+// reports depends on how it was built (a tagged dependency, the main module,
+// a workspace), so a stamped version would make one generator at one commit
+// write different bytes.
+var CodeGeneratorName = "Leeway canonwire"
 
 func NewGoCodeGeneratorDriver(namingConvention common.NamingConventionI, tech common.TechnologySpecificGeneratorI) *GeneratorDriver {
 	return &GeneratorDriver{
