@@ -241,3 +241,56 @@ func arrowRecord(t *testing.T) arrow.RecordBatch {
 	schema := arrow.NewSchema([]arrow.Field{{Name: "v", Type: arrow.PrimitiveTypes.Int64}}, nil)
 	return array.NewRecordBatch(schema, []arrow.Array{arr}, 1)
 }
+
+// An insert into a table a transform is registered for sends what the
+// transform returns, to its table, with the insert's settings — the
+// deduplication token among them (ADR-0402 §SD1, §SD2); another table's
+// insert is sent as it is.
+func TestExecutor_AppliesTheRegisteredTransform(t *testing.T) {
+	type sent struct {
+		query string
+		token string
+		cols  []string
+	}
+	var got []sent
+	exec, alloc := newTestExecutor(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		s := sent{query: r.URL.Query().Get("query"), token: r.URL.Query().Get("insert_deduplication_token")}
+		rdr, err := ipc.NewFileReader(bytes.NewReader(body))
+		if err == nil {
+			for _, f := range rdr.Schema().Fields() {
+				s.cols = append(s.cols, f.Name)
+			}
+			_ = rdr.Close()
+		}
+		got = append(got, s)
+	})
+	defer alloc.AssertSize(t, 0)
+	tAlloc := memory.NewCheckedAllocator(memory.NewGoAllocator())
+	defer tAlloc.AssertSize(t, 0)
+
+	unregister := recordstore.RegisterInsertTransform("scratch_storeexec.facts", recordstore.InsertTransformFunc(
+		func(_ string, records []arrow.RecordBatch) (string, []arrow.RecordBatch, error) {
+			b := array.NewInt64Builder(tAlloc)
+			defer b.Release()
+			b.Append(records[0].Column(0).(*array.Int64).Value(0))
+			arr := b.NewArray()
+			defer arr.Release()
+			schema := arrow.NewSchema([]arrow.Field{{Name: "carried", Type: arrow.PrimitiveTypes.Int64}}, nil)
+			return "scratch_storeexec.carrier", []arrow.RecordBatch{array.NewRecordBatch(schema, []arrow.Array{arr}, 1)}, nil
+		}))
+	defer unregister()
+
+	rec := arrowRecord(t)
+	defer rec.Release()
+	_, err := exec.InsertArrowWith(context.Background(), "scratch_storeexec.facts", []arrow.RecordBatch{rec},
+		recordstore.InsertSettings{}.WithDeduplicationToken("tok-7"))
+	require.NoError(t, err)
+	require.NoError(t, exec.InsertArrow(context.Background(), "scratch_storeexec.facts", []arrow.RecordBatch{rec}))
+	require.NoError(t, exec.InsertArrow(context.Background(), "scratch_storeexec.other", []arrow.RecordBatch{rec}))
+
+	require.Len(t, got, 3)
+	assert.Equal(t, sent{query: "INSERT INTO scratch_storeexec.carrier FORMAT Arrow", token: "tok-7", cols: []string{"carried"}}, got[0])
+	assert.Equal(t, sent{query: "INSERT INTO scratch_storeexec.carrier FORMAT Arrow", cols: []string{"carried"}}, got[1])
+	assert.Equal(t, sent{query: "INSERT INTO scratch_storeexec.other FORMAT Arrow", cols: []string{"v"}}, got[2])
+}

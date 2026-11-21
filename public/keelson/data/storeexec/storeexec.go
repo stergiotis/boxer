@@ -51,6 +51,17 @@
 // A server user held at readonly=1 refuses any request that changes a setting;
 // build the executor with [Options.DisableStamp] for such a user.
 //
+// # Registered insert transforms
+//
+// Every insert consults the process-wide registry of
+// [recordstore.RegisterInsertTransform] (ADR-0402 §SD2): an insert into a
+// table a transform is registered for sends the transform's batches to the
+// table it names, with the insert's settings. This executor applies it itself
+// rather than [New] returning a wrapper, so every executor built here — in a
+// host, a daemon or a command — carries it, and callers keep the concrete type
+// [Executor.QueryArrowParams] needs. A process that registers nothing sees no
+// change.
+//
 // # Concurrency
 //
 // A Client is goroutine-safe and so is this wrapper, but a generated store is
@@ -215,17 +226,17 @@ func (inst *Executor) QueryArrowParams(ctx context.Context, sql string, params m
 
 // InsertArrow appends records to table and returns once the insert is
 // acknowledged. The records are not retained; the caller releases them after
-// return.
+// return. An insert into a table a transform is registered for
+// ([recordstore.RegisterInsertTransform], ADR-0402) sends what the transform
+// returns, to the table it names.
 func (inst *Executor) InsertArrow(ctx context.Context, table string, records []arrow.RecordBatch) (err error) {
-	err = inst.client.InsertArrowSettings(ctx, table, records, inst.settings(ctx))
-	if err != nil {
-		err = eb.Build().Str("table", table).Errorf("storeexec: insert failed: %w", err)
-	}
+	err = inst.insert(ctx, table, records, inst.settings(ctx))
 	return
 }
 
 // InsertArrowWith is InsertArrow with the settings riding the request
-// beside the call stamp.
+// beside the call stamp; a registered transform applies as it does there,
+// and the settings ride the transformed insert.
 func (inst *Executor) InsertArrowWith(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (applied bool, err error) {
 	merged := inst.settings(ctx)
 	if extra := settings.Map(); len(extra) > 0 {
@@ -236,11 +247,28 @@ func (inst *Executor) InsertArrowWith(ctx context.Context, table string, records
 			merged[k] = v
 		}
 	}
-	err = inst.client.InsertArrowSettings(ctx, table, records, merged)
-	if err != nil {
-		err = eb.Build().Str("table", table).Errorf("storeexec: insert failed: %w", err)
-	}
+	err = inst.insert(ctx, table, records, merged)
 	return true, err
+}
+
+// insert applies the transform registered for table, if any, and sends the
+// result with settings.
+func (inst *Executor) insert(ctx context.Context, table string, records []arrow.RecordBatch, settings map[string]string) (err error) {
+	target, out, release, err := recordstore.ApplyRegisteredTransform(table, records)
+	if err != nil {
+		err = eh.Errorf("storeexec: %w", err)
+		return
+	}
+	defer release()
+	err = inst.client.InsertArrowSettings(ctx, target, out, settings)
+	if err != nil {
+		b := eb.Build().Str("table", table)
+		if target != table {
+			b = b.Str("target", target)
+		}
+		err = b.Errorf("storeexec: insert failed: %w", err)
+	}
+	return
 }
 
 // withArrowStreamFormat appends the output-format clause. A trailing
