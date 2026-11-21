@@ -642,6 +642,7 @@ func (inst *Service) handleTranscribe(msg *app.Msg) {
 	}
 	lg.Str("sender", string(msg.Sender)).Str("purpose", req.Purpose).Bool("ok", rep.Ok).Str("reason", rep.Reason).
 		Int("audioBytes", len(req.Audio)).Bool("diarize", req.Diarize).Dur("elapsed", rec.Elapsed).Msg("llm: transcribe")
+	p.close()
 	inst.reply(msg.Reply, rep)
 }
 

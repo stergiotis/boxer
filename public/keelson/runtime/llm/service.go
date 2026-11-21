@@ -585,6 +585,7 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 	}
 	lg.Str("sender", string(msg.Sender)).Str("purpose", req.Purpose).Bool("ok", rep.Ok).Str("reason", rep.Reason).
 		Int32("in", resp.InputTokens).Int32("out", resp.OutputTokens).Dur("elapsed", rec.Elapsed).Msg("llm: complete")
+	p.close()
 	inst.reply(msg.Reply, rep)
 }
 

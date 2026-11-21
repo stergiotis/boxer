@@ -78,6 +78,7 @@ type passage struct {
 	claim    approvalClaim
 	left     bool
 	cleanup  []func()
+	closed   bool
 }
 
 // settle charges what the call used, and the bytes that left the cell —
@@ -99,11 +100,16 @@ func (inst *passage) settle(used ration.Usage) {
 
 // close releases the passage: an unsettled call is settled as using
 // nothing, a held approval is consumed when the bytes left and given back
-// otherwise, and the call stops being cancellable. Safe on a nil passage.
+// otherwise, and the call stops being cancellable. A verb closes it
+// before it replies, so a requester that acts on the reply finds the
+// approval already spent or given back. Safe on a nil passage, and a
+// second close does nothing: by then a resend may hold the call's
+// approval, and giving it back again would take it from that resend.
 func (inst *passage) close() {
-	if inst == nil {
+	if inst == nil || inst.closed {
 		return
 	}
+	inst.closed = true
 	if inst.ticket != nil && !inst.settled {
 		inst.settle(nil)
 	}
