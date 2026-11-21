@@ -144,7 +144,7 @@ func (inst *BusApi) RunId() (id string)        { id = inst.cfg.RunId; return }
 func (inst *BusApi) Spawn(callerCtx context.Context, opts SpawnOpts) (h HandleI, err error) {
 	parent := callerCtx
 	if parent == nil {
-		parent = context.Background()
+		parent = context.Background() //boxer:lint disable=CS020 reason="documented: a nil callerCtx opts out of caller-side scoping"
 	}
 
 	if opts.OwnerAppId == "" {

@@ -23,11 +23,9 @@ github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers.appAudit
 github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers.appLogsProvider.Snapshot
 github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers.appRunsProvider.Snapshot
 github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers.workingsetsProvider.Snapshot
-github.com/stergiotis/boxer/public/keelson/runtime/lifetime.New
 github.com/stergiotis/boxer/public/keelson/runtime/llm.NewService
 github.com/stergiotis/boxer/public/keelson/runtime/moderator.NewService
 github.com/stergiotis/boxer/public/keelson/runtime/queryprogress.Poller.Start
-github.com/stergiotis/boxer/public/keelson/runtime/task.BusApi.Spawn
 github.com/stergiotis/boxer/public/keelson/runtime/task.RunToCompletion
 github.com/stergiotis/boxer/public/keelson/runtime/trail.AsAuditSink
 github.com/stergiotis/boxer/public/keelson/runtime/watchbill.Worker.RunJob

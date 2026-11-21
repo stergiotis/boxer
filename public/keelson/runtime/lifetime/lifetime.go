@@ -68,7 +68,7 @@ type Scope struct {
 // of a parent that is already retired is born retired, and done.
 func New(parent *Scope) (inst *Scope) {
 	inst = &Scope{parent: parent, done: make(chan struct{})}
-	workParent, tailParent := context.Background(), context.Background()
+	workParent, tailParent := context.Background(), context.Background() //boxer:lint disable=CS020 reason="a root scope (parent nil) is a root: its contexts end only by Retire and Abandon"
 	if parent != nil {
 		workParent, tailParent = parent.work, parent.tail
 	}
