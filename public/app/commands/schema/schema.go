@@ -3,6 +3,8 @@
 // bringing them in line (ADR-0387). `plan` prints the verdicts and the
 // statements; `apply` runs the statements and needs --yes. A shape change
 // that is not mechanical is refused with a pointer to doc/migration.
+// `roundtrip` checks a deployment's facts insert transform against its read
+// relation on clickhouse-local (ADR-0402 §SD6); it reaches no server.
 package schema
 
 import (
@@ -55,6 +57,7 @@ func NewCliCommand() *cli.Command {
 				},
 				Action: runApply,
 			},
+			roundTripCommand(),
 		},
 	}
 }
