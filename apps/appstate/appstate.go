@@ -96,7 +96,10 @@ type snapshot struct {
 	lastError string
 	lastNote  string
 	refreshed time.Time
-	inflight  int
+	// readFrom is when the read that landed last began; it sees every
+	// verb that had landed by then.
+	readFrom time.Time
+	inflight int
 	// reads says the window has a reader; false only where the host minted
 	// no bus for it.
 	reads bool
@@ -243,6 +246,7 @@ func (inst *App) poll(ctx context.Context) {
 // refresh reads the table and lands it as one snapshot. A failed read keeps
 // the rows the window had; the error says why.
 func (inst *App) refresh(ctx context.Context) {
+	began := time.Now()
 	var rows entryCols
 	var readErr string
 	if inst.reader == nil {
@@ -262,6 +266,7 @@ func (inst *App) refresh(ctx context.Context) {
 		}
 		inst.snap.rows = rows
 		inst.snap.refreshed = time.Now()
+		inst.snap.readFrom = began
 	}
 	inst.mu.Unlock()
 	inst.landed.Store(true)

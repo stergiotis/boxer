@@ -191,20 +191,31 @@ func mounted(t *testing.T) (a *App, b *persist.StoreBackend) {
 	return
 }
 
+// eventuallyListed waits for the verbs in flight to land, then for a read
+// that began after they did, and checks what that read listed. Both waits
+// are on the window's own state, not on a time budget: a verb ends within
+// its request timeout and a read within one statement. hangGuard only
+// turns a window that never reads into a failure instead of a stuck test.
 func (inst *App) eventuallyListed(t *testing.T, n int) (s snapshot) {
 	t.Helper()
-	inst.markDirty()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		s = inst.snapshot()
-		if s.inflight == 0 && !s.refreshed.IsZero() && s.rows.Len() == n {
-			return
-		}
+	const hangGuard = time.Minute
+	deadline := time.Now().Add(hangGuard)
+	for s = inst.snapshot(); s.inflight != 0; s = inst.snapshot() {
 		if time.Now().After(deadline) {
-			t.Fatalf("the window should list %d entries; it lists %d (err=%q note=%q inflight=%d)", n, s.rows.Len(), s.lastError, s.lastNote, s.inflight)
+			t.Fatalf("a verb never landed (err=%q note=%q inflight=%d)", s.lastError, s.lastNote, s.inflight)
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
 	}
+	landed := time.Now()
+	inst.markDirty()
+	for s = inst.snapshot(); s.readFrom.Before(landed); s = inst.snapshot() {
+		if time.Now().After(deadline) {
+			t.Fatalf("the window never read after its verbs landed (err=%q note=%q)", s.lastError, s.lastNote)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	require.Equal(t, n, s.rows.Len(), "the window lists what the store holds (err=%q note=%q)", s.lastError, s.lastNote)
+	return
 }
 
 // TestForgetWaitsForItsConfirmation is the confirmation step ADR-0185 M3
