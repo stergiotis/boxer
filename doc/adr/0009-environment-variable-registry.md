@@ -426,6 +426,8 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 - **2026-11-20 — A `Sensitive` variable can be read from a file: `NAME_FILE`.** `NewString` registers a companion `NAME_FILE` (a path, not itself sensitive, same category and origin) for every `Sensitive` spec, and `Get` reads the named file — one trailing newline dropped, at most 64 KiB — when `NAME` is unset or empty. The variable wins over the file, and an unreadable file is reported once on stderr and resolves as unset. `ValueSourceE` gains `ValueSourceFile`, appended so the existing values keep their numbers. This keeps a secret out of the process environment, which every child inherits and `/proc/<pid>/environ` shows; extbin now also removes `Sensitive` variables from a child's environment unless the program declares it keeps them (ADR-0118, update of the same date). It covers code that reads the secret through `Get`; a flag bound to the variable by `cli.EnvVars` alone does not see the file. The core decision is unchanged.
 
+- **2026-11-20 — The markdown reference drops its `generated-at` header.** The timestamp changed on every `go generate`, so regenerating an unchanged registry dirtied the tree and the post-test drift check could not tell a stale page from a fresh one. Like the JSON snapshot, `doc/env-vars.md` is now a pure function of the linked registry. The core decision is unchanged.
+
 ## References
 
 - `public/config/config.go` — existing `Configer` interface, unchanged by this ADR.
