@@ -237,10 +237,35 @@ func TagValueOf(id uint64) identifier.TagValue {
 	return identifier.TaggedId(id).GetTag().GetValue()
 }
 
+// ownedByPackage says whether the golden at path is a vocabulary's own: a
+// file in the testdata directory of a Go package. A copy of a golden kept
+// anywhere else — a release's contract snapshot, which records the tables a
+// release promised — repeats claims rather than making them, and counting it
+// would report every id it holds as claimed twice.
+func ownedByPackage(path string) (owned bool, err error) {
+	dir := filepath.Dir(path)
+	if filepath.Base(dir) != "testdata" {
+		return
+	}
+	entries, err := os.ReadDir(filepath.Dir(dir))
+	if err != nil {
+		err = eb.Build().Str("path", path).Errorf("unable to list the golden's package directory: %w", err)
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".go") {
+			owned = true
+			return
+		}
+	}
+	return
+}
+
 // FindGoldens walks root and returns every committed assignment table it
 // finds, keyed by the path it was read from. It skips the directories the go
 // tool skips for ./... — names starting with "." or "_", which is where
-// agent worktrees and other checkouts of the same tree live — and node_modules.
+// agent worktrees and other checkouts of the same tree live — and node_modules,
+// and it reads only the goldens a Go package owns (see ownedByPackage).
 func FindGoldens(root string) (r map[string][]Assignment, err error) {
 	r = make(map[string][]Assignment)
 	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
@@ -255,6 +280,10 @@ func FindGoldens(root string) (r map[string][]Assignment, err error) {
 		}
 		if d.Name() != GoldenBaseName {
 			return nil
+		}
+		owned, oerr := ownedByPackage(path)
+		if oerr != nil || !owned {
+			return oerr
 		}
 		raw, rerr := os.ReadFile(path)
 		if rerr != nil {

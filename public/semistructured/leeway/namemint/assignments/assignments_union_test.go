@@ -1,6 +1,8 @@
 package assignments_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,6 +26,27 @@ func allGoldens(t *testing.T) map[string][]assignments.Assignment {
 	require.NoError(t, err)
 	require.NotEmpty(t, found, "no assignment goldens found — the check would prove nothing")
 	return found
+}
+
+// A copy of a golden outside a package's testdata — the membership tables a
+// release's contract snapshot records — repeats claims the package already
+// makes, so the walk reads only the package's own.
+func TestFindGoldensReadsOnlyAPackagesOwnGolden(t *testing.T) {
+	root := t.TempDir()
+	golden := assignments.Render([]assignments.Assignment{{Ordinal: 1, Name: "a", Id: 1}})
+	write := func(rel string, content string) {
+		p := filepath.Join(root, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
+	}
+	write("vocab/vocab.go", "package vocab\n")
+	write("vocab/testdata/"+assignments.GoldenBaseName, golden)
+	write("contracts/snap/membership/vocab/testdata/"+assignments.GoldenBaseName, golden)
+
+	found, err := assignments.FindGoldens(root)
+	require.NoError(t, err)
+	assert.Len(t, found, 1)
+	assert.Contains(t, found, filepath.Join(root, "vocab", "testdata", assignments.GoldenBaseName))
 }
 
 // Ids carry their tag, so two vocabularies sharing a tag value collide here as

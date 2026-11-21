@@ -273,7 +273,8 @@ func describeSpace(sp string) string {
 }
 
 // FindStreamGoldens walks root and returns every committed stream golden,
-// keyed by the path it was read from, skipping what FindGoldens skips.
+// keyed by the path it was read from, skipping what FindGoldens skips and
+// reading only the goldens a Go package owns.
 func FindStreamGoldens(root string) (r map[string][]StreamClaim, err error) {
 	r = make(map[string][]StreamClaim)
 	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
@@ -288,6 +289,10 @@ func FindStreamGoldens(root string) (r map[string][]StreamClaim, err error) {
 		}
 		if d.Name() != StreamGoldenBaseName {
 			return nil
+		}
+		owned, oerr := ownedByPackage(path)
+		if oerr != nil || !owned {
+			return oerr
 		}
 		raw, rerr := os.ReadFile(path)
 		if rerr != nil {
