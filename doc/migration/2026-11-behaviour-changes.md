@@ -16,7 +16,8 @@ The changes below compile unchanged in a depending module, so the compiler
 does not point at them; a test, a deployment or the module's own gate does,
 later. The API breaks and package moves of the same period are in
 [2026-11-library-layering.md](./2026-11-library-layering.md); the context
-now passed to store, persist and bus calls is in its own note.
+now passed to store, persist and bus calls is in
+[2026-11-io-context.md](./2026-11-io-context.md).
 
 ## When to use this recipe
 
@@ -89,11 +90,10 @@ relied on the old behaviour.
 - **Panics returned by `task.Run`.** `Run` and `RunToCompletion` return a
   panic in the work as an error instead of re-raising it (ADR-0386 SD3).
 - **Writes at stop.** Store and facts writes take the caller's context, so a
-  write under a context cancelled at stop does not land. A bus handler's row
-  that must land runs under `context.WithoutCancel(msg.Context())`; a
-  recording pipeline's last flush and close run under
-  `context.WithoutCancel(producerCtx)` bounded by a timeout of their own, not
-  under the cancelled context.
+  write under a context cancelled at stop does not land; the last flush and
+  close run under `context.WithoutCancel` of the producer's context
+  ([2026-11-io-context.md § Writes at stop](./2026-11-io-context.md#writes-at-stop),
+  [ADR-0395](../adr/0395-io-takes-a-context.md)).
 - **Decode bounds.** An fffi2 read of a length past `DefaultMaxFieldLength`
   fails the read before allocating; a caller that sends more raises it with
   `SetMaxFieldLength` (no ADR).
