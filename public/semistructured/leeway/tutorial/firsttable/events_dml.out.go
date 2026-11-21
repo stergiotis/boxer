@@ -38,7 +38,7 @@ func CreateSchemaEvents() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1494
 
 type InEntityEvents struct {
 	errs               []error
@@ -114,7 +114,7 @@ var InEntityEventsSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1697
 
 // SetId sets the entity's id column.
 func (inst *InEntityEvents) SetId(id0 uint64) *InEntityEvents {
@@ -130,7 +130,7 @@ func (inst *InEntityEvents) SetId(id0 uint64) *InEntityEvents {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1697
 
 // SetTimestamp sets the entity's ts column.
 func (inst *InEntityEvents) SetTimestamp(ts1 time.Time) *InEntityEvents {
