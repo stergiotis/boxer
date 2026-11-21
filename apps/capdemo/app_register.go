@@ -22,15 +22,15 @@ var helpFS embed.FS
 // point of the demo: a real-world app spelling out exactly what it
 // needs from the runtime.
 //
-//   - fs.dialog.read — request the file picker. Pub only; the broker
+//   - runtime.fs.dialog.read — request the file picker. Pub only; the broker
 //     subscribes to fs.> and replies on the request inbox.
-//   - fs.dialog.watch — request the folder-watch picker. Pub only;
+//   - runtime.fs.dialog.watch — request the folder-watch picker. Pub only;
 //     the broker mints a HandleModeWatch handle on Resolve.
-//   - fs.handle.> — deliberately NOT declared, which is as much the point
+//   - runtime.fs.handle.> — deliberately NOT declared, which is as much the point
 //     of the demo as the two above. It used to be, "eagerly", with a note
 //     that a request-specific narrow grant would be preferable; that is
 //     what the broker was already doing. Resolve adds the narrow
-//     fs.handle.{uuid}.> to this client the moment the USER approves a
+//     runtime.fs.handle.{uuid}.> to this client the moment the USER approves a
 //     dialog and revokes it on close (CapDirectionBoth for watch handles,
 //     so the .event subscribe is allowed — a half this manifest never
 //     carried anyway, since its entry was Pub only). Declaring the

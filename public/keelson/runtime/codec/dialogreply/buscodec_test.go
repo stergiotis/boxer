@@ -22,7 +22,7 @@ func TestBuscodecRoundTripApproved(t *testing.T) {
 		FactId:              1,
 		At:                  time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		Approved:            true,
-		HandleSubjectPrefix: "fs.handle.deadbeef",
+		HandleSubjectPrefix: "runtime.fs.handle.deadbeef",
 		DisplayName:         "notes.md",
 	}
 	wire, err := buscodec.Encode(orig)

@@ -16,8 +16,8 @@ import (
 )
 
 // newSetup spins up an Inst + fsbroker.Service + an app client. The app
-// client is granted only fs.dialog.read at construction; the broker
-// augments its caps to include fs.handle.{uuid}.> on Resolve.
+// client is granted only runtime.fs.dialog.read at construction; the broker
+// augments its caps to include runtime.fs.handle.{uuid}.> on Resolve.
 func newSetup(t *testing.T) (inst *inprocbus.Inst, svc *fsbroker.Service, appBus *inprocbus.Client, cleanup func()) {
 	t.Helper()
 	inst = inprocbus.NewInst(zerolog.Nop())
@@ -144,9 +144,9 @@ func TestService_Handle_UnknownUuid(t *testing.T) {
 	_ = svc
 
 	bus := inst.NewClient("test.app2", []app.SubjectFilter{
-		{Pattern: "fs.handle.>", Direction: app.CapDirectionPub},
+		{Pattern: "runtime.fs.handle.>", Direction: app.CapDirectionPub},
 	})
-	reply, err := bus.Request(t.Context(), "fs.handle.deadbeef.read", nil)
+	reply, err := bus.Request(t.Context(), "runtime.fs.handle.deadbeef.read", nil)
 	require.NoError(t, err)
 	dr, err := fsbroker.UnmarshalDialogReply(reply)
 	require.NoError(t, err)
@@ -159,7 +159,7 @@ func TestService_DialogWrite_ResolveGrantsHandleAndWrites(t *testing.T) {
 	defer cleanup()
 
 	// The write path needs its own client: newSetup's app is granted only
-	// fs.dialog.read. The broker augments fs.handle.{uuid}.> on Resolve.
+	// runtime.fs.dialog.read. The broker augments runtime.fs.handle.{uuid}.> on Resolve.
 	writer := inst.NewClient("test.writer", []app.SubjectFilter{
 		{Pattern: fsbroker.SubjectDialogWrite, Direction: app.CapDirectionPub, Reason: "test app may request writes"},
 	})
@@ -317,7 +317,7 @@ func TestService_Handle_CloseEvictsHandle(t *testing.T) {
 	require.NoError(t, err)
 
 	// Subsequent access is denied at the bus layer: closing the handle
-	// revokes the fs.handle.{uuid}.> cap, so the app can no longer even
+	// revokes the runtime.fs.handle.{uuid}.> cap, so the app can no longer even
 	// publish to the handle subject (defense in depth on top of the
 	// service-side handle eviction).
 	_, err = appBus.Request(t.Context(), dr.HandleSubjectPrefix+".read", nil)
@@ -326,7 +326,7 @@ func TestService_Handle_CloseEvictsHandle(t *testing.T) {
 }
 
 func TestService_AppCannotAccessOtherAppsHandle(t *testing.T) {
-	// App A obtains a handle. App B has fs.handle.> pub cap (an unusually
+	// App A obtains a handle. App B has runtime.fs.handle.> pub cap (an unusually
 	// permissive grant); it tries to read and to close A's handle. The bus
 	// permits the publishes (B has the cap); the broker refuses them because
 	// the handle was granted to A, not to the message's sender.
@@ -356,7 +356,7 @@ func TestService_AppCannotAccessOtherAppsHandle(t *testing.T) {
 
 	// App B with a permissive cap tries to read A's handle.
 	appB := inst.NewClient("test.appB", []app.SubjectFilter{
-		{Pattern: "fs.handle.>", Direction: app.CapDirectionPub},
+		{Pattern: "runtime.fs.handle.>", Direction: app.CapDirectionPub},
 	})
 	bReply, err := appB.Request(t.Context(), drA.HandleSubjectPrefix+".read", nil)
 	require.NoError(t, err)

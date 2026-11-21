@@ -1,5 +1,5 @@
 // Package dialogreply is the leeway-coded wire form of the
-// file-dialog reply payload published on `fs.dialog.{op}` replies.
+// file-dialog reply payload published on `runtime.fs.dialog.{op}` replies.
 //
 // Vocabulary:
 //

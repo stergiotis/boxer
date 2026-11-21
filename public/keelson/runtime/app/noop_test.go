@@ -11,9 +11,9 @@ import (
 
 func TestNoopBus_Publish_Errors(t *testing.T) {
 	var b BusI = &NoopBus{}
-	err := b.Publish("fs.dialog.read", []byte("x"))
+	err := b.Publish("runtime.fs.dialog.read", []byte("x"))
 	require.Error(t, err)
-	assert.Equal(t, "fs.dialog.read", ebtest.Fields(t, err)["subject"])
+	assert.Equal(t, "runtime.fs.dialog.read", ebtest.Fields(t, err)["subject"])
 }
 
 func TestNoopBus_Subscribe_Errors(t *testing.T) {

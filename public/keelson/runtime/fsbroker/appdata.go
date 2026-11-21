@@ -1,10 +1,10 @@
 package fsbroker
 
 // appdata.go — the app data area: one directory per app, owned by the
-// runtime, which an app reaches by file NAME over fs.appdata.{op}. It is the
+// runtime, which an app reaches by file NAME over runtime.fs.appdata.{op}. It is the
 // Powerbox's answer for state an app keeps for itself rather than a file the
 // user hands it: nothing is picked, so nothing waits on a person, and the
-// authority is the manifest's `fs.appdata.>` declaration, which the bus
+// authority is the manifest's `runtime.fs.appdata.>` declaration, which the bus
 // enforces on publish. The broker keys the directory on the message's
 // Sender — the bus's record of who published, not a payload claim — so an
 // app can name only files in its own directory, and a name is a single path
@@ -32,8 +32,8 @@ import (
 )
 
 // SubjectAppDataPrefix is followed by the op: read, write, append, stat, list.
-// An app declares `fs.appdata.>` (Pub) to use its data area.
-const SubjectAppDataPrefix = "fs.appdata."
+// An app declares `runtime.fs.appdata.>` (Pub) to use its data area.
+const SubjectAppDataPrefix = "runtime.fs.appdata."
 
 const (
 	AppDataOpRead   = "read"
@@ -46,14 +46,14 @@ const (
 // AppDataDirEnv overrides where the app data areas live.
 var AppDataDirEnv = env.NewPath(env.Spec{
 	Name:        "BOXER_FS_APPDATA_DIR",
-	Description: "fs broker: root of the per-app data areas (fs.appdata.*); empty uses <user config dir>/boxer/appdata",
+	Description: "fs broker: root of the per-app data areas (runtime.fs.appdata.*); empty uses <user config dir>/boxer/appdata",
 	Category:    env.CategorySystem,
 })
 
 // maxAppDataNameLen bounds a file name in a data area.
 const maxAppDataNameLen = 128
 
-// AppDataRequest is the payload of every fs.appdata.{op} request. Like
+// AppDataRequest is the payload of every runtime.fs.appdata.{op} request. Like
 // [DialogRequest] it is an ephemeral control-plane value and rides the
 // buscodec default (canonical CBOR) path.
 type AppDataRequest struct {
@@ -71,7 +71,7 @@ type AppDataEntry struct {
 	ModTime int64  `cbor:"modTime"` // unix nanoseconds
 }
 
-// AppDataReply answers every fs.appdata.{op} request.
+// AppDataReply answers every runtime.fs.appdata.{op} request.
 type AppDataReply struct {
 	Ok     bool   `cbor:"ok"`
 	Reason string `cbor:"reason,omitempty"`

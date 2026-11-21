@@ -16,7 +16,7 @@ broker mints on resolve.
 
 **Dialog flow (read / write / bundle):**
 
-1. App publishes `fs.dialog.read` (or `.write` / `.bundle`).
+1. App publishes `runtime.fs.dialog.read` (or `.write` / `.bundle`).
 2. `fsbroker.Service` queues a `PendingRequest` and replies are
    suspended on the request inbox.
 3. `pickerbridge.Bridge` (running every frame as an overlay above the
@@ -24,28 +24,28 @@ broker mints on resolve.
    file picker.
 4. On user selection, `Service.Resolve(reqId, path)` mints a uuid,
    registers `(uuid, path, mode)`, augments the requesting client's
-   caps with `fs.handle.{uuid}.>` (Pub direction for read/write/bundle
+   caps with `runtime.fs.handle.{uuid}.>` (Pub direction for read/write/bundle
    handles), and replies with
-   `DialogReply{Granted: true, HandleSubjectPrefix: "fs.handle.{uuid}"}`.
-5. App publishes `fs.handle.{uuid}.read` to fetch the file contents
+   `DialogReply{Granted: true, HandleSubjectPrefix: "runtime.fs.handle.{uuid}"}`.
+5. App publishes `runtime.fs.handle.{uuid}.read` to fetch the file contents
    over the same bus.
 
 User clicks Cancel → `Service.Cancel(reqId)` → `DialogReply{Granted:
 false, Reason: ...}` — the app receives a reply on the same inbox so
 it doesn't time out.
 
-**Watch flow (fs.dialog.watch — streaming directory changes):**
+**Watch flow (runtime.fs.dialog.watch — streaming directory changes):**
 
-1. App publishes `fs.dialog.watch`. Same queueing path as the other
+1. App publishes `runtime.fs.dialog.watch`. Same queueing path as the other
    dialogs; the picker overlay opens with the "Pick folder to watch"
    header.
 2. On user selection, `Service.Resolve` mints a `HandleModeWatch`
-   handle and augments the app's caps with `fs.handle.{uuid}.>` at
+   handle and augments the app's caps with `runtime.fs.handle.{uuid}.>` at
    `CapDirectionBoth` — the Sub direction is the wrinkle that lets the
    app subscribe to the streaming event subject.
-3. App subscribes to `fs.handle.{uuid}.event` *before* starting the
+3. App subscribes to `runtime.fs.handle.{uuid}.event` *before* starting the
    watch so early kernel events aren't missed.
-4. App publishes `fs.handle.{uuid}.watch` with an optional
+4. App publishes `runtime.fs.handle.{uuid}.watch` with an optional
    `WatchRequest{PollFallback, PollIntervalMs, Recursive}` payload.
    The broker picks the backend via `statfs` on the path; reply names
    which one was chosen.
@@ -56,8 +56,8 @@ it doesn't time out.
    single-level mode, or a forward-slash relpath ("sub/file.txt",
    "deep/nested/leaf.txt") in recursive mode. Absolute paths stay
    inside the broker either way.
-6. Teardown: `fs.handle.{uuid}.unwatch` stops the stream and keeps the
-   handle alive; `fs.handle.{uuid}.close` evicts the handle and tears
+6. Teardown: `runtime.fs.handle.{uuid}.unwatch` stops the stream and keeps the
+   handle alive; `runtime.fs.handle.{uuid}.close` evicts the handle and tears
    down any active watch implicitly.
 
 **Backends within `fsbroker` (per-watch strategy, not Powerbox

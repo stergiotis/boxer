@@ -173,7 +173,7 @@ func TestManifest_DeclaresExpectedCaps(t *testing.T) {
 	assert.Contains(t, patterns, fsbroker.SubjectDialogRead)
 	assert.Contains(t, patterns, fsbroker.SubjectDialogWatch)
 	assert.Contains(t, patterns, clipboardbroker.SubjectWrite)
-	// No static fs.handle.> — the broker adds the narrow fs.handle.{uuid}.>
+	// No static runtime.fs.handle.> — the broker adds the narrow runtime.fs.handle.{uuid}.>
 	// to this app's live client when the USER approves a dialog and revokes it
 	// on close, so declaring the wildcard would trade a per-file, revocable,
 	// user-approved grant for standing authority over every handle the broker
@@ -189,7 +189,7 @@ func TestManifest_DeclaresExpectedCaps(t *testing.T) {
 }
 
 // resolveWatchPick drives runWatchPick by waiting for the pending
-// fs.dialog.watch request and resolving it with dir. The same shape as
+// runtime.fs.dialog.watch request and resolving it with dir. The same shape as
 // TestApp_FsPick_HandleReadRoundTrip's pending-then-resolve pattern.
 func resolveWatchPick(t *testing.T, a *App, fsSvc *fsbroker.Service, dir string) {
 	t.Helper()
@@ -369,7 +369,7 @@ func TestApp_FsWatch_StopReleasesSubscription(t *testing.T) {
 
 // TestRunPick_OutlastsTheTransportDefault and its watch twin are the
 // regression guards on a defect the round-trip tests above cannot see, because
-// they resolve the dialog immediately: fs.dialog.* is answered when somebody
+// they resolve the dialog immediately: runtime.fs.dialog.* is answered when somebody
 // finishes choosing in a picker, and the bus transport's own default is far
 // shorter than a person. Under it both flows failed with "request timeout"
 // while the dialog was still on screen.

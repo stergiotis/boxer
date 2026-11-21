@@ -307,11 +307,11 @@ func TestReapAll_EmitsShutdownRows(t *testing.T) {
 func TestSetBus_WiresInprocClientThroughMountCtx(t *testing.T) {
 	reg := app.NewRegistry()
 	m := mkManifest("test.bus")
-	// Grant a single fs.dialog.* cap so we can verify the wiring
+	// Grant a single runtime.fs.dialog.* cap so we can verify the wiring
 	// passes manifest caps through to the client (publish to an
 	// allowed subject succeeds, publish elsewhere fails).
 	m.Caps = []app.SubjectFilter{
-		{Pattern: "fs.dialog.>", Direction: app.CapDirectionPub},
+		{Pattern: "runtime.fs.dialog.>", Direction: app.CapDirectionPub},
 	}
 	ca := &counterApp{manifest: m}
 	require.NoError(t, reg.Register(ca))
@@ -332,13 +332,13 @@ func TestSetBus_WiresInprocClientThroughMountCtx(t *testing.T) {
 	// The allowed cap: publish should not error on the permission gate
 	// (it may still error on "no subscriber" — that's a different
 	// path and not what we assert here).
-	pubErr := mountBus.Publish("fs.dialog.open", []byte("payload"))
+	pubErr := mountBus.Publish("runtime.fs.dialog.open", []byte("payload"))
 	// inprocbus publish with no subscriber returns nil; an unallowed
 	// subject would error with a permission message. Either way an
 	// allowed Publish must not surface a "permission" wording.
 	if pubErr != nil {
 		assert.NotContains(t, pubErr.Error(), "permission",
-			"app with fs.dialog.> cap must clear the permission gate for fs.dialog.open")
+			"app with runtime.fs.dialog.> cap must clear the permission gate for runtime.fs.dialog.open")
 	}
 
 	// A non-matching subject must be rejected by the permission gate.
@@ -370,13 +370,13 @@ func TestSetBus_NilDefaultsToNoopBus(t *testing.T) {
 func TestSetBus_FsBrokerEndToEnd(t *testing.T) {
 	// Phase B integration: bus + fsbroker + windowhost — the
 	// carousel-shaped wiring without the egui render loop. An app
-	// with fs.dialog.read cap publishes a request; the broker queues
+	// with runtime.fs.dialog.read cap publishes a request; the broker queues
 	// it; the test acts as the picker bridge and Resolves; the
 	// app's Request returns with a handle subject prefix.
 	reg := app.NewRegistry()
 	m := mkManifest("test.fsclient")
 	m.Caps = []app.SubjectFilter{
-		{Pattern: "fs.dialog.read", Direction: app.CapDirectionPub,
+		{Pattern: "runtime.fs.dialog.read", Direction: app.CapDirectionPub,
 			Reason: "test fixture needs to ask for a file"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionSub,
 			Reason: "Request must subscribe to its reply inbox"},
@@ -404,7 +404,7 @@ func TestSetBus_FsBrokerEndToEnd(t *testing.T) {
 	replyCh := make(chan []byte, 1)
 	errCh := make(chan error, 1)
 	go func() {
-		reply, reqErr := clientBus.Request(t.Context(), "fs.dialog.read", []byte(`{"hint":"open"}`))
+		reply, reqErr := clientBus.Request(t.Context(), "runtime.fs.dialog.read", []byte(`{"hint":"open"}`))
 		if reqErr != nil {
 			errCh <- reqErr
 			return

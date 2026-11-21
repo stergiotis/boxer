@@ -13,7 +13,7 @@ import (
 
 // writerCaps is the minimal cap set a consumer needs to issue a copy: Pub on
 // clipboard.write. The reply lands on an ephemeral _INBOX.* that bypasses cap
-// checks, so no Sub cap is required — matching every fs.dialog.* consumer.
+// checks, so no Sub cap is required — matching every runtime.fs.dialog.* consumer.
 func writerCaps() []app.SubjectFilter {
 	return []app.SubjectFilter{
 		{Pattern: clipboardbroker.SubjectWrite, Direction: app.CapDirectionPub, Reason: "test: copy"},

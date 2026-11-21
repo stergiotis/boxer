@@ -98,7 +98,7 @@ func ParseWatchEventKind(s string) (k WatchEventKindE) {
 	return
 }
 
-// WatchEvent is the payload published on fs.handle.{uuid}.event,
+// WatchEvent is the payload published on runtime.fs.handle.{uuid}.event,
 // wire-encoded via the canonical bus codec. Name is the basename of
 // the affected entry within the watched directory in single-level
 // mode, or a forward-slash relative path (e.g. "sub/file.txt") in
@@ -112,7 +112,7 @@ type WatchEvent struct {
 	Ts     int64           `json:"ts"`
 }
 
-// WatchRequest is the optional payload of an fs.handle.{uuid}.watch
+// WatchRequest is the optional payload of an runtime.fs.handle.{uuid}.watch
 // request. All zero values select defaults — empty payload is valid.
 type WatchRequest struct {
 	// PollFallback forces the poller backend regardless of the underlying
@@ -130,7 +130,7 @@ type WatchRequest struct {
 	Recursive bool `json:"recursive,omitempty"`
 }
 
-// WatchReply is the reply payload to fs.handle.{uuid}.watch. Started is
+// WatchReply is the reply payload to runtime.fs.handle.{uuid}.watch. Started is
 // false either on broker-side error (with Reason populated) or when the
 // handle already has an active watch.
 type WatchReply struct {

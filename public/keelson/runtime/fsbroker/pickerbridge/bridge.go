@@ -1,6 +1,6 @@
 // Package pickerbridge connects the fs Powerbox service to the egui
 // filepicker widget. Hosts call Bridge.Render(ids) once per frame from
-// the rendering loop. The bridge pulls pending fs.dialog requests off
+// the rendering loop. The bridge pulls pending runtime.fs.dialog requests off
 // the service, drives the picker, and completes each dialog via
 // Service.Resolve (user picked) or Service.Cancel (user pressed cancel).
 //
@@ -182,7 +182,7 @@ func saveFilenameHint(mode filepicker.ModeE, suggested string) (name string) {
 	return filepath.Base(suggested)
 }
 
-// pickerOptionsFor maps a fs.dialog.{op} subject to the filepicker
+// pickerOptionsFor maps a runtime.fs.dialog.{op} subject to the filepicker
 // mode + title that startPicker constructs the widget with. Extracted
 // so the dispatch logic is testable without spinning up a real egui
 // render context. titleOverride (when non-empty) wins over the

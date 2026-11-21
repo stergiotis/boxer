@@ -36,7 +36,7 @@ func TestParseSubject_RejectsMalformed(t *testing.T) {
 		"task.",
 		"task.id",
 		"task.id.",
-		"fs.dialog.read",
+		"runtime.fs.dialog.read",
 		"taskid.verb",
 		"task..verb",
 	}

@@ -92,15 +92,15 @@ func TestNewApp_NoSelection_EmptyCap(t *testing.T) {
 
 func TestCapSpec_FsAppFilter(t *testing.T) {
 	spec := Registry[CapFs]
-	assert.True(t, spec.AppFilter(app.SubjectFilter{Pattern: "fs.dialog.read"}))
-	assert.True(t, spec.AppFilter(app.SubjectFilter{Pattern: "fs.handle.>"}))
+	assert.True(t, spec.AppFilter(app.SubjectFilter{Pattern: "runtime.fs.dialog.read"}))
+	assert.True(t, spec.AppFilter(app.SubjectFilter{Pattern: "runtime.fs.handle.>"}))
 	assert.False(t, spec.AppFilter(app.SubjectFilter{Pattern: "runtime.persist.x.>"}))
 }
 
 func TestCapSpec_PersistAppFilterAndHostInjected(t *testing.T) {
 	spec := Registry[CapPersist]
 	assert.True(t, spec.AppFilter(app.SubjectFilter{Pattern: "runtime.persist.foo.>"}))
-	assert.False(t, spec.AppFilter(app.SubjectFilter{Pattern: "fs.dialog.read"}))
+	assert.False(t, spec.AppFilter(app.SubjectFilter{Pattern: "runtime.fs.dialog.read"}))
 
 	// HostInjected reflects manifest.PersistedKeys.
 	// SubjectAlias takes the last path segment, so "github.com/example/play"

@@ -1,5 +1,5 @@
 // Package watchreply is the leeway-coded wire form of the
-// watch-reply payload on `fs.handle.{uuid}.watch`.
+// watch-reply payload on `runtime.fs.handle.{uuid}.watch`.
 //
 // Vocabulary:
 //

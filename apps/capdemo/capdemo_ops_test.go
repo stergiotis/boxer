@@ -51,10 +51,10 @@ func TestGetViewReadsTheSections(t *testing.T) {
 	inst.setBusy(true)
 	inst.setClipboardNote("copied 12 bytes as plaintext", 0)
 	inst.mu.Lock()
-	inst.lastHandlePrefix = "fs.handle.abc"
+	inst.lastHandlePrefix = "runtime.fs.handle.abc"
 	inst.previewBytes = []byte("abc")
 	inst.previewTotal = 3000
-	inst.watchHandlePrefix = "fs.handle.def"
+	inst.watchHandlePrefix = "runtime.fs.handle.def"
 	inst.watchBackend = "poller"
 	inst.watchActive = true
 	inst.watchRecursive = true
@@ -62,9 +62,9 @@ func TestGetViewReadsTheSections(t *testing.T) {
 	inst.mu.Unlock()
 
 	v = getView(t, inst)
-	assert.Equal(t, FileSection{Handle: "fs.handle.abc", PickOpen: true, PreviewBytes: 3, TotalBytes: 3000}, v.File)
+	assert.Equal(t, FileSection{Handle: "runtime.fs.handle.abc", PickOpen: true, PreviewBytes: 3, TotalBytes: 3000}, v.File)
 	assert.Equal(t, PersistSection{ScratchpadLength: 5, Status: "saved 5 bytes at 10:00:00"}, v.Persist)
-	assert.Equal(t, WatchSection{Handle: "fs.handle.def", Backend: "poller", Active: true, Events: 2, Recursive: true}, v.Watch)
+	assert.Equal(t, WatchSection{Handle: "runtime.fs.handle.def", Backend: "poller", Active: true, Events: 2, Recursive: true}, v.Watch)
 	assert.Equal(t, ClipboardSection{Status: "copied 12 bytes as plaintext"}, v.Clipboard)
 	assert.False(t, v.Bus)
 	assert.NotEqual(t, before, inst.Operations().ResourceValue(resSections), "the resource moved")

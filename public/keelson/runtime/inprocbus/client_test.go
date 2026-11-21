@@ -14,7 +14,7 @@ import (
 func TestClient_PublishDeniedWithoutCap(t *testing.T) {
 	inst := newInst(t)
 	bus := inst.NewClient("test.app", []app.SubjectFilter{
-		{Pattern: "fs.dialog.read", Direction: app.CapDirectionPub},
+		{Pattern: "runtime.fs.dialog.read", Direction: app.CapDirectionPub},
 	})
 	err := bus.Publish("ch.query.boxer", []byte("x"))
 	require.Error(t, err)
@@ -26,7 +26,7 @@ func TestClient_PublishAllowedByCap(t *testing.T) {
 	bus := inst.NewClient("test.app", []app.SubjectFilter{
 		{Pattern: "fs.>", Direction: app.CapDirectionPub},
 	})
-	err := bus.Publish("fs.dialog.read", []byte("x"))
+	err := bus.Publish("runtime.fs.dialog.read", []byte("x"))
 	require.NoError(t, err)
 }
 

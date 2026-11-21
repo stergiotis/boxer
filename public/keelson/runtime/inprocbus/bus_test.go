@@ -32,18 +32,18 @@ func TestInst_PublishSubscribe_Delivers(t *testing.T) {
 	inst := newInst(t)
 	bus := inst.NewClient("test.app", fullCaps())
 	var got atomic.Pointer[app.Msg]
-	unsub, err := bus.Subscribe("fs.dialog.read", func(msg *app.Msg) {
+	unsub, err := bus.Subscribe("runtime.fs.dialog.read", func(msg *app.Msg) {
 		got.Store(msg)
 	})
 	require.NoError(t, err)
 	defer unsub()
 
-	err = bus.Publish("fs.dialog.read", []byte("hello"))
+	err = bus.Publish("runtime.fs.dialog.read", []byte("hello"))
 	require.NoError(t, err)
 
 	m := got.Load()
 	require.NotNil(t, m)
-	assert.Equal(t, "fs.dialog.read", m.Subject)
+	assert.Equal(t, "runtime.fs.dialog.read", m.Subject)
 	assert.Equal(t, []byte("hello"), m.Payload)
 }
 
@@ -77,8 +77,8 @@ func TestInst_PublishMatchesWildcards(t *testing.T) {
 	require.NoError(t, err)
 	defer unsub()
 
-	require.NoError(t, bus.Publish("fs.dialog.read", nil))
-	require.NoError(t, bus.Publish("fs.handle.abc.read", nil))
+	require.NoError(t, bus.Publish("runtime.fs.dialog.read", nil))
+	require.NoError(t, bus.Publish("runtime.fs.handle.abc.read", nil))
 	require.NoError(t, bus.Publish("kafka.produce.topic", nil)) // no match
 
 	assert.Equal(t, int32(2), hits.Load())
@@ -87,7 +87,7 @@ func TestInst_PublishMatchesWildcards(t *testing.T) {
 func TestInst_PublishNoSubscribers_NoError(t *testing.T) {
 	inst := newInst(t)
 	bus := inst.NewClient("test.app", fullCaps())
-	err := bus.Publish("fs.dialog.read", []byte("x"))
+	err := bus.Publish("runtime.fs.dialog.read", []byte("x"))
 	require.NoError(t, err)
 }
 

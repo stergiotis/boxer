@@ -71,7 +71,7 @@ func TestSubscriptionsAndClientCaps_AttributeToInstance(t *testing.T) {
 	require.NoError(t, err)
 	_, err = b.Subscribe("t.two", func(*app.Msg) {})
 	require.NoError(t, err)
-	b.AddCap(app.SubjectFilter{Pattern: "fs.handle.x.>", Direction: app.CapDirectionBoth, Reason: "granted"})
+	b.AddCap(app.SubjectFilter{Pattern: "runtime.fs.handle.x.>", Direction: app.CapDirectionBoth, Reason: "granted"})
 
 	subs, _ := r.Lookup("subscriptions")
 	rec, err := subs.Snapshot(introspect.AllColumns())
@@ -95,7 +95,7 @@ func TestSubscriptionsAndClientCaps_AttributeToInstance(t *testing.T) {
 	assert.Equal(t, "t.>", columnString(t, rec2, "pattern", 0))
 	assert.Equal(t, "pub+sub", columnString(t, rec2, "direction", 0))
 	assert.Equal(t, uint64(8), columnUint64(t, rec2, "instance_key", 2))
-	assert.Equal(t, "fs.handle.x.>", columnString(t, rec2, "pattern", 2))
+	assert.Equal(t, "runtime.fs.handle.x.>", columnString(t, rec2, "pattern", 2))
 	assert.Equal(t, "granted", columnString(t, rec2, "reason", 2))
 	// test.effects is not a registered app, so nothing counts as declared.
 	assert.False(t, columnBool(t, rec2, "declared", 0))

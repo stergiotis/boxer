@@ -1,5 +1,5 @@
 // Package watchevent is the leeway-coded wire form of one
-// filesystem-watch event published on `fs.handle.{uuid}.event`.
+// filesystem-watch event published on `runtime.fs.handle.{uuid}.event`.
 //
 // Vocabulary:
 //

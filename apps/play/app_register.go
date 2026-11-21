@@ -258,8 +258,8 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		// Inline help corpus (apps/play/help/), indexed by
 		// keelson/runtime/help and shown by the HelpHost.
 		Help: help.MustSub(helpFS, "help"),
-		// fs Powerbox — Load .sql button publishes fs.dialog.read,
-		// then issues fs.handle.{uuid}.read once the broker mints
+		// fs Powerbox — Load .sql button publishes runtime.fs.dialog.read,
+		// then issues runtime.fs.handle.{uuid}.read once the broker mints
 		// the handle. ADR-0026 §SD7.
 		// ch.local.exec.timerangepicker — the from/to param-slot
 		// widget calls evaluator.Eval to resolve ClickHouse SQL

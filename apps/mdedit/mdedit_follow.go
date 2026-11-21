@@ -9,7 +9,7 @@ package mdedit
 // The broker side is the read-handle watch seam (fsbroker.handleWatch): the
 // read handle openFile now KEEPS is asked to watch its own file, the broker
 // watches the parent directory and filters to the file, and events arrive on
-// fs.handle.{uuid}.event under a narrow Sub cap granted at Resolve. The
+// runtime.fs.handle.{uuid}.event under a narrow Sub cap granted at Resolve. The
 // ordering rules are the ones capdemo demonstrated — subscribe before watch —
 // plus one this app adds: with handle uuids stable per (app, path, op),
 // re-opening the SAME file mints the same uuid, so the old handle's close is

@@ -217,15 +217,15 @@ var Registry = map[CapId]CapSpec{
 	CapFs: {
 		Id:            CapFs,
 		Display:       "fs.* Powerbox",
-		SubjectFamily: "fs.dialog.{read|write|bundle|watch}, fs.handle.{uuid}.{read|close|watch|unwatch|event}",
+		SubjectFamily: "runtime.fs.dialog.{read|write|bundle|watch}, runtime.fs.handle.{uuid}.{read|close|watch|unwatch|event}",
 		Description: "User-mediated filesystem access. Apps publish " +
-			"fs.dialog.read to request a file pick; fsbroker.Service queues " +
+			"runtime.fs.dialog.read to request a file pick; fsbroker.Service queues " +
 			"the request; the picker overlay resolves with a user-selected " +
 			"path; the broker mints an opaque handle uuid and augments the " +
-			"app's caps with fs.handle.{uuid}.>. The path is never exposed " +
-			"to the app — only the handle subject is. fs.dialog.watch adds " +
+			"app's caps with runtime.fs.handle.{uuid}.>. The path is never exposed " +
+			"to the app — only the handle subject is. runtime.fs.dialog.watch adds " +
 			"streaming directory-change notifications on the conventional " +
-			"fs.handle.{uuid}.event subject; the broker grants Pub+Sub on " +
+			"runtime.fs.handle.{uuid}.event subject; the broker grants Pub+Sub on " +
 			"the per-uuid handle pattern so the app can subscribe. Watch " +
 			"requests carry an optional WatchRequest.Recursive flag — when " +
 			"set, events fire for the entire subtree and Name carries the " +

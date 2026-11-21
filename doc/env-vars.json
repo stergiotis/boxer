@@ -868,7 +868,7 @@
     {
       "name": "BOXER_FS_APPDATA_DIR",
       "type": "path",
-      "description": "fs broker: root of the per-app data areas (fs.appdata.*); empty uses <user config dir>/boxer/appdata",
+      "description": "fs broker: root of the per-app data areas (runtime.fs.appdata.*); empty uses <user config dir>/boxer/appdata",
       "category": "system",
       "sensitive": false,
       "origin": {
@@ -956,7 +956,7 @@
     {
       "name": "BOXER_JACKSTAY_PLAN",
       "type": "string",
-      "description": "jackstay window: plan, by file name in the window's data area (fs.appdata), opened at start and saved to (created on first save when missing)",
+      "description": "jackstay window: plan, by file name in the window's data area (runtime.fs.appdata), opened at start and saved to (created on first save when missing)",
       "category": "database",
       "sensitive": false,
       "origin": {

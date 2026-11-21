@@ -172,7 +172,7 @@ Each entry is a `SubjectFilter`:
 
 ```go
 SubjectFilter{
-    Pattern:   "fs.dialog.read",
+    Pattern:   "runtime.fs.dialog.read",
     Reason:    "import CSV/Parquet",
     Direction: CapDirectionPub,
     Sticky:    true,
@@ -183,7 +183,7 @@ Patterns follow NATS wildcards (`*` matches one token, `>` matches the
 rest). The subject taxonomy (ADR-0026 §SD3) is:
 
 ```
-fs.dialog.read         | fs.handle.{uuid}.{op}     | fs file access
+runtime.fs.dialog.read         | runtime.fs.handle.{uuid}.{op}     | fs file access
 ch.query.{db}          | ch.stream.{db}            | ClickHouse queries
 kafka.produce.{topic}  | kafka.consume.{group}.…   | Kafka
 app.{id}.event.{name}  | app.{id}.request.{name}   | inter-app pub/sub

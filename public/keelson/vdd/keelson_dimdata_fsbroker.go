@@ -6,7 +6,7 @@ import (
 )
 
 // Fsbroker narrow memberships — the request/reply/event DTOs for
-// fs.dialog.* and fs.handle.{uuid}.* subjects. Shared columns
+// runtime.fs.dialog.* and runtime.fs.handle.{uuid}.* subjects. Shared columns
 // (reason) live in keelson_dimdata_shared.go.
 //
 // dialog- vs watch- prefixes split the broker's two surfaces. The
@@ -22,7 +22,7 @@ var (
 				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembDialogHandleSubject is the NATS subject prefix
-	// (fs.handle.{uuid}) the broker hands back on approval — the
+	// (runtime.fs.handle.{uuid}) the broker hands back on approval — the
 	// caller's caps already cover {prefix}.> by the time the reply
 	// lands.
 	MembDialogHandleSubject = KeelsonHrNkRegistry.MustBegin("dialogHandleSubject", 22).
@@ -50,7 +50,7 @@ var (
 				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 
 	// MembWatchEventSubject is the NATS subject events publish to
-	// (fs.handle.{uuid}.event).
+	// (runtime.fs.handle.{uuid}.event).
 	MembWatchEventSubject = KeelsonHrNkRegistry.MustBegin("watchEventSubject", 27).
 				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 

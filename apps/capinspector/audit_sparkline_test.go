@@ -102,7 +102,7 @@ func TestAuditHistogram_Record_AccumulatesWithinBucket(t *testing.T) {
 func TestCounters_Snapshot_PerCap(t *testing.T) {
 	c := NewCounters()
 	t0 := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	c.recordAt(audit.AuditRecord{Subject: "fs.dialog.read"}, t0)
+	c.recordAt(audit.AuditRecord{Subject: "runtime.fs.dialog.read"}, t0)
 
 	fs := c.snapshotAt(CapFs, t0)
 	assert.EqualValues(t, 1, fs[sparkBuckets-1], "fs newest bucket")
@@ -130,7 +130,7 @@ func TestCounters_Snapshot_UnknownCapIsZero(t *testing.T) {
 func TestCounters_Reset_ZerosHistograms(t *testing.T) {
 	c := NewCounters()
 	t0 := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	c.recordAt(audit.AuditRecord{Subject: "fs.dialog.read"}, t0)
+	c.recordAt(audit.AuditRecord{Subject: "runtime.fs.dialog.read"}, t0)
 	c.Reset()
 	fs := c.snapshotAt(CapFs, t0)
 	for i, v := range fs {
@@ -150,7 +150,7 @@ func TestCounters_Snapshot_EveryRegisteredCap(t *testing.T) {
 	samples := map[CapId]string{
 		CapRun:          "runtime.run.start",
 		CapFacts:        "runtime.facts.read",
-		CapFs:           "fs.dialog.read",
+		CapFs:           "runtime.fs.dialog.read",
 		CapPersist:      "runtime.persist.play.editor.set",
 		CapTask:         "task.start",
 		CapWatchbill:    "watchbill.job.enqueue",

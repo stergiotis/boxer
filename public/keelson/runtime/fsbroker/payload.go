@@ -47,8 +47,8 @@ func UnmarshalDialogReply(b []byte) (r DialogReply, err error) {
 }
 
 // DialogRequest is the OPTIONAL payload an app may publish on an
-// fs.dialog.{op} open to carry advisory hints for the picker. Today it holds
-// only a suggested filename for the "Save as" dialog (fs.dialog.write). A nil
+// runtime.fs.dialog.{op} open to carry advisory hints for the picker. Today it holds
+// only a suggested filename for the "Save as" dialog (runtime.fs.dialog.write). A nil
 // or empty payload means "no hints", so callers that publish nil to open a
 // dialog stay wire-compatible.
 //
@@ -163,7 +163,7 @@ func UnmarshalWatchReply(b []byte) (r WatchReply, err error) {
 }
 
 // MarshalWatchEvent serialises a WatchEvent for publication on
-// fs.handle.{uuid}.event.
+// runtime.fs.handle.{uuid}.event.
 func MarshalWatchEvent(e WatchEvent) (b []byte, err error) {
 	wire := watchevent.WatchEvent{
 		At:     time.Unix(0, e.Ts).UTC(),

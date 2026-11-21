@@ -146,7 +146,7 @@ func TestBroker_FuncPolicy_PerRequestDecision(t *testing.T) {
 	noPayload, _ := MarshalRequest(GrantRequest{
 		AppId: "test.app",
 		SubjectFilter: app.SubjectFilter{
-			Pattern: "fs.dialog.read", Direction: app.CapDirectionPub,
+			Pattern: "runtime.fs.dialog.read", Direction: app.CapDirectionPub,
 		},
 	})
 	noReplyBytes, err := bus.Request(t.Context(), RequestSubject, noPayload)

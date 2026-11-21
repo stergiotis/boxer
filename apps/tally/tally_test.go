@@ -29,7 +29,7 @@ func TestManifestIsRegistered(t *testing.T) {
 	assert.NotNil(t, m.Help, "the help book ships with the app")
 	assert.NotEmpty(t, m.Caps)
 	for _, cap := range m.Caps {
-		assert.False(t, strings.HasPrefix(cap.Pattern, "fs.handle."), "never a standing handle grant (ADR-0026 §SD7)")
+		assert.False(t, strings.HasPrefix(cap.Pattern, "runtime.fs.handle."), "never a standing handle grant (ADR-0026 §SD7)")
 	}
 }
 

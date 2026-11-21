@@ -10,8 +10,8 @@ import (
 
 func TestClassify_Subjects(t *testing.T) {
 	cases := map[string]CapId{
-		"fs.dialog.read":                  CapFs,
-		"fs.handle.abc.read":              CapFs,
+		"runtime.fs.dialog.read":                  CapFs,
+		"runtime.fs.handle.abc.read":              CapFs,
 		"runtime.persist.play.editor.set": CapPersist,
 		"runtime.facts.read":              CapFacts,
 		"runtime.heartbeat.tick":          CapRun,
@@ -27,8 +27,8 @@ func TestClassify_Subjects(t *testing.T) {
 
 func TestCounters_Record_PerCap(t *testing.T) {
 	c := NewCounters()
-	c.Record(audit.AuditRecord{Subject: "fs.dialog.read"})
-	c.Record(audit.AuditRecord{Subject: "fs.handle.abc.read"})
+	c.Record(audit.AuditRecord{Subject: "runtime.fs.dialog.read"})
+	c.Record(audit.AuditRecord{Subject: "runtime.fs.handle.abc.read"})
 	c.Record(audit.AuditRecord{Subject: "runtime.persist.play.x.set"})
 	c.Record(audit.AuditRecord{Subject: "ch.local.exec.foo"}) // → other
 
@@ -43,7 +43,7 @@ func TestCounters_Record_PerCap(t *testing.T) {
 
 func TestCounters_Reset(t *testing.T) {
 	c := NewCounters()
-	c.Record(audit.AuditRecord{Subject: "fs.dialog.read"})
+	c.Record(audit.AuditRecord{Subject: "runtime.fs.dialog.read"})
 	c.Reset()
 	assert.EqualValues(t, 0, c.Count(CapFs))
 	assert.EqualValues(t, 0, c.Count(CapBus))

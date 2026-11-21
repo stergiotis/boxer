@@ -17,8 +17,8 @@ import (
 )
 
 // newWatchSetup spins up an Inst + fsbroker.Service + an app client with
-// caps for fs.dialog.watch. The broker augments the client's caps to
-// include fs.handle.{uuid}.> (CapDirectionBoth) on Resolve so the app can
+// caps for runtime.fs.dialog.watch. The broker augments the client's caps to
+// include runtime.fs.handle.{uuid}.> (CapDirectionBoth) on Resolve so the app can
 // publish requests AND subscribe to the .event stream.
 func newWatchSetup(t *testing.T) (inst *inprocbus.Inst, svc *fsbroker.Service, appBus *inprocbus.Client, cleanup func()) {
 	t.Helper()
@@ -35,7 +35,7 @@ func newWatchSetup(t *testing.T) (inst *inprocbus.Inst, svc *fsbroker.Service, a
 	return
 }
 
-// eventCollector subscribes to a fs.handle.{uuid}.event subject and feeds
+// eventCollector subscribes to a runtime.fs.handle.{uuid}.event subject and feeds
 // matching kinds onto a buffered channel. Used by tests to assert events
 // land without races. The collector preserves arrival order; callers may
 // time out via the channel's read deadline.
@@ -105,7 +105,7 @@ func pendingWatchOnce(t *testing.T, svc *fsbroker.Service) (req fsbroker.Pending
 	return
 }
 
-// resolveWatchPath drives a fs.dialog.watch request, resolves it against
+// resolveWatchPath drives a runtime.fs.dialog.watch request, resolves it against
 // dir, and returns the handle subject prefix the app received.
 func resolveWatchPath(t *testing.T, svc *fsbroker.Service, appBus *inprocbus.Client, dir string) (prefix string) {
 	t.Helper()
@@ -191,7 +191,7 @@ func TestService_Watch_PollFallbackCreateEvent(t *testing.T) {
 	assert.Equal(t, "p.txt", ev.Name)
 }
 
-// resolveDialog drives one fs.dialog.{op} request over the given subject,
+// resolveDialog drives one runtime.fs.dialog.{op} request over the given subject,
 // resolves it against path, and returns the granted reply.
 func resolveDialog(t *testing.T, svc *fsbroker.Service, appBus *inprocbus.Client, subject string, op string, path string) (dr fsbroker.DialogReply) {
 	t.Helper()
@@ -223,7 +223,7 @@ func resolveDialog(t *testing.T, svc *fsbroker.Service, appBus *inprocbus.Client
 }
 
 // TestService_Watch_OnReadHandleFollowsTheFile is the read-handle watch seam:
-// a file granted via fs.dialog.read may be watched, the stream carries only
+// a file granted via runtime.fs.dialog.read may be watched, the stream carries only
 // THAT file's events (Name scrubbed to "" — the watched object is the file),
 // sibling churn leaks nothing, and a rename-replace save — the common editor
 // write — arrives as RenameTo rather than orphaning the watch. Runs on the
@@ -409,7 +409,7 @@ func TestService_Watch_HandleCloseTearsDownWatch(t *testing.T) {
 	require.NoError(t, err)
 
 	// A subsequent watch op is denied at the bus layer: closing the handle
-	// revokes the fs.handle.{uuid}.> cap, so the app can no longer publish to
+	// revokes the runtime.fs.handle.{uuid}.> cap, so the app can no longer publish to
 	// the handle subject at all.
 	_, err = appBus.Request(t.Context(), prefix+".watch", nil)
 	require.Error(t, err)

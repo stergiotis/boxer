@@ -20,8 +20,8 @@ scope, with its outcome drawn as a badge on the next frame.
 
 | subject | direction | why |
 | --- | --- | --- |
-| `fs.dialog.read` | publish | ask the broker to open the file picker |
-| `fs.dialog.watch` | publish | ask the broker to open the folder-watch picker |
+| `runtime.fs.dialog.read` | publish | ask the broker to open the file picker |
+| `runtime.fs.dialog.watch` | publish | ask the broker to open the folder-watch picker |
 | `clipboard.write` | publish | copy a code block to the clipboard, labelled |
 | `runtime.persist.<own alias>.>` | publish, injected by the host | the one persisted key, `scratchpad`, named in `PersistedKeys` |
 
@@ -31,9 +31,9 @@ so no app repeats that pattern.
 
 ## What it deliberately does not declare
 
-`fs.handle.>` is absent, and that is as much the point as the three
+`runtime.fs.handle.>` is absent, and that is as much the point as the three
 declared subjects. A granted file or folder is addressed under
-`fs.handle.<uuid>.>`, and the broker adds exactly that narrow subject to
+`runtime.fs.handle.<uuid>.>`, and the broker adds exactly that narrow subject to
 this window's live grants the moment the person approves a dialog, and
 revokes it when the handle closes. Declaring the wildcard would trade a
 per-file, revocable, person-approved authority for a standing one over
@@ -44,7 +44,7 @@ allowed too.
 
 ## The sections
 
-**fs.dialog.read** — *Pick a file…* publishes the request; the broker
+**runtime.fs.dialog.read** — *Pick a file…* publishes the request; the broker
 queues it and the picker overlay resolves it. While it is open the section
 says so. On approval the window reads the file through the granted
 handle's `.read` subject and shows the handle subject, how many bytes came
@@ -57,7 +57,7 @@ hh:mm:ss", "loaded N bytes", "get: key absent", "deleted". A Load hands the
 value to the next frame before the text box binds, so a value never lands
 mid-frame.
 
-**fs.dialog.watch** — *Pick folder to watch…* opens the folder picker,
+**runtime.fs.dialog.watch** — *Pick folder to watch…* opens the folder picker,
 subscribes to the handle's `.event` subject before asking the watch to
 start, and shows the handle, the backend the broker chose and the events
 as they arrive, the last twelve of a fifty-event buffer. *Force poller

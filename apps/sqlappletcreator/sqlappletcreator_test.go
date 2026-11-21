@@ -137,7 +137,7 @@ func TestSubmitGuardsEmptyTitle(t *testing.T) {
 }
 
 // fakeFsBus drives the fs Powerbox export flow: it grants a write handle for
-// fs.dialog.write and captures the bytes written to the granted handle.
+// runtime.fs.dialog.write and captures the bytes written to the granted handle.
 type fakeFsBus struct {
 	mu          sync.Mutex
 	dialogReq   []byte
@@ -176,8 +176,8 @@ func (f *fakeFsBus) Request(ctx context.Context, subject string, payload []byte)
 		if !f.grant {
 			return fsbroker.MarshalDialogReply(fsbroker.DialogReply{Granted: false, Reason: f.grantReason})
 		}
-		return fsbroker.MarshalDialogReply(fsbroker.DialogReply{Granted: true, HandleSubjectPrefix: "fs.handle.abc123"})
-	case strings.HasPrefix(subject, "fs.handle.") && strings.HasSuffix(subject, ".write"):
+		return fsbroker.MarshalDialogReply(fsbroker.DialogReply{Granted: true, HandleSubjectPrefix: "runtime.fs.handle.abc123"})
+	case strings.HasPrefix(subject, "runtime.fs.handle.") && strings.HasSuffix(subject, ".write"):
 		f.wrote = append([]byte(nil), payload...)
 		return fsbroker.MarshalDialogReply(fsbroker.DialogReply{Granted: true})
 	default:
@@ -242,7 +242,7 @@ func TestExportGuardsEmptyTitle(t *testing.T) {
 
 // TestExportWaitsLongEnoughForAPerson is the regression guard on a defect that
 // made the whole export unusable and was invisible to every other test here:
-// fs.dialog.write is answered when somebody finishes choosing in a file
+// runtime.fs.dialog.write is answered when somebody finishes choosing in a file
 // picker, and the bus transport's default wait is five seconds. Under it the
 // export reported a timeout while the picker was still open. The fakes answer
 // instantly, so only the requested duration can show the difference.
@@ -261,7 +261,7 @@ func TestExportWaitsLongEnoughForAPerson(t *testing.T) {
 	defer bus.mu.Unlock()
 	assert.Equal(t, fsbroker.DialogTimeout, bus.waits[fsbroker.SubjectDialogWrite],
 		"the save dialog waits on a person, not on a service")
-	assert.Equal(t, fsbroker.HandleOpTimeout, bus.waits["fs.handle.abc123.write"],
+	assert.Equal(t, fsbroker.HandleOpTimeout, bus.waits["runtime.fs.handle.abc123.write"],
 		"the handle write has no human in it and should not wait like the dialog")
 	assert.Greater(t, bus.waits[fsbroker.SubjectDialogWrite], time.Minute,
 		"anything near the transport default fails while the picker is open")
@@ -271,8 +271,8 @@ func TestExportWaitsLongEnoughForAPerson(t *testing.T) {
 // make: it answers every subject regardless of authority, so it would keep
 // passing after the manifest lost a cap the flow actually needs.
 //
-// The manifest deliberately does NOT declare fs.handle.> — the broker adds the
-// narrow fs.handle.{uuid}.> to this app's live client when the USER approves
+// The manifest deliberately does NOT declare runtime.fs.handle.> — the broker adds the
+// narrow runtime.fs.handle.{uuid}.> to this app's live client when the USER approves
 // the save dialog, and revokes it on close, so the wildcard would only convert
 // a per-file, revocable, user-approved grant into standing authority over
 // every handle the broker ever mints. This runs the whole export against a

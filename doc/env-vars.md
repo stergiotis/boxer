@@ -219,7 +219,7 @@ Every Sensitive variable `NAME` has a companion `NAME_FILE`, listed as a path: i
 | `BOXER_ANCHOR_STORE_URL` | string | — | — |  | HTTP endpoint of the organisation's ClickHouse anchor store (ADR-0314 §SD2); unset anchors heads in memory, not durably |
 | `BOXER_ANCHOR_STORE_USER` | string | `default` | — |  | user for BOXER_ANCHOR_STORE_URL |
 | `BOXER_FACTS_ENGINE` | string | `MergeTree() PARTITION BY toYYYYMM("ts:ts:z64:47::0:") ORDER BY "ts:ts:z64:47::0:"` | — |  | engine clause (engine, PARTITION BY, ORDER BY, optional TTL; no SETTINGS) a newly created boxer.facts table gets; an existing table keeps its own. Before ADR-0397 it was 'MergeTree() ORDER BY "ts:ts:z64:47::0:"' |
-| `BOXER_JACKSTAY_PLAN` | string | — | — |  | jackstay window: plan, by file name in the window's data area (fs.appdata), opened at start and saved to (created on first save when missing) |
+| `BOXER_JACKSTAY_PLAN` | string | — | — |  | jackstay window: plan, by file name in the window's data area (runtime.fs.appdata), opened at start and saved to (created on first save when missing) |
 | `BOXER_JACKSTAY_TARGET_ENDPOINT` | string | — | `--target` |  | jackstay target server: HTTP URL or host:port (e.g. http://replica:8123/); empty means no target |
 | `BOXER_JACKSTAY_TARGET_PASSWORD` | string | — | — | yes | jackstay target server password; read from the environment only, never stored in a plan |
 | `BOXER_JACKSTAY_TARGET_PASSWORD_FILE` | path | — | — |  | path of a file whose contents are BOXER_JACKSTAY_TARGET_PASSWORD's value (one trailing newline is dropped); read when BOXER_JACKSTAY_TARGET_PASSWORD is unset, so the secret stays out of the environment children inherit |
@@ -420,7 +420,7 @@ Every Sensitive variable `NAME` has a companion `NAME_FILE`, listed as a path: i
 | `BOXER_CLICKHOUSE_LOCAL` | path | — | — |  | explicit path to the clickhouse binary `clickhouse local` runs; empty uses the PATH lookup |
 | `BOXER_COMPONENT` | string | — | — |  | component identity mark, injected by the supervisor (unit Environment= line, launcher script) and inherited by children; read by the topology layer (ADR-0126); empty = unmarked |
 | `BOXER_FFPROBE_BIN` | path | — | — |  | explicit path to the ffprobe binary the audio decoder spawns; empty uses the PATH lookup |
-| `BOXER_FS_APPDATA_DIR` | path | — | — |  | fs broker: root of the per-app data areas (fs.appdata.*); empty uses <user config dir>/boxer/appdata |
+| `BOXER_FS_APPDATA_DIR` | path | — | — |  | fs broker: root of the per-app data areas (runtime.fs.appdata.*); empty uses <user config dir>/boxer/appdata |
 | `BOXER_FS_PICKER_SERVED_ROOT` | path | — | — |  | fs broker: directory the file picker is rooted at on a host served over the headless carrier (IMZERO2_HEADLESS_LISTEN set); empty uses <user config dir>/boxer/picker, created 0700. The desktop host roots the picker at / |
 | `BOXER_LAUNCHER_FRECENCY_HALFLIFE` | duration | `336h` | — |  | launcher ranking decay: a launch this old counts half as much as one just now |
 | `BOXER_RCLONE` | path | — | — |  | explicit path to the rclone binary the lading store's SFTP seam spawns; empty uses the PATH lookup |

@@ -1,9 +1,9 @@
 // Package capdemo is the M2 capability-broker showcase app. One window,
-// four sections: a fs.dialog.read round-trip (pick a file, get a
+// four sections: a runtime.fs.dialog.read round-trip (pick a file, get a
 // handle, fetch contents), a runtime.persist.{ownAlias}.scratchpad
 // round-trip (save / load / delete a TextEdit's contents), an
-// fs.dialog.watch round-trip (pick a folder, stream change events on
-// fs.handle.{uuid}.event), and a clipboard section (a labelled copy
+// runtime.fs.dialog.watch round-trip (pick a folder, stream change events on
+// runtime.fs.handle.{uuid}.event), and a clipboard section (a labelled copy
 // through the broker). Demonstrates that an app declaring the right Caps
 // gets working Bus() and Storage() through MountContextI without any
 // direct syscalls.
@@ -120,7 +120,7 @@ type App struct {
 
 	mu sync.Mutex
 
-	// fs.dialog.read state.
+	// runtime.fs.dialog.read state.
 	pickInFlight     bool
 	lastHandlePrefix string
 	previewBytes     []byte
@@ -141,7 +141,7 @@ type App struct {
 	clipboardNote string
 	clipboardTone badge.ToneE
 
-	// fs.dialog.watch state. watchUsePoller and watchRecursive are
+	// runtime.fs.dialog.watch state. watchUsePoller and watchRecursive are
 	// written directly by the render goroutine (via Checkbox
 	// SendRespVal); the picker goroutine reads them once on pick. All
 	// other fields are mutated under inst.mu from the picker / event
@@ -304,7 +304,7 @@ func (inst *App) runCopy(text string) {
 
 func (inst *App) renderFsSection() {
 	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-fs"),
-		c.WidgetText().Text("fs.dialog.read — Powerbox file pick").Keep()).
+		c.WidgetText().Text("runtime.fs.dialog.read — Powerbox file pick").Keep()).
 		DefaultOpen(true).KeepIter() {
 		inst.mu.Lock()
 		busy := inst.pickInFlight
@@ -383,7 +383,7 @@ func (inst *App) renderPersistSection() {
 	}
 }
 
-// runPick is the goroutine driving an fs.dialog.read round trip:
+// runPick is the goroutine driving an runtime.fs.dialog.read round trip:
 // publish → broker queues → picker overlay resolves → reply lands.
 // Then a second Request fetches the file contents through the
 // granted handle subject. State updates happen under inst.mu so the
@@ -398,7 +398,7 @@ func (inst *App) runPick() {
 
 	rawReply, rerr := app.RequestWithin(inst.ioCtx, inst.bus, fsbroker.DialogTimeout, fsbroker.SubjectDialogRead, nil)
 	if rerr != nil {
-		inst.setFileErr("fs.dialog.read: " + rerr.Error())
+		inst.setFileErr("runtime.fs.dialog.read: " + rerr.Error())
 		return
 	}
 	dr, jerr := fsbroker.UnmarshalDialogReply(rawReply)
@@ -532,7 +532,7 @@ func (inst *App) setClipboardNote(s string, tone badge.ToneE) {
 
 func (inst *App) renderWatchSection() {
 	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-watch"),
-		c.WidgetText().Text("fs.dialog.watch — folder change notifications").Keep()).
+		c.WidgetText().Text("runtime.fs.dialog.watch — folder change notifications").Keep()).
 		DefaultOpen(true).KeepIter() {
 		inst.mu.Lock()
 		prefix := inst.watchHandlePrefix
@@ -606,8 +606,8 @@ func (inst *App) renderWatchSection() {
 	}
 }
 
-// runWatchPick drives a fs.dialog.watch round-trip: publish → broker
-// queues → picker overlay resolves with a folder → fs.handle.{uuid}.>
+// runWatchPick drives a runtime.fs.dialog.watch round-trip: publish → broker
+// queues → picker overlay resolves with a folder → runtime.fs.handle.{uuid}.>
 // is auto-granted (CapDirectionBoth — Sub on .event included) →
 // subscribe to .event → start the watch. State updates land under
 // inst.mu so Frame sees consistent snapshots.
@@ -622,7 +622,7 @@ func (inst *App) runWatchPick() {
 
 	rawReply, rerr := app.RequestWithin(inst.ioCtx, inst.bus, fsbroker.DialogTimeout, fsbroker.SubjectDialogWatch, nil)
 	if rerr != nil {
-		inst.setWatchErr("fs.dialog.watch: " + rerr.Error())
+		inst.setWatchErr("runtime.fs.dialog.watch: " + rerr.Error())
 		return
 	}
 	dr, jerr := fsbroker.UnmarshalDialogReply(rawReply)

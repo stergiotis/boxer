@@ -32,11 +32,11 @@ var helpFS embed.FS
 // at all — the asymmetry is the broker's, which serves no read subject
 // (ADR-0178 §Context).
 //
-// fs.dialog.read and fs.dialog.write are the two file gestures (M4), and they
+// runtime.fs.dialog.read and runtime.fs.dialog.write are the two file gestures (M4), and they
 // authorise ASKING, not reaching: each one opens a picker the user must
-// approve, and neither names a path. `fs.handle.>` is deliberately absent even
+// approve, and neither names a path. `runtime.fs.handle.>` is deliberately absent even
 // though a granted handle is addressed under it — the broker adds the narrow
-// `fs.handle.{uuid}.>` to this app's live cap set at the moment the user
+// `runtime.fs.handle.{uuid}.>` to this app's live cap set at the moment the user
 // approves, and revokes it on close (fsbroker.Service.Resolve). Declaring the
 // wildcard statically would trade that for standing authority over every
 // handle the broker ever mints, in exchange for nothing: the dynamic grant is

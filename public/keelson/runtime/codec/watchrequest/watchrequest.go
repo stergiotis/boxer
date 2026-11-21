@@ -1,5 +1,5 @@
 // Package watchrequest is the leeway-coded wire form of the
-// watch-request payload on `fs.handle.{uuid}.watch`.
+// watch-request payload on `runtime.fs.handle.{uuid}.watch`.
 //
 // Vocabulary: three narrow terms ([vdd.MembWatchPollFallback],
 // [vdd.MembWatchPollIntervalMs], [vdd.MembWatchRecursive]). All

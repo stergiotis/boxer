@@ -25,8 +25,8 @@ package mdedit
 // after that reuses the granted handle silently.
 //
 // **The cap set stays narrow.** The manifest declares the two dialog subjects
-// only. `fs.handle.{uuid}.>` is granted by the broker at the moment the user
-// approves a dialog, and revoked on close, so a static `fs.handle.>` in the
+// only. `runtime.fs.handle.{uuid}.>` is granted by the broker at the moment the user
+// approves a dialog, and revoked on close, so a static `runtime.fs.handle.>` in the
 // manifest would widen the app's standing authority to every handle the broker
 // ever mints in exchange for nothing.
 //
@@ -45,7 +45,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
 
-// Handle ops. The broker splits `fs.handle.{uuid}.{op}` on dots, so these are
+// Handle ops. The broker splits `runtime.fs.handle.{uuid}.{op}` on dots, so these are
 // appended to the prefix the dialog reply carried.
 const (
 	opRead  = ".read"
@@ -187,7 +187,7 @@ func sanitiseFileBase(title string) (base string) {
 	return strings.Trim(b.String(), "-")
 }
 
-// readReplyError reports whether a reply to `fs.handle.{uuid}.read` is the
+// readReplyError reports whether a reply to `runtime.fs.handle.{uuid}.read` is the
 // broker refusing rather than the file's bytes.
 //
 // The op answers with the raw body on success and a CBOR DialogReply on

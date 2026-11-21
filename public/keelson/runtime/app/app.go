@@ -226,7 +226,7 @@ type BusI interface {
 // caller that names its wait instead of the transport.
 //
 // It exists because one class of request is bounded by a HUMAN rather
-// than by a service: an fs.dialog.{read,write} is answered when someone
+// than by a service: an runtime.fs.dialog.{read,write} is answered when someone
 // finishes choosing in a file picker, which is not a five-second
 // operation. Under the transport default those flows fail while the
 // picker is still open, and the app is told "timeout" for a dialog the

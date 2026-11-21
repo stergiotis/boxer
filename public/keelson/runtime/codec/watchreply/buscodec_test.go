@@ -22,7 +22,7 @@ func TestBuscodecRoundTripStarted(t *testing.T) {
 		FactId:       1,
 		At:           time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		Started:      true,
-		EventSubject: "fs.handle.deadbeef.event",
+		EventSubject: "runtime.fs.handle.deadbeef.event",
 		Backend:      "inotify",
 	}
 	wire, err := buscodec.Encode(orig)

@@ -10,7 +10,7 @@
 // want of one, and the plans used before are listed on the first page.
 //
 // Plans and their journals live in the window's data area, which the
-// runtime's fs broker owns (fs.appdata.*): the window names files and never
+// runtime's fs broker owns (runtime.fs.appdata.*): the window names files and never
 // holds a path. A plan comes in from elsewhere, or goes out, through the file
 // dialogs (Import, Export), which the user answers.
 //
@@ -130,7 +130,7 @@ func (inst stepE) describe() (s string) {
 // saved plan without a dialog.
 var PlanEnv = env.NewString(env.Spec{
 	Name:        "BOXER_JACKSTAY_PLAN",
-	Description: "jackstay window: plan, by file name in the window's data area (fs.appdata), opened at start and saved to (created on first save when missing)",
+	Description: "jackstay window: plan, by file name in the window's data area (runtime.fs.appdata), opened at start and saved to (created on first save when missing)",
 	Category:    env.CategoryDatabase,
 })
 

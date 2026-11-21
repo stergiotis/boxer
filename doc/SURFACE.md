@@ -856,7 +856,7 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 - `public/keelson/runtime/codec/adhocrequest` — Package adhocrequest is the leeway-coded wire form of a request to the ad-hoc dataset capability (ADR-0240 §SD8): `runtime.adhoc.publish`, `runtime.adhoc.resolve` and `runtime.adhoc.retract` share one kind under an op symbol, the watchbill shape.
 - `public/keelson/runtime/codec/appstatereply` — Package appstatereply is the leeway-coded wire form of the app-state service's answer (ADR-0185 §SD3), sibling to keelson/runtime/codec/appstaterequest.
 - `public/keelson/runtime/codec/appstaterequest` — Package appstaterequest is the leeway-coded wire form of an app-state manager request, sent on `runtime.appstate.<op>` (ADR-0185 §SD3).
-- `public/keelson/runtime/codec/dialogreply` — Package dialogreply is the leeway-coded wire form of the file-dialog reply payload published on `fs.dialog.{op}` replies.
+- `public/keelson/runtime/codec/dialogreply` — Package dialogreply is the leeway-coded wire form of the file-dialog reply payload published on `runtime.fs.dialog.{op}` replies.
 - `public/keelson/runtime/codec/errkind` — Package errkind is the ADR-0042 M5 retrofit of the rowmarshall.Error hand-coded writer (ADR-0041's parallel-array shredded shape).
 - `public/keelson/runtime/codec/errkind/leewayrender` — Package leewayrender bridges a captured errkind.Error into the leeway read pipeline — any streamreadaccess.SinkI, typically the read model (lwread) a leewaywidgets.RecordCard draws.
 - `public/keelson/runtime/codec/factswrapper` — Package factswrapper implements marshallgen.WrapperEmitterI for the keelson boxer.facts schema.
@@ -875,9 +875,9 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 - `public/keelson/runtime/codec/taskprogress` — Package taskprogress is the leeway-coded wire form of the periodic progress payload published on `task.<id>.progress`.
 - `public/keelson/runtime/codec/watchbillreply` — Package watchbillreply is the leeway-coded wire form of the worker's answer to a watchbill client request (ADR-0234 §SD1), sibling to keelson/runtime/codec/watchbillrequest.
 - `public/keelson/runtime/codec/watchbillrequest` — Package watchbillrequest is the leeway-coded wire form of a watchbill client request, published on `watchbill.job.<op>` (ADR-0234 §SD1).
-- `public/keelson/runtime/codec/watchevent` — Package watchevent is the leeway-coded wire form of one filesystem-watch event published on `fs.handle.{uuid}.event`.
-- `public/keelson/runtime/codec/watchreply` — Package watchreply is the leeway-coded wire form of the watch-reply payload on `fs.handle.{uuid}.watch`.
-- `public/keelson/runtime/codec/watchrequest` — Package watchrequest is the leeway-coded wire form of the watch-request payload on `fs.handle.{uuid}.watch`.
+- `public/keelson/runtime/codec/watchevent` — Package watchevent is the leeway-coded wire form of one filesystem-watch event published on `runtime.fs.handle.{uuid}.event`.
+- `public/keelson/runtime/codec/watchreply` — Package watchreply is the leeway-coded wire form of the watch-reply payload on `runtime.fs.handle.{uuid}.watch`.
+- `public/keelson/runtime/codec/watchrequest` — Package watchrequest is the leeway-coded wire form of the watch-request payload on `runtime.fs.handle.{uuid}.watch`.
 - `public/keelson/runtime/configview` — Package configview renders the boxer/public/config/env registry as a read-only inspector.
 - `public/keelson/runtime/externaledit` — Package externaledit is the contract by which a window hands a text to an editor in another window and gets every saved revision back.
 - `public/keelson/runtime/factsschema/factsread` — Package factsread is how Go code reads the facts table in SQL: a statement is authored against leeway's read surface — column handles and the LW_GET family — and [Prepare] turns it into the statement that executes.

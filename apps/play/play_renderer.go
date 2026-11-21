@@ -926,7 +926,7 @@ type PlayApp struct {
 	// M2 capability handles, populated by SetCapabilities from the
 	// runtime's MountCtx. Both may be nil when running outside the
 	// carousel (legacy CLI command, unit tests, screenshot tour).
-	// bus drives "Load .sql" via fs.dialog.read; storage persists
+	// bus drives "Load .sql" via runtime.fs.dialog.read; storage persists
 	// the SQL buffer between sessions on Run + Unmount.
 	bus     app.BusI
 	storage app.StorageI
@@ -1057,8 +1057,8 @@ func (inst *PlayApp) RestorePersistedTimelineBandsSql() {
 	inst.timelineBandsSql = string(value)
 }
 
-// loadFromPicker is the goroutine driving an fs.dialog.read +
-// fs.handle.{uuid}.read round-trip. State updates happen under
+// loadFromPicker is the goroutine driving an runtime.fs.dialog.read +
+// runtime.fs.handle.{uuid}.read round-trip. State updates happen under
 // pickMu so the Render loop sees a consistent snapshot. Errors
 // surface on inst.pickErr and render below the toolbar as a small
 // muted label; the editor buffer is untouched on failure.
@@ -1075,7 +1075,7 @@ func (inst *PlayApp) loadFromPicker() {
 
 	rawReply, rerr := app.RequestWithin(inst.ioCtx, inst.bus, fsbroker.DialogTimeout, fsbroker.SubjectDialogRead, nil)
 	if rerr != nil {
-		inst.setLoadErr("fs.dialog.read: " + rerr.Error())
+		inst.setLoadErr("runtime.fs.dialog.read: " + rerr.Error())
 		return
 	}
 	dr, jerr := fsbroker.UnmarshalDialogReply(rawReply)
@@ -2412,7 +2412,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 		// Load .sql via fs Powerbox — only when the runtime wired a
 		// bus client. The picker overlay lives at the host level
 		// (carousel renders pickerbridge between Frame and metrics);
-		// this button only kicks the fs.dialog.read request that puts
+		// this button only kicks the runtime.fs.dialog.read request that puts
 		// a pending entry on the broker's queue.
 		var pickErr string
 		if inst.bus != nil && !inst.toolbarMinimal {

@@ -26,13 +26,13 @@ func TestReportListsGapsAndAnswered(t *testing.T) {
 	}
 	add(reportManifest("org.test.b", app.SubjectFilter{Pattern: "runtime.llm.*", Direction: app.CapDirectionPub, Reason: "ask the model"}))
 	add(reportManifest("org.test.a", append(basemap.ClientCaps("tiles"),
-		app.SubjectFilter{Pattern: "fs.dialog.read", Direction: app.CapDirectionPub, Reason: "open a file"})...))
+		app.SubjectFilter{Pattern: "runtime.fs.dialog.read", Direction: app.CapDirectionPub, Reason: "open a file"})...))
 	add(reportManifest("org.test.c"))
 
 	rep := Report(reg, Services{})
 	require.Equal(t, []string{"org.test.a", "org.test.b", "org.test.c"}, rep.Apps)
 	require.Len(t, rep.Gaps, 2)
-	require.Equal(t, Gap{App: "org.test.a", Pattern: "fs.dialog.read", Direction: "pub", Reason: "open a file"}, rep.Gaps[0])
+	require.Equal(t, Gap{App: "org.test.a", Pattern: "runtime.fs.dialog.read", Direction: "pub", Reason: "open a file"}, rep.Gaps[0])
 	require.Equal(t, "org.test.b", rep.Gaps[1].App)
 	require.Len(t, rep.Answered, 1)
 	require.Equal(t, basemap.ClientCaps("")[0].Pattern, rep.Answered[0].Pattern)
@@ -47,7 +47,7 @@ func TestServicesServeTheirSubjects(t *testing.T) {
 	if !(Services{AudioOut: true}).serves(audioout.SubjectOpen) {
 		t.Fatal("a tab with the audio-output service serves audio.out.open")
 	}
-	if (Services{AudioOut: true}).serves("fs.dialog.read") {
+	if (Services{AudioOut: true}).serves("runtime.fs.dialog.read") {
 		t.Fatal("the audio-output service serves nothing else")
 	}
 }

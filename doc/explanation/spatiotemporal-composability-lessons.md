@@ -182,7 +182,7 @@ Under `apps/`, seven of the fourteen `Unmount` implementations were empty on
 the runtime cannot tell an empty teardown that is complete from one that is
 missing. `apps/capdemo` releases its file-watch subscription on its Stop and
 Close buttons but not in `Unmount`, so a window closed mid-watch leaves the
-subscription and its `fs.handle.*` cap in place. The paper's diagnosis of
+subscription and its `runtime.fs.handle.*` cap in place. The paper's diagnosis of
 VSCode's `deactivate` hook — disposal separated from creation, completeness
 unverifiable — describes this shape exactly.
 
@@ -299,7 +299,7 @@ is a disposer stack: every acquisition through the context prepends its
 inverse; disposal runs them last-in-first-out and fires at most once. The
 mount context could carry the same: `Subscribe` through the mount context
 registers the unsubscribe; `task.ForApp` registers a cancel; a resolved
-`fs.handle` registers its close; the host runs the stack at reap. Three
+`runtime.fs.handle` registers its close; the host runs the stack at reap. Three
 observations make this cheap here rather than speculative: the seam already
 exists (`MountContextI`); the one dead wire is known (`windowhost` passes a
 `nil` stop channel; ADR-0155 SD4 decides a real channel for embedded

@@ -107,14 +107,14 @@ func TestClientClose_GrantsDieWithTheClient(t *testing.T) {
 	got, ok := bus.ClientByAppId("test.app")
 	require.True(t, ok)
 	require.Same(t, newer, got, "lookup lands on the newest live client")
-	got.AddCap(app.SubjectFilter{Pattern: "fs.handle.abc.>", Direction: app.CapDirectionBoth})
-	require.NoError(t, newer.Publish("fs.handle.abc.read", nil))
+	got.AddCap(app.SubjectFilter{Pattern: "runtime.fs.handle.abc.>", Direction: app.CapDirectionBoth})
+	require.NoError(t, newer.Publish("runtime.fs.handle.abc.read", nil))
 
 	require.NoError(t, newer.Close())
 	got, ok = bus.ClientByAppId("test.app")
 	require.True(t, ok, "an older live client is still addressable")
 	require.Same(t, older, got)
-	err := older.Publish("fs.handle.abc.read", nil)
+	err := older.Publish("runtime.fs.handle.abc.read", nil)
 	require.Error(t, err, "the grant belonged to the closed client, not to the app id")
 	assert.True(t, errors.Is(err, ErrPermissionViolation))
 

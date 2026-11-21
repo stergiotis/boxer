@@ -19,7 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imageview"
 )
 
-// Handle ops. The broker splits `fs.handle.{uuid}.{op}` on dots, so these
+// Handle ops. The broker splits `runtime.fs.handle.{uuid}.{op}` on dots, so these
 // are appended to the prefix the dialog reply carried.
 const (
 	opHandleRead  = ".read"

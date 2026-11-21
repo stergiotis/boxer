@@ -682,8 +682,8 @@ func TestManifestDeclaresExactlyTheFiveSubjects(t *testing.T) {
 }
 
 // TestManifestDoesNotDeclareAWildcardHandleCap is the one worth keeping
-// sharpest. A granted file handle is addressed under `fs.handle.{uuid}.>`, and
-// the tempting way to reach it is a static `fs.handle.>` in the manifest —
+// sharpest. A granted file handle is addressed under `runtime.fs.handle.{uuid}.>`, and
+// the tempting way to reach it is a static `runtime.fs.handle.>` in the manifest —
 // which is what a sibling app does. It is not needed: the broker adds the
 // narrow per-handle cap to the live client when the USER approves a dialog and
 // revokes it on close, so the static wildcard would only convert a

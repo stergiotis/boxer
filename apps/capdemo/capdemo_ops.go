@@ -42,7 +42,7 @@ type capSnap struct {
 	storage   bool
 }
 
-// FileSection is the fs.dialog.read section as get_view reports it.
+// FileSection is the runtime.fs.dialog.read section as get_view reports it.
 type FileSection struct {
 	Handle       string `desc:"the granted handle's subject prefix; empty while none is held"`
 	PickOpen     bool   `desc:"true while the picker is open and the person has not answered"`
@@ -57,7 +57,7 @@ type PersistSection struct {
 	Status           string `desc:"the last verb's note: saved, loaded, absent, deleted, or the error"`
 }
 
-// WatchSection is the fs.dialog.watch section.
+// WatchSection is the runtime.fs.dialog.watch section.
 type WatchSection struct {
 	Handle    string `desc:"the granted folder handle's subject prefix; empty while none is held"`
 	Backend   string `desc:"the backend the broker chose for the watch"`
@@ -76,9 +76,9 @@ type ClipboardSection struct {
 // View is get_view's result: the four sections, and whether the window
 // has a bus and storage to reach the brokers through.
 type View struct {
-	File      FileSection      `desc:"fs.dialog.read"`
+	File      FileSection      `desc:"runtime.fs.dialog.read"`
 	Persist   PersistSection   `desc:"runtime.persist.scratchpad"`
-	Watch     WatchSection     `desc:"fs.dialog.watch"`
+	Watch     WatchSection     `desc:"runtime.fs.dialog.watch"`
 	Clipboard ClipboardSection `desc:"clipboard.write"`
 	Bus       bool             `desc:"true when the window has a bus; without one every verb shows the no-bus line"`
 	Storage   bool             `desc:"true when the window has storage for the persist section"`

@@ -355,7 +355,7 @@ type App struct {
 	confirmDiscard    bool
 	confirmDiscardSrc string
 
-	// writeHandle is the fs.handle.{uuid} prefix a save dialog granted, empty
+	// writeHandle is the runtime.fs.handle.{uuid} prefix a save dialog granted, empty
 	// until the reader has chosen a file. Holding it is what makes the second
 	// and every later Save silent (ADR-0178 M4).
 	//

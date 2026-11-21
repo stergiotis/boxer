@@ -1,14 +1,14 @@
 // Package fsbroker is the runtime's file-system Powerbox per ADR-0026 §SD7.
-// Apps that want to read a file publish to fs.dialog.read; the broker
+// Apps that want to read a file publish to runtime.fs.dialog.read; the broker
 // queues a pending request that the host's file picker resolves on user
 // selection. On resolve the broker mints an opaque handle uuid, augments
-// the requesting client's caps to include fs.handle.{uuid}.> and replies
+// the requesting client's caps to include runtime.fs.handle.{uuid}.> and replies
 // with the handle subject prefix. The app then publishes to
-// fs.handle.{uuid}.read to actually fetch the file content — it never
+// runtime.fs.handle.{uuid}.read to actually fetch the file content — it never
 // sees a path.
 //
 // Beside the dialogs and their handles, each app has a data area it reaches
-// by file name over fs.appdata.{op}, for records it keeps for itself (see
+// by file name over runtime.fs.appdata.{op}, for records it keeps for itself (see
 // appdata.go).
 //
 // M2.6 ships the service + a programmatic Resolve API for tests and for
@@ -42,14 +42,14 @@ import (
 
 // Subject taxonomy implemented by this service (ADR-0026 §SD3).
 const (
-	SubjectDialogRead   = "fs.dialog.read"
-	SubjectDialogWrite  = "fs.dialog.write"
-	SubjectDialogBundle = "fs.dialog.bundle"
-	SubjectDialogWatch  = "fs.dialog.watch"
-	HandleSubjectPrefix = "fs.handle." // followed by {uuid}.{op}
+	SubjectDialogRead   = "runtime.fs.dialog.read"
+	SubjectDialogWrite  = "runtime.fs.dialog.write"
+	SubjectDialogBundle = "runtime.fs.dialog.bundle"
+	SubjectDialogWatch  = "runtime.fs.dialog.watch"
+	HandleSubjectPrefix = "runtime.fs.handle." // followed by {uuid}.{op}
 	// HandleEventOp is the trailing token for the streaming-event subject
 	// the broker publishes on once a watch is active:
-	// fs.handle.{uuid}.event. Apps subscribe to this subject to receive
+	// runtime.fs.handle.{uuid}.event. Apps subscribe to this subject to receive
 	// WatchEvent payloads.
 	HandleEventOp = "event"
 )
@@ -63,7 +63,7 @@ const ServiceAppId app.AppIdT = "runtime.fs"
 // them is a property of the subject rather than of the caller: only this
 // package knows which of its requests waits on a person.
 //
-// A `fs.dialog.*` request is not answered until somebody has found a folder,
+// A `runtime.fs.dialog.*` request is not answered until somebody has found a folder,
 // typed a name and pressed Save. Under the transport default — five seconds,
 // the order of magnitude a NATS client uses — every dialog flow fails while
 // its picker is still on screen and the app reports a timeout for a dialog the
@@ -93,7 +93,7 @@ const (
 // a request is refused at once instead of queued.
 const MaxInflightOps = 64
 
-// DefaultMaxReadBytes caps a single fs.handle.{uuid}.read response. The
+// DefaultMaxReadBytes caps a single runtime.fs.handle.{uuid}.read response. The
 // whole file is buffered into memory (and again as the bus payload), so an
 // app granted a handle to a multi-gigabyte file — or an unbounded special
 // file like /dev/zero — would otherwise drive the process OOM. Hosts that
@@ -110,7 +110,7 @@ const (
 	HandleModeRead        HandleModeE = 1
 	HandleModeWrite       HandleModeE = 2
 	HandleModeBundle      HandleModeE = 3
-	// HandleModeWatch marks a handle as eligible for fs.handle.{uuid}.watch
+	// HandleModeWatch marks a handle as eligible for runtime.fs.handle.{uuid}.watch
 	// streaming notifications on a DIRECTORY the picker selected. Read/write
 	// are not permitted on watch handles. The reverse is narrower: a
 	// HandleModeRead handle may also watch — its own file, filtered
@@ -118,10 +118,10 @@ const (
 	HandleModeWatch HandleModeE = 4
 )
 
-// DialogReply is the payload returned on every fs.dialog.{op} request,
+// DialogReply is the payload returned on every runtime.fs.dialog.{op} request,
 // wire-encoded via buscodec (CBOR canonical). On approval
-// HandleSubjectPrefix carries fs.handle.{uuid} and the app's caps
-// already cover fs.handle.{uuid}.> at the moment the reply lands.
+// HandleSubjectPrefix carries runtime.fs.handle.{uuid} and the app's caps
+// already cover runtime.fs.handle.{uuid}.> at the moment the reply lands.
 type DialogReply struct {
 	Granted             bool   `json:"granted"`
 	HandleSubjectPrefix string `json:"handleSubjectPrefix,omitempty"`
@@ -150,7 +150,7 @@ type PendingRequest struct {
 }
 
 // handle stores a resolved file grant. Path is never exposed back to the
-// app — the app addresses the file via fs.handle.{uuid}.{op} only.
+// app — the app addresses the file via runtime.fs.handle.{uuid}.{op} only.
 type handle struct {
 	uuid        string
 	path        string
@@ -318,7 +318,7 @@ func (inst *Service) handleInstanceClosed(msg *app.Msg) {
 
 // Resolve completes a pending dialog with the user's chosen path. Mints a
 // fresh handle uuid, registers (uuid, path, mode), grants
-// fs.handle.{uuid}.> to the requesting client, and replies on the request
+// runtime.fs.handle.{uuid}.> to the requesting client, and replies on the request
 // inbox. Returns an error when no such pending request exists or the
 // app's client cannot be found.
 func (inst *Service) Resolve(reqId string, path string) (handleUuid string, err error) {
@@ -361,7 +361,7 @@ func (inst *Service) Resolve(reqId string, path string) (handleUuid string, err 
 		client.AddCap(app.SubjectFilter{
 			Pattern:   HandleSubjectPrefix + handleUuid + ".>",
 			Direction: dir,
-			Reason:    "granted via fs.dialog." + p.op,
+			Reason:    "granted via runtime.fs.dialog." + p.op,
 		})
 		if mode == HandleModeRead {
 			// A read handle may watch its own file (handleWatch accepts
@@ -373,7 +373,7 @@ func (inst *Service) Resolve(reqId string, path string) (handleUuid string, err 
 			client.AddCap(app.SubjectFilter{
 				Pattern:   HandleSubjectPrefix + handleUuid + "." + HandleEventOp,
 				Direction: app.CapDirectionSub,
-				Reason:    "watch events for the file granted via fs.dialog." + p.op,
+				Reason:    "watch events for the file granted via runtime.fs.dialog." + p.op,
 			})
 		}
 	} else {
@@ -406,7 +406,7 @@ func (inst *Service) Cancel(reqId string) (err error) {
 }
 
 func (inst *Service) handleRequest(msg *app.Msg) {
-	// Skip self-published broadcasts (e.g. fs.handle.{uuid}.event payloads
+	// Skip self-published broadcasts (e.g. runtime.fs.handle.{uuid}.event payloads
 	// emitted by the watch pump). The broker's own fs.> subscription would
 	// otherwise loop back into dispatch.
 	if msg.Sender == ServiceAppId {
@@ -492,7 +492,7 @@ func (inst *Service) handleHandleOp(msg *app.Msg) {
 	h, ok := inst.handles[uuid]
 	inst.mu.Unlock()
 	// The bus cap check is not the only gate: a handle answers only the app
-	// it was granted to, so a manifest declaring a broad fs.handle.> cannot
+	// it was granted to, so a manifest declaring a broad runtime.fs.handle.> cannot
 	// reach another app's grant. Refused as unknown, so the reply does not
 	// confirm that the handle exists.
 	if ok && msg.Sender != h.appId {
@@ -552,7 +552,7 @@ func (inst *Service) handleRead(reply string, h *handle) {
 }
 
 // handleWrite persists the request payload to the handle's path. Rejected
-// unless the handle was minted via fs.dialog.write (HandleModeWrite) — a
+// unless the handle was minted via runtime.fs.dialog.write (HandleModeWrite) — a
 // read-mode handle can never be turned into a write. The payload is written
 // whole by replaceHandleFile (temporary file, fsync, rename): it already sits
 // in memory as the inbound bus message, so there is no incremental streaming
@@ -640,7 +640,7 @@ func (inst *Service) handleClose(reply string, uuid string) {
 	if hadWatch {
 		w.backend.Stop()
 	}
-	// Revoke the fs.handle.{uuid}.> cap granted at Resolve so the closed
+	// Revoke the runtime.fs.handle.{uuid}.> cap granted at Resolve so the closed
 	// handle's subject stops matching and the app's cap set doesn't grow
 	// without bound across a long session.
 	if h != nil {
@@ -732,7 +732,7 @@ func mintHandleUuid() (uuid string, err error) {
 }
 
 // handleWatch starts a streaming watch on the handle's path. Two modes may
-// watch: a HandleModeWatch handle (minted via fs.dialog.watch — the user
+// watch: a HandleModeWatch handle (minted via runtime.fs.dialog.watch — the user
 // picked a DIRECTORY to observe) watches its path as granted, and a
 // HandleModeRead handle watches ITS OWN FILE — the seam that lets an editor
 // follow the document it has open. The file case routes through
@@ -740,7 +740,7 @@ func mintHandleUuid() (uuid string, err error) {
 // filtered to the one file broker-side, because the app holds no path and a
 // read grant must not leak sibling names. On success the broker replies with
 // a WatchReply naming the event subject and spawns a pump goroutine that
-// publishes each backend event to fs.handle.{uuid}.event. Idempotent at the
+// publishes each backend event to runtime.fs.handle.{uuid}.event. Idempotent at the
 // handle level — a second watch request for an already-watching handle
 // replies Started=false.
 func (inst *Service) handleWatch(msg *app.Msg, h *handle) {
@@ -821,7 +821,7 @@ func (inst *Service) handleWatch(msg *app.Msg, h *handle) {
 }
 
 // handleUnwatch stops an active watch but keeps the handle alive — a
-// subsequent fs.handle.{uuid}.watch may restart streaming. Always replies
+// subsequent runtime.fs.handle.{uuid}.watch may restart streaming. Always replies
 // OK; unknown uuid is silently treated as already-stopped.
 func (inst *Service) handleUnwatch(reply string, uuid string) {
 	inst.mu.Lock()
@@ -837,7 +837,7 @@ func (inst *Service) handleUnwatch(reply string, uuid string) {
 }
 
 // pumpWatch reads from the backend's event channel and publishes each
-// event onto fs.handle.{uuid}.event. Exits when the backend's channel
+// event onto runtime.fs.handle.{uuid}.event. Exits when the backend's channel
 // closes (Stop / root-vanished). Bus publishes are synchronous; a slow
 // subscriber stalls the pump and may force the backend's bounded queue to
 // emit a synthetic WatchEventOverflow.

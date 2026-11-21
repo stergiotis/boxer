@@ -352,12 +352,12 @@ func TestPatternsOverlap(t *testing.T) {
 		a, b string
 		want bool
 	}{
-		{"fs.dialog.read", "fs.dialog.read", true},
-		{"fs.dialog.read", "fs.dialog.write", false},
-		{"fs.dialog.read", "fs.>", true},
-		{"fs.>", "fs.dialog.read", true},
-		{"fs.*.read", "fs.dialog.>", true},
-		{"fs.dialog", "fs.dialog.read", false},
+		{"runtime.fs.dialog.read", "runtime.fs.dialog.read", true},
+		{"runtime.fs.dialog.read", "runtime.fs.dialog.write", false},
+		{"runtime.fs.dialog.read", "fs.>", true},
+		{"fs.>", "runtime.fs.dialog.read", true},
+		{"fs.*.read", "runtime.fs.dialog.>", true},
+		{"runtime.fs.dialog", "runtime.fs.dialog.read", false},
 		{"task.>", "task.*.cancel", true},
 		{"", "fs.>", false},
 	}
@@ -367,9 +367,9 @@ func TestPatternsOverlap(t *testing.T) {
 }
 
 func TestUnansweredCaps(t *testing.T) {
-	subs := []inprocbus.SubscriptionInfo{{Pattern: "fs.dialog.read"}, {Pattern: inprocbus.InboxPrefix + "abc"}}
+	subs := []inprocbus.SubscriptionInfo{{Pattern: "runtime.fs.dialog.read"}, {Pattern: inprocbus.InboxPrefix + "abc"}}
 	caps := []app.SubjectFilter{
-		{Pattern: "fs.dialog.read", Direction: app.CapDirectionPub},
+		{Pattern: "runtime.fs.dialog.read", Direction: app.CapDirectionPub},
 		{Pattern: "ch.local.exec.default", Direction: app.CapDirectionPub},
 		{Pattern: "app.x.event.>", Direction: app.CapDirectionSub},
 	}

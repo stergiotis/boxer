@@ -49,7 +49,7 @@ func setupPlayWithCapsTimeout(t *testing.T, busTimeout time.Duration) (inst *Pla
 	id := app.AppIdT("github.com/stergiotis/boxer/apps/play")
 	// The MANIFEST's own caps, not a hand-copy of them. A copy drifts, and it
 	// drifted in exactly the direction that matters: it kept granting
-	// fs.handle.> after the manifest stopped declaring it, so the round-trip
+	// runtime.fs.handle.> after the manifest stopped declaring it, so the round-trip
 	// test below would have gone on passing on an authority the real app no
 	// longer has. Only the host-injected persist cap is added, because the
 	// windowhost derives that one from PersistedKeys rather than the manifest.
@@ -174,7 +174,7 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// + the regex explorer's own chlocalbroker pool, which gloss/regexp's
 	// block face embeds. The applet-store save cap moved
 	// out with the O4 authoring form (now apps/sqlappletcreator); the
-	// fs.handle.> wildcard came out once the broker's dynamic per-handle
+	// runtime.fs.handle.> wildcard came out once the broker's dynamic per-handle
 	// grant was shown to be sufficient.
 	//
 	// The count is asserted on purpose: a capability is an authority this app
@@ -199,7 +199,7 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 		patterns = append(patterns, cap.Pattern)
 	}
 	assert.Contains(t, patterns, fsbroker.SubjectDialogRead)
-	// No static fs.handle.> — the broker grants the narrow fs.handle.{uuid}.>
+	// No static runtime.fs.handle.> — the broker grants the narrow runtime.fs.handle.{uuid}.>
 	// when the USER approves the picker and revokes it on close, so the
 	// wildcard would only convert a per-file, revocable grant into standing
 	// authority over every handle. TestPlayApp_LoadFromPicker_RoundTrip runs
@@ -263,7 +263,7 @@ func TestRegisteredAsFactory(t *testing.T) {
 
 // TestPlayApp_LoadFromPicker_OutlastsTheTransportDefault is the regression
 // guard on a defect the round-trip test above could not see, because it
-// resolves the dialog immediately: fs.dialog.read is answered when somebody
+// resolves the dialog immediately: runtime.fs.dialog.read is answered when somebody
 // finishes choosing in a file picker, and the bus transport's own default is
 // far shorter than that. Under it the load failed with "request timeout" while
 // the picker was still on screen.

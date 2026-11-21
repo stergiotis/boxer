@@ -324,7 +324,7 @@ func TestOwnCapabilities_DedupesCapabilities(t *testing.T) {
 
 func TestEvaluate_Ok_FilesWithFsCap(t *testing.T) {
 	f := evaluate("some.app", "CAPABILITY_FILES", []app.SubjectFilter{
-		{Pattern: "fs.dialog.read", Direction: app.CapDirectionPub},
+		{Pattern: "runtime.fs.dialog.read", Direction: app.CapDirectionPub},
 	})
 	assert.Equal(t, StatusOK, f.Status)
 }
