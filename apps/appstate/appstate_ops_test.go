@@ -184,7 +184,7 @@ type engineWindow struct {
 
 func newEngineWindow(t *testing.T) (w *engineWindow) {
 	inst, _ := opsFixture(t)
-	eng := opengine.New(ops.Catalog(), inst.Operations())
+	eng := opengine.New(t.Context(), ops.Catalog(), inst.Operations())
 	ctx := app.NewStaticFrameContext(nil)
 	ctx.SetOperationsGesture(eng.Gesture)
 	inst.frameCtx = ctx
@@ -209,7 +209,7 @@ func (inst *engineWindow) submit(t *testing.T, id string, op string, in any) (ou
 	args, err := buscodec.Encode(in)
 	require.NoError(t, err)
 	revs := inst.eng.Revisions()
-	inst.eng.Submit(op, opwire.CallRequest{CallId: id, Args: args, Writer: "task:t",
+	inst.eng.Submit(t.Context(), op, opwire.CallRequest{CallId: id, Args: args, Writer: "task:t",
 		Expects: map[string]uint64{resSelection: revs[resSelection], resRead: revs[resRead]}})
 	inst.frame(nil)
 	out, ok := inst.eng.Status(id)

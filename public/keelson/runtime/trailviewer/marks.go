@@ -1,7 +1,6 @@
 package trailviewer
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
@@ -180,7 +179,7 @@ func (inst *App) markRow(call app.OperationCall, in MarkRowArgs) (out MarkRowRes
 	}
 	appId := inst.appIdOr()
 	principal := osPrincipal()
-	ctx := callident.WithCallIdentity(context.Background(), callident.CallIdentity{
+	ctx := callident.WithCallIdentity(call.Context(), callident.CallIdentity{
 		Origin: callident.Origin{Run: src.run(), App: appId, Instance: inst.instance},
 		Claims: callident.Claims{Principal: principal, Purpose: Purpose},
 	})

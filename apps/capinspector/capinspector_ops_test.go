@@ -1,6 +1,7 @@
 package capinspector
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -145,7 +146,7 @@ type engineWindow struct {
 
 func newEngineWindow() (w *engineWindow) {
 	inst := freshApp()
-	eng := opengine.New(ops.Catalog(), inst.Operations())
+	eng := opengine.New(context.Background(), ops.Catalog(), inst.Operations())
 	ctx := app.NewStaticFrameContext(nil)
 	ctx.SetOperationsGesture(eng.Gesture)
 	inst.frameCtx = ctx
@@ -169,7 +170,7 @@ func (inst *engineWindow) submit(t *testing.T, id string, op string, in any) (ou
 	args, err := buscodec.Encode(in)
 	require.NoError(t, err)
 	revs := inst.eng.Revisions()
-	inst.eng.Submit(op, opwire.CallRequest{CallId: id, Args: args, Writer: "task:t", Expects: map[string]uint64{resSelection: revs[resSelection]}})
+	inst.eng.Submit(t.Context(), op, opwire.CallRequest{CallId: id, Args: args, Writer: "task:t", Expects: map[string]uint64{resSelection: revs[resSelection]}})
 	inst.frame(nil)
 	out, ok := inst.eng.Status(id)
 	require.True(t, ok)

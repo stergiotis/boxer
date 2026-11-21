@@ -1,6 +1,7 @@
 package opengine
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,7 +41,7 @@ func witnessSet() *appops.Set[*witness, witnessSnap] {
 func newWitness(t *testing.T) (w *witness, eng *Engine) {
 	set := witnessSet()
 	w = &witness{text: "start"}
-	eng = New(set.Catalog(), set.Bind(w))
+	eng = New(context.Background(), set.Catalog(), set.Bind(w))
 	eng.SetAttached(true)
 	runFrame(eng)
 	return
@@ -56,9 +57,9 @@ func runFrame(eng *Engine) {
 func submit(t *testing.T, eng *Engine, id string, writer string, obo *app.OnBehalfOf) {
 	raw, err := buscodec.Encode(setTextArgs{Text: id})
 	require.NoError(t, err)
-	out := eng.Submit("get_text", opwire.CallRequest{V: opwire.WireVersion, CallId: id + "-read", Writer: writer})
+	out := eng.Submit(t.Context(), "get_text", opwire.CallRequest{V: opwire.WireVersion, CallId: id + "-read", Writer: writer})
 	require.Equal(t, opwire.PhaseCompleted, out.Phase)
-	out = eng.Submit("set_text", opwire.CallRequest{V: opwire.WireVersion, CallId: id, Args: raw,
+	out = eng.Submit(t.Context(), "set_text", opwire.CallRequest{V: opwire.WireVersion, CallId: id, Args: raw,
 		Expects: map[string]uint64{"text": out.Revisions["text"]}, Writer: writer, OnBehalfOf: obo})
 	require.Equal(t, opwire.PhaseAccepted, out.Phase)
 }

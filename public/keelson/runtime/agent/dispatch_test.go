@@ -210,7 +210,7 @@ func (inst *fakeHost) OpsOpen(appId app.AppIdT, kind string, cfg []byte) (uint64
 	defer inst.mu.Unlock()
 	key := uint64(100 + len(inst.engines))
 	d := &doc{text: "opened"}
-	inst.engines[key] = opengine.New(docOps.Catalog(), docOps.Bind(d))
+	inst.engines[key] = opengine.New(context.Background(), docOps.Catalog(), docOps.Bind(d))
 	inst.docs[key] = d
 	if inst.openAs != opwire.LoadUnspecified {
 		if inst.loads == nil {
@@ -312,7 +312,7 @@ func newRigWith(t *testing.T, configure func(cfg *Config)) *rig {
 	bus := inprocbus.NewInst(zerolog.Nop())
 	host := &fakeHost{engines: map[uint64]*opengine.Engine{}, docs: map[uint64]*doc{}}
 	d := &doc{text: "start"}
-	host.engines[7] = opengine.New(docOps.Catalog(), docOps.Bind(d))
+	host.engines[7] = opengine.New(t.Context(), docOps.Catalog(), docOps.Bind(d))
 	host.docs[7] = d
 	host.frame(7)
 	stop := make(chan struct{})
@@ -329,7 +329,7 @@ func newRigWith(t *testing.T, configure func(cfg *Config)) *rig {
 		}
 		_, key, op, _ := opwire.ParseSubject(msg.Subject)
 		req, _ := buscodec.Decode[opwire.CallRequest](msg.Payload)
-		_ = buscodec.Reply(hostClient.Publish, msg.Reply, opwire.CallReply{V: opwire.WireVersion, Outcome: host.eng(key).Submit(op, req)})
+		_ = buscodec.Reply(hostClient.Publish, msg.Reply, opwire.CallReply{V: opwire.WireVersion, Outcome: host.eng(key).Submit(msg.Context(), op, req)})
 	})
 	require.NoError(t, err)
 	cfg := Config{Registry: reg, Host: host}

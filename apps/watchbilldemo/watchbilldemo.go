@@ -268,7 +268,7 @@ func (inst *App) enqueue() { inst.enqueueAs(app.OperationCall{}) }
 func (inst *App) enqueueAs(call app.OperationCall) {
 	req := inst.request(call.OnBehalfOf)
 	inst.verb("enqueue", call.Key, func() (note string, job watchbillstore.Job, err error) {
-		job, err = inst.client.Enqueue(inst.ioCtx, req)
+		job, err = inst.client.Enqueue(call.Context(), req)
 		if err != nil {
 			return "", job, err
 		}

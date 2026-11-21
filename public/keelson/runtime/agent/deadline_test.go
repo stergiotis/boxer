@@ -93,7 +93,7 @@ func TestALateCallIsCheckedBeforeItWaitsForTime(t *testing.T) {
 	ctx := context.Background()
 	d := &doc{text: "other"}
 	r.host.mu.Lock()
-	r.host.engines[9] = opengine.New(docOps.Catalog(), docOps.Bind(d))
+	r.host.engines[9] = opengine.New(t.Context(), docOps.Catalog(), docOps.Bind(d))
 	r.host.docs[9] = d
 	r.host.mu.Unlock()
 	got := make(chan Grant, 1)

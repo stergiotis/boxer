@@ -22,6 +22,7 @@
 package opengine
 
 import (
+	"context"
 	"errors"
 	"maps"
 	"reflect"
@@ -97,6 +98,9 @@ type snapshot struct {
 type Engine struct {
 	catalog *app.OperationsCatalog
 	h       app.OperationsHandlerI
+	// life is the window's lifetime: what a gesture runs under, and what
+	// bounds a queued command, whose request was answered before it ran.
+	life context.Context
 
 	mu       sync.Mutex
 	queue    []*call
@@ -140,10 +144,11 @@ type Engine struct {
 	resourceSet []string
 }
 
-// New serves catalog through h.
-func New(catalog *app.OperationsCatalog, h app.OperationsHandlerI) (inst *Engine) {
+// New serves catalog through h for a window whose lifetime is life — the
+// instance's app.ContextOf.
+func New(life context.Context, catalog *app.OperationsCatalog, h app.OperationsHandlerI) (inst *Engine) {
 	inst = &Engine{
-		catalog: catalog, h: h,
+		catalog: catalog, h: h, life: life,
 		calls:   make(map[string]*call),
 		values:  make(map[string]any),
 		revs:    make(map[string]uint64),
@@ -186,21 +191,24 @@ type Applied struct {
 // SetApplyBracket installs the bracket; set it before the first Frame.
 func (inst *Engine) SetApplyBracket(b ApplyBracketI) { inst.bracket = b }
 
-// Submit takes a call off the render goroutine. A command is queued and
-// answers accepted; a query or an external read is answered from the latest
-// snapshot.
-func (inst *Engine) Submit(op string, req opwire.CallRequest) (out opwire.Outcome) {
+// Submit takes a call off the render goroutine, under ctx — the request's
+// (app.Msg.Context). A command is queued and answers accepted; its handler
+// later sees the request's values (the call identity) under the window's
+// lifetime, since the request has ended by then. A query or an external
+// read is answered from the latest snapshot within the request, under ctx
+// itself (ADR-0396 §4).
+func (inst *Engine) Submit(ctx context.Context, op string, req opwire.CallRequest) (out opwire.Outcome) {
 	spec, ok := inst.catalog.Lookup(op)
 	if !ok {
 		out = opwire.Outcome{Phase: opwire.PhaseRefused, Reason: "no such operation"}
 		return
 	}
 	if spec.Class != app.OperationClassCommand {
-		out = inst.query(spec, req)
+		out = inst.query(ctx, spec, req)
 		return
 	}
 	c := &call{id: req.CallId, spec: spec, args: req.Args, expects: req.Expects,
-		call:    callOf(req),
+		call:    callOf(commandContext{Context: inst.life, values: ctx}, req),
 		outcome: opwire.Outcome{Phase: opwire.PhaseAccepted}}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
@@ -227,14 +235,31 @@ func agentCaused(call app.OperationCall) (yes bool) {
 	return call.OnBehalfOf != nil || strings.HasPrefix(call.Writer, opwire.WriterTask(""))
 }
 
-// callOf is the call context req carries to a command or an external read.
-func callOf(req opwire.CallRequest) (oc app.OperationCall) {
+// callOf is the call context req carries to a command or an external read,
+// run under ctx.
+func callOf(ctx context.Context, req opwire.CallRequest) (oc app.OperationCall) {
 	oc = app.OperationCall{Writer: req.Writer, Key: req.Key, Reason: req.Reason, RefData: req.RefData,
-		OnBehalfOf: req.OnBehalfOf}
+		OnBehalfOf: req.OnBehalfOf}.WithContext(ctx)
 	return
 }
 
-func (inst *Engine) query(spec app.OperationSpec, req opwire.CallRequest) (out opwire.Outcome) {
+// commandContext is a queued command's context: the window's lifetime for
+// its deadline and cancellation, the request's values — the call identity —
+// first for its values. The request was answered "accepted" before the
+// command ran, so its own cancellation has fired by then.
+type commandContext struct {
+	context.Context
+	values context.Context
+}
+
+func (inst commandContext) Value(key any) (v any) {
+	if v = inst.values.Value(key); v != nil {
+		return
+	}
+	return inst.Context.Value(key)
+}
+
+func (inst *Engine) query(ctx context.Context, spec app.OperationSpec, req opwire.CallRequest) (out opwire.Outcome) {
 	s := inst.snap.Load()
 	if s == nil || s.view == nil {
 		s = inst.awaitView(inst.queryWait)
@@ -247,7 +272,7 @@ func (inst *Engine) query(spec app.OperationSpec, req opwire.CallRequest) (out o
 	var confined bool
 	var err error
 	if spec.Class == app.OperationClassExternalRead {
-		result, confined, err = s.view.ExternalRead(callOf(req), spec.Name, req.Args)
+		result, confined, err = s.view.ExternalRead(callOf(ctx, req), spec.Name, req.Args)
 	} else {
 		result, err = s.view.Query(spec.Name, req.Args)
 	}
@@ -722,7 +747,7 @@ func (inst *Engine) Gesture(op string, args []byte) (result []byte, err error) {
 		return
 	}
 	entrypoint.Human(func() {
-		result, err = inst.h.ApplyCommand(app.OperationCall{Writer: opwire.WriterPerson}, op, args)
+		result, err = inst.h.ApplyCommand(app.OperationCall{Writer: opwire.WriterPerson}.WithContext(inst.life), op, args)
 	})
 	out := outcomeOfError(err)
 	if out.Phase == opwire.PhaseUnspecified {

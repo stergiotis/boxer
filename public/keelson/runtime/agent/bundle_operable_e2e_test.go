@@ -62,7 +62,7 @@ func TestAnAgentDrivesAnOperableBundleView(t *testing.T) {
 	rcv := &viewReceiver{view: sqlapplet.NewBundleView("counts", sqlapplet.BundleViewConfig{Bus: viewBus, Log: zerolog.Nop(),
 		StampAppId: string(viewReceiverId) + "#items", InstanceKey: key, Operable: true})}
 	t.Cleanup(rcv.view.Close)
-	e := opengine.New(viewReceiverOps.Catalog(), viewReceiverOps.Bind(rcv))
+	e := opengine.New(t.Context(), viewReceiverOps.Catalog(), viewReceiverOps.Bind(rcv))
 	r.host.mu.Lock()
 	r.host.engines[key] = e
 	if r.host.apps == nil {

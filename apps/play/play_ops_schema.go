@@ -193,7 +193,7 @@ func addSchemaOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			if err := schemaReadable(sn, call.OnBehalfOf); err != nil {
 				return TableList{}, err
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), schemaOpTimeout)
+			ctx, cancel := context.WithTimeout(call.Context(), schemaOpTimeout)
 			defer cancel()
 			return listTables(ctx, sn.client, in)
 		})
@@ -207,7 +207,7 @@ func addSchemaOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			if strings.TrimSpace(in.Table) == "" {
 				return TableDescription{}, app.RefuseOperation("name the table; list_tables lists them")
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), schemaOpTimeout)
+			ctx, cancel := context.WithTimeout(call.Context(), schemaOpTimeout)
 			defer cancel()
 			return describeTable(ctx, sn.client, in.Table)
 		})

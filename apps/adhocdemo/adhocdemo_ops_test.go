@@ -217,7 +217,7 @@ func TestPublishTreeSettlesWithTheSnapshot(t *testing.T) {
 // calls (A3); without a host the same button applies directly.
 func TestTheButtonsAreTheCommands(t *testing.T) {
 	f := newOpsFixture(t)
-	eng := opengine.New(adhocOps.Catalog(), f.inst.Operations())
+	eng := opengine.New(t.Context(), adhocOps.Catalog(), f.inst.Operations())
 	ctx := app.NewStaticFrameContext(nil)
 	ctx.SetOperationsGesture(eng.Gesture)
 

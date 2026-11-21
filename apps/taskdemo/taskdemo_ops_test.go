@@ -125,7 +125,7 @@ type engineWindow struct {
 
 func newEngineWindow(t *testing.T) (w *engineWindow, cleanup func()) {
 	inst, _, cleanup := setupApp(t)
-	eng := opengine.New(ops.Catalog(), inst.Operations())
+	eng := opengine.New(t.Context(), ops.Catalog(), inst.Operations())
 	ctx := app.NewStaticFrameContext(nil)
 	ctx.SetOperationsGesture(eng.Gesture)
 	inst.frameCtx = ctx
@@ -152,7 +152,7 @@ func (inst *engineWindow) submit(t *testing.T, id string, op string, in any) (ou
 	// app's change before the call expects the revision it reads.
 	inst.frame(nil)
 	revs := inst.eng.Revisions()
-	inst.eng.Submit(op, opwire.CallRequest{CallId: id, Key: id, Args: args, Writer: "task:t",
+	inst.eng.Submit(t.Context(), op, opwire.CallRequest{CallId: id, Key: id, Args: args, Writer: "task:t",
 		Expects: map[string]uint64{resControls: revs[resControls]}})
 	inst.frame(nil)
 	out, ok := inst.eng.Status(id)

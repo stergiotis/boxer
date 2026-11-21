@@ -162,7 +162,7 @@ type submittedOp struct {
 }
 
 // submit records the call and hands it to the window's engine.
-func (inst *noteHost) submit(key uint64, op string, req opwire.CallRequest) (out opwire.Outcome) {
+func (inst *noteHost) submit(ctx context.Context, key uint64, op string, req opwire.CallRequest) (out opwire.Outcome) {
 	args := "{}"
 	if len(req.Args) > 0 {
 		var v any
@@ -175,7 +175,7 @@ func (inst *noteHost) submit(key uint64, op string, req opwire.CallRequest) (out
 	inst.mu.Lock()
 	inst.submitted = append(inst.submitted, submittedOp{window: key, op: op, writer: req.Writer, args: args})
 	inst.mu.Unlock()
-	return inst.eng(key).Submit(op, req)
+	return inst.eng(key).Submit(ctx, op, req)
 }
 
 // person changes a note as the person would, between two frames: the
@@ -261,7 +261,7 @@ func (inst *noteHost) OpsOpen(appId app.AppIdT, kind string, cfg []byte) (uint64
 	if ops == nil {
 		ops = noteOps
 	}
-	inst.engines[key], inst.notes[key] = opengine.New(ops.Catalog(), ops.Bind(n)), n
+	inst.engines[key], inst.notes[key] = opengine.New(context.Background(), ops.Catalog(), ops.Bind(n)), n
 	return key, nil
 }
 
@@ -417,7 +417,7 @@ func coordRigWith(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opToo
 	_, err = hostClient.Subscribe(opwire.Pattern, func(msg *app.Msg) {
 		_, key, op, _ := opwire.ParseSubject(msg.Subject)
 		req, _ := buscodec.Decode[opwire.CallRequest](msg.Payload)
-		_ = buscodec.Reply(hostClient.Publish, msg.Reply, opwire.CallReply{V: opwire.WireVersion, Outcome: host.submit(key, op, req)})
+		_ = buscodec.Reply(hostClient.Publish, msg.Reply, opwire.CallReply{V: opwire.WireVersion, Outcome: host.submit(msg.Context(), key, op, req)})
 	})
 	require.NoError(t, err)
 	asvc, err := agent.NewService(ctx, bus, zerolog.Nop(), agent.Config{Journal: intents, Registry: reg, Host: host, TestGrants: true, Pace: time.Millisecond})

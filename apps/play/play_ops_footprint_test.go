@@ -130,7 +130,7 @@ func TestCommandsChangeOnlyWhatTheyDeclare(t *testing.T) {
 	defer inner.graph.close()
 	inner.liveMain = true
 	l := &PlayLauncher{inner: inner}
-	eng := opengine.New(playOps.Catalog(), l.Operations())
+	eng := opengine.New(t.Context(), playOps.Catalog(), l.Operations())
 	footprintFrame(t, l, eng)
 	var violations []string
 	observed := map[string]bool{}
@@ -146,7 +146,7 @@ func TestCommandsChangeOnlyWhatTheyDeclare(t *testing.T) {
 		for _, r := range spec.Writes {
 			expects[r] = eng.Revisions()[r]
 		}
-		out := eng.Submit(cmd.op, opwire.CallRequest{V: opwire.WireVersion, CallId: fmt.Sprintf("c%d", i), Writer: cmd.writer,
+		out := eng.Submit(t.Context(), cmd.op, opwire.CallRequest{V: opwire.WireVersion, CallId: fmt.Sprintf("c%d", i), Writer: cmd.writer,
 			Args: args, Expects: expects})
 		require.Equal(t, opwire.PhaseAccepted, out.Phase, "%s: %s", cmd.op, out.Reason)
 		// The command applies on the next frame; a few more let what it

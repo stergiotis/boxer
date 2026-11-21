@@ -1,6 +1,7 @@
 package opengine
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -57,7 +58,7 @@ type harness struct {
 func newHarness(t *testing.T) *harness {
 	set := editorSet()
 	ed := &editor{text: "start"}
-	h := &harness{t: t, ed: ed, eng: New(set.Catalog(), set.Bind(ed))}
+	h := &harness{t: t, ed: ed, eng: New(context.Background(), set.Catalog(), set.Bind(ed))}
 	h.eng.SetAttached(true) // a task works in the window, so each frame builds the view
 	h.frame(nil)            // the first frame records the starting values
 	return h
@@ -84,7 +85,7 @@ func (inst *harness) call(op string, args any, expects map[string]uint64) opwire
 		raw, err = buscodec.Encode(args)
 		require.NoError(inst.t, err)
 	}
-	return inst.eng.Submit(op, opwire.CallRequest{V: opwire.WireVersion, CallId: string(rune('a' + inst.n)), Args: raw,
+	return inst.eng.Submit(inst.t.Context(), op, opwire.CallRequest{V: opwire.WireVersion, CallId: string(rune('a' + inst.n)), Args: raw,
 		Expects: expects, Writer: opwire.WriterTask("t1")})
 }
 
@@ -273,11 +274,11 @@ func TestTheAppsOwnChangesAndGesturesAreAttributed(t *testing.T) {
 
 func TestQueryBeforeTheFirstSnapshotIsRefused(t *testing.T) {
 	set := editorSet()
-	eng := New(set.Catalog(), set.Bind(&editor{}))
+	eng := New(context.Background(), set.Catalog(), set.Bind(&editor{}))
 	eng.queryWait = 10 * time.Millisecond
-	out := eng.Submit("get_text", opwire.CallRequest{CallId: "q"})
+	out := eng.Submit(t.Context(), "get_text", opwire.CallRequest{CallId: "q"})
 	assert.Equal(t, opwire.PhaseRefused, out.Phase)
-	out = eng.Submit("nope", opwire.CallRequest{CallId: "n"})
+	out = eng.Submit(t.Context(), "nope", opwire.CallRequest{CallId: "n"})
 	assert.Equal(t, opwire.PhaseRefused, out.Phase)
 }
 
@@ -285,7 +286,7 @@ func TestNoViewIsBuiltWhileNoOneCanReadIt(t *testing.T) {
 	set := editorSet()
 	views := 0
 	ed := &editor{text: "start"}
-	eng := New(set.Catalog(), countingHandler{OperationsHandlerI: set.Bind(ed), views: &views})
+	eng := New(context.Background(), set.Catalog(), countingHandler{OperationsHandlerI: set.Bind(ed), views: &views})
 	for range 3 {
 		eng.BeginFrame()
 		eng.ApplyQueued()
@@ -307,13 +308,13 @@ func TestNoViewIsBuiltWhileNoOneCanReadIt(t *testing.T) {
 func TestAQueryWaitsForTheNextFrameToBuildAView(t *testing.T) {
 	set := editorSet()
 	ed := &editor{text: "start"}
-	eng := New(set.Catalog(), set.Bind(ed))
+	eng := New(context.Background(), set.Catalog(), set.Bind(ed))
 	eng.BeginFrame()
 	eng.ApplyQueued()
 	eng.TakeSnapshot()
 	eng.EndFrame()
 	done := make(chan opwire.Outcome)
-	go func() { done <- eng.Submit("get_text", opwire.CallRequest{CallId: "q"}) }()
+	go func() { done <- eng.Submit(t.Context(), "get_text", opwire.CallRequest{CallId: "q"}) }()
 	require.Eventually(t, eng.Busy, time.Second, time.Millisecond, "a waiting query asks for frames")
 	eng.BeginFrame()
 	eng.ApplyQueued()
@@ -329,12 +330,12 @@ func TestAQueryWaitsForTheNextFrameToBuildAView(t *testing.T) {
 
 func TestAQueryThatNoFrameAnswersIsRefused(t *testing.T) {
 	set := editorSet()
-	eng := New(set.Catalog(), set.Bind(&editor{}))
+	eng := New(context.Background(), set.Catalog(), set.Bind(&editor{}))
 	eng.queryWait = 10 * time.Millisecond
 	eng.BeginFrame()
 	eng.ApplyQueued()
 	eng.TakeSnapshot()
-	out := eng.Submit("get_text", opwire.CallRequest{CallId: "q"})
+	out := eng.Submit(t.Context(), "get_text", opwire.CallRequest{CallId: "q"})
 	assert.Equal(t, opwire.PhaseRefused, out.Phase)
 	assert.Contains(t, out.Reason, "the window has drawn no frame for", "a window that drew once says how long ago, not that it never drew")
 	assert.False(t, eng.Busy())
@@ -386,7 +387,7 @@ func TestAStalledWindowSaysHowLongItHasNotDrawn(t *testing.T) {
 func TestUnavailableCommandIsRefusedWithoutAView(t *testing.T) {
 	set := editorSet()
 	ed := &editor{text: "start", disabled: true}
-	eng := New(set.Catalog(), set.Bind(ed))
+	eng := New(context.Background(), set.Catalog(), set.Bind(ed))
 	eng.BeginFrame()
 	eng.ApplyQueued()
 	eng.TakeSnapshot()
@@ -394,7 +395,7 @@ func TestUnavailableCommandIsRefusedWithoutAView(t *testing.T) {
 	revs, _ := eng.SnapshotRevisions()
 	args, err := buscodec.Encode(setTextArgs{Text: "agent"})
 	require.NoError(t, err)
-	eng.Submit("set_text", opwire.CallRequest{CallId: "c", Args: args, Expects: map[string]uint64{"text": revs["text"]},
+	eng.Submit(t.Context(), "set_text", opwire.CallRequest{CallId: "c", Args: args, Expects: map[string]uint64{"text": revs["text"]},
 		Writer: opwire.WriterTask("t1")})
 	eng.BeginFrame()
 	eng.ApplyQueued()
@@ -432,7 +433,7 @@ func TestUndoRestoresOnlyWhatStillHoldsTheCommandsValue(t *testing.T) {
 		return ok
 	})
 	ed := &editor{text: "start"}
-	h := &harness{t: t, ed: ed, eng: New(set.Catalog(), set.Bind(ed))}
+	h := &harness{t: t, ed: ed, eng: New(context.Background(), set.Catalog(), set.Bind(ed))}
 	h.eng.SetAttached(true)
 	h.frame(nil)
 	_, rev := h.read()

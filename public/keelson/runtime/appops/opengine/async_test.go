@@ -1,6 +1,7 @@
 package opengine
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -42,7 +43,7 @@ func workEngine(t *testing.T) (w *work, eng *Engine, frame func()) {
 	t.Helper()
 	set := workSet()
 	w = &work{}
-	eng = New(set.Catalog(), set.Bind(w))
+	eng = New(context.Background(), set.Catalog(), set.Bind(w))
 	eng.SetAttached(true)
 	frame = func() {
 		eng.BeginFrame()
@@ -58,7 +59,7 @@ func workEngine(t *testing.T) (w *work, eng *Engine, frame func()) {
 // work takes, then completes with the settlement's result (ADR-0358 §SD1).
 func TestAnAsyncCommandRunsUntilItSettles(t *testing.T) {
 	w, eng, frame := workEngine(t)
-	out := eng.Submit("start", opwire.CallRequest{CallId: "c1"})
+	out := eng.Submit(t.Context(), "start", opwire.CallRequest{CallId: "c1"})
 	require.Equal(t, opwire.PhaseAccepted, out.Phase)
 	for range 3 {
 		frame()
@@ -83,7 +84,7 @@ func TestAnAsyncCommandRunsUntilItSettles(t *testing.T) {
 
 func TestAnAsyncCommandCanFailOrBeRefusedAtTheEnd(t *testing.T) {
 	w, eng, frame := workEngine(t)
-	eng.Submit("start", opwire.CallRequest{CallId: "c1"})
+	eng.Submit(t.Context(), "start", opwire.CallRequest{CallId: "c1"})
 	frame()
 	w.failed = errors.New("the server went away")
 	frame()
@@ -92,7 +93,7 @@ func TestAnAsyncCommandCanFailOrBeRefusedAtTheEnd(t *testing.T) {
 	assert.Contains(t, st.Reason, "went away")
 
 	w, eng, frame = workEngine(t)
-	eng.Submit("start", opwire.CallRequest{CallId: "c2"})
+	eng.Submit(t.Context(), "start", opwire.CallRequest{CallId: "c2"})
 	frame()
 	w.failed = app.RefuseOperation("no longer allowed")
 	frame()
@@ -105,7 +106,7 @@ func TestAnAsyncCommandCanFailOrBeRefusedAtTheEnd(t *testing.T) {
 // the work has its own cancel operation.
 func TestARunningCallIsKeptAndKeepsItsPhase(t *testing.T) {
 	_, eng, frame := workEngine(t)
-	eng.Submit("start", opwire.CallRequest{CallId: "c1"})
+	eng.Submit(t.Context(), "start", opwire.CallRequest{CallId: "c1"})
 	frame()
 	out, ok := eng.Cancel("c1")
 	require.True(t, ok)
@@ -128,7 +129,7 @@ func TestAnAsyncCommandWithoutSettlesDoesNotBind(t *testing.T) {
 // write expects the state the work left rather than a conflict with it.
 func TestASettledCommandCarriesTheRevisionItsWorkLeft(t *testing.T) {
 	w, eng, frame := workEngine(t)
-	eng.Submit("start", opwire.CallRequest{CallId: "c1"})
+	eng.Submit(t.Context(), "start", opwire.CallRequest{CallId: "c1"})
 	frame()
 	// The work lands during the app's frame, between the command stage and
 	// the frame's end.

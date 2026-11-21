@@ -19,11 +19,11 @@ func TestAQueuedCommandWakesTheClient(t *testing.T) {
 	hostwake.Set(func() { wakes++ })
 	defer hostwake.Set(nil)
 
-	out := eng.Submit("start", opwire.CallRequest{CallId: "c1"})
+	out := eng.Submit(t.Context(), "start", opwire.CallRequest{CallId: "c1"})
 	require.Equal(t, opwire.PhaseAccepted, out.Phase)
 	assert.Equal(t, 1, wakes)
 
-	out = eng.Submit("start", opwire.CallRequest{CallId: "c1"})
+	out = eng.Submit(t.Context(), "start", opwire.CallRequest{CallId: "c1"})
 	require.Equal(t, opwire.PhaseRefused, out.Phase, "a reused call id")
 	assert.Equal(t, 1, wakes, "nothing was queued")
 }

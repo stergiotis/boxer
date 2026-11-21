@@ -19,7 +19,7 @@ import (
 func TestThePersonPublishesThroughTheGesturePath(t *testing.T) {
 	fakeAppletDocs(t)
 	l, h, reader := bundleLauncher(t)
-	eng := opengine.New(playOps.Catalog(), h)
+	eng := opengine.New(t.Context(), playOps.Catalog(), h)
 	ctx := app.NewStaticFrameContext(nil)
 	ctx.SetOperationsGesture(eng.Gesture)
 	l.inner.gestureCtx = ctx

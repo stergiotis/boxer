@@ -228,7 +228,7 @@ func addCheckOp(s *appops.Set[*PlayLauncher, opsSnap]) {
 			if err = schemaReadable(sn, call.OnBehalfOf); err != nil {
 				return
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), checkTimeout)
+			ctx, cancel := context.WithTimeout(call.Context(), checkTimeout)
 			defer cancel()
 			return runCheck(ctx, sn.client, sn.check, call.OnBehalfOf, in)
 		})

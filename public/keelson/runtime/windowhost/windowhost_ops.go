@@ -51,7 +51,7 @@ func (w *window) startOps(logger zerolog.Logger, listener func(key uint64, e ope
 	if h == nil {
 		return
 	}
-	eng := opengine.New(w.manifest.Operations, h)
+	eng := opengine.New(app.ContextOf(w.mountCtx), w.manifest.Operations, h)
 	if listener != nil {
 		key := uint64(w.key)
 		eng.SetListener(func(e opengine.LogEntry) { listener(key, e) })
@@ -400,7 +400,7 @@ func (inst *OpsService) handle(msg *app.Msg) {
 			rep.Outcome = opwire.Outcome{Phase: opwire.PhaseFailed, Reason: "undecodable call"}
 			break
 		}
-		rep.Outcome = eng.Submit(op, req)
+		rep.Outcome = eng.Submit(msg.Context(), op, req)
 	}
 	inst.reply(msg.Reply, rep)
 }

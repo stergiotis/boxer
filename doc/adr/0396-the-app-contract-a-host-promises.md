@@ -91,6 +91,12 @@ an app outside this module relied on it:
    for what an app optionally implements — `PausableAppI`, `OperationsAppI`,
    `OperationsAsyncI`, `WorkingsetComposerI` — and for the host-side bus
    capabilities.
+   An operation handler's call carries its context too
+   (`app.OperationCall.Context()`): a query or external read runs under the
+   request's own context; a command an agent queued runs under the window's
+   lifetime with the request's values — its call identity — since the
+   request was answered before the command ran; a gesture runs under the
+   window's lifetime.
 5. **Dead members go.** `FrameContextI.EguiScope`,
    `Manifest.BackgroundTickHz` (with its `keelson('apps')` column and the
    carousel's list column) and `SurfaceHints.ScreenshotStage` /
@@ -206,6 +212,8 @@ an app outside this module relied on it:
 - Launch kinds are left un-namespaced (see Alternatives).
 - The static contexts are the embeddable bases; no new type names.
 - `ContextOf` stays a function.
+- A queued command's context takes cancellation from the window and values
+  from the request, rather than the request's own (already ended) context.
 - `ext` as the reserved root for other modules' services.
 - Topics extended by registration rather than kept closed by policy.
 - A registration failure stops the host rather than the app.

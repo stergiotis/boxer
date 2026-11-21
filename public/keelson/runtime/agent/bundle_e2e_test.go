@@ -77,7 +77,7 @@ func TestABundleCrossesWindowsWithItsProvenance(t *testing.T) {
 		c := r.bus.NewClient(manifest.Id, manifest.Caps)
 		c.SetInstanceKey(key)
 		l = play.NewHeadlessLauncherForTest(t.Context(), c, zerolog.Nop(), "http://ch.example:8123/")
-		e := opengine.New(manifest.Operations, l.Operations())
+		e := opengine.New(t.Context(), manifest.Operations, l.Operations())
 		r.host.mu.Lock()
 		r.host.engines[key] = e
 		if r.host.apps == nil {

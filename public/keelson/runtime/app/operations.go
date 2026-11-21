@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"reflect"
 	"regexp"
 	"slices"
@@ -548,6 +549,30 @@ type OperationCall struct {
 	// context on every onward request it makes (ADR-0269 §SD6). nil on the
 	// person's gestures.
 	OnBehalfOf *OnBehalfOf
+
+	ctx context.Context
+}
+
+// Context is what the handler does the call's I/O under (ADR-0396 §4): for
+// a query or an external read the request's own context (app.Msg.Context),
+// ending when the requester stops waiting; for a command an agent queued,
+// the requester's values — its call identity — under the window's
+// lifetime, since the request was answered before the command ran; for a
+// gesture the window's lifetime (ContextOf). A call built without one, in a
+// test, has a context that never ends.
+func (inst OperationCall) Context() (ctx context.Context) {
+	if inst.ctx == nil {
+		return context.Background() //boxer:lint disable=CS020 reason="the root for a call built without a context, as Msg.Context"
+	}
+	return inst.ctx
+}
+
+// WithContext is call with Context ctx. A host uses it when it hands a
+// call to a handler.
+func (inst OperationCall) WithContext(ctx context.Context) (out OperationCall) {
+	out = inst
+	out.ctx = ctx
+	return
 }
 
 // OnBehalfOf is the context the host's dispatcher stamps on an agent's

@@ -71,7 +71,7 @@ func addEndpointFunctionOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			if err = schemaReadable(sn, call.OnBehalfOf); err != nil {
 				return
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), schemaOpTimeout)
+			ctx, cancel := context.WithTimeout(call.Context(), schemaOpTimeout)
 			defer cancel()
 			return endpointFunctions(ctx, sn.client)
 		})
