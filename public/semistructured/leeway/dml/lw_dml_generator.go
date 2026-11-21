@@ -20,7 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
-var CodeGeneratorName = "Leeway DML (" + vcs.ModuleInfo() + ")"
+var CodeGeneratorName = "Leeway DML (" + vcs.BoxerModuleVersion() + ")"
 
 type structFieldOperationE uint8
 

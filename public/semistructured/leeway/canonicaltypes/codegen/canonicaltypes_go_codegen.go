@@ -11,7 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
 
-var CodeGeneratorName = "Leeway CT (" + vcs.ModuleInfo() + ")"
+var CodeGeneratorName = "Leeway CT (" + vcs.BoxerModuleVersion() + ")"
 
 var ErrNotImplemented = errors.New("go code generation not implemtented for given canonical type")
 

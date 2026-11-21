@@ -11,7 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
 
-var CodeGeneratorName = "ET7 DDL (" + vcs.ModuleInfo() + ")"
+var CodeGeneratorName = "ET7 DDL (" + vcs.BoxerModuleVersion() + ")"
 
 func checkColumnsAllValid(columns []common.PhysicalColumnDesc) {
 	if compiletimeflags.ExtraChecks {

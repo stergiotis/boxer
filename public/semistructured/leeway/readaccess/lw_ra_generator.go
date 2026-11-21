@@ -20,7 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
-var CodeGeneratorName = "Leeway readaccess (" + vcs.ModuleInfo() + ")"
+var CodeGeneratorName = "Leeway readaccess (" + vcs.BoxerModuleVersion() + ")"
 
 func NewGoClassBuilder(fatRuntime bool) *GoClassBuilder {
 	return &GoClassBuilder{

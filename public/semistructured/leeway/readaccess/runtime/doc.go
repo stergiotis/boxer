@@ -12,3 +12,11 @@
 // readers retain the Arrow arrays they load ([ReleasableI]); call Release
 // when done.
 package runtime
+
+// GeneratedABI1 is the generated-code ABI this runtime serves. Every file the
+// read-access generator writes references it (`const _ =
+// runtime.GeneratedABI1`), so a file generated against an older runtime fails
+// to compile at that line instead of deep inside a method; regenerate it. A
+// change to what generated code may call renames the constant
+// (GeneratedABI2, …) in the same commit as the generator change.
+const GeneratedABI1 = true

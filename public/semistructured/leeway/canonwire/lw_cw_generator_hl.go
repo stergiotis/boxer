@@ -14,7 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/unsafeperf"
 )
 
-var CodeGeneratorName = "Leeway canonwire (" + vcs.ModuleInfo() + ")"
+var CodeGeneratorName = "Leeway canonwire (" + vcs.BoxerModuleVersion() + ")"
 
 func NewGoCodeGeneratorDriver(namingConvention common.NamingConventionI, tech common.TechnologySpecificGeneratorI) *GeneratorDriver {
 	return &GeneratorDriver{

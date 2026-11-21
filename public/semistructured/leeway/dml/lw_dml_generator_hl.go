@@ -105,7 +105,7 @@ import (
 		err = eh.Errorf("unable to compose go imports: %w", err)
 		return
 	}
-	_, err = s.WriteString("\n)\n")
+	_, err = s.WriteString("\n)\n\n" + abiGuard)
 	if err != nil {
 		return
 	}
@@ -130,3 +130,7 @@ import (
 	}
 	return
 }
+
+// abiGuard pins a generated file to the runtime ABI it was generated
+// against (runtime.GeneratedABI1).
+const abiGuard = "// If this line does not compile, the runtime moved on: regenerate this file.\nconst _ = runtime.GeneratedABI1\n"

@@ -63,3 +63,71 @@ const copyrightYears = "2023, 2024, 2025, 2026"
 func CopyrightInfo() string {
 	return "Copyright © " + copyrightYears + " " + author
 }
+
+// BoxerModulePath is this module's path.
+const BoxerModulePath = "github.com/stergiotis/boxer"
+
+// BoxerModuleVersion names the version of this module the running binary was
+// built from, as "<module>@<version>": the version of the dependency (its
+// replacement's, when replaced) when another module is the main module; when
+// this module is the main module, its release tag, or "(devel)" for a build
+// of an untagged or modified tree (so a generator run from a test and one
+// run from the built command stamp the same text). A code generator stamps it into the files it
+// writes, so a file names the generator release rather than the binary that
+// happened to drive it. Without build info it is NoBuildInfo.
+func BoxerModuleVersion() (s string) {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return NoBuildInfo
+	}
+	version := ""
+	if info.Main.Path == BoxerModulePath {
+		version = mainModuleVersion(info.Main.Version)
+	} else {
+		for _, dep := range info.Deps {
+			if dep.Path != BoxerModulePath {
+				continue
+			}
+			version = dep.Version
+			if dep.Replace != nil {
+				version = dep.Replace.Version
+				if version == "" {
+					version = "(replaced)"
+				}
+			}
+			break
+		}
+	}
+	if version == "" {
+		version = "(unknown)"
+	}
+	return BoxerModulePath + "@" + version
+}
+
+// mainModuleVersion keeps a clean release tag and maps a pseudo-version, a
+// "+dirty" build or no version to "(devel)".
+func mainModuleVersion(v string) (out string) {
+	if v == "" || strings.Contains(v, "+") || isPseudoVersion(v) {
+		return "(devel)"
+	}
+	return v
+}
+
+// isPseudoVersion reports whether v ends in the "yyyymmddhhmmss-abcdefabcdef"
+// suffix the go command gives an untagged commit.
+func isPseudoVersion(v string) (b bool) {
+	i := strings.LastIndexByte(v, '-')
+	if i < 15 || len(v)-i-1 != 12 {
+		return false
+	}
+	ts := v[i-14 : i]
+	if v[i-15] != '-' && v[i-15] != '.' {
+		return false
+	}
+	for _, c := range ts {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
