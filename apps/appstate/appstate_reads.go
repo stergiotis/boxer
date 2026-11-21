@@ -10,7 +10,7 @@ import (
 )
 
 // The entries are an introspection table, not a verb (ADR-0185 §SD1): one
-// read over keelson('app_state') through the `keelson.query.app_state`
+// read over keelson('app_state') through the `runtime.keelson.query.app_state`
 // grant the manifest declares (ADR-0253), decoded from ArrowStream into
 // columns (ADR-0257). The watchbill window reads its trail the same way.
 

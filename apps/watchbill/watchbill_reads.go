@@ -13,7 +13,7 @@ import (
 
 // The trail and the worker row are introspection tables, not client verbs
 // (ADR-0236 §SD1): two reads over keelson() tables, each through the
-// `keelson.query.<table>` grant the manifest declares for it (ADR-0253).
+// `runtime.keelson.query.<table>` grant the manifest declares for it (ADR-0253).
 // The rows come back as ArrowStream and are decoded into columns
 // (ADR-0257).
 

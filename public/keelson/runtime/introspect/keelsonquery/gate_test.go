@@ -60,10 +60,10 @@ func TestGate(t *testing.T) {
 }
 
 func TestSubjectsAndCaps(t *testing.T) {
-	assert.Equal(t, "keelson.query.app_state", Subject("app_state"))
+	assert.Equal(t, "runtime.keelson.query.app_state", Subject("app_state"))
 	caps := ClientCaps("watchbill_event", "watchbill_worker")
 	require.Len(t, caps, 2)
-	assert.Equal(t, "keelson.query.watchbill_event", caps[0].Pattern)
+	assert.Equal(t, "runtime.keelson.query.watchbill_event", caps[0].Pattern)
 	assert.True(t, caps[0].Sticky)
 	assert.Contains(t, caps[1].Reason, "watchbill_worker")
 	svc := ServiceCaps("introspect")

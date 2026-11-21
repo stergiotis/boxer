@@ -1,5 +1,5 @@
 // Package keelsonqueryrequest is the leeway-coded wire form of a read over
-// one introspection table, sent on `keelson.query.<table>` (ADR-0253 §SD2).
+// one introspection table, sent on `runtime.keelson.query.<table>` (ADR-0253 §SD2).
 // The requesting app is not a payload field — the service attributes it
 // from the bus envelope, and the bus audits the request because it is a
 // request, not a publish.

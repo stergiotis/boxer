@@ -22,7 +22,7 @@ import (
 )
 
 // The tables' names, as keelson() resolves them and as a reader's
-// `keelson.query.<table>` grant names them (ADR-0253 §SD1).
+// `runtime.keelson.query.<table>` grant names them (ADR-0253 §SD1).
 const (
 	// TableAppRuns is window sessions across runs.
 	TableAppRuns = "app_runs"

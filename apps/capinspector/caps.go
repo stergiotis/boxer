@@ -374,8 +374,8 @@ var Registry = map[CapId]CapSpec{
 	},
 	CapKeelsonQuery: {
 		Id:            CapKeelsonQuery,
-		Display:       "keelson.query.* reads",
-		SubjectFamily: "keelson.query.{table} (request/reply)",
+		Display:       "runtime.keelson.query.* reads",
+		SubjectFamily: "runtime.keelson.query.{table} (request/reply)",
 		Description: "Reading one introspection table from an app (ADR-0253): " +
 			"the statement travels as a request on the table's own subject, " +
 			"the host's service holds it to that table — no second table, no " +

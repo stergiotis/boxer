@@ -157,14 +157,14 @@ func TestStore_AppAuditSummary_Folds_LiveCH(t *testing.T) {
 	var rows []evaudit.Event
 	for i, lat := range []uint32{10, 20, 0} {
 		rows = append(rows, evaudit.Event{At: t0.Add(time.Duration(i) * time.Second), Origin: origin, Row: busaudit.EventOf(busaudit.AuditRecord{
-			Subject: "keelson.query.apps", Result: busaudit.AuditResultOk, LatencyMs: lat, RequestSizeB: 9})})
+			Subject: "runtime.keelson.query.apps", Result: busaudit.AuditResultOk, LatencyMs: lat, RequestSizeB: 9})})
 	}
 	rows = append(rows,
-		evaudit.Event{At: t0, Origin: origin, Row: busaudit.EventOf(busaudit.AuditRecord{Subject: "keelson.query.apps", Result: busaudit.AuditResultDenied})},
-		evaudit.Event{At: t0, Origin: origin, Row: busaudit.EventOf(busaudit.AuditRecord{Subject: "keelson.query.apps", Result: busaudit.AuditResultTimeout, LatencyMs: 5})},
+		evaudit.Event{At: t0, Origin: origin, Row: busaudit.EventOf(busaudit.AuditRecord{Subject: "runtime.keelson.query.apps", Result: busaudit.AuditResultDenied})},
+		evaudit.Event{At: t0, Origin: origin, Row: busaudit.EventOf(busaudit.AuditRecord{Subject: "runtime.keelson.query.apps", Result: busaudit.AuditResultTimeout, LatencyMs: 5})},
 		evaudit.Event{At: t0, Origin: origin, Row: evaudit.AuditEvent{Domain: "dmdm", Action: "request", Outcome: evaudit.OutcomeOk,
 			PrincipalBy: evaudit.PrincipalByNone, OriginBy: "self", Retention: "disclosure",
-			RefTypes: []string{busaudit.BusRefSubject}, RefValues: []string{"keelson.query.apps"}}},
+			RefTypes: []string{busaudit.BusRefSubject}, RefValues: []string{"runtime.keelson.query.apps"}}},
 	)
 	writeTrailEvents(t, rows)
 
@@ -173,7 +173,7 @@ func TestStore_AppAuditSummary_Folds_LiveCH(t *testing.T) {
 	require.Len(t, got, 3, "the bus domain's requests only")
 	ok := got[0]
 	assert.Equal(t, "reader", string(ok.AppId))
-	assert.Equal(t, "keelson.query.apps", ok.Subject)
+	assert.Equal(t, "runtime.keelson.query.apps", ok.Subject)
 	assert.Equal(t, "ok", ok.Result)
 	assert.EqualValues(t, 3, ok.Requests)
 	assert.InDelta(t, 15.0, ok.MeanLatencyMs, 1e-9)
@@ -181,7 +181,7 @@ func TestStore_AppAuditSummary_Folds_LiveCH(t *testing.T) {
 	assert.Equal(t, t0, ok.FirstAt)
 	assert.Equal(t, t0.Add(2*time.Second), ok.LastAt)
 	assert.Equal(t, "denied", got[1].Result)
-	assert.Equal(t, "keelson.query.apps", got[1].Subject)
+	assert.Equal(t, "runtime.keelson.query.apps", got[1].Subject)
 	assert.Zero(t, got[1].MeanLatencyMs)
 	assert.Equal(t, "timeout", got[2].Result, "a timeout keeps its own outcome")
 	assert.InDelta(t, 5.0, got[2].MeanLatencyMs, 1e-9)

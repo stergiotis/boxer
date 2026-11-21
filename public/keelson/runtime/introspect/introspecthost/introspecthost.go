@@ -3,7 +3,7 @@
 // [Start] once, and the tables become queryable three ways: by an external
 // clickhouse-local/-server over `url()`, by a co-resident SQL console
 // (apps/play) that points at the loopback `/query` endpoint, and by an app
-// holding a `keelson.query.<table>` grant over the bus (ADR-0253).
+// holding a `runtime.keelson.query.<table>` grant over the bus (ADR-0253).
 //
 // The server MUST run in the host's own OS process: the providers read live
 // in-process state (the running window host, live env values, the app/demo
@@ -392,7 +392,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	if deps.ChlocalAvailable && deps.Bus != nil {
 		svc, qerr := keelsonquery.NewService(deps.Bus, deps.Log, reg, queryPoolName)
 		if qerr != nil {
-			deps.Log.Warn().Err(qerr).Msg("introspecthost: keelson.query service start failed; keelson.query.* will be unbound")
+			deps.Log.Warn().Err(qerr).Msg("introspecthost: keelson.query service start failed; runtime.keelson.query.* will be unbound")
 		} else {
 			querySvc = svc
 			if deps.QueryStarted != nil {
@@ -488,7 +488,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 		Str("queryEndpoint", endpoint).
 		Bool("queryBacked", cfg.Runner != nil).
 		Bool("busQuery", querySvc != nil).
-		Msg("introspecthost: table source listening (external join via url(); co-resident apps target queryEndpoint or keelson.query.<table>)")
+		Msg("introspecthost: table source listening (external join via url(); co-resident apps target queryEndpoint or runtime.keelson.query.<table>)")
 
 	stop = func(ctx context.Context) error {
 		introspect.SetLocalQueryEndpoint("")

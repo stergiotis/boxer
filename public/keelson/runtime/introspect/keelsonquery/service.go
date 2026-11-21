@@ -18,7 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
-// Service answers `keelson.query.<table>` over the in-process engine: the
+// Service answers `runtime.keelson.query.<table>` over the in-process engine: the
 // statement is gated to the subject's table, the referenced table is
 // snapshotted and projected in-process (ADR-0094 §SD4), and the result
 // comes back in the request's FORMAT. No loopback socket is involved, so

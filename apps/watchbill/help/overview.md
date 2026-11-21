@@ -15,7 +15,7 @@ verbs a person may apply to a job, cancel and retry. The window holds no
 jobs of its own. The list comes from the worker's list verb over the bus;
 the trail and the worker line are two introspection tables,
 `keelson('watchbill_event')` and `keelson('watchbill_worker')`, read through
-the `keelson.query` grant the manifest declares for each; cancel and retry
+the `runtime.keelson.query` grant the manifest declares for each; cancel and retry
 are requests the durable store answers. The same rows are in
 `keelson('watchbill')` for SQL, and in the `watchbill` applet book.
 

@@ -6,7 +6,7 @@ import (
 )
 
 // keelson.query memberships (ADR-0253 §SD2): the request an app holding
-// `keelson.query.<table>` sends and the reply the host's introspection
+// `runtime.keelson.query.<table>` sends and the reply the host's introspection
 // service answers with. The table itself is not here — it is a provider on
 // the introspection registry (ADR-0094 §SD1); these are the wire forms that
 // cross the bus.

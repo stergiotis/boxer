@@ -13,7 +13,7 @@ import (
 )
 
 // The table names, as keelson() resolves them and as a reader's
-// `keelson.query.<table>` grant names them (ADR-0253 §SD1).
+// `runtime.keelson.query.<table>` grant names them (ADR-0253 §SD1).
 const (
 	// TableJobs is the job table, one row per job.
 	TableJobs = "watchbill"

@@ -1,12 +1,12 @@
 // Package keelsonquery is the bus side of the introspection tables
-// (ADR-0253): the `keelson.query.<table>` request/reply family an app reads
+// (ADR-0253): the `runtime.keelson.query.<table>` request/reply family an app reads
 // a `keelson()` table through, and the service that answers it over the
 // in-process engine (ADR-0094 §SD4).
 //
 // One subject per table is the grant's granularity. An app that reads the
 // watchbill trail declares that table and no other, the broker can show a
 // prompt that says exactly that, and the service holds the statement to it:
-// a request on `keelson.query.x` may name x and nothing else — no second
+// a request on `runtime.keelson.query.x` may name x and nothing else — no second
 // table, no table function, no mutation. Joins are play's business over the
 // HTTP endpoint, which stays for the SQL-console class of consumer.
 //
@@ -28,15 +28,15 @@ import (
 // are the same plane answering the same question by two transports.
 const ServiceAppId app.AppIdT = "runtime.introspect.query"
 
-// The family (ADR-0253 §SD1): `keelson.query.<table>`, read-only. The
+// The family (ADR-0253 §SD1): `runtime.keelson.query.<table>`, read-only. The
 // payload is a keelsonqueryrequest.KeelsonQueryRequest, the reply a
 // keelsonqueryreply.KeelsonQueryReply, and the table in the subject and in
 // the payload must agree.
 const (
 	// SubjectPrefix precedes the table name.
-	SubjectPrefix = "keelson.query."
+	SubjectPrefix = "runtime.keelson.query."
 	// SubjectAll is the service's subscription pattern.
-	SubjectAll = "keelson.query.*"
+	SubjectAll = "runtime.keelson.query.*"
 )
 
 // Subject is the request subject for table.

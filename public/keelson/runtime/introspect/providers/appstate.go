@@ -24,7 +24,7 @@ import (
 )
 
 // TableAppState is the table's name, as keelson() resolves it and as a
-// manager's `keelson.query.<table>` grant names it (ADR-0253 §SD1).
+// manager's `runtime.keelson.query.<table>` grant names it (ADR-0253 §SD1).
 const TableAppState = "app_state"
 
 // RegisterAppState registers the app_state provider into r. persistExec is

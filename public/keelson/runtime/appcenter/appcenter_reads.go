@@ -13,7 +13,7 @@ import (
 )
 
 // Every lens is one statement over one introspection table (ADR-0260 §SD3),
-// read through the `keelson.query.<table>` grant the manifest declares
+// read through the `runtime.keelson.query.<table>` grant the manifest declares
 // (ADR-0253) and decoded into columns (ADR-0257). The gate admits one table
 // per statement, so the page is composed here rather than joined in SQL.
 

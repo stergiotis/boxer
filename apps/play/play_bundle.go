@@ -432,7 +432,7 @@ func (inst *bundleRow) columns() (cols []BundleColumn) {
 	return
 }
 
-// listBundles reads keelson('adhoc_bundles') over keelson.query.
+// listBundles reads keelson('adhoc_bundles') over runtime.keelson.query.
 func listBundles(bus app.BusI, obo *app.OnBehalfOf) (out BundleList, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), bundleListTimeout)
 	defer cancel()

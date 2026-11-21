@@ -37,7 +37,7 @@ The statement carries no FORMAT clause; the request names the format, and
 
 ## What the schematic shows
 
-- **Subjects.** `keelson.query.<table>`, request/reply with generated
+- **Subjects.** `runtime.keelson.query.<table>`, request/reply with generated
   codecs. The table in the subject and in the payload must agree.
 - **Backends.** One service, under the id `runtime.introspect.query` — the
   identity the HTTP `/query` runner already publishes under — over the

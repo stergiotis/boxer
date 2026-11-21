@@ -183,8 +183,8 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	//
 	// Three more open ad-hoc bundles (ADR-0288 §SD4): runtime.adhoc.bundle.resolve
 	// and runtime.adhoc.bundle.event.> for a window that follows one, and
-	// keelson.query.adhoc_bundles for list_bundles. The Model tab's
-	// runtime.llm.complete and keelson.query.sql_passes left with the tab
+	// runtime.keelson.query.adhoc_bundles for list_bundles. The Model tab's
+	// runtime.llm.complete and runtime.keelson.query.sql_passes left with the tab
 	// (ADR-0254, Updates 2026-10-07). runtime.adhoc.bundle.publish for
 	// publish_result and the Publish menu, runtime.adhoc.read for the column values
 	// list_bundles shows (ADR-0288 §SD4, §SD5). runtime.task.> for the query runs,
