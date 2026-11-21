@@ -273,11 +273,13 @@ same three slots, `""` and `0` when unattributed.
 A deployment may read facts from a relation other than the table written to
 — a view over its own storage — named by `BOXER_FACTS_READ_TABLE`
 ([ADR-0402](../adr/0402-facts-stored-in-a-deployments-own-table-a-write-transform-at-the-insert-seam-and-one-read-table-setting.md)).
-A generated store does not look the setting up: whoever builds one over
-the facts table passes `factsschema.ReadTableFor(<Store>TableName)` as the
-config's `ReadTable`, or the store's scans and its schema check read the
-table written to. The writes need nothing: the executor applies an insert
-transform the binary registered.
+A store generated against the facts table looks the setting up in its
+constructor when its config names no `ReadTable`, so its scans and its
+schema check follow it; a `ReadTable` the builder does pass wins, and a
+store pointed at another table reads that table. The setting is validated
+there, and a value that cannot be used panics — a binary that would rather
+return an error calls `factsschema.ReadTable` first. The writes need
+nothing: the executor applies an insert transform the binary registered.
 
 The one seam worth understanding before you start is
 `factsschema/storegen.MembershipIds`. A store bakes membership ids into its

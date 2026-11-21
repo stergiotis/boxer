@@ -151,11 +151,20 @@ registry resolves it once per process (`factsschema.ReadTable`,
 `factsschema.ReadTableFor`), a host refuses to boot on a malformed value,
 and it reaches everything that reads: the hand-written readers
 (`chstore.Config.ReadTable`), the recorder and the watchbill presence,
-which take it themselves when none is given, the generated stores the
-commands and apps build over the facts table (`ReadTable` in their
-configs), the trail views, `keelsonddl --trail-views`, and the readers
+which take it themselves when none is given, every generated store over
+the facts table, the trail views, `keelsonddl --trail-views`, and the readers
 that carried the name as a literal. This is ADR-0296 §SD9 (d) completed,
 and serves a `Merge` over boxer-owned storage tables equally.
+
+A store generated against the facts table asks for the setting in its
+constructor when its configuration names no read table, so a consumer's
+store follows it once regenerated, without its builder passing anything.
+The generator does not decide this from a table's name: it takes a
+read-table default as an input (`gen.Input.ReadTableDefault`), which the
+facts-bound generator sets and no other store's generation does, so a
+store that owns its table is emitted as before. What the caller names
+wins; a store pointed at another table than `boxer.facts` reads that
+table.
 
 **SD4 — The read relation has the facts shape, and need not be a table.**
 It returns every facts column under its name and with its type; the schema
@@ -202,10 +211,6 @@ change to the facts columns.
   text can run against a deployment's storage.
 - Whether boxer takes the storage switch of ADR-0296 §SD9 for itself. SD3
   serves either outcome; nothing here decides it.
-- A generated store reads its read table from its configuration only; the
-  generator is unchanged. A store a consumer builds over the facts table
-  is given `factsschema.ReadTableFor` by its caller, or reads the table
-  written to.
 - The clickhouse-local and IPC capture executors do not consult the
   registry; a caller that wants the transform there wraps them with
   `recordstore.RegisteredTransforms`.
@@ -223,7 +228,7 @@ change to the facts columns.
 | registration | `RegisterInsertTransform`, one call a binary makes before stores are built | the executors boxer constructs |
 | env registry | `BOXER_FACTS_READ_TABLE` | `doc/env-vars.md` |
 | facts store configuration, host boot | `chstore.Config.ReadTable`; the host refuses a malformed setting | the hand-written readers' composed SQL; the recorder and presence |
-| generated stores over the facts table in commands and apps | `ReadTable` from the setting | their schema checks and scans |
+| record-store generator | `gen.Input.ReadTableDefault`, set by the facts-bound generator | the stores over the facts table, regenerated; their schema checks and scans |
 | trail views, DDL command | `trailviews.ComposeFrom`; `keelsonddl --read-table` | — |
 | setup, schema check, `schema plan` | no table DDL under a transform; `TableContract.ColumnsOnly`; `chstore.SchemaContracts` | the plan's output |
 | removal of kept text, `Truncate`, `DropTable`, query-run view | refused under a transform | their callers' messages |
@@ -255,7 +260,8 @@ change to the facts columns.
   ordinary insert per batch.
 - SQL written against `boxer.facts` keeps working where the deployment
   names its view so.
-- A consumer's generated stores need no regeneration.
+- A consumer's generated stores need no regeneration to be written
+  through a transform, and one regeneration to follow the read table.
 - The read-table half of ADR-0296 §SD9 is completed for every reader in
   the tree.
 
@@ -298,6 +304,8 @@ change to the facts columns.
   `boxer.facts` with the view (or sets the variable), and ships binaries
   that register the transform. The order, and stopping writers for it,
   is the subject of a migration note, deferred (see *Deferred*).
+- **Regeneration.** The gen tests of the stores over the facts table; a
+  consumer regenerates its own to have them follow the read table.
 - **Old shape.** One table, read and written, stays the default.
 
 ## Verification plan — Tier 1
@@ -344,6 +352,13 @@ change to the facts columns.
   the setting at boot and refuses a malformed one.
 - The read table setting applies to a store bound to `boxer.facts` only; a
   config pointed at a scratch table keeps reading the table it writes.
+- A store generated against the facts table resolves the setting in its
+  constructor and panics on a value it cannot use, as it does on a
+  malformed table reference; a binary that wants an error instead checks
+  `factsschema.ReadTable` first, as the host does at boot.
+- The generator takes the default as an input rather than recognising the
+  facts table, so the stores that own their tables cannot start following
+  a setting meant for another.
 - The trail views stay in the facts database and read the read relation.
 - Under a transform setup still creates the facts database, for the lease
   table and the trail views.
