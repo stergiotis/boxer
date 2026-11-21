@@ -298,7 +298,7 @@ func ForApp(ctx app.MountContextI) (api TaskApiI) {
 		RunId:       ctx.RunId(),
 		Logger:      ctx.Log(),
 		MountCancel: ctx.Cancel(),
-		Lifetime:    app.LifetimeOf(ctx),
+		Lifetime:    ctx.Lifetime(),
 	})
 	return
 }

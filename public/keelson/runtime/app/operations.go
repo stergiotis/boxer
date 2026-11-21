@@ -530,14 +530,6 @@ type ConfinedResultI interface {
 	ResultConfined() (confined bool)
 }
 
-// OperationsGestureI is the capability a frame context offers an app whose
-// catalog the host serves: a gesture of the person's that the catalog also
-// exposes as a command goes through it, so it calls the same handler and
-// enters the same log (ADR-0269 §SD8 "One path"). Call it from Frame.
-type OperationsGestureI interface {
-	OperationGesture(op string, args []byte) (result []byte, err error)
-}
-
 // OperationCall is what the host passes a handler with each command.
 type OperationCall struct {
 	// Writer names who asked: "person" for the app's own gestures routed

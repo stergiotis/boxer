@@ -244,7 +244,7 @@ type engineWindow struct {
 func newEngineWindow() (w *engineWindow) {
 	inst := builtInstance()
 	eng := opengine.New(ops.Catalog(), inst.Operations())
-	ctx := app.NewStaticFrameContext(nil, nil)
+	ctx := app.NewStaticFrameContext(nil)
 	ctx.SetOperationsGesture(eng.Gesture)
 	inst.frameCtx = ctx
 	w = &engineWindow{inst: inst, eng: eng}

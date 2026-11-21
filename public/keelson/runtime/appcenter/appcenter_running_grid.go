@@ -90,11 +90,7 @@ func (inst *App) ensureWidths(ctx app.FrameContextI) {
 		return
 	}
 	g.widthsInit = true
-	h, ok := ctx.(colwidth.HostI)
-	if !ok {
-		return
-	}
-	store := h.ColumnWidthStore()
+	store := colwidth.StoreOf(ctx)
 	if store == nil {
 		return
 	}

@@ -102,7 +102,7 @@ type Config struct {
 	// counts from one, which a process without a window host can afford.
 	AllocateKey func() uint64
 	// MountValues are handed to every service's mount context
-	// (app.MountValuesI), as the window host hands them to every window.
+	// (app.MountContextI.MountValue), as the window host hands them to every window.
 	MountValues map[any]any
 	// Subscriptions, when set, lists the bus's live subscriptions once every
 	// selected service's Mount has returned, so the host can say which of a

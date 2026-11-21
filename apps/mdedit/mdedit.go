@@ -555,7 +555,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.store = ctx.Storage()
 	inst.ioCtx = app.ContextOf(ctx)
 	inst.tasks = task.ForApp(ctx)
-	inst.scope = app.LifetimeOf(ctx)
+	inst.scope = ctx.Lifetime()
 	inst.origin = mddocfacts.Origin{Run: ctx.RunId(), App: string(manifest.Id), Instance: ctx.InstanceKey()}
 	handed, err := inst.handOver(ctx.LaunchConfig())
 	if err != nil || handed {

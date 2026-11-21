@@ -129,7 +129,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.instance = ctx.InstanceKey()
 	inst.log = ctx.Log()
 	inst.tasks = task.ForApp(ctx)
-	inst.scope = app.LifetimeOf(ctx)
+	inst.scope = ctx.Lifetime()
 
 	// The window's own bundle alias (ADR-0288 §SD3): a second adhocdemo
 	// window publishes its own. The first publish is a task like every

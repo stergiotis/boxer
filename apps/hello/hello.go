@@ -57,7 +57,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	} else if gErr != nil {
 		inst.log.Debug().Err(gErr).Msg("hello: no stored count; starting at zero")
 	}
-	if inst.scope = app.LifetimeOf(ctx); inst.scope == nil {
+	if inst.scope = ctx.Lifetime(); inst.scope == nil {
 		// A host without a lifetime scope (a bare test context).
 		inst.scope, inst.ownScope = lifetime.New(nil), true
 	}

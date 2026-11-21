@@ -218,7 +218,7 @@ func TestPublishTreeSettlesWithTheSnapshot(t *testing.T) {
 func TestTheButtonsAreTheCommands(t *testing.T) {
 	f := newOpsFixture(t)
 	eng := opengine.New(adhocOps.Catalog(), f.inst.Operations())
-	ctx := app.NewStaticFrameContext(nil, nil)
+	ctx := app.NewStaticFrameContext(nil)
 	ctx.SetOperationsGesture(eng.Gesture)
 
 	frame := func(body func()) {

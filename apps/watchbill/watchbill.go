@@ -215,7 +215,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.reads = newTableReader(ctx.Bus())
 	inst.tasks = task.ForApp(ctx)
 	inst.stop = ctx.Cancel()
-	if inst.scope = app.LifetimeOf(ctx); inst.scope == nil {
+	if inst.scope = ctx.Lifetime(); inst.scope == nil {
 		// No host drain: the app owns a root scope and retires it at
 		// Unmount.
 		inst.scope, inst.ownScope = lifetime.New(nil), true
@@ -323,11 +323,7 @@ func (inst *App) ensureWidths(ctx app.FrameContextI) {
 		return
 	}
 	inst.widthsInit = true
-	h, ok := ctx.(colwidth.HostI)
-	if !ok {
-		return
-	}
-	store := h.ColumnWidthStore()
+	store := colwidth.StoreOf(ctx)
 	if store == nil {
 		return
 	}

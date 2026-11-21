@@ -307,7 +307,7 @@ func (inst *App) syncStopClose(ctx app.FrameContextI) {
 	}
 	// A watched conversation's notice says why its window went.
 	inst.turnEnded("closed by a stop: " + clip(why, 60))
-	if cl, ok := ctx.(app.WindowCloseI); ok && cl.CloseWindow(clip(why, 200)) {
+	if ctx.CloseWindow(clip(why, 200)) {
 		return
 	}
 	inst.setNote("this conversation was ended: "+why+". This host closes no window for the app, so it stays", true)

@@ -342,7 +342,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
 	inst.tasks = task.ForApp(ctx)
-	inst.scope = app.LifetimeOf(ctx)
+	inst.scope = ctx.Lifetime()
 	inst.storage = ctx.Storage()
 	inst.ioCtx = app.ContextOf(ctx)
 	inst.phaseChip = fsmview.New(inst.ids, "analysis-phase", inst.phaseMachine, fsmview.Options[phaseE]{

@@ -63,10 +63,8 @@ func TestColumnWidth_CapabilityPresentWithState(t *testing.T) {
 	h.SetState(statestore.NewMemory())
 
 	ctx := openAndFrameCtx(t, h, "test.colwidth")
-	cap, ok := ctx.(colwidth.HostI)
-	require.True(t, ok, "a host with a state store must expose colwidth.HostI")
-	store := cap.ColumnWidthStore()
-	require.NotNil(t, store)
+	store := colwidth.StoreOf(ctx)
+	require.NotNil(t, store, "a host with a state store must hand the column-width store")
 
 	// Usable, not merely non-nil: a round-trip through the returned store
 	// is what the resolver will do.
@@ -93,8 +91,7 @@ func TestColumnWidth_CapabilityAbsentWithoutState(t *testing.T) {
 	h.SetAudit("run-xyz", factsstore.NewInMemoryFactsStore())
 
 	ctx := openAndFrameCtx(t, h, "test.colwidth")
-	_, ok := ctx.(colwidth.HostI)
-	assert.False(t, ok, "no state store must mean no capability, not a nil store")
+	assert.Nil(t, colwidth.StoreOf(ctx), "no state store must mean no column-width store")
 }
 
 // The wrapper must not swallow the capabilities the host sets each frame.
@@ -106,9 +103,7 @@ func TestColumnWidth_WrapperPreservesWindowFocus(t *testing.T) {
 	h.SetState(statestore.NewMemory())
 
 	ctx := openAndFrameCtx(t, h, "test.colwidth")
-	f, ok := ctx.(app.WindowFocusI)
-	require.True(t, ok, "embedding must keep WindowFocusI reachable")
-	_ = f.WindowFocused()
+	_ = ctx.WindowFocused()
 	assert.Equal(t, app.AppIdT("test.colwidth"), ctx.AppId(),
 		"the wrapper must present the target's identity (ADR-0382 §SD5)")
 }

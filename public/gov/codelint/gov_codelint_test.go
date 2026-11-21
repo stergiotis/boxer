@@ -790,7 +790,7 @@ func TestCS017_FlagsAGoroutineNoScopeOrTaskOwns(t *testing.T) {
 		assert.Equal(t, "CS017", f.RuleId)
 		assert.Equal(t, codelint.FindingSeverityWarn, f.Severity)
 		assert.Contains(t, f.Path, "bad.go")
-		assert.Contains(t, f.Message, "app.LifetimeOf(ctx).Go")
+		assert.Contains(t, f.Message, "ctx.Lifetime().Go")
 	}
 
 	// The shipped rule covers the apps tree only.

@@ -177,7 +177,7 @@ type engineWindow struct {
 func newEngineWindow(t *testing.T) (ew *engineWindow) {
 	w := opsFixture(t)
 	eng := opengine.New(ops.Catalog(), w.Operations())
-	ctx := app.NewStaticFrameContext(nil, nil)
+	ctx := app.NewStaticFrameContext(nil)
 	ctx.SetOperationsGesture(eng.Gesture)
 	ew = &engineWindow{w: w, eng: eng}
 	w.claimController()

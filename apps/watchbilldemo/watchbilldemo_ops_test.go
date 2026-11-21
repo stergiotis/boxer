@@ -229,7 +229,7 @@ func TestTheEnqueueButtonIsTheCommand(t *testing.T) {
 	f := newFixture(t)
 	f.a.durationSec = 0.2
 	eng := opengine.New(ops.Catalog(), f.a.Operations())
-	ctx := app.NewStaticFrameContext(nil, nil)
+	ctx := app.NewStaticFrameContext(nil)
 	ctx.SetOperationsGesture(eng.Gesture)
 
 	eng.BeginFrame()

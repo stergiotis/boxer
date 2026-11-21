@@ -70,7 +70,7 @@ func (inst *recorder) Mount(ctx app.MountContextI) (err error) {
 	inst.keySeen = ctx.InstanceKey()
 	_, _ = ctx.Bus().Subscribe("t.evt", func(msg *app.Msg) {})
 	if inst.tail {
-		app.LifetimeOf(ctx).Go(func(c context.Context) { <-inst.release })
+		ctx.Lifetime().Go(func(c context.Context) { <-inst.release })
 	}
 	if inst.mounted != nil {
 		close(inst.mounted)

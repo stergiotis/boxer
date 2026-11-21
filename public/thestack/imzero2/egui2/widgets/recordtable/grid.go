@@ -93,7 +93,7 @@ type Input struct {
 	Columns []Column
 	// Widths, when set, resolves each column's width from the user's stored
 	// overrides and captures their drags (ADR-0151). The host acquires it from
-	// the frame context's colwidth.HostI, with Opts.MinPoints = DragMinWidth
+	// the frame context's colwidth.StoreOf, with Opts.MinPoints = DragMinWidth
 	// and Opts.MaxPoints = MaxColumnWidth, and may share one across grids.
 	Widths *colwidth.Resolver
 	// TableTag is the instance-tier scope of the stored widths; empty means

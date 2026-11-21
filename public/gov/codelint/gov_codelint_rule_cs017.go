@@ -11,7 +11,7 @@ import (
 )
 
 // A goroutine an app starts is counted into its instance's lifetime scope
-// (ADR-0322; the keelson-app skill's W5): through `app.LifetimeOf(ctx)` and
+// (ADR-0322; the keelson-app skill's W5): through `ctx.Lifetime()` and
 // `scope.Go`, through a task on `task.ForApp`, or through a child
 // `lifetime.New(parent)`. The host retires the scope at close and drains it
 // before it closes the bus client; a bare `go` statement is invisible to
@@ -57,7 +57,7 @@ const (
 	lifetimeEnterFunc  = "Enter"
 	taskRunFunc        = "Run"
 	taskRunToCompFunc  = "RunToCompletion"
-	cs017RemedySummary = "start it with app.LifetimeOf(ctx).Go, or as a task on task.ForApp, so the host's drain and the Running tab see it (ADR-0322)"
+	cs017RemedySummary = "start it with ctx.Lifetime().Go, or as a task on task.ForApp, so the host's drain and the Running tab see it (ADR-0322)"
 )
 
 // lifetimeAnnotationPattern matches a `// lifetime: <reason>` doc-comment

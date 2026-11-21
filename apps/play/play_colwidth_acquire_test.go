@@ -11,30 +11,17 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 )
 
-// frameCtxWithStore is a frame context carrying the ADR-0151 capability, the
-// shape windowhost wraps a real window's context in. Declared here rather than
-// imported so this package's test does not depend on the host.
-type frameCtxWithStore struct {
-	*app.StaticFrameContext
-	store colwidth.StoreI
-}
-
-func (inst *frameCtxWithStore) ColumnWidthStore() (store colwidth.StoreI) {
-	store = inst.store
-	return
-}
-
 func plainFrameCtx(id app.AppIdT) (ctx *app.StaticFrameContext) {
 	mc := app.NewStaticMountContext(id, zerolog.Nop(), nil, nil, nil)
-	ctx = app.NewStaticFrameContext(mc, nil)
+	ctx = app.NewStaticFrameContext(mc)
 	return
 }
 
-func storeFrameCtx(id app.AppIdT) (ctx *frameCtxWithStore) {
-	ctx = &frameCtxWithStore{
-		StaticFrameContext: plainFrameCtx(id),
-		store:              statestore.NewMemory(),
-	}
+// storeFrameCtx carries the column-width store as the window host hands
+// it: a mount value under colwidth.StoreKey.
+func storeFrameCtx(id app.AppIdT) (ctx *app.StaticFrameContext) {
+	ctx = plainFrameCtx(id)
+	ctx.SetMountValue(colwidth.StoreKey{}, colwidth.StoreI(statestore.NewMemory()))
 	return
 }
 
@@ -47,11 +34,11 @@ func TestEnsureColWidthResAcquiresFromCapability(t *testing.T) {
 	inst := &PlayApp{}
 	inst.ensureColWidthRes(storeFrameCtx("test/app"))
 	if inst.colWidthRes == nil {
-		t.Fatal("a context carrying colwidth.HostI must yield a resolver")
+		t.Fatal("a context carrying colwidth.StoreOf must yield a resolver")
 	}
 }
 
-// Absence is not an error (colwidth.HostI's contract): a host with no facts
+// Absence is not an error (colwidth.StoreOf's contract): a host with no facts
 // store leaves widths on the call site's defaults and every affordance keeps
 // working. A panic or an error here would push the check to every re-host.
 func TestEnsureColWidthResWithoutCapabilityIsNotAnError(t *testing.T) {

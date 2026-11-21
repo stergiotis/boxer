@@ -796,11 +796,7 @@ func (inst *PlayApp) ensureColWidthRes(ctx app.FrameContextI) {
 		return
 	}
 	inst.colWidthResInit = true
-	h, ok := ctx.(colwidth.HostI)
-	if !ok {
-		return
-	}
-	store := h.ColumnWidthStore()
+	store := colwidth.StoreOf(ctx)
 	if store == nil {
 		return
 	}

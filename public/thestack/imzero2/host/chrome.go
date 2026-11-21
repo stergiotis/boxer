@@ -137,7 +137,7 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 		// of the previous frame (consume_key already removed it), and
 		// this chrome is a process singleton — the safe shape for a
 		// consumer of process-global input (the other shape is a
-		// per-instance consumer gated on app.WindowFocusI; see
+		// per-instance consumer gated on app.FrameContextI.WindowFocused; see
 		// GetF1KeyPressed). OpenOrRaise is what makes the recurring
 		// press sane: the first opens the help window, every further
 		// one brings the same window back to the front instead of

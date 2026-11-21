@@ -47,9 +47,28 @@ func TestStaticMountContext_NilDepsReplaced(t *testing.T) {
 	assert.Equal(t, AppIdT("org.test.x"), mc.AppId())
 }
 
-func TestStaticFrameContext_EguiScope(t *testing.T) {
+// The zero capabilities are the absent results FrameContextI documents.
+func TestStaticFrameContext_AbsentCapabilities(t *testing.T) {
 	mc := NewStaticMountContext("org.test.x", zerolog.Nop(), nil, nil, nil)
-	fc := NewStaticFrameContext(mc, "scope-value")
-	assert.Equal(t, "scope-value", fc.EguiScope())
+	fc := NewStaticFrameContext(mc)
 	assert.Equal(t, AppIdT("org.test.x"), fc.AppId())
+	assert.Nil(t, fc.Lifetime())
+	assert.Nil(t, fc.MountValue("k"))
+	assert.False(t, fc.CloseWindow("why"))
+	_, err := fc.OperationGesture("op", nil)
+	var refusal *OperationRefusal
+	assert.ErrorAs(t, err, &refusal)
+}
+
+// A wrapper that embeds the interface forwards every capability, the
+// methods added after it was written included.
+func TestAWrapperForwardsCapabilities(t *testing.T) {
+	mc := NewStaticMountContext("org.test.x", zerolog.Nop(), nil, nil, nil)
+	mc.SetMountValue("k", "v")
+	fc := NewStaticFrameContext(mc)
+	fc.SetWindowFocused(false)
+	type wrapper struct{ FrameContextI }
+	var ctx FrameContextI = wrapper{fc}
+	assert.Equal(t, "v", ctx.MountValue("k"))
+	assert.False(t, ctx.WindowFocused())
 }

@@ -17,7 +17,7 @@ import (
 func AdaptToRenderer(a app.AppI) (r func() error) {
 	m := a.Manifest()
 	mountCtx := app.NewStaticMountContext(m.Id, app.AppLogger(log.Logger, m.Id), nil, nil, nil)
-	frameCtx := app.NewStaticFrameContext(mountCtx, nil)
+	frameCtx := app.NewStaticFrameContext(mountCtx)
 	hostIds := c.NewWidgetIdStack()
 	var mounted bool
 	r = func() (err error) {

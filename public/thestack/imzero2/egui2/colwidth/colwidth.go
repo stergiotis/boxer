@@ -93,34 +93,29 @@ type StoreI interface {
 	DeleteColumnWidth(ctx context.Context, appId app.AppIdT, tier string, scope string, columnKey string) (err error)
 }
 
-// HostI is the optional frame-context capability a host with a state store
-// provides so an app can persist column widths. It takes the shape
-// ADR-0382 §SD4 settled for reaching host-held collaborators: an optional
-// capability type-asserted off the context, exactly as [app.WindowFocusI]
-// is, so the four-method app contract stays frozen and hosts without a
-// state store owe nothing.
-//
-// It is declared here rather than in `app` because its store speaks in
-// statestore rows, and `statestore` imports `app` — declaring it there
-// would close that loop.
-//
-// Absence means no durable widths, not an error. An app that cannot
-// acquire a store renders with its own defaults; every width affordance
-// stays usable and nothing persists:
+// StoreKey is the mount-value key under which a host with a state store
+// hands its apps the column-width store (ADR-0396 §4): a mount value
+// rather than a context method because the store speaks in statestore
+// rows, and statestore imports app.
+type StoreKey struct{}
+
+// StoreOf is the column-width store the host handed ctx, nil when it has
+// none. Absence means no durable widths, not an error: an app renders with
+// its own defaults, every width affordance stays usable and nothing
+// persists.
 //
 //	var res *colwidth.Resolver
-//	if h, ok := ctx.(colwidth.HostI); ok {
-//		if st := h.ColumnWidthStore(); st != nil {
-//			res, _ = colwidth.New(app.ContextOf(ctx), st, colwidth.Opts{AppId: ctx.AppId()})
-//		}
+//	if st := colwidth.StoreOf(ctx); st != nil {
+//		res, _ = colwidth.New(app.ContextOf(ctx), st, colwidth.Opts{AppId: ctx.AppId()})
 //	}
 //
 // Construct with the mount context's AppId, never one the app composes:
 // ADR-0382 §SD5 makes that the keying identity — the app whose window the
 // person sees, which a pane drawn in another app's window shares with its
 // host.
-type HostI interface {
-	ColumnWidthStore() (store StoreI)
+func StoreOf(ctx app.MountContextI) (store StoreI) {
+	store, _ = ctx.MountValue(StoreKey{}).(StoreI)
+	return
 }
 
 func writeLenPrefixed(h *blake3.Hasher, s string) {

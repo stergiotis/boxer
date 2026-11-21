@@ -9,52 +9,55 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
-// NoopBus is a BusI that errors on every call. Used by M1 hosts before the
-// cap broker arrives in M2. Apps that exercise Bus() in M1 fail loudly with
-// a structured error naming the subject.
+// NoopBus is a BusI that errors on every call: what a context without a
+// transport hands out (a test's, a CLI bootstrap's), so an app that uses
+// Bus() there fails loudly with an error naming the subject.
 type NoopBus struct{}
 
 var _ BusI = (*NoopBus)(nil)
 
 func (inst *NoopBus) Publish(subject string, payload []byte) (err error) {
-	err = eb.Build().Str("subject", subject).Errorf("noopbus: broker not available in M1")
+	err = eb.Build().Str("subject", subject).Errorf("noopbus: this context has no bus")
 	return
 }
 
 func (inst *NoopBus) Subscribe(subject string, handler MsgHandlerFunc) (unsubscribe func(), err error) {
-	err = eb.Build().Str("subject", subject).Errorf("noopbus: broker not available in M1")
+	err = eb.Build().Str("subject", subject).Errorf("noopbus: this context has no bus")
 	return
 }
 
 func (inst *NoopBus) Request(ctx context.Context, subject string, payload []byte) (reply []byte, err error) {
-	err = eb.Build().Str("subject", subject).Errorf("noopbus: broker not available in M1")
+	err = eb.Build().Str("subject", subject).Errorf("noopbus: this context has no bus")
 	return
 }
 
-// NoopStorage is a StorageI that errors on every call. Used by M1 hosts
-// before the CH+leeway state layer arrives in M2.
+// NoopStorage is a StorageI that errors on every call: what a context
+// without a persist service hands out.
 type NoopStorage struct{}
 
 var _ StorageI = (*NoopStorage)(nil)
 
 func (inst *NoopStorage) Get(ctx context.Context, key string) (value []byte, found bool, err error) {
-	err = eb.Build().Str("key", key).Errorf("noopstorage: storage not available in M1")
+	err = eb.Build().Str("key", key).Errorf("noopstorage: this context has no storage")
 	return
 }
 
 func (inst *NoopStorage) Set(ctx context.Context, key string, value []byte) (err error) {
-	err = eb.Build().Str("key", key).Errorf("noopstorage: storage not available in M1")
+	err = eb.Build().Str("key", key).Errorf("noopstorage: this context has no storage")
 	return
 }
 
 func (inst *NoopStorage) Delete(ctx context.Context, key string) (err error) {
-	err = eb.Build().Str("key", key).Errorf("noopstorage: storage not available in M1")
+	err = eb.Build().Str("key", key).Errorf("noopstorage: this context has no storage")
 	return
 }
 
-// StaticMountContext is a minimal MountContextI for tests and bootstrap
-// scenarios that don't yet have a real bus or storage. Hosts construct one
-// per app at Mount.
+// StaticMountContext is the MountContextI every host in this module hands
+// its apps, and the base a fake embeds: hosts construct one per instance and
+// fill it with the Set methods before Mount (ADR-0396 §4). A wrapper that
+// changes one capability — a pane's own storage — embeds the MountContextI
+// it wraps instead, so it forwards every other method, including ones added
+// later.
 type StaticMountContext struct {
 	id           AppIdT
 	logger       zerolog.Logger
@@ -71,11 +74,9 @@ type StaticMountContext struct {
 }
 
 var _ MountContextI = (*StaticMountContext)(nil)
-var _ LifetimeI = (*StaticMountContext)(nil)
-var _ MountValuesI = (*StaticMountContext)(nil)
 
-// SetMountValue records v under key (MountValuesI); hosts call it before
-// Mount.
+// SetMountValue records v under key (MountContextI.MountValue); hosts call
+// it before Mount.
 func (inst *StaticMountContext) SetMountValue(key any, v any) {
 	if inst.values == nil {
 		inst.values = make(map[any]any)
@@ -216,40 +217,31 @@ func (inst *StaticMountContext) LaunchReason() (reason LaunchReasonE) {
 	return
 }
 
-// StaticFrameContext extends StaticMountContext with a host-supplied egui
-// scope. M1 hosts pass nil; M3 hosts pass the real *egui2.Context. The
-// scope is typed as any here so the runtime package does not pull egui2
-// bindings transitively — the bridge to the typed scope lands when the
-// DockHost ships in M3.
+// StaticFrameContext is the FrameContextI every host in this module hands
+// its apps, and the base a fake embeds. Its zero capabilities are the
+// absent results FrameContextI documents: focused, no close, no gesture.
 type StaticFrameContext struct {
 	*StaticMountContext
-	scope any
-	// windowFocused backs the WindowFocusI capability. Constructed true:
+	// windowFocused backs WindowFocused. Constructed true:
 	// a host that never says otherwise is a single-surface host, whose
 	// sole instance is the active one by definition. A multi-window host
 	// (windowhost) overwrites it before every Frame with whether this
 	// context's window is the shell's topmost.
 	windowFocused bool
-	// gesture backs OperationsGestureI; nil when the host serves no catalog
+	// gesture backs OperationGesture; nil when the host serves no catalog
 	// for this window.
 	gesture func(op string, args []byte) (result []byte, err error)
-	// closeWindow backs WindowCloseI; nil when the host has no window of
-	// the app's to close.
+	// closeWindow backs CloseWindow; nil when the host has no window of the
+	// app's to close.
 	closeWindow func(reason string)
 }
 
 var _ FrameContextI = (*StaticFrameContext)(nil)
-var _ WindowFocusI = (*StaticFrameContext)(nil)
-var _ OperationsGestureI = (*StaticFrameContext)(nil)
-var _ WindowCloseI = (*StaticFrameContext)(nil)
 
-// NewStaticFrameContext wraps a MountContext with a host-supplied egui scope.
-// scope may be nil in M1; consumers that need it should error at the per-app
-// boundary, not panic.
-func NewStaticFrameContext(mc *StaticMountContext, scope any) (inst *StaticFrameContext) {
+// NewStaticFrameContext wraps a mount context for Frame.
+func NewStaticFrameContext(mc *StaticMountContext) (inst *StaticFrameContext) {
 	inst = &StaticFrameContext{
 		StaticMountContext: mc,
-		scope:              scope,
 		windowFocused:      true,
 	}
 	return
@@ -287,11 +279,6 @@ func (inst *StaticFrameContext) CloseWindow(reason string) (asked bool) {
 	}
 	inst.closeWindow(reason)
 	return true
-}
-
-func (inst *StaticFrameContext) EguiScope() (scope any) {
-	scope = inst.scope
-	return
 }
 
 // SetWindowFocused records whether the window carrying this context is the

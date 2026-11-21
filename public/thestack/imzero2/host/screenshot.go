@@ -14,7 +14,7 @@ import (
 func AdaptBodyOnly(a app.AppI) func(hids *c.WidgetIdStack) error {
 	m := a.Manifest()
 	mc := app.NewStaticMountContext(m.Id, app.AppLogger(log.Logger, m.Id), nil, nil, nil)
-	fc := app.NewStaticFrameContext(mc, nil)
+	fc := app.NewStaticFrameContext(mc)
 	var mounted bool
 	return func(hids *c.WidgetIdStack) (err error) {
 		mc.SetIds(hids)

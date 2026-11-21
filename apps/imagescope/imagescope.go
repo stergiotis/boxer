@@ -218,7 +218,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.bindIds(ctx.Ids())
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
-	inst.scope = app.LifetimeOf(ctx)
+	inst.scope = ctx.Lifetime()
 	inst.measure.Configure(inst.tasks, measureKind, measureTitle)
 	inst.phaseChip = fsmview.New(inst.ids, "image-phase", inst.phaseMachine, fsmview.Options[phaseE]{
 		Title:      "Image phase",

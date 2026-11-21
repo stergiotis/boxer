@@ -50,7 +50,7 @@ func MountOn(bus *inprocbus.Inst, id app.AppIdT, ids *c.WidgetIdStack, logger ze
 	stop := make(chan struct{})
 	mc := app.NewStaticMountContext(manifest.Id, logger.With().Str("app", string(manifest.Id)).Logger(), nil, bus.NewClient(manifest.Id, manifest.Caps), stop)
 	mc.SetIds(ids)
-	m = &Mounted{inst: inst, mount: mc, frame: app.NewStaticFrameContext(mc, nil), stop: stop}
+	m = &Mounted{inst: inst, mount: mc, frame: app.NewStaticFrameContext(mc), stop: stop}
 	if err = inst.Mount(mc); err != nil {
 		close(stop)
 		return nil, eb.Build().Str("app", string(id)).Errorf("browserhost: mount: %w", err)

@@ -10,7 +10,7 @@ import (
 
 // The drain step of the closing edge (ADR-0322): between an
 // instance's Unmount and the close of its bus client, the host waits for the
-// instance's lifetime scope (app.LifetimeI) to be done, so work the app
+// instance's lifetime scope (app.MountContextI.Lifetime) to be done, so work the app
 // counted in writes its tail over a live bus. A window close drains off the
 // render goroutine — the window is gone from the desktop at once, and its
 // client closes when the drain ends; a shutdown drains every instance in

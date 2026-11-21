@@ -384,7 +384,7 @@ type PlayApp struct {
 	// a nested query, and it is the gesture that does the work, not the mode.
 	subqueryMode bool
 	// windowUnfocused says the shell's active window is some OTHER window
-	// this frame (app.WindowFocusI, stamped by PlayLauncher.Frame). It
+	// this frame (app.FrameContextI.WindowFocused, stamped by PlayLauncher.Frame). It
 	// gates the Ctrl+Enter poll alone: the chord is process-global input
 	// every open play instance sees, and only the instance the user is in
 	// may act on it. Inverted so the zero value — tests building PlayApp
@@ -1537,12 +1537,12 @@ func (inst *PlayApp) MainSQL() string {
 // optional interface type-asserted off the context, so a host that cannot
 // offer one owes nothing and nothing errors:
 //
-//   - [app.WindowFocusI] gates the process-global Ctrl+Enter chord. The chord
+//   - [app.FrameContextI.WindowFocused] gates the process-global Ctrl+Enter chord. The chord
 //     is drained once from egui's shared queue and is visible to every open
 //     instance alike, so without the gate one press runs a query in all of
 //     them. A host that cannot say is taken as focused: single-surface hosts
 //     and tests have only the one instance, and it is the active one.
-//   - [colwidth.HostI] carries the column-width store (ADR-0151). It is
+//   - [colwidth.StoreOf] carries the column-width store (ADR-0151). It is
 //     acquired here rather than at Mount because it is a frame-context
 //     capability; ensureColWidthRes does the once-only work.
 //
@@ -1551,11 +1551,7 @@ func (inst *PlayApp) MainSQL() string {
 // re-host that called the pass directly silently lost both. Making the
 // context the only way in turns that from a rule to remember into a signature.
 func (inst *PlayApp) Frame(ctx app.FrameContextI) (err error) {
-	focused := true
-	if f, ok := ctx.(app.WindowFocusI); ok {
-		focused = f.WindowFocused()
-	}
-	inst.windowUnfocused = !focused
+	inst.windowUnfocused = !ctx.WindowFocused()
 	inst.ensureColWidthRes(ctx)
 	err = inst.render()
 	return
@@ -1826,7 +1822,7 @@ func (inst *PlayApp) renderTabBody(spec *TabSpec, title string, f *TabFrame) {
 // Sync, and the StateManager holds it as per-frame state every reader sees —
 // so with more than one play instance open, each instance's poll observes the
 // same press. The focus gate below is what makes the binding belong to ONE of
-// them: the instance whose window the shell reports active (app.WindowFocusI,
+// them: the instance whose window the shell reports active (app.FrameContextI.WindowFocused,
 // via PlayLauncher.Frame). Without it, one press ran a query in every open
 // playground. A press while a run is already in flight is dropped rather
 // than queued, which is what the toolbar does too: it shows Cancel, not Run.

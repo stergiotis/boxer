@@ -306,7 +306,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.ensureReplayChip()
 	inst.tasks = task.ForApp(ctx)
-	inst.scope = app.LifetimeOf(ctx)
+	inst.scope = ctx.Lifetime()
 	// Capture the host-provided capability bus for the singleton Sampler to
 	// subscribe on (ADR-0090): imztop consumes metrics, it never reads /proc.
 	setSamplerBus(ctx.Bus())

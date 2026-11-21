@@ -27,7 +27,7 @@ type tailApp struct {
 
 func (inst *tailApp) Manifest() (m app.Manifest) { return inst.manifest }
 func (inst *tailApp) Mount(ctx app.MountContextI) (err error) {
-	inst.scope = lifetime.New(app.LifetimeOf(ctx))
+	inst.scope = lifetime.New(ctx.Lifetime())
 	bus := ctx.Bus()
 	_, err = bus.Subscribe("t.evt", func(msg *app.Msg) {})
 	inst.scope.Go(func(work context.Context) {

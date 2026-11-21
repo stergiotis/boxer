@@ -9,7 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
 
-// A window's app may ask the host to close it (app.WindowCloseI): the
+// A window's app may ask the host to close it (FrameContextI.CloseWindow): the
 // request lands on that window alone, with the app's reason marked as its
 // own on the lifecycle row.
 func TestAWindowAsksToBeClosed(t *testing.T) {
@@ -24,9 +24,7 @@ func TestAWindowAsksToBeClosed(t *testing.T) {
 	first, second := h.windows[0], h.windows[1]
 	h.mu.Unlock()
 
-	closer, ok := first.frameCtxApp.(app.WindowCloseI)
-	require.True(t, ok, "the window host's frame context closes its window")
-	require.True(t, closer.CloseWindow("the stop \"done\" fired"))
+	require.True(t, first.frameCtxApp.CloseWindow("the stop \"done\" fired"))
 
 	require.True(t, h.closeRequested(first))
 	require.False(t, h.closeRequested(second))
@@ -38,6 +36,6 @@ func TestAWindowAsksToBeClosed(t *testing.T) {
 
 // A context no host installed a close on says so, and the app falls back.
 func TestAContextWithoutAWindowDoesNotClose(t *testing.T) {
-	fc := app.NewStaticFrameContext(app.NewStaticMountContext("test.selfclose", zerolog.Nop(), nil, nil, nil), nil)
+	fc := app.NewStaticFrameContext(app.NewStaticMountContext("test.selfclose", zerolog.Nop(), nil, nil, nil))
 	require.False(t, fc.CloseWindow("nothing to close"))
 }

@@ -86,7 +86,7 @@ func TestAStopEndsTheConversationAndClosesTheWindow(t *testing.T) {
 	inst.focused = true
 	inst.coord = newCoordinator(nil, nil, inst.conv.id)
 	inst.landStops(&turnResult{ended: stopActionClose, endedWhy: `the stop "fin" fired`})
-	fc := app.NewStaticFrameContext(app.NewStaticMountContext(ManifestId, zerolog.Nop(), nil, nil, nil), nil)
+	fc := app.NewStaticFrameContext(app.NewStaticMountContext(ManifestId, zerolog.Nop(), nil, nil, nil))
 	var asked []string
 	fc.SetWindowClose(func(reason string) { asked = append(asked, reason) })
 	inst.syncStopClose(fc)
@@ -97,7 +97,7 @@ func TestAStopEndsTheConversationAndClosesTheWindow(t *testing.T) {
 	inst.focused = true
 	inst.coord = newCoordinator(nil, nil, inst.conv.id)
 	inst.landStops(&turnResult{ended: stopActionClose, endedWhy: "x"})
-	inst.syncStopClose(app.NewStaticFrameContext(app.NewStaticMountContext(ManifestId, zerolog.Nop(), nil, nil, nil), nil))
+	inst.syncStopClose(app.NewStaticFrameContext(app.NewStaticMountContext(ManifestId, zerolog.Nop(), nil, nil, nil)))
 	assert.Contains(t, inst.note.text, "closes no window")
 	assert.NotEmpty(t, inst.conv.ended)
 }

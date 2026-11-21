@@ -22,7 +22,7 @@ var _ app.AppI = (*valueApp)(nil)
 
 func (inst *valueApp) Manifest() (m app.Manifest) { return inst.manifest }
 func (inst *valueApp) Mount(ctx app.MountContextI) (err error) {
-	inst.got = app.MountValueOf(ctx, mountValueKey{})
+	inst.got = ctx.MountValue(mountValueKey{})
 	return
 }
 func (inst *valueApp) Frame(ctx app.FrameContextI) (err error)   { return }
@@ -45,5 +45,5 @@ func TestTheHostHandsItsMountValuesToEveryApp(t *testing.T) {
 	h.mu.Unlock()
 	require.NoError(t, w.appInst.Mount(w.mountCtx))
 	assert.Same(t, v, va.got)
-	assert.Nil(t, app.MountValueOf(app.NewStaticMountContext("x", zerolog.Nop(), nil, nil, nil), mountValueKey{}))
+	assert.Nil(t, app.NewStaticMountContext("x", zerolog.Nop(), nil, nil, nil).MountValue(mountValueKey{}))
 }

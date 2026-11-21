@@ -265,7 +265,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		// scope (ADR-0322), so a window close cascades into its work.
 		inst.tasks = task.ForApp(ctx)
 	}
-	inst.scope = app.LifetimeOf(ctx)
+	inst.scope = ctx.Lifetime()
 	inst.configureLanes()
 	inst.status = "connecting…"
 	if raw := ctx.LaunchConfig(); len(raw) > 0 {
@@ -328,11 +328,7 @@ func (inst *App) ensureColWidths(ctx app.FrameContextI) {
 		return
 	}
 	inst.colWidthsInit = true
-	h, ok := ctx.(colwidth.HostI)
-	if !ok {
-		return
-	}
-	store := h.ColumnWidthStore()
+	store := colwidth.StoreOf(ctx)
 	if store == nil {
 		return
 	}

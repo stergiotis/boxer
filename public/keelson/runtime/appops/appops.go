@@ -482,17 +482,12 @@ func (inst *Set[A, S]) ResourceNames() (names []string) {
 // no catalog for the window, the call is refused and the app should apply
 // the change itself.
 func Gesture[In any, Out any](ctx app.FrameContextI, op string, in In) (out Out, err error) {
-	g, ok := ctx.(app.OperationsGestureI)
-	if !ok {
-		err = app.RefuseOperation("the frame context offers no gesture path")
-		return
-	}
 	args, err := buscodec.Encode(in)
 	if err != nil {
 		err = eb.Build().Str("operation", op).Errorf("appops: encode arguments: %w", err)
 		return
 	}
-	raw, err := g.OperationGesture(op, args)
+	raw, err := ctx.OperationGesture(op, args)
 	if err != nil || len(raw) == 0 {
 		return
 	}

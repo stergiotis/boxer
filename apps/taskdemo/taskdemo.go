@@ -135,7 +135,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	inst.tasks = task.ForApp(ctx)
-	if inst.scope = app.LifetimeOf(ctx); inst.scope == nil {
+	if inst.scope = ctx.Lifetime(); inst.scope == nil {
 		// A host without a lifetime scope (a bare test context).
 		inst.scope, inst.ownScope = lifetime.New(nil), true
 	}

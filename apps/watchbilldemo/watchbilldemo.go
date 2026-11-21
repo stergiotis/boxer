@@ -132,7 +132,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.client.Timeout = requestTimeout
 	inst.tasks = task.ForApp(ctx)
 	inst.stop = ctx.Cancel()
-	if inst.scope = app.LifetimeOf(ctx); inst.scope == nil {
+	if inst.scope = ctx.Lifetime(); inst.scope == nil {
 		// No host drain: the app owns a root scope and retires it at
 		// Unmount.
 		inst.scope, inst.ownScope = lifetime.New(nil), true

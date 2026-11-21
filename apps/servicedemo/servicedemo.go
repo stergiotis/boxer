@@ -83,7 +83,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 			}
 		}
 	}
-	scope := app.LifetimeOf(ctx)
+	scope := ctx.Lifetime()
 	if scope != nil {
 		// A refused start means the scope already retired: the window is
 		// leaving, and the ticker has nothing left to count.

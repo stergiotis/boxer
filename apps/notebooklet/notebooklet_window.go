@@ -69,7 +69,7 @@ func (inst *window) build() {
 func (inst *window) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.bus = ctx.Bus()
-	if inst.scope = app.LifetimeOf(ctx); inst.scope == nil {
+	if inst.scope = ctx.Lifetime(); inst.scope == nil {
 		inst.scope, inst.ownScope = lifetime.New(nil), true
 	}
 	inst.build()

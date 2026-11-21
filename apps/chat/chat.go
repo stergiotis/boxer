@@ -163,7 +163,7 @@ type App struct {
 	// from, by run id, until their runs are closed: a resume of such a run
 	// waits for the close rather than racing it (ADR-0308 §SD9).
 	retiring map[string]*coordinator
-	// scope is the window's lifetime (app.LifetimeI): every coordinator's
+	// scope is the window's lifetime (app.MountContextI.Lifetime): every coordinator's
 	// is a child of it, so the host waits for a retired run's close before
 	// it closes the bus. nil without a host, where each coordinator owns
 	// its own.
@@ -310,7 +310,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.log = ctx.Log()
 	inst.runId, inst.window = ctx.RunId(), ctx.InstanceKey()
-	inst.scope = app.LifetimeOf(ctx)
+	inst.scope = ctx.Lifetime()
 	if d, ok := cell.OfMount(ctx); ok {
 		inst.confinedTier = d.ConfinedTier
 	}
@@ -381,10 +381,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 
 // Frame renders one frame.
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
-	inst.focused = true
-	if f, ok := ctx.(app.WindowFocusI); ok {
-		inst.focused = f.WindowFocused()
-	}
+	inst.focused = ctx.WindowFocused()
 	// The window's focus, not the embedded composer's: where a question
 	// the model asks is drawn (asker.focused).
 	inst.windowFocused.Store(inst.focused)

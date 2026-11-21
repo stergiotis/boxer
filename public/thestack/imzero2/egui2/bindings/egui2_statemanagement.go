@@ -300,7 +300,7 @@ type StateManager struct {
 	// GetCommandEnterPressed. Unlike F1 this is not a runtime binding — no
 	// chrome-level consumer exists — and every poller in a frame sees the
 	// same press, so an app consumer gates on its window being the shell's
-	// active one (app.WindowFocusI); see GetCommandEnterPressed for the
+	// active one (app.FrameContextI.WindowFocused); see GetCommandEnterPressed for the
 	// contract.
 	commandEnter      bool
 	commandEnterShift bool
@@ -377,7 +377,7 @@ func (inst *StateManager) GetZoomDelta() ZoomDeltaValue {
 //     chrome (DecorateRenderer) polls it and opens-or-raises HelpHost.
 //     Apps must not poll it too — they would act on the same press.
 //   - a PER-INSTANCE consumer gated on the shell's active window
-//     (the app.WindowFocusI capability), which is what Ctrl+Enter has
+//     (the app.FrameContextI.WindowFocused capability), which is what Ctrl+Enter has
 //     — see [StateManager.GetCommandEnterPressed]. Without the gate,
 //     one press fans out into every open instance of the app.
 //
@@ -418,7 +418,7 @@ func (inst *StateManager) GetF8KeyPressed() (pressed bool) {
 // react. The value is per-frame state every reader sees alike — with
 // the app open in more than one shell window, every instance's poll
 // observes the same press, so a consumer must gate on whether ITS
-// window is the shell's active one (the app.WindowFocusI frame-context
+// window is the shell's active one (the app.FrameContextI.WindowFocused frame-context
 // capability; absent capability = single-surface host = focused).
 // play's claimRunChord is the reference consumer — one press ran a
 // query in every open playground before that gate existed. A focused

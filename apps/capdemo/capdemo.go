@@ -179,7 +179,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.bus = ctx.Bus()
 	inst.storage = ctx.Storage()
 	inst.ioCtx = app.ContextOf(ctx)
-	inst.scope = app.LifetimeOf(ctx)
+	inst.scope = ctx.Lifetime()
 	return
 }
 

@@ -18,7 +18,7 @@ func gestureLauncher(t *testing.T) (*PlayLauncher, *opengine.Engine) {
 	t.Helper()
 	l, h := opsLauncher(t)
 	eng := opengine.New(playOps.Catalog(), h)
-	ctx := app.NewStaticFrameContext(nil, nil)
+	ctx := app.NewStaticFrameContext(nil)
 	ctx.SetOperationsGesture(eng.Gesture)
 	l.inner.gestureCtx = ctx
 	eng.BeginFrame()

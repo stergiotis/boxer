@@ -109,7 +109,7 @@ type window struct {
 	// singleton's carried window from closing it twice.
 	stop     chan struct{}
 	stopOnce sync.Once
-	// lifetime is the scope behind app.LifetimeI (ADR-0322, proposed):
+	// lifetime is the scope behind app.MountContextI.Lifetime (ADR-0322, proposed):
 	// retired with stop, drained after Unmount and before the bus client
 	// closes (windowhost_drain.go).
 	lifetime *lifetime.Scope
@@ -373,7 +373,7 @@ type Inst struct {
 	dialogTasks  task.TaskApiI
 
 	// activeKey names the shell's active window — the one whose frame
-	// context reads focused (app.WindowFocusI), and therefore the one
+	// context reads focused (FrameContextI.WindowFocused), and therefore the one
 	// instance process-global input like the Ctrl+Enter chord belongs
 	// to. Derived each Frame by pickActiveWindow from the windows' r7
 	// WINDOW_TOPMOST reports; zero while no window is open. Mutated
@@ -435,12 +435,12 @@ type Inst struct {
 	drains drainState
 
 	// mountValues are handed to every app the host mounts
-	// (app.MountValuesI); SetMountValue before the first Open.
+	// (MountContextI.MountValue); SetMountValue before the first Open.
 	mountValues map[any]any
 }
 
 // SetMountValue hands v under key to every app mounted after the call
-// (app.MountValuesI): what the host built once — the cell declaration —
+// (MountContextI.MountValue): what the host built once — the cell declaration —
 // reaches the app as that one copy. Call it before the first Open.
 func (inst *Inst) SetMountValue(key any, v any) {
 	if inst.mountValues == nil {
@@ -603,7 +603,7 @@ func (inst *Inst) Open(appId app.AppIdT) (key WindowKeyT, err error) {
 //
 // The raise runs on the next Frame, and egui's stacking then reports
 // the window topmost — so it also becomes the shell's active window
-// (app.WindowFocusI), exactly as a fresh open would be: both halves
+// (FrameContextI.WindowFocused), exactly as a fresh open would be: both halves
 // end with the window on top and focused. The oldest window wins when
 // several show the app. opened reports which half ran.
 func (inst *Inst) OpenOrRaise(appId app.AppIdT) (key WindowKeyT, opened bool, err error) {
@@ -808,23 +808,20 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	for k, v := range inst.mountValues {
 		mountCtx.SetMountValue(k, v)
 	}
+	// The column-width store (ADR-0151 M4) is a mount value under colwidth's
+	// key (ADR-0396 §4), set only when a state store exists: its absence is
+	// how an app learns there is nowhere durable to put widths.
+	if inst.state != nil {
+		mountCtx.SetMountValue(colwidth.StoreKey{}, colwidth.StoreI(inst.state))
+	}
 	appIds := c.NewWidgetIdStack()
 	mountCtx.SetIds(appIds)
-	frameCtx := app.NewStaticFrameContext(mountCtx, nil)
-	// The window may ask to be closed (app.WindowCloseI). Close marks the
+	frameCtx := app.NewStaticFrameContext(mountCtx)
+	// The window may ask to be closed (FrameContextI.CloseWindow). Close marks the
 	// request under inst.mu, which the render loop does not hold across an
 	// app's Frame, and the window is reaped at the end of the frame.
 	frameCtx.SetWindowClose(func(reason string) { inst.Close(key, selfCloseReason(reason)) })
-	// Column-width capability (ADR-0151 M4) in the ADR-0382 §SD4 shape: an
-	// optional capability on the frame context, not a contract method. Only
-	// wrapped when a state store exists, because absence of the capability
-	// is how an app learns there is nowhere durable to put widths — wrapping
-	// unconditionally and handing back nil would move that check to every
-	// call site instead.
 	var frameCtxApp app.FrameContextI = frameCtx
-	if inst.state != nil {
-		frameCtxApp = &frameCtxColWidth{StaticFrameContext: frameCtx, store: inst.state}
-	}
 	// Share Mount/Unmount state per AppI instance: a second window over a
 	// singleton-registered app reuses the existing instMount (refs++), so the
 	// instance is Mounted once and Unmounted only when its last window closes.
@@ -1364,7 +1361,7 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	// wrap here.
 	// Decide the shell's active window from last frame's stacking
 	// reports, then stamp every window's frame context below so each
-	// app's Frame can gate process-global input (app.WindowFocusI) on
+	// app's Frame can gate process-global input (FrameContextI.WindowFocused) on
 	// whether ITS window is the active one — the seam that keeps one
 	// Ctrl+Enter from running a query in every open playground.
 	{
@@ -1844,24 +1841,4 @@ func (inst *Inst) RenderAppsMenu(ids *c.WidgetIdStack) {
 		return
 	}
 	inst.launcher.RenderMenu(ids)
-}
-
-// frameCtxColWidth adds the ADR-0151 column-width capability to a window's
-// frame context. It embeds the static context rather than reimplementing
-// it, so every other capability the host sets each frame — window focus,
-// the egui scope — passes through untouched.
-type frameCtxColWidth struct {
-	*app.StaticFrameContext
-	store colwidth.StoreI
-}
-
-var _ colwidth.HostI = (*frameCtxColWidth)(nil)
-
-// ColumnWidthStore hands back the host's state store, whose column-width
-// verbs are exactly colwidth.StoreI. Scoping is the app's: the resolver
-// keys every read and write by the mount context's AppId, so one app's
-// overrides cannot reach another's through this.
-func (inst *frameCtxColWidth) ColumnWidthStore() (store colwidth.StoreI) {
-	store = inst.store
-	return
 }

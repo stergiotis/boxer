@@ -33,7 +33,7 @@ import (
 //     task.ForApp — are released by the host at the closing edge whether or
 //     not Unmount does so (ADR-0188): the host closes MountContextI.Cancel()
 //     first, then runs Unmount, then drains the instance's lifetime scope
-//     (see [LifetimeI]), then closes the instance's bus client. An app may
+//     (see [MountContextI.Lifetime]), then closes the instance's bus client. An app may
 //     therefore still use its bus inside Unmount, and work it counted into
 //     its scope may write its tail until the drain ends; a goroutine that
 //     outlives the drain and keeps the client sees a closed-client error
@@ -125,89 +125,68 @@ type MountContextI interface {
 	// at, not an omission). LaunchReasonPlain whenever LaunchConfig is
 	// nil.
 	LaunchReason() (reason LaunchReasonE)
+	// Lifetime is the instance's lifetime scope (ADR-0322), which the host
+	// retires with Cancel(), before Unmount, and drains after Unmount — off
+	// the render goroutine, up to a deadline — before it closes the bus
+	// client. Work an app counts into the scope (Enter, Go, a child scope,
+	// or a task spawned through task.ForApp) therefore keeps a live bus for
+	// its tail; past the deadline the scope is abandoned, tails see their
+	// context end, and the bus closes regardless. Tails and drain hooks run
+	// beside the app after Unmount has returned: they make no imzero2 call.
+	// A goroutine the app starts without counting it in is not waited for.
+	//
+	// Absent: nil, on a host that does not drain (a test's context, a CLI
+	// bootstrap); a child of nil is a root scope the app owns.
+	Lifetime() (s *lifetime.Scope)
+	// MountValue is the value the host hands every app it mounts under key,
+	// keyed as context.Context's values are, so a package this one cannot
+	// import — the cell declaration (package cell), the column-width store
+	// (package colwidth) — reaches an app as the host's one copy. The
+	// package that owns a value owns its key and a typed accessor over this
+	// method.
+	//
+	// Absent: nil.
+	MountValue(key any) (v any)
 }
 
-// FrameContextI extends MountContextI with frame-scoped resources. The host
-// pre-prepares the WidgetIdStack before each Frame() call (ADR-0026 §SD9),
-// so apps must not call Prepare() themselves.
+// FrameContextI extends MountContextI with what a host offers during a
+// Frame. The host pre-prepares the WidgetIdStack before each Frame() call
+// (ADR-0026 §SD9), so apps must not call Prepare() themselves.
 //
-// Hosts that can tell which of their windows is active additionally
-// implement [WindowFocusI] on the same context — an optional capability,
-// not part of this interface, so single-surface hosts and test fakes owe
-// nothing.
+// Every capability is a method with a documented absent result (ADR-0396
+// §4), so a wrapper that embeds the interface forwards capabilities added
+// later, and a fake embeds *StaticFrameContext.
 type FrameContextI interface {
 	MountContextI
-	// EguiScope returns the host-provided egui rendering scope. The concrete
-	// type is the egui2 Context wrapper introduced by M3 (DockHost); until
-	// then, M1 hosts return nil and apps fall back to the legacy global
-	// bindings via a LegacyFuncApp wrapper.
-	EguiScope() (scope any)
-}
-
-// WindowFocusI is the optional frame-context capability a multi-window
-// host provides so an app instance can tell whether ITS window is the
-// shell's active one this frame. Process-global input — a keyboard chord
-// drained once from egui's shared queue — is visible to every open
-// instance's Frame alike, so an app acting on such input must gate on
-// this or one press fans out into every window hosting that app.
-//
-// Type-assert from the FrameContextI; a context without it belongs to a
-// single-surface host, where the only instance is the active one — treat
-// absence as focused:
-//
-//	focused := true
-//	if f, ok := ctx.(app.WindowFocusI); ok {
-//		focused = f.WindowFocused()
-//	}
-type WindowFocusI interface {
+	// WindowFocused says whether the window this instance draws into is the
+	// shell's active one this frame. Process-global input — a keyboard
+	// chord drained once from egui's shared queue — is visible to every
+	// open instance's Frame alike, so an app acting on such input gates on
+	// this or one press fans out into every window hosting that app.
+	//
+	// Absent: true, on a single-surface host, where the only instance is
+	// the active one.
 	WindowFocused() (focused bool)
-}
-
-// WindowCloseI is the optional frame-context capability by which an app asks
-// the host to close the window it is drawn in (ADR-0370 §SD9). The
-// host closes it at the end of the frame along the path its own close takes
-// — leave, unmount, drain, unload — with reason on the lifecycle row, so an
-// app does nothing after the call that it would not do before any other
-// close. Call it from Frame.
-//
-// asked is false when the host has no window of the app's to close: a
-// single-surface host, a test fake, a pane drawn in another app's window.
-// The app then falls back to whatever it does without the capability; a
-// context that lacks the interface altogether is the same case.
-//
-// It is not a capability subject: the call reaches nothing but the caller's
-// own window, which the person can open again.
-type WindowCloseI interface {
+	// CloseWindow asks the host to close the window the app is drawn in
+	// (ADR-0370 §SD9). The host closes it at the end of the frame along the
+	// path its own close takes — leave, unmount, drain, unload — with
+	// reason on the lifecycle row, so an app does nothing after the call
+	// that it would not do before any other close. Call it from Frame. It
+	// is not a capability subject: the call reaches nothing but the
+	// caller's own window, which the person can open again.
+	//
+	// Absent: asked is false when the host has no window of the app's to
+	// close — a single-surface host, a test fake, a pane drawn in another
+	// app's window; the app falls back to what it does without it.
 	CloseWindow(reason string) (asked bool)
-}
-
-// LifetimeI is the optional mount-context capability a host provides when it
-// drains an instance between Unmount and unload (ADR-0322, proposed). The
-// scope is retired with Cancel(), before Unmount; after Unmount the host
-// waits — off the render goroutine, up to a deadline — until the scope is
-// done, then closes the bus client. Work an app counts into the scope (with
-// Enter, Go, a child scope, or a task spawned through task.ForApp) therefore
-// keeps a live bus for its tail. Past the deadline the scope is abandoned:
-// tails see their context end, and the bus closes regardless.
-//
-// Tails and drain hooks run beside the app, not on the render goroutine,
-// and after Unmount has returned (ADR-0322 §SD6): they make no imzero2
-// call, and touch only state that is safe to share with the app's other
-// goroutines. A goroutine the app starts without counting it in is not
-// waited for.
-//
-// Type-assert from the MountContextI, or call [LifetimeOf]; a nil scope means
-// the host does not drain, and a child of nil is a root scope the app owns.
-type LifetimeI interface {
-	Lifetime() (s *lifetime.Scope)
-}
-
-// LifetimeOf is ctx's lifetime scope, nil when the host provides none.
-func LifetimeOf(ctx MountContextI) (s *lifetime.Scope) {
-	if l, ok := ctx.(LifetimeI); ok {
-		s = l.Lifetime()
-	}
-	return
+	// OperationGesture applies one of the app's catalog commands as the
+	// person, through the host (ADR-0269 §SD8), so it is logged and bumps
+	// revisions like any other writer's. Call it from Frame, usually
+	// through appops.Gesture.
+	//
+	// Absent: a refusal (IsOperationRefusal) where the host serves no
+	// catalog for the window; the app then applies the change itself.
+	OperationGesture(op string, args []byte) (result []byte, err error)
 }
 
 // ContextOf is the context an app instance does its I/O under — persist,
@@ -216,36 +195,16 @@ func LifetimeOf(ctx MountContextI) (s *lifetime.Scope) {
 // Retire and ends when the host abandons the instance at the end of its
 // drain. So a save in Unmount, after the instance has left, still runs, and
 // nothing outlives the instance. Work that should stop the moment the
-// instance leaves uses LifetimeOf(ctx).Ctx() instead.
+// instance leaves uses mc.Lifetime().Ctx() instead.
 //
 // A mount context without a lifetime scope — a test's, a CLI bootstrap's —
 // has no end, and neither has the context returned for it. Call it once,
 // in Mount, and keep the result: each call wraps a new context.
 func ContextOf(mc MountContextI) (ctx context.Context) {
-	if s := LifetimeOf(mc); s != nil {
+	if s := mc.Lifetime(); s != nil {
 		return s.TailContext()
 	}
 	return context.Background() //boxer:lint disable=CS020 reason="a mount context without a lifetime scope has no end; this is its root"
-}
-
-// MountValuesI is an optional capability of a MountContextI: values the
-// host hands every app it mounts, keyed as context.Context's are, so a
-// package this one cannot import — the cell declaration (package cell) —
-// reaches an app as the host's one copy rather than a second read of the
-// environment. The package that owns a value owns its key and a typed
-// accessor over [MountValueOf]. Type-assert from the MountContextI, or
-// call MountValueOf; a context without the capability carries no values.
-type MountValuesI interface {
-	MountValue(key any) (v any)
-}
-
-// MountValueOf is the value ctx carries under key, nil when it carries
-// none.
-func MountValueOf(ctx MountContextI, key any) (v any) {
-	if m, ok := ctx.(MountValuesI); ok {
-		v = m.MountValue(key)
-	}
-	return
 }
 
 // BusI is the cap-broker / inter-app message bus described by ADR-0026 §SD3
