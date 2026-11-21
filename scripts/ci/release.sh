@@ -2,7 +2,8 @@
 # Check a release candidate, then print — never run — the commands that tag it
 # (ADR-0390).
 #
-#   scripts/ci/release.sh [--version vX.Y.Z] [--fuzztime D] [<rev>]
+#   scripts/ci/release.sh [--version vX.Y.Z] [--fuzztime D]
+#                         [--use-running-clickhouse] [<rev>]
 #
 # Checks out <rev> (default HEAD) into a detached worktree of its own and runs
 # every gate in it, each to completion, in the order below, through the gate()
@@ -13,9 +14,8 @@
 #
 #   module          go mod tidy --diff, go mod verify, go build ./...
 #   tests           gotest.sh, gotest_binary_log.sh (both with --check-drift)
-#   integration     gotest-integration.sh against a ClickHouse server: the one
-#                   on 127.0.0.1:8123 if it answers, else the pinned throwaway
-#                   from clickhouse_server.sh (a download of ~240 MB)
+#   integration     gotest-integration.sh --strict-skips: a skipped test fails
+#                   the step
 #   lint            lint.sh, every step, baselines enforced
 #   rust            viewer_test.sh, watermark_test.sh
 #   supply chain    govuln.sh, cargo_advisories.sh, license_gate.sh
@@ -29,6 +29,19 @@
 #                   the logs (never into the tree)
 #   clean tree      nothing above left the worktree dirty
 #
+# ClickHouse: before the first gate the script starts a server of its own —
+# the pinned build from clickhouse_server.sh (a download of ~240 MB the first
+# time), on 127.0.0.1 at free ports from 18123 (HTTP) and 19000 (native), data
+# under the run's state directory beside the worktree — and points
+# CLICKHOUSE_ENDPOINT and CLICKHOUSE_URL at it (gate_lib.sh
+# clickhouse_private), so both test lanes reach it and no other server. It is
+# stopped after the integration lane and on exit.
+#
+#   --use-running-clickhouse  use the server already answering on
+#                   127.0.0.1:8123 instead. The test lanes then create and
+#                   drop scratch databases on that server and write to its
+#                   system tables; credentials come from the environment.
+#
 # Exit status 0 means every gate ran and passed; the script then prints the
 # signed-tag commands for --version (doc/howto/release-signing.md). It tags,
 # signs and pushes nothing itself.
@@ -40,12 +53,14 @@ export GOWORK=off
 
 version=""
 fuzztime=10s
+running_ch=0
 rev=HEAD
 while [ $# -gt 0 ]; do
     case "$1" in
         --version) version="$2"; shift 2 ;;
         --fuzztime) fuzztime="$2"; shift 2 ;;
-        -h|--help) sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --use-running-clickhouse) running_ch=1; shift ;;
+        -h|--help) sed -n '2,47p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         -*) echo "release: unknown option $1" >&2; exit 2 ;;
         *) rev="$1"; shift ;;
     esac
@@ -70,6 +85,16 @@ echo "release: full logs in $logdir"
 # shellcheck source=gate_lib.sh
 source "$here/gate_lib.sh"
 gate_logdir="$logdir"
+trap 'gate_stop_clickhouse; _cw_remove' EXIT
+
+# ---- ClickHouse, for both test lanes -------------------------------------------
+if [ "$running_ch" = 1 ]; then
+    ch_ok=1; clickhouse_running || ch_ok=0
+    ch_missing="no ClickHouse server answers on 127.0.0.1:8123"
+else
+    ch_ok=1; clickhouse_private "$(dirname "$wt")/clickhouse" || ch_ok=0
+    ch_missing="the run's own ClickHouse server did not start (see $logdir/clickhouse.log)"
+fi
 
 # ---- module, tests ------------------------------------------------------------
 gate "go mod tidy --diff" go mod tidy --diff
@@ -79,10 +104,10 @@ gate "gotest" scripts/ci/gotest.sh --check-drift
 gate "gotest binary_log" scripts/ci/gotest_binary_log.sh --check-drift
 
 # ---- integration ---------------------------------------------------------------
-if ensure_clickhouse 1 "$(dirname "$wt")/clickhouse"; then
-    gate "integration lane" scripts/ci/gotest-integration.sh
+if [ "$ch_ok" = 1 ]; then
+    gate "integration lane" scripts/ci/gotest-integration.sh --strict-skips
 else
-    not_run "integration lane" "no ClickHouse server on 127.0.0.1:8123 (see $logdir/clickhouse.log)"
+    not_run "integration lane" "$ch_missing"
 fi
 gate_stop_clickhouse
 

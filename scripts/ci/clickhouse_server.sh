@@ -1,36 +1,33 @@
 #!/bin/bash
 # A throwaway ClickHouse server for the integration lane.
 #
-#   scripts/ci/clickhouse_server.sh install DIR   fetch the pinned binary into DIR
-#   scripts/ci/clickhouse_server.sh start DIR     start a server on 127.0.0.1
-#   scripts/ci/clickhouse_server.sh stop DIR      stop it
-#   scripts/ci/clickhouse_server.sh url DIR       print the started server's HTTP URL
+#   scripts/ci/clickhouse_server.sh install DIR                fetch the pinned binary into DIR
+#   scripts/ci/clickhouse_server.sh start DIR [HTTP [NATIVE]]  start a server on 127.0.0.1
+#   scripts/ci/clickhouse_server.sh stop DIR                   stop it
+#   scripts/ci/clickhouse_server.sh url DIR                    print the started server's HTTP URL
 #
-# Ports: CLICKHOUSE_SERVER_HTTP_PORT (default 8123) and
-# CLICKHOUSE_SERVER_TCP_PORT (default 9000), read by start. A binary already
-# at DIR/clickhouse is used as it is, so a machine with ClickHouse installed
-# can link its own instead of running install.
-#
-# The lane's ClickHouse tests reach one server at localhost:8123 as the default
-# user with no password, and read system.query_log; `clickhouse local` covers
-# the rest of the tree. The version is pinned at or above the README's floor
-# (26.8), and the download is pinned by its SHA-256 as well as its version: the
-# static build's tarball, of which only usr/bin/clickhouse is kept. Everything
-# the server writes — data, logs, the pid file — stays under DIR.
-#
-# For CI and release runs on a machine with no ClickHouse of its own. On the
-# default ports it cannot run beside a server that already binds them; on
-# other ports it can, and the tests are pointed at it with
-#
-#   export CLICKHOUSE_URL="$(scripts/ci/clickhouse_server.sh url DIR)"
-#
-# Only the tests that read CLICKHOUSE_URL follow; the ones that name
-# localhost:8123 themselves still reach whatever answers there.
+# start listens on 127.0.0.1 only, on the HTTP port HTTP (default 8123) and the
+# native port NATIVE (default 9000), and opens no other port. It refuses to
+# start when either port already answers, so it never reports a server it did
+# not start as its own. release.sh and nightly.sh pass free ports away from the
+# defaults (gate_lib.sh), so the server runs beside one a workstation already
+# has; the defaults are for a machine with none. Without the arguments the
+# ports come from CLICKHOUSE_SERVER_HTTP_PORT and CLICKHOUSE_SERVER_TCP_PORT. A
+# binary already at DIR/clickhouse is used as it is, so a machine with
+# ClickHouse installed can link its own instead of running install.
 #
 # A started server carries an empty database named boxer_throwaway_server.
 # The tests that need the runtime's real names — boxer.facts as a view over a
 # deployment's table, a host booted against it — look for it and skip on any
 # server without it, so they cannot run against a server that holds data.
+#
+# Tests reach the server through CLICKHOUSE_ENDPOINT / CLICKHOUSE_URL as the
+# default user with no password, and read system.query_log; `clickhouse local`
+# covers the rest of the tree. The version is pinned at or above the README's
+# floor (26.8), and the download is pinned by its SHA-256 as well as its
+# version: the static build's tarball, of which only usr/bin/clickhouse is
+# kept. Everything the server writes — data, logs, the pid file — stays under
+# DIR.
 set -euo pipefail
 
 CH_VERSION=26.8.37.168
@@ -41,16 +38,16 @@ CH_URL="https://github.com/ClickHouse/ClickHouse/releases/download/${CH_TAG}/${C
 
 cmd="${1:-}"
 dir="${2:-}"
-[ -n "$cmd" ] && [ -n "$dir" ] || { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+http_port="${3:-${CLICKHOUSE_SERVER_HTTP_PORT:-8123}}"
+tcp_port="${4:-${CLICKHOUSE_SERVER_TCP_PORT:-9000}}"
+[ -n "$cmd" ] && [ -n "$dir" ] || { sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+case "$http_port$tcp_port" in
+    *[!0-9]*) echo "clickhouse_server: ports must be numbers" >&2; exit 2 ;;
+esac
 mkdir -p "$dir"
 dir=$(readlink -f "$dir")
 bin="$dir/clickhouse"
 marker_db=boxer_throwaway_server
-http_port="${CLICKHOUSE_SERVER_HTTP_PORT:-8123}"
-tcp_port="${CLICKHOUSE_SERVER_TCP_PORT:-9000}"
-case "$http_port$tcp_port" in
-    *[!0-9]*) echo "clickhouse_server: ports must be numbers" >&2; exit 2 ;;
-esac
 
 install() {
     if [ -x "$bin" ] && "$bin" --version 2>/dev/null | grep -qF "$CH_VERSION"; then
@@ -67,12 +64,20 @@ install() {
     "$bin" --version
 }
 
+# port_in_use PORT: something accepts a connection on 127.0.0.1:PORT.
+port_in_use() {
+    (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
+}
+
 start() {
     [ -x "$bin" ] || { echo "clickhouse_server: run install first" >&2; exit 1; }
-    if curl -fsS "http://127.0.0.1:$http_port/ping" >/dev/null 2>&1; then
-        echo "clickhouse_server: something already answers on 127.0.0.1:$http_port; set CLICKHOUSE_SERVER_HTTP_PORT and CLICKHOUSE_SERVER_TCP_PORT" >&2
-        exit 1
-    fi
+    local p
+    for p in "$http_port" "$tcp_port"; do
+        if port_in_use "$p"; then
+            echo "clickhouse_server: 127.0.0.1:$p is already in use; not starting" >&2
+            exit 1
+        fi
+    done
     mkdir -p "$dir/data" "$dir/log"
     echo "$http_port" >"$dir/http_port"
     cat >"$dir/config.xml" <<EOF
@@ -110,14 +115,14 @@ start() {
 EOF
     (cd "$dir" && nohup "$bin" server --config-file="$dir/config.xml" --pid-file="$dir/clickhouse.pid" \
         >"$dir/log/stdout.log" 2>&1 &)
-    local i
+    local i base="http://127.0.0.1:$http_port"
     for i in $(seq 1 60); do
-        if curl -fsS "http://127.0.0.1:$http_port/ping" >/dev/null 2>&1; then
-            echo "clickhouse server up on 127.0.0.1:$http_port: $(curl -fsS "http://127.0.0.1:$http_port/?query=SELECT%20version()")"
+        if curl -fsS "$base/ping" >/dev/null 2>&1; then
+            echo "clickhouse server up on 127.0.0.1:$http_port (native $tcp_port): $(curl -fsS "$base/?query=SELECT%20version()")"
             # The marker a test checks before it uses the runtime's own
             # database and table names, which it must never do on a server
             # that holds someone's data.
-            curl -fsS "http://127.0.0.1:$http_port/" --data-binary \
+            curl -fsS "$base/" --data-binary \
                 "CREATE DATABASE IF NOT EXISTS $marker_db COMMENT 'a throwaway server started by scripts/ci/clickhouse_server.sh: tests may drop and create any database here'" >/dev/null
             return
         fi
@@ -130,7 +135,17 @@ EOF
 
 stop() {
     [ -f "$dir/clickhouse.pid" ] || { echo "clickhouse_server: no pid file in $dir"; return; }
-    kill "$(cat "$dir/clickhouse.pid")" 2>/dev/null || true
+    local pid i
+    pid=$(cat "$dir/clickhouse.pid")
+    kill "$pid" 2>/dev/null || true
+    for i in $(seq 1 30); do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 1
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+        echo "clickhouse_server: $pid still running after 30s; sending KILL" >&2
+        kill -KILL "$pid" 2>/dev/null || true
+    fi
     rm -f -- "$dir/clickhouse.pid" "$dir/http_port"
 }
 
