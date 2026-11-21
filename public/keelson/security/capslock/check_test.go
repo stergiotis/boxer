@@ -75,6 +75,7 @@ func TestRefineCapability(t *testing.T) {
 		{"os.Getwd", capReadProcessSelf},
 		{"os.Getpid", capReadProcessSelf},
 		{"os.Executable", capReadProcessSelf},
+		{"runtime/debug.ReadBuildInfo", capReadProcessSelf},
 		// the environment — CS011's domain
 		{"os.Getenv", capReadEnv},
 		{"os.Environ", capReadEnv},

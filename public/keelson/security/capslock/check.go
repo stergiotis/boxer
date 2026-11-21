@@ -369,13 +369,16 @@ const (
 // when it is dialled. Requiring a subject to justify the *discovery* as well
 // would count the same act twice, and there is no subject that would honestly
 // justify it: see the READ_SYSTEM_STATE discussion in ADR-0026's 2026-07-15
-// update.
+// update. runtime/debug.ReadBuildInfo belongs here for the same reason: it
+// reads the module versions linked into the running binary, a fact about the
+// process and not about the machine.
 var processSelfFuncs = map[string]struct{}{
-	"os.Getwd":       {},
-	"os.Getpid":      {},
-	"os.Getppid":     {},
-	"os.Executable":  {},
-	"os.Getpagesize": {},
+	"os.Getwd":                    {},
+	"os.Getpid":                   {},
+	"os.Getppid":                  {},
+	"os.Executable":               {},
+	"os.Getpagesize":              {},
+	"runtime/debug.ReadBuildInfo": {},
 }
 
 // envFuncs read the process environment. This gate defers to codelint CS011,
