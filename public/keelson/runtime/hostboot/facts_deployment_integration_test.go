@@ -307,6 +307,15 @@ func TestFactsDeployment_AReadTableSetting(t *testing.T) {
 	assert.NotEqual(t, recordstore.SchemaVerdictOk, bv.Verdict, bv.Summary())
 	assert.Contains(t, bv.Missing, factsschema.TsColumn)
 
+	// So is a view that returns a facts column under another type: here the
+	// timestamp in seconds.
+	require.NoError(t, cli.Exec(ctx, carrier.ViewStatement(nil, map[string]string{factsschema.TsColumn: "DateTime('UTC')"})))
+	retyped, output := runDeployment(t, "carrier", "BOXER_FACTS_READ_TABLE="+carrier.View)
+	rv, ok := verdictFor(retyped, carrier.View)
+	require.True(t, ok, output)
+	assert.Equal(t, recordstore.SchemaVerdictIncompatible, rv.Verdict, rv.Summary())
+	require.NoError(t, cli.Exec(ctx, carrier.ViewStatement([]string{factsschema.TsColumn}, nil)))
+
 	// Under BOXER_SCHEMA_STRICT that verdict fails the boot.
 	strict, output := runDeployment(t, "carrier", "BOXER_FACTS_READ_TABLE="+carrier.View, "BOXER_SCHEMA_STRICT=1")
 	assert.NotEmpty(t, strict.BootErr, output)
