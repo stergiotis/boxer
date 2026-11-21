@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
@@ -51,7 +53,7 @@ func TestLivePipelineEndToEnd(t *testing.T) {
 	ctx := context.Background()
 	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if cli.Ping(ctx) != nil {
-		t.Skipf("no live ClickHouse at %s", chclient.ConfigFromEnv().URL)
+		t.Skipf("no live ClickHouse at %s", env.RedactURL(chclient.ConfigFromEnv().URL))
 	}
 	require.NoError(t, cli.Exec(ctx, "DROP DATABASE IF EXISTS "+scratchDb))
 	t.Cleanup(func() { _ = cli.Exec(context.Background(), "DROP DATABASE IF EXISTS "+scratchDb) })
@@ -213,7 +215,7 @@ func TestLiveSecondInstanceRefused(t *testing.T) {
 	ctx := context.Background()
 	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if cli.Ping(ctx) != nil {
-		t.Skipf("no live ClickHouse at %s", chclient.ConfigFromEnv().URL)
+		t.Skipf("no live ClickHouse at %s", env.RedactURL(chclient.ConfigFromEnv().URL))
 	}
 	const db = scratchDb + "_owner"
 	first := startScratch(t, cli, db, Config{BackfillFrom: time.Now()})
@@ -242,7 +244,7 @@ func TestLiveDenseOverlapDoesNotStall(t *testing.T) {
 	ctx := context.Background()
 	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if cli.Ping(ctx) != nil {
-		t.Skipf("no live ClickHouse at %s", chclient.ConfigFromEnv().URL)
+		t.Skipf("no live ClickHouse at %s", env.RedactURL(chclient.ConfigFromEnv().URL))
 	}
 	const probes = 60
 	from := time.Now().Add(-time.Second)
@@ -269,7 +271,7 @@ func TestLiveOldBackfillStaysDuplicateFree(t *testing.T) {
 	ctx := context.Background()
 	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if cli.Ping(ctx) != nil {
-		t.Skipf("no live ClickHouse at %s", chclient.ConfigFromEnv().URL)
+		t.Skipf("no live ClickHouse at %s", env.RedactURL(chclient.ConfigFromEnv().URL))
 	}
 	oldest := queryScalar(t, cli,
 		"SELECT toUnixTimestamp(min(event_time)) FROM system.query_log WHERE type != 'QueryStart' AND event_time < now() - INTERVAL 2 DAY")
@@ -304,7 +306,7 @@ func TestLiveReconcileRefusesDriftedDestination(t *testing.T) {
 	ctx := context.Background()
 	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if cli.Ping(ctx) != nil {
-		t.Skipf("no live ClickHouse at %s", chclient.ConfigFromEnv().URL)
+		t.Skipf("no live ClickHouse at %s", env.RedactURL(chclient.ConfigFromEnv().URL))
 	}
 	const db = scratchDb + "_drift"
 	require.NoError(t, cli.Exec(ctx, "DROP DATABASE IF EXISTS "+db))
@@ -371,11 +373,15 @@ func expandAuthored(t *testing.T, sql string, table string) string {
 // key the assertions look up) and optional log_comment stamp.
 func runTaggedQuery(t *testing.T, queryId string, logComment string) {
 	t.Helper()
-	u := strings.TrimRight(chclient.ConfigFromEnv().URL, "/") + "/?query_id=" + queryId
+	u, err := url.Parse(chclient.ConfigFromEnv().URL)
+	require.NoError(t, err)
+	q := u.Query()
+	q.Set("query_id", queryId)
 	if logComment != "" {
-		u += "&log_comment=" + strings.ReplaceAll(logComment, `"`, "%22")
+		q.Set("log_comment", logComment)
 	}
-	resp, err := http.Post(u, "text/plain", strings.NewReader("SELECT 42"))
+	u.RawQuery = q.Encode()
+	resp, err := http.Post(u.String(), "text/plain", strings.NewReader("SELECT 42"))
 	require.NoError(t, err)
 	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
