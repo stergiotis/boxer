@@ -512,6 +512,15 @@ ADRs are append-only; supersession is recorded, not deleted.
   they became nested scopes. The seventeen non-widget packages under
   `widgets/` stay where they are: moving them changes public import paths
   for every downstream consumer, which is a decision for its own ADR.
+- **2026-11-21 — a widget test reads a recorded stream by message, not by
+  byte.** An opcode is its call's position in the sorted IDL, so it moves
+  when the IDL gains a call, and a payload word can equal one by chance; a
+  test that counted an opcode as a raw 4-byte word broke on the first and
+  miscounted on the second. The `scenetest` harness records the stream
+  (`InstallRecording`) and walks its frames (`Messages`, `FindOpcode`,
+  `CountOpcode`, `Opcodes`), comparing the bindings' `FuncProcIdE`
+  constants against each message's own opcode only; calls spliced into a
+  message's payload are not visited.
 
 ## References
 
