@@ -59,21 +59,9 @@ var manifest = app.Manifest{
 		PreferredHeight: 900,
 	},
 	Caps: append([]app.SubjectFilter{
-		{
-			Pattern:   fsbroker.SubjectDialogRead,
-			Direction: app.CapDirectionPub,
-			Reason:    "imagescope: Open — the system file picker chooses one PNG or JPEG file, which is read once through the handle the reply carries",
-		},
-		{
-			Pattern:   adhocdata.SubjectPublish,
-			Direction: app.CapDirectionPub,
-			Reason:    "imagescope: publish the pixels of the marked region as an ephemeral dataset for the play handover (ADR-0134)",
-		},
-		{
-			Pattern:   windowopen.OpenSubject,
-			Direction: app.CapDirectionPub,
-			Reason:    "imagescope: Send to play — a play window seeded with the query behind the statistics table (ADR-0135 §SD7)",
-		},
+		fsbroker.DialogReadCap("imagescope: Open — the system file picker chooses one PNG or JPEG file, which is read once through the handle the reply carries"),
+		adhocdata.PublishCap("imagescope: publish the pixels of the marked region as an ephemeral dataset for the play handover (ADR-0134)"),
+		windowopen.OpenCap("imagescope: Send to play — a play window seeded with the query behind the statistics table (ADR-0135 §SD7)"),
 	}, task.ProducerCaps()...),
 }
 

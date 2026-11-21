@@ -54,11 +54,7 @@ func init() {
 // keelson tasks owned by the window; the helper's reason is the
 // declaration), and the bundle view's.
 func adhocCaps() (caps []app.SubjectFilter) {
-	caps = []app.SubjectFilter{{
-		Pattern:   adhocdata.SubjectBundlePublish,
-		Direction: app.CapDirectionPub,
-		Reason:    "adhocdemo: publish and republish the computed series as an ad-hoc bundle (ADR-0288)",
-	}}
+	caps = []app.SubjectFilter{adhocdata.BundlePublishCap("adhocdemo: publish and republish the computed series as an ad-hoc bundle (ADR-0288)")}
 	caps = append(caps, task.ProducerCaps()...)
 	caps = append(caps, sqlapplet.BundleViewCaps...)
 	return

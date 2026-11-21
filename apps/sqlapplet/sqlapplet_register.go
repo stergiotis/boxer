@@ -413,16 +413,8 @@ func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {
 		// attenuated play (sqlapplet_app_ops.go).
 		Operations: appletOps.Catalog(),
 		Caps: []app.SubjectFilter{
-			{
-				Pattern:   clipboardbroker.SubjectWrite,
-				Direction: app.CapDirectionPub,
-				Reason:    "Copy a fenced block out of the Definition drawer (ADR-0132 §SD3): the document is the artifact",
-			},
-			{
-				Pattern:   windowopen.OpenSubject,
-				Direction: app.CapDirectionPub,
-				Reason:    "Open in Playground (ADR-0135 §SD7): the §SD3 escape-hatch upgrade",
-			},
+			clipboardbroker.WriteCap("Copy a fenced block out of the Definition drawer (ADR-0132 §SD3): the document is the artifact"),
+			windowopen.OpenCap("Open in Playground (ADR-0135 §SD7): the §SD3 escape-hatch upgrade"),
 		},
 	}
 	// Declared datasets add the two capabilities their binding needs
@@ -432,16 +424,8 @@ func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {
 	// the two-cap surface.
 	if len(def.Datasets) > 0 {
 		m.Caps = append(m.Caps,
-			app.SubjectFilter{
-				Pattern:   adhocdata.SubjectResolve,
-				Direction: app.CapDirectionPub,
-				Reason:    "resolve declared dataset aliases to their newest live handles at open (ADR-0134 §SD4)",
-			},
-			app.SubjectFilter{
-				Pattern:   adhocdata.SubjectEventAll,
-				Direction: app.CapDirectionSub,
-				Reason:    "follow declared datasets as they are published and withdrawn (ADR-0188 §SD3)",
-			},
+			adhocdata.ResolveCap("resolve declared dataset aliases to their newest live handles at open (ADR-0134 §SD4)"),
+			adhocdata.EventsCap("follow declared datasets as they are published and withdrawn (ADR-0188 §SD3)"),
 		)
 	}
 	return

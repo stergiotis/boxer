@@ -24,7 +24,9 @@
 //     with a documented result for a host that lacks it; ContextOf is the
 //     context an instance does its I/O under.
 //   - Subjects. Manifest.Caps declares the subject filters the app's bus
-//     client may use; a service package exports one helper per capability.
+//     client may use, validated against the subject grammar at
+//     registration (ValidateCapPattern); a service package exports one
+//     helper per capability.
 //
 // What a host discovers by type assertion is what an app optionally
 // implements:
@@ -40,6 +42,7 @@ package app
 
 import (
 	"io/fs"
+	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -85,6 +88,54 @@ func (inst AppIdT) DerivedAlias() (alias string) {
 func isAliasByte(c byte) (ok bool) {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
 		(c >= '0' && c <= '9') || c == '_' || c == '-'
+}
+
+// The roots of the subject grammar (ADR-0396 §6). A capability pattern a
+// manifest declares begins with one of them.
+const (
+	// SubjectRootRuntime: services this module's runtime defines, as
+	// runtime.<service>.….
+	SubjectRootRuntime = "runtime"
+	// SubjectRootApp: subjects an app owns, as app.<alias>.…; the operation
+	// subjects app.<alias>.<instance>.op.<name> are one family of it.
+	SubjectRootApp = "app"
+	// SubjectRootExt: reserved for services another module defines, as
+	// ext.<module-token>.<service>.…, so they cannot collide with a
+	// runtime service this module adds later.
+	SubjectRootExt = "ext"
+	// SubjectRootInbox: the transport's reply inboxes.
+	SubjectRootInbox = "_INBOX"
+)
+
+// ValidateCapPattern reports a capability pattern outside the subject
+// grammar: an empty token, a first token that is not one of the roots, or
+// an ext pattern that names no module token of its own.
+func ValidateCapPattern(pattern string) (err error) {
+	if pattern == "" {
+		err = eh.Errorf("capability pattern is empty")
+		return
+	}
+	tokens := strings.Split(pattern, ".")
+	for _, tok := range tokens {
+		if tok == "" {
+			err = eb.Build().Str("pattern", pattern).Errorf("capability pattern %q has an empty token", pattern)
+			return
+		}
+	}
+	switch tokens[0] {
+	case SubjectRootRuntime, SubjectRootApp, SubjectRootInbox:
+	case SubjectRootExt:
+		if len(tokens) < 3 || tokens[1] == "*" || tokens[1] == ">" {
+			err = eb.Build().Str("pattern", pattern).
+				Errorf("capability pattern %q: an ext subject is ext.<module-token>.<service>…, with the module token spelled out", pattern)
+			return
+		}
+	default:
+		err = eb.Build().Str("pattern", pattern).
+			Errorf("capability pattern %q starts outside the subject grammar: a runtime service is runtime.<service>.…, an app's own subject app.<alias>.…, another module's service ext.<module-token>.<service>.… (ADR-0396 §6)", pattern)
+		return
+	}
+	return
 }
 
 // ValidateAlias reports an alias that is not one subject token of
@@ -203,7 +254,8 @@ func ParseCapDirection(s string) (d CapDirectionE) {
 }
 
 // SubjectFilter is a NATS-style subject permission. Pattern follows NATS
-// wildcards: '*' matches one token, '>' matches the rest. The in-process bus
+// wildcards: '*' matches one token, '>' matches the rest; its first token
+// is a root of the subject grammar (ValidateCapPattern). The in-process bus
 // enforces it; the capability broker grants further filters at runtime.
 type SubjectFilter struct {
 	Pattern   string
@@ -421,6 +473,12 @@ func (inst Manifest) Validate() (err error) {
 	if inst.Alias != "" {
 		if aErr := ValidateAlias(inst.Alias); aErr != nil {
 			err = eb.Build().Str("id", string(inst.Id)).Errorf("manifest: %w", aErr)
+			return
+		}
+	}
+	for _, c := range inst.Caps {
+		if cErr := ValidateCapPattern(c.Pattern); cErr != nil {
+			err = eb.Build().Str("id", string(inst.Id)).Errorf("manifest: %w", cErr)
 			return
 		}
 	}

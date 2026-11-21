@@ -36,18 +36,12 @@ import (
 // on the introspection endpoint that read their own datasets, so every
 // bundle opens in every receiver.
 var BundleViewCaps = []app.SubjectFilter{
-	{Pattern: adhocdata.SubjectBundleResolve, Direction: app.CapDirectionPub,
-		Reason: "a bundle view resolves the bundle it shows: its document and datasets (ADR-0288 §SD7)"},
-	{Pattern: adhocdata.SubjectBundleEventAll, Direction: app.CapDirectionSub,
-		Reason: "and follows the bundle's republish and retract"},
-	{Pattern: adhocdata.SubjectResolve, Direction: app.CapDirectionPub,
-		Reason: "and keeps the bundle's datasets bound"},
-	{Pattern: adhocdata.SubjectEventAll, Direction: app.CapDirectionSub,
-		Reason: "and follows their republish and retract"},
-	{Pattern: clipboardbroker.SubjectWrite, Direction: app.CapDirectionPub,
-		Reason: "Copy a fenced block out of a bundle view's Definition drawer (ADR-0132 §SD3)"},
-	{Pattern: windowopen.OpenSubject, Direction: app.CapDirectionPub,
-		Reason: "a bundle view's Open in Playground opens the bundle in a play window (ADR-0288 §SD7)"},
+	adhocdata.BundleResolveCap("a bundle view resolves the bundle it shows: its document and datasets (ADR-0288 §SD7)"),
+	adhocdata.BundleEventsCap("and follows the bundle's republish and retract"),
+	adhocdata.ResolveCap("and keeps the bundle's datasets bound"),
+	adhocdata.EventsCap("and follows their republish and retract"),
+	clipboardbroker.WriteCap("Copy a fenced block out of a bundle view's Definition drawer (ADR-0132 §SD3)"),
+	windowopen.OpenCap("a bundle view's Open in Playground opens the bundle in a play window (ADR-0288 §SD7)"),
 }
 
 // BundleViewConfig is a bundle view's wiring: the receiver's bus, logger

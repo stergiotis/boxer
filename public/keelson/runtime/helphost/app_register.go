@@ -50,16 +50,8 @@ var manifest = app.Manifest{
 	// 2026-05-30). Pub only — the broker subscribes to runtime.clipboard.write and
 	// the windowed host drains the queued text into an egui copy_text op.
 	Caps: []app.SubjectFilter{
-		{
-			Pattern:   clipboardbroker.SubjectWrite,
-			Direction: app.CapDirectionPub,
-			Reason:    "copy help code blocks to the clipboard",
-		},
-		{
-			Pattern:   windowopen.OpenSubject,
-			Direction: app.CapDirectionPub,
-			Reason:    "follow an mdedit:// link in a help page: open an mdedit window on the snapshot document it names (ADR-0347)",
-		},
+		clipboardbroker.WriteCap("copy help code blocks to the clipboard"),
+		windowopen.OpenCap("follow an mdedit:// link in a help page: open an mdedit window on the snapshot document it names (ADR-0347)"),
 	},
 	// Self-documenting corpus: an overview of the Help app and a
 	// how-to for wiring help docs into a new app's manifest. Anyone

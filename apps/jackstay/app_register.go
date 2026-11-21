@@ -42,21 +42,9 @@ var manifest = app.Manifest{
 	// The jobs are keelson tasks: keelson('tasks') lists them by window and
 	// the task monitor can cancel them.
 	Caps: append([]app.SubjectFilter{
-		{
-			Pattern:   fsbroker.SubjectAppDataPrefix + ">",
-			Direction: app.CapDirectionPub,
-			Reason:    "jackstay: keep plans and their sync journals in the window's data area",
-		},
-		{
-			Pattern:   fsbroker.SubjectDialogRead,
-			Direction: app.CapDirectionPub,
-			Reason:    "jackstay: Import — raise the file picker to copy in a plan the user chooses",
-		},
-		{
-			Pattern:   fsbroker.SubjectDialogWrite,
-			Direction: app.CapDirectionPub,
-			Reason:    "jackstay: Export — raise the save picker to write a copy of the plan",
-		},
+		fsbroker.AppDataCap("jackstay: keep plans and their sync journals in the window's data area"),
+		fsbroker.DialogReadCap("jackstay: Import — raise the file picker to copy in a plan the user chooses"),
+		fsbroker.DialogWriteCap("jackstay: Export — raise the save picker to write a copy of the plan"),
 	}, task.ProducerCaps()...),
 	// The plans this window used, for the first page's resume list.
 	PersistedKeys: []string{recentKey},

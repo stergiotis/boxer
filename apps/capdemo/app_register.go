@@ -57,21 +57,9 @@ var manifest = app.Manifest{
 		PreferredHeight: 480,
 	},
 	Caps: []app.SubjectFilter{
-		{
-			Pattern:   fsbroker.SubjectDialogRead,
-			Direction: app.CapDirectionPub,
-			Reason:    "demo: request a user-picked file via Powerbox",
-		},
-		{
-			Pattern:   fsbroker.SubjectDialogWatch,
-			Direction: app.CapDirectionPub,
-			Reason:    "demo: request a folder-watch dialog via Powerbox",
-		},
-		{
-			Pattern:   clipboardbroker.SubjectWrite,
-			Direction: app.CapDirectionPub,
-			Reason:    "demo: copy code blocks to the clipboard via the markdown copy button",
-		},
+		fsbroker.DialogReadCap("demo: request a user-picked file via Powerbox"),
+		fsbroker.DialogWatchCap("demo: request a folder-watch dialog via Powerbox"),
+		clipboardbroker.WriteCap("demo: copy code blocks to the clipboard via the markdown copy button"),
 	},
 	PersistedKeys: []string{scratchpadKey},
 	Operations:    ops.Catalog(),

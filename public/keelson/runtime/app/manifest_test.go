@@ -311,3 +311,15 @@ func TestKindE_String(t *testing.T) {
 	assert.Equal(t, "applet", KindApplet.String())
 	assert.Equal(t, "demo", KindDemo.String())
 }
+
+func TestCapPatternsFollowTheSubjectGrammar(t *testing.T) {
+	for _, ok := range []string{"runtime.llm.complete", "runtime.task.>", "app.play.event.>", "_INBOX.>", "ext.acme.tiles.fetch"} {
+		assert.NoError(t, ValidateCapPattern(ok), ok)
+	}
+	for _, bad := range []string{"", "llm.complete", "*.x", ">", "ext.>", "ext.*.x", "ext.acme", "runtime..x"} {
+		assert.Error(t, ValidateCapPattern(bad), bad)
+	}
+	m := Manifest{Id: "x/y", Display: "y", Surface: SurfaceWindowed, Topics: []TopicT{TopicRuntime}, Summary: "does y",
+		Caps: []SubjectFilter{{Pattern: "fs.dialog.read", Direction: CapDirectionPub}}}
+	assert.Error(t, m.Validate())
+}

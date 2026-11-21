@@ -36,8 +36,7 @@ const stopCheckTimeout = 20 * time.Second
 // StopsCaps is the capability a window whose conversations carry stops
 // needs: a publish on the pool the checks run in.
 func StopsCaps() []app.SubjectFilter {
-	return []app.SubjectFilter{{Pattern: chlocalbroker.SubjectExecPrefix + stopsPool, Direction: app.CapDirectionPub,
-		Reason: "chat: evaluate the conversation's stops over its own run in the host's local SQL worker (ADR-0370)"}}
+	return []app.SubjectFilter{chlocalbroker.ExecCap(stopsPool, "chat: evaluate the conversation's stops over its own run in the host's local SQL worker (ADR-0370)")}
 }
 
 // stopRunnerI runs a statement over input tables in a local worker; the

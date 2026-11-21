@@ -40,16 +40,8 @@ var manifest = app.Manifest{
 	Operations: ops.Catalog(),
 	Help:       help.MustSub(helpFS, "help"),
 	Caps: []app.SubjectFilter{
-		{
-			Pattern:   adhocdata.SubjectPublish,
-			Direction: app.CapDirectionPub,
-			Reason:    "imzrt: publish captured pprof profiles as ad-hoc datasets, republishing each kind onto its stable handle (ADR-0134)",
-		},
-		{
-			Pattern:   windowopen.OpenSubject,
-			Direction: app.CapDirectionPub,
-			Reason:    "imzrt: Explore — open a play window seeded on a captured profile, bound to the introspection endpoint (ADR-0135)",
-		},
+		adhocdata.PublishCap("imzrt: publish captured pprof profiles as ad-hoc datasets, republishing each kind onto its stable handle (ADR-0134)"),
+		windowopen.OpenCap("imzrt: Explore — open a play window seeded on a captured profile, bound to the introspection endpoint (ADR-0135)"),
 	},
 }
 

@@ -54,7 +54,7 @@ func ServiceCaps(poolName string) (caps []app.SubjectFilter) {
 	caps = []app.SubjectFilter{
 		{Pattern: SubjectAll, Direction: app.CapDirectionSub, Reason: "keelson.query: serve reads over the introspection tables"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "keelson.query: reply to inboxes"},
-		{Pattern: chlocalbroker.SubjectExecPrefix + poolName, Direction: app.CapDirectionPub, Reason: "keelson.query: run the statement on clickhouse-local"},
+		chlocalbroker.ExecCap(poolName, "keelson.query: run the statement on clickhouse-local"),
 	}
 	return
 }

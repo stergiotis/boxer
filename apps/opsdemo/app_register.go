@@ -35,8 +35,7 @@ var manifest = app.Manifest{
 	Surface:    app.SurfaceWindowed,
 	Operations: ops.Catalog(),
 	Help:       help.MustSub(helpFS, "help"),
-	Caps: []app.SubjectFilter{{Pattern: clipboardbroker.SubjectWrite, Direction: app.CapDirectionPub,
-		Reason: "opsdemo: copy the note to the clipboard"}},
+	Caps:       []app.SubjectFilter{clipboardbroker.WriteCap("opsdemo: copy the note to the clipboard")},
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  520,
 		PreferredHeight: 360,

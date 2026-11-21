@@ -54,16 +54,8 @@ var manifest = app.Manifest{
 	},
 	PersistedKeys: []string{keyDocA, keyDocB, keyFloor},
 	Caps: append([]app.SubjectFilter{
-		{
-			Pattern:   adhocdata.SubjectPublish,
-			Direction: app.CapDirectionPub,
-			Reason:    "writingstylescope: publish the section cross-matrix as an ephemeral dataset for the play handover (ADR-0134)",
-		},
-		{
-			Pattern:   windowopen.OpenSubject,
-			Direction: app.CapDirectionPub,
-			Reason:    "writingstylescope: Open in play — a play window seeded with the query behind the pairs table (ADR-0135 §SD7)",
-		},
+		adhocdata.PublishCap("writingstylescope: publish the section cross-matrix as an ephemeral dataset for the play handover (ADR-0134)"),
+		windowopen.OpenCap("writingstylescope: Open in play — a play window seeded with the query behind the pairs table (ADR-0135 §SD7)"),
 	}, task.ProducerCaps()...),
 }
 

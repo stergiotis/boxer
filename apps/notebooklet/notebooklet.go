@@ -114,8 +114,7 @@ func ParseDocSource(bookID string, p string, src []byte, fsys fs.FS, topics []ap
 // (notebook.EmbedCaps), and opening the notebook window on its document.
 // A document widens none of them.
 func Caps() (caps []app.SubjectFilter) {
-	return append(notebook.EmbedCaps(), app.SubjectFilter{Pattern: windowopen.OpenSubject, Direction: app.CapDirectionPub,
-		Reason: "notebooklet: Open in notebook — open the notebook window on this document, where it is worked on and collected"})
+	return append(notebook.EmbedCaps(), windowopen.OpenCap("notebooklet: Open in notebook — open the notebook window on this document, where it is worked on and collected"))
 }
 
 func holdsRecord(nb *mdnotebook.Notebook) bool {

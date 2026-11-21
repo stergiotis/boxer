@@ -44,8 +44,7 @@ var manifest = app.Manifest{
 	Surface:  app.SurfaceWindowed,
 	Help:     help.MustSub(helpFS, "help"),
 	Caps: append(agent.ClientCaps("agentconsole: call operations by hand"),
-		app.SubjectFilter{Pattern: windowopen.OpenSubject, Direction: app.CapDirectionPub,
-			Reason: "agentconsole: open a window to work in"}),
+		windowopen.OpenCap("agentconsole: open a window to work in")),
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  640,
 		PreferredHeight: 560,

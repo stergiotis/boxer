@@ -36,15 +36,7 @@ var manifest = app.Manifest{
 	LaunchKind: launchcfg.Kind,
 	// The operations catalog (ADR-0345), in appcenter_ops.go.
 	Operations: ops.Catalog(),
-	Caps: append(append(keelsonquery.ClientCaps(readTables...), app.SubjectFilter{
-		Pattern:   windowopen.OpenSubject,
-		Direction: app.CapDirectionPub,
-		Reason:    "app center: Open — open the app a page shows, the app-state manager, or play on a section's table",
-	}, app.SubjectFilter{
-		Pattern:   adhocdata.SubjectPublish,
-		Direction: app.CapDirectionPub,
-		Reason:    "app center: Measure CPU — publish the profile it takes, for Explore (ADR-0351 §SD4)",
-	}), task.ProducerCaps()...),
+	Caps:       append(append(keelsonquery.ClientCaps(readTables...), windowopen.OpenCap("app center: Open — open the app a page shows, the app-state manager, or play on a section's table"), adhocdata.PublishCap("app center: Measure CPU — publish the profile it takes, for Explore (ADR-0351 §SD4)")), task.ProducerCaps()...),
 }
 
 func init() {

@@ -68,7 +68,7 @@ func newEngine(t *testing.T, reg *introspect.Registry) *introspectengine.Engine 
 		_ = svc.Stop(ctx)
 	})
 	caller := bus.NewClient("test.keelsonfield", []app.SubjectFilter{
-		{Pattern: chlocalbroker.SubjectExecAll, Direction: app.CapDirectionBoth, Reason: "test"},
+		chlocalbroker.ExecAllCap("test"),
 	})
 	e, err := introspectengine.New(introspectengine.Config{Registry: reg, Bus: caller}, logger)
 	require.NoError(t, err)

@@ -74,8 +74,7 @@ var manifest = app.Manifest{
 	Caps: append(append(task.ProducerCaps(), externaledit.ClientCaps("notebook: hand the notebook's text to the host's editor app and take each save back")...),
 		app.SubjectFilter{Pattern: ladingpublish.Subject(mountTag), Direction: app.CapDirectionPub,
 			Reason: "notebook: publish a collected notebook and its stored results to the lading store, under the notebook mount tag (ADR-0371 §SD10)"},
-		app.SubjectFilter{Pattern: audioout.SubjectOpen, Direction: app.CapDirectionPub,
-			Reason: "notebook: play a recording the notebook holds"},
+		audioout.OpenCap("notebook: play a recording the notebook holds"),
 		// The two below are declarations, not routes: nothing publishes on
 		// `runtime.ch.server.read.*`. They say what this process dials from the
 		// window's own code, where a reviewer looks for it (ADR-0026 §SD10).

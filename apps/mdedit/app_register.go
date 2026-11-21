@@ -70,26 +70,10 @@ var manifest = app.Manifest{
 		PreferredHeight: 820,
 	},
 	Caps: []app.SubjectFilter{
-		{
-			Pattern:   clipboardbroker.SubjectWrite,
-			Direction: app.CapDirectionPub,
-			Reason:    "mdedit: copy the document to the clipboard",
-		},
-		{
-			Pattern:   fsbroker.SubjectDialogRead,
-			Direction: app.CapDirectionPub,
-			Reason:    "mdedit: Open — raise the file picker to load a document the user chooses",
-		},
-		{
-			Pattern:   fsbroker.SubjectDialogWrite,
-			Direction: app.CapDirectionPub,
-			Reason:    "mdedit: Save — raise the save picker; later saves reuse the granted handle",
-		},
-		{
-			Pattern:   windowopen.OpenSubject,
-			Direction: app.CapDirectionPub,
-			Reason:    "mdedit: Send to play — open the playground on the document persisted as a boxer.facts row; and follow an mdedit:// link, which opens another mdedit window on a snapshot document (ADR-0347)",
-		},
+		clipboardbroker.WriteCap("mdedit: copy the document to the clipboard"),
+		fsbroker.DialogReadCap("mdedit: Open — raise the file picker to load a document the user chooses"),
+		fsbroker.DialogWriteCap("mdedit: Save — raise the save picker; later saves reuse the granted handle"),
+		windowopen.OpenCap("mdedit: Send to play — open the playground on the document persisted as a boxer.facts row; and follow an mdedit:// link, which opens another mdedit window on a snapshot document (ADR-0347)"),
 		// Restore, open, save and send run as keelson tasks owned by the
 		// window.
 		task.ProducerCaps()[0],

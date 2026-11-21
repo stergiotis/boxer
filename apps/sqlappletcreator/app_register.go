@@ -41,11 +41,7 @@ var manifest = app.Manifest{
 			Direction: app.CapDirectionPub,
 			Reason:    "submit the authored buffer to the applet store (ADR-0132 O4 'A')",
 		},
-		{
-			Pattern:   fsbroker.SubjectDialogWrite,
-			Direction: app.CapDirectionPub,
-			Reason:    "Export as .md via the Powerbox save dialog (ADR-0132 O4 'B')",
-		},
+		fsbroker.DialogWriteCap("Export as .md via the Powerbox save dialog (ADR-0132 O4 'B')"),
 		// Save and Export run as keelson tasks owned by the window.
 		task.ProducerCaps()[0],
 	},

@@ -47,11 +47,7 @@ var manifest = app.Manifest{
 	// not reopen; but "imztop holds no capability" is no longer true and should
 	// not be repeated.
 	Caps: []app.SubjectFilter{
-		{
-			Pattern:   sysmetricsbus.SubjectWildcard,
-			Direction: app.CapDirectionSub,
-			Reason:    "subscribe to system metrics (CPU/mem/disk/net/proc/...)",
-		},
+		sysmetricsbus.SubscribeCap("subscribe to system metrics (CPU/mem/disk/net/proc/...)"),
 		// Replay (ADR-0197 §SD7). This entry names an outbound reach, not a bus
 		// route: nothing publishes on `runtime.ch.server.read.*`, and the host mints a
 		// client for it that imztop never uses. The only `ch.` subject family

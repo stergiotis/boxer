@@ -267,56 +267,16 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		// chlocalbroker pool per ADR-0028. Absent this cap the
 		// host falls back to the simpler DateTimePickerButton pair.
 		Caps: []app.SubjectFilter{
-			{
-				Pattern:   fsbroker.SubjectDialogRead,
-				Direction: app.CapDirectionPub,
-				Reason:    "Load .sql via Powerbox picker",
-			},
-			{
-				Pattern:   chlocalbroker.SubjectExecPrefix + timerangepicker.PoolName,
-				Direction: app.CapDirectionPub,
-				Reason:    "evaluate user time-range expressions (ADR-0016 Phase 4)",
-			},
-			{
-				Pattern:   windowopen.OpenSubject,
-				Direction: app.CapDirectionPub,
-				Reason:    "open the applet creator window (ADR-0135 §SD7 / ADR-0132 O4)",
-			},
-			{
-				Pattern:   adhocdata.SubjectPublish,
-				Direction: app.CapDirectionPub,
-				Reason:    "publish the generated timeseries fixture and the projection as ad-hoc datasets (ADR-0163 §SD7, ADR-0238)",
-			},
-			{
-				Pattern:   adhocdata.SubjectResolve,
-				Direction: app.CapDirectionPub,
-				Reason:    "a window opened with a launch config that declares dataset aliases resolves them (ADR-0240 §SD7)",
-			},
-			{
-				Pattern:   adhocdata.SubjectEventAll,
-				Direction: app.CapDirectionSub,
-				Reason:    "and follows their publish and retract events",
-			},
-			{
-				Pattern:   adhocdata.SubjectBundleResolve,
-				Direction: app.CapDirectionPub,
-				Reason:    "a window opens an ad-hoc bundle: its document and the datasets it reads (ADR-0288 §SD4)",
-			},
-			{
-				Pattern:   adhocdata.SubjectBundleEventAll,
-				Direction: app.CapDirectionSub,
-				Reason:    "and follows the bundle's republish and retract",
-			},
-			{
-				Pattern:   adhocdata.SubjectBundlePublish,
-				Direction: app.CapDirectionPub,
-				Reason:    "publish_result and the Publish menu publish the main result as an ad-hoc bundle (ADR-0288 §SD4)",
-			},
-			{
-				Pattern:   adhocdata.SubjectRead,
-				Direction: app.CapDirectionPub,
-				Reason:    "list_bundles reads a bundle's column values as a read of the data, held to the task's grant (ADR-0288 §SD5)",
-			},
+			fsbroker.DialogReadCap("Load .sql via Powerbox picker"),
+			chlocalbroker.ExecCap(timerangepicker.PoolName, "evaluate user time-range expressions (ADR-0016 Phase 4)"),
+			windowopen.OpenCap("open the applet creator window (ADR-0135 §SD7 / ADR-0132 O4)"),
+			adhocdata.PublishCap("publish the generated timeseries fixture and the projection as ad-hoc datasets (ADR-0163 §SD7, ADR-0238)"),
+			adhocdata.ResolveCap("a window opened with a launch config that declares dataset aliases resolves them (ADR-0240 §SD7)"),
+			adhocdata.EventsCap("and follows their publish and retract events"),
+			adhocdata.BundleResolveCap("a window opens an ad-hoc bundle: its document and the datasets it reads (ADR-0288 §SD4)"),
+			adhocdata.BundleEventsCap("and follows the bundle's republish and retract"),
+			adhocdata.BundlePublishCap("publish_result and the Publish menu publish the main result as an ad-hoc bundle (ADR-0288 §SD4)"),
+			adhocdata.ReadCap("list_bundles reads a bundle's column values as a read of the data, held to the task's grant (ADR-0288 §SD5)"),
 			// list_bundles reads the bundle catalog (ADR-0288 §SD4).
 			keelsonquery.ClientCaps(adhocdata.BundleCatalogTableName)[0],
 			{
@@ -324,16 +284,8 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 				Direction: app.CapDirectionPub,
 				Reason:    "gloss/regexp's block face embeds the regex explorer, whose match, list and replace tabs run on clickhouse-local (ADR-0186 Update 2026-09-03)",
 			},
-			{
-				Pattern:   clipboardbroker.SubjectWrite,
-				Direction: app.CapDirectionPub,
-				Reason:    "Copy buttons: the Definition pane's SQL fences and gloss/taggedid's block face (ADR-0026 Update 2026-05-30)",
-			},
-			{
-				Pattern:   audioout.SubjectOpen,
-				Direction: app.CapDirectionPub,
-				Reason:    "play a recording held in a cell: the audio/wav gloss's block face (ADR-0245 §SD6, ADR-0372)",
-			},
+			clipboardbroker.WriteCap("Copy buttons: the Definition pane's SQL fences and gloss/taggedid's block face (ADR-0026 Update 2026-05-30)"),
+			audioout.OpenCap("play a recording held in a cell: the audio/wav gloss's block face (ADR-0245 §SD6, ADR-0372)"),
 			// The Map, Graph and Vector field panes' basemap tiles, fetched
 			// through the host's egress service (ADR-0262 §SD6).
 			basemap.ClientCaps("play: basemap tiles under the Map, Graph and Vector field panes")[0],

@@ -28,21 +28,9 @@ var manifest = app.Manifest{
 	Kind:     app.KindDemo,
 	Surface:  app.SurfaceWindowed,
 	Caps: append([]app.SubjectFilter{
-		{
-			Pattern:   chlocalbroker.SubjectExecPrefix + timerangepicker.PoolName,
-			Direction: app.CapDirectionPub,
-			Reason:    "evaluate user time-range expressions (ADR-0016 Phase 4)",
-		},
-		{
-			Pattern:   clipboardbroker.SubjectWrite,
-			Direction: app.CapDirectionPub,
-			Reason:    "gallery: the cbordiag demo's copy buttons go through the clipboard broker (ADR-0026)",
-		},
-		{
-			Pattern:   audioout.SubjectOpen,
-			Direction: app.CapDirectionPub,
-			Reason:    "gallery: the waveform demo's 'output device' switch (ADR-0372)",
-		},
+		chlocalbroker.ExecCap(timerangepicker.PoolName, "evaluate user time-range expressions (ADR-0016 Phase 4)"),
+		clipboardbroker.WriteCap("gallery: the cbordiag demo's copy buttons go through the clipboard broker (ADR-0026)"),
+		audioout.OpenCap("gallery: the waveform demo's 'output device' switch (ADR-0372)"),
 	},
 		// Demos that run background jobs as keelson tasks (ADR-0038): the
 		// waveform player's peaks build, the distsummary band warm-up.
