@@ -12,7 +12,7 @@ generator: boxer gov releasenotes
 
 # Release notes: v0.0.23..HEAD
 
-2148 commit(s) in the range.
+2175 commit(s) in the range.
 
 ## Build requirements
 
