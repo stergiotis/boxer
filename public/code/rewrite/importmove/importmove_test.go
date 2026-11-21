@@ -91,8 +91,8 @@ func TestRewriteFile(t *testing.T) {
 	for _, f := range res.Findings {
 		kinds[f.Kind] = f.Moved
 	}
-	assert.Equal(t, "example.com/m/a/b/gen", kinds[FindingGoGenerate])
-	assert.Equal(t, "example.com/m/a/b/c", kinds[FindingStringLiteral])
+	assert.Equal(t, "example.com/m/a/b/gen", kinds[FindingKindGoGenerate])
+	assert.Equal(t, "example.com/m/a/b/c", kinds[FindingKindStringLiteral])
 }
 
 func TestRunWritesAndScansTemplates(t *testing.T) {
@@ -118,7 +118,7 @@ func TestRunWritesAndScansTemplates(t *testing.T) {
 		if filepath.Ext(r.Path) == ".tmpl" {
 			require.Len(t, r.Findings, 1)
 			assert.Equal(t, 2, r.Findings[0].Line)
-			assert.Equal(t, FindingTemplate, r.Findings[0].Kind)
+			assert.Equal(t, FindingKindTemplate, r.Findings[0].Kind)
 		}
 	}
 }

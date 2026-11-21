@@ -51,18 +51,18 @@ type Plan struct {
 type FindingKindE uint8
 
 const (
-	FindingStringLiteral FindingKindE = iota
-	FindingGoGenerate
-	FindingTemplate
+	FindingKindStringLiteral FindingKindE = iota
+	FindingKindGoGenerate
+	FindingKindTemplate
 )
 
 func (inst FindingKindE) String() (s string) {
 	switch inst {
-	case FindingStringLiteral:
+	case FindingKindStringLiteral:
 		return "string literal"
-	case FindingGoGenerate:
+	case FindingKindGoGenerate:
 		return "go:generate"
-	case FindingTemplate:
+	case FindingKindTemplate:
 		return "template"
 	default:
 		return "unknown"
@@ -176,7 +176,7 @@ func (inst Plan) RewriteFile(name string, src []byte) (out []byte, res FileResul
 		}
 		for _, p := range inst.movedPaths(lit.Value) {
 			to, _ := inst.Target(p)
-			res.Findings = append(res.Findings, Finding{Path: name, Line: fset.Position(lit.Pos()).Line, Kind: FindingStringLiteral, Moved: p, Target: to})
+			res.Findings = append(res.Findings, Finding{Path: name, Line: fset.Position(lit.Pos()).Line, Kind: FindingKindStringLiteral, Moved: p, Target: to})
 		}
 		return true
 	})
@@ -187,7 +187,7 @@ func (inst Plan) RewriteFile(name string, src []byte) (out []byte, res FileResul
 			}
 			for _, p := range inst.movedPaths(c.Text) {
 				to, _ := inst.Target(p)
-				res.Findings = append(res.Findings, Finding{Path: name, Line: fset.Position(c.Pos()).Line, Kind: FindingGoGenerate, Moved: p, Target: to})
+				res.Findings = append(res.Findings, Finding{Path: name, Line: fset.Position(c.Pos()).Line, Kind: FindingKindGoGenerate, Moved: p, Target: to})
 			}
 		}
 	}
@@ -213,7 +213,7 @@ func (inst Plan) ScanTemplate(name string, src []byte) (findings []Finding) {
 		line++
 		for _, p := range inst.movedPaths(sc.Text()) {
 			to, _ := inst.Target(p)
-			findings = append(findings, Finding{Path: name, Line: line, Kind: FindingTemplate, Moved: p, Target: to})
+			findings = append(findings, Finding{Path: name, Line: line, Kind: FindingKindTemplate, Moved: p, Target: to})
 		}
 	}
 	return
