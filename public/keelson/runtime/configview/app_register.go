@@ -3,8 +3,6 @@ package configview
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
@@ -46,11 +44,8 @@ func init() {
 	// capture is handled centrally by the widgets TestDriver via the Demo
 	// registered in configview_tour.go (ADR-0057) — there is no per-app
 	// screenshot factory anymore.
-	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, err error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, err error) {
 		a = newInstance(manifest)
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("configview: failed to register factory")
-	}
 }

@@ -3,8 +3,6 @@ package trailviewer
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
@@ -61,11 +59,8 @@ var manifest = runtimeapp.Manifest{
 }
 
 func init() {
-	err := runtimeapp.DefaultRegistry.RegisterFactory(manifest, func() (a runtimeapp.AppI, ctorErr error) {
+	runtimeapp.RegisterFactory(manifest, func() (a runtimeapp.AppI, ctorErr error) {
 		a = newInstance(manifest)
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("trailviewer: failed to register factory")
-	}
 }

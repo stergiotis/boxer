@@ -6,11 +6,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/rs/zerolog/log"
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/promptbook"
+	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 )
 
@@ -34,9 +34,7 @@ var promptsFS embed.FS
 const promptBookId = "chat"
 
 func init() {
-	if err := promptbook.Register(promptBookId, help.MustSub(promptsFS, "prompts")); err != nil {
-		log.Warn().Err(err).Msg("chat: failed to register the prompt book")
-	}
+	registration.Fail("promptbook.Register", promptbook.Register(promptBookId, help.MustSub(promptsFS, "prompts")))
 }
 
 // promptSection is one section of the system prompt, and which

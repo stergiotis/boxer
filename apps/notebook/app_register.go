@@ -31,8 +31,6 @@ package notebook
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/apps/notebook/launchcfg"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -109,10 +107,8 @@ var SnapshotSeed = env.NewString(env.Spec{
 })
 
 func init() {
-	if err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = newApp()
 		return
-	}); err != nil {
-		log.Warn().Err(err).Msg("notebook app: failed to register factory")
-	}
+	})
 }

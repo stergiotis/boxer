@@ -8,12 +8,12 @@ import (
 	"sync"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/apps/chat"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/promptbook"
+	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -24,9 +24,7 @@ import (
 var bookFS embed.FS
 
 func init() {
-	if err := RegisterBook("chatlet", help.MustSub(bookFS, "book"), []app.TopicT{app.TopicObservability}); err != nil {
-		log.Warn().Err(err).Msg("chatlet: failed to register the book")
-	}
+	registration.Fail("chatlet.RegisterBook", RegisterBook("chatlet", help.MustSub(bookFS, "book"), []app.TopicT{app.TopicObservability}))
 }
 
 type registeredBook struct {

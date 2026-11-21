@@ -132,13 +132,10 @@ func init() {
 	// wrapper with its own id stack over the same component, which is the
 	// shape that makes two windows render independently while agreeing about
 	// what is filtered.
-	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = NewApp(Default)
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("launcher: failed to register factory")
-	}
 }
 
 // hostAssertion documents the structural contract between this package and

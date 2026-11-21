@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -36,20 +37,29 @@ var (
 	probes = map[string]ProbeFunc{}
 )
 
-// Register installs the probe for a kind name (the DTO's `kind:` tag).
-// Intended for package-init use from the codec module that owns the
-// kind. Registering a nil probe or re-registering an existing kind
-// panics — both indicate a wiring bug worth failing loudly at startup.
+// Register installs the probe for a kind name (the DTO's `kind:` tag),
+// from the package init of the codec module that owns the kind. A nil
+// probe, an empty name or a kind registered twice — two codecs claiming
+// one kind — is recorded as a registration failure, which stops a host
+// from starting (ADR-0396 §2).
 func Register(kind string, probe ProbeFunc) {
+	registration.Fail("kindcheck.Register", Add(kind, probe))
+}
+
+// Add is Register returning the refusal instead of recording it.
+func Add(kind string, probe ProbeFunc) (err error) {
 	if kind == "" || probe == nil {
-		panic("kindcheck: Register requires a kind name and a non-nil probe")
+		err = eb.Build().Str("kind", kind).Errorf("kindcheck: a probe needs a kind name and a non-nil probe")
+		return
 	}
 	mu.Lock()
 	defer mu.Unlock()
 	if _, dup := probes[kind]; dup {
-		panic("kindcheck: duplicate Register for kind " + kind)
+		err = eb.Build().Str("kind", kind).Errorf("kindcheck: kind %q is registered twice", kind)
+		return
 	}
 	probes[kind] = probe
+	return
 }
 
 // Check verifies that b decodes as the claimed kind. An unregistered

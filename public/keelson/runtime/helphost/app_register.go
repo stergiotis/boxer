@@ -3,8 +3,6 @@ package helphost
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
@@ -72,7 +70,7 @@ var manifest = app.Manifest{
 }
 
 func init() {
-	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		h := New()
 		// F1 pushed the ref of the window it was pressed over before
 		// asking for this open (PushRef).
@@ -80,7 +78,4 @@ func init() {
 		a = h
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("helphost: failed to register factory")
-	}
 }

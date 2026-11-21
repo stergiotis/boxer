@@ -1,7 +1,6 @@
 package logdemo
 
 import (
-	"github.com/rs/zerolog/log"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 )
@@ -34,11 +33,8 @@ func init() {
 	// own emit counter, stream toggle, and custom-message buffer. The
 	// per-instance number stamped on the logger lets the logviewer
 	// tell two open windows apart in its tail table.
-	err := runtimeapp.DefaultRegistry.RegisterFactory(manifest, func() (a runtimeapp.AppI, ctorErr error) {
+	runtimeapp.RegisterFactory(manifest, func() (a runtimeapp.AppI, ctorErr error) {
 		a = newApp()
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("logdemo: failed to register factory")
-	}
 }

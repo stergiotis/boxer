@@ -14,8 +14,6 @@ package agentconsole
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/public/config/env"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
@@ -64,11 +62,8 @@ var DestinationsSeed = env.NewString(env.Spec{
 })
 
 func init() {
-	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = newApp()
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("agentconsole: failed to register factory")
-	}
 }

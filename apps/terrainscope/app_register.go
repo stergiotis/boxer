@@ -3,8 +3,6 @@ package terrainscope
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/apps/terrainscope/launchcfg"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -68,11 +66,8 @@ var PointsSeed = env.NewString(env.Spec{
 // init registers the app into app.DefaultRegistry. Factory ctor so two
 // open windows get independent App state.
 func init() {
-	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = newApp()
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("terrainscope: failed to register factory")
-	}
 }

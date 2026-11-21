@@ -1,7 +1,6 @@
 package leewaywidgets_demo
 
 import (
-	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -32,11 +31,8 @@ func init() {
 	// window has its own selectedView. Screenshot capture is handled
 	// centrally by the widgets TestDriver via the Demos registered in
 	// leewaywidgets_tour.go (ADR-0057).
-	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, err error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, err error) {
 		a = newApp()
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("leewaywidgets_demo: failed to register factory")
-	}
 }

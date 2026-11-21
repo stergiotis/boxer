@@ -1,8 +1,6 @@
 package servicedemo
 
 import (
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
 
@@ -24,11 +22,8 @@ var manifest = app.Manifest{
 }
 
 func init() {
-	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = New(0)
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("servicedemo: failed to register factory")
-	}
 }

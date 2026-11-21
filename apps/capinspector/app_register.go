@@ -3,8 +3,6 @@ package capinspector
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -44,11 +42,8 @@ var manifest = app.Manifest{
 }
 
 func init() {
-	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = newApp()
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("capinspector: failed to register factory")
-	}
 }

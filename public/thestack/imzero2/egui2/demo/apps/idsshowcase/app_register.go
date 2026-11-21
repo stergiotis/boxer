@@ -3,8 +3,6 @@ package idsshowcase
 import (
 	"fmt"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -94,13 +92,10 @@ func RenderTourGeometry(ids *c.WidgetIdStack) {
 }
 
 func init() {
-	err := runtimeapp.DefaultRegistry.RegisterFactory(manifest, func() (a runtimeapp.AppI, ctorErr error) {
+	runtimeapp.RegisterFactory(manifest, func() (a runtimeapp.AppI, ctorErr error) {
 		a = newApp()
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("idsshowcase: failed to register factory")
-	}
 	// Demo-registry hooks for the screenshot tour. The carousel resolve
 	// blank-imports this package so this init runs whenever the carousel
 	// is loaded — the tour driver picks the demos up automatically.

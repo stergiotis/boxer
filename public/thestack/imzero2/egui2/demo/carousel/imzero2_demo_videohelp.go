@@ -4,6 +4,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
+	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/videooutput"
 )
 
@@ -27,7 +28,5 @@ func init() {
 		log.Warn().Err(err).Msg("demo: video-output help: NewBook failed")
 		return
 	}
-	if err = help.Register(b); err != nil {
-		log.Warn().Err(err).Msg("demo: video-output help: Register failed")
-	}
+	registration.Fail("help.Register", help.Register(b))
 }

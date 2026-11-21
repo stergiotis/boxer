@@ -41,8 +41,8 @@ func TestHostServicesStartInOrderAndStopAtClose(t *testing.T) {
 
 func TestRegisterHostServiceRefusesDuplicatesAndEmpties(t *testing.T) {
 	noop := func(context.Context, *Runtime) (stop func(), err error) { return }
-	RegisterHostService("test.hostservice.dup", noop)
-	require.Panics(t, func() { RegisterHostService("test.hostservice.dup", noop) })
-	require.Panics(t, func() { RegisterHostService("", noop) })
-	require.Panics(t, func() { RegisterHostService("test.hostservice.nil", nil) })
+	require.NoError(t, AddHostService("test.hostservice.dup", noop))
+	require.Error(t, AddHostService("test.hostservice.dup", noop))
+	require.Error(t, AddHostService("", noop))
+	require.Error(t, AddHostService("test.hostservice.nil", nil))
 }

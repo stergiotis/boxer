@@ -3,11 +3,10 @@ package watchbilldemo
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 )
@@ -47,13 +46,9 @@ var manifest = app.Manifest{
 // process-wide: any worker in a binary that links this package drains
 // demo.sleep jobs, whether or not a window is open (ADR-0223 §SD8).
 func init() {
-	if err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = newApp()
 		return
-	}); err != nil {
-		log.Warn().Err(err).Msg("watchbilldemo: failed to register factory")
-	}
-	if err := watchbill.Register(sleepHandler{}); err != nil {
-		log.Warn().Err(err).Msg("watchbilldemo: failed to register handler")
-	}
+	})
+	registration.Fail("watchbill.Register", watchbill.Register(sleepHandler{}))
 }

@@ -3,7 +3,6 @@ package imzrt
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
@@ -58,10 +57,8 @@ func init() {
 	// imzrt registers an interactive per-window *App. Screenshot capture is
 	// handled centrally by the widgets TestDriver via the Demos registered
 	// in imzrt_tour.go (ADR-0057).
-	if err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, err error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, err error) {
 		a = newApp()
 		return
-	}); err != nil {
-		log.Warn().Err(err).Msg("imzrt: failed to register factory")
-	}
+	})
 }

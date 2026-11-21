@@ -3,8 +3,6 @@ package appstate
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	as "github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
@@ -48,10 +46,8 @@ var manifest = app.Manifest{
 }
 
 func init() {
-	if err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = newApp()
 		return
-	}); err != nil {
-		log.Warn().Err(err).Msg("appstate app: failed to register factory")
-	}
+	})
 }

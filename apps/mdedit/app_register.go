@@ -3,7 +3,6 @@ package mdedit
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config/env"
 
 	"github.com/stergiotis/boxer/apps/mdedit/launchcfg"
@@ -114,11 +113,8 @@ var DocSeed = env.NewString(env.Spec{
 // windows get independent App state — including independent buffers, which
 // share one persist key and therefore one restored document.
 func init() {
-	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = newApp()
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("mdedit: failed to register factory")
-	}
 }

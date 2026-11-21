@@ -3,7 +3,6 @@ package sqlappletcreator
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 
 	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
@@ -69,11 +68,8 @@ var DraftSeed = env.NewString(env.Spec{
 })
 
 func init() {
-	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = &App{}
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("sqlappletcreator: failed to register factory")
-	}
 }

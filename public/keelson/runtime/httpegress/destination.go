@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/loopback"
+	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -93,24 +94,33 @@ var registry struct {
 	specs []DestinationSpec
 }
 
-// Register adds a destination to the host-wide registry. Called from a
-// package's init; a bad or duplicate name is a programming error and
-// panics, as the environment registry does.
+// Register adds a destination to the host-wide registry from a package's
+// init. A bad or duplicate name is recorded as a registration failure,
+// which stops a host from starting (ADR-0396 §2).
 func Register(spec DestinationSpec) {
+	registration.Fail("httpegress.Register", Add(spec))
+}
+
+// Add is Register returning the refusal instead of recording it.
+func Add(spec DestinationSpec) (err error) {
 	if !ValidDestinationName(spec.Name) {
-		panic("httpegress: invalid destination name " + spec.Name)
+		err = eb.Build().Str("destination", spec.Name).Errorf("httpegress: invalid destination name %q", spec.Name)
+		return
 	}
 	if spec.Resolve == nil {
-		panic("httpegress: destination " + spec.Name + " has no resolve function")
+		err = eb.Build().Str("destination", spec.Name).Errorf("httpegress: destination %q has no resolve function", spec.Name)
+		return
 	}
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 	for _, s := range registry.specs {
 		if s.Name == spec.Name {
-			panic("httpegress: destination registered twice: " + spec.Name)
+			err = eb.Build().Str("destination", spec.Name).Errorf("httpegress: destination %q is registered twice", spec.Name)
+			return
 		}
 	}
 	registry.specs = append(registry.specs, spec)
+	return
 }
 
 // Registered returns the registry, sorted by name.

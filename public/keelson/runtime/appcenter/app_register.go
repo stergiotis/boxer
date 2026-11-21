@@ -1,8 +1,6 @@
 package appcenter
 
 import (
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appcenter/launchcfg"
@@ -50,10 +48,8 @@ var manifest = app.Manifest{
 }
 
 func init() {
-	if err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = newApp()
 		return
-	}); err != nil {
-		log.Warn().Err(err).Msg("appcenter app: failed to register factory")
-	}
+	})
 }

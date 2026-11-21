@@ -4,8 +4,6 @@ import (
 	"embed"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
@@ -44,11 +42,8 @@ func init() {
 	// Factory registration — each dock-host Open() yields a fresh
 	// LogViewerApp with its own filter state and a unique per-instance
 	// seed so two open tiles produce disjoint Go-side widget IDs.
-	err := runtimeapp.DefaultRegistry.RegisterFactory(manifest, func() (a runtimeapp.AppI, ctorErr error) {
+	runtimeapp.RegisterFactory(manifest, func() (a runtimeapp.AppI, ctorErr error) {
 		a = newInstance(manifest)
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("logviewer: failed to register factory")
-	}
 }

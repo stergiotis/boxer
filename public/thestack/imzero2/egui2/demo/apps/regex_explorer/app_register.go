@@ -1,7 +1,6 @@
 package regex_explorer
 
 import (
-	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -66,11 +65,8 @@ func init() {
 	// query results, …). Screenshot capture is handled centrally by the
 	// widgets TestDriver via the Demos registered in regex_explorer_tour.go
 	// (ADR-0057).
-	err := runtimeapp.DefaultRegistry.RegisterFactory(manifest, func() (a runtimeapp.AppI, err error) {
+	runtimeapp.RegisterFactory(manifest, func() (a runtimeapp.AppI, err error) {
 		a = newInstance()
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("regex_explorer: failed to register factory")
-	}
 }

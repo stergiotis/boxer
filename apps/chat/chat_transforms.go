@@ -5,10 +5,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/promptbook"
+	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -27,9 +26,7 @@ var transformsFS embed.FS
 const transformBookId = "transforms"
 
 func init() {
-	if err := promptbook.Register(transformBookId, help.MustSub(transformsFS, "transforms")); err != nil {
-		log.Warn().Err(err).Msg("chat: failed to register the transformation book")
-	}
+	registration.Fail("promptbook.Register", promptbook.Register(transformBookId, help.MustSub(transformsFS, "transforms")))
 }
 
 // chatTransforms parses the embedded book once. A document that does not

@@ -4,6 +4,9 @@ import (
 	"context"
 	"slices"
 	"sync"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // HostServiceStartFunc starts a service on a booted runtime: the bus, the
@@ -20,19 +23,29 @@ var hostServices struct {
 // RegisterHostService registers a service every Boot in this process starts,
 // in registration order. It is meant for init functions of packages a host
 // links, so a host built from another module's command can carry services of
-// its own without owning the Boot call. It panics on an empty or repeated
-// name or a nil start.
+// its own without owning the Boot call. An empty or repeated name or a nil
+// start is recorded as a registration failure, which stops Boot
+// (ADR-0396 §2).
 func RegisterHostService(name string, start HostServiceStartFunc) {
+	registration.Fail("hostboot.RegisterHostService", AddHostService(name, start))
+}
+
+// AddHostService is RegisterHostService returning the refusal instead of
+// recording it.
+func AddHostService(name string, start HostServiceStartFunc) (err error) {
 	if name == "" || start == nil {
-		panic("hostboot: RegisterHostService needs a name and a start func")
+		err = eb.Build().Str("name", name).Errorf("hostboot: a host service needs a name and a start func")
+		return
 	}
 	hostServices.mu.Lock()
 	defer hostServices.mu.Unlock()
 	if slices.Contains(hostServices.names, name) {
-		panic("hostboot: host service registered twice: " + name)
+		err = eb.Build().Str("name", name).Errorf("hostboot: host service %q is registered twice", name)
+		return
 	}
 	hostServices.names = append(hostServices.names, name)
 	hostServices.starts = append(hostServices.starts, start)
+	return
 }
 
 // RegisteredHostServices returns the names of the registered host services

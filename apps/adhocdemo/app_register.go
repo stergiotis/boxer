@@ -3,8 +3,6 @@ package adhocdemo
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/apps/sqlapplet"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -45,13 +43,10 @@ var manifest = app.Manifest{
 }
 
 func init() {
-	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = newApp()
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("adhocdemo: failed to register factory")
-	}
 }
 
 // adhocCaps composes the manifest's capabilities from the helpers that

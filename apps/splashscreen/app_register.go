@@ -3,8 +3,6 @@ package splashscreen
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 )
@@ -54,10 +52,8 @@ func init() {
 	// splashscreen registers an interactive per-window App. Screenshot
 	// capture is handled centrally by the widgets TestDriver via the Demos
 	// registered in splashscreen_tour.go (ADR-0057).
-	if err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = newApp()
 		return
-	}); err != nil {
-		log.Warn().Err(err).Msg("splashscreen: failed to register factory")
-	}
+	})
 }

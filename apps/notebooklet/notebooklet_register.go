@@ -9,10 +9,10 @@ import (
 	"sync"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/apps/notebook"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook/samples"
 )
@@ -25,9 +25,7 @@ var helpFS embed.FS
 // The sample notebooks are the book this package registers: their records
 // make their own rows, so each runs live against any ClickHouse.
 func init() {
-	if err := RegisterBook("samples", samples.FS(), []app.TopicT{app.TopicData}); err != nil {
-		log.Warn().Err(err).Msg("notebooklet: failed to register the samples")
-	}
+	registration.Fail("notebooklet.RegisterBook", RegisterBook("samples", samples.FS(), []app.TopicT{app.TopicData}))
 }
 
 type registeredBook struct {

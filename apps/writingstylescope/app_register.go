@@ -3,8 +3,6 @@ package writingstylescope
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/apps/writingstylescope/launchcfg"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
@@ -87,11 +85,8 @@ var DocsSeed = env.NewString(env.Spec{
 // windows get independent App state — including independent confidence-band
 // warm-up jobs.
 func init() {
-	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = newApp()
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("writingstylescope: failed to register factory")
-	}
 }

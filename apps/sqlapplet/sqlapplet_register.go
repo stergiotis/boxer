@@ -9,12 +9,12 @@ import (
 	"sync"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
+	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -143,76 +143,46 @@ var bookappstateFS embed.FS
 var bookchsysFS embed.FS
 
 func init() {
-	if err := RegisterBook("sqlapplet", help.MustSub(bookFS, "book"), []app.TopicT{app.TopicRuntime}); err != nil {
-		log.Warn().Err(err).Msg("sqlapplet: failed to register starter book")
-	}
-	if err := RegisterBook("topology", help.MustSub(booktopoFS, "booktopo"), []app.TopicT{app.TopicTopology}); err != nil {
-		log.Warn().Err(err).Msg("sqlapplet: failed to register topology book")
-	}
-	if err := RegisterBook("godep", help.MustSub(bookgodepFS, "bookgodep"), []app.TopicT{app.TopicCode}); err != nil {
-		log.Warn().Err(err).Msg("sqlapplet: failed to register godep book")
-	}
-	if err := RegisterBook("pprof", help.MustSub(bookpprofFS, "bookpprof"), []app.TopicT{app.TopicObservability}); err != nil {
-		log.Warn().Err(err).Msg("sqlapplet: failed to register pprof book")
-	}
-	if err := RegisterBook("watchbill", help.MustSub(bookwatchbillFS, "bookwatchbill"), []app.TopicT{app.TopicRuntime}); err != nil {
-		log.Warn().Err(err).Msg("sqlapplet: failed to register watchbill book")
-	}
-	if err := RegisterBook("appstate", help.MustSub(bookappstateFS, "bookappstate"), []app.TopicT{app.TopicRuntime}); err != nil {
-		log.Warn().Err(err).Msg("sqlapplet: failed to register app-state book")
-	}
+	registration.Fail("sqlapplet.RegisterBook", RegisterBook("sqlapplet", help.MustSub(bookFS, "book"), []app.TopicT{app.TopicRuntime}))
+	registration.Fail("sqlapplet.RegisterBook", RegisterBook("topology", help.MustSub(booktopoFS, "booktopo"), []app.TopicT{app.TopicTopology}))
+	registration.Fail("sqlapplet.RegisterBook", RegisterBook("godep", help.MustSub(bookgodepFS, "bookgodep"), []app.TopicT{app.TopicCode}))
+	registration.Fail("sqlapplet.RegisterBook", RegisterBook("pprof", help.MustSub(bookpprofFS, "bookpprof"), []app.TopicT{app.TopicObservability}))
+	registration.Fail("sqlapplet.RegisterBook", RegisterBook("watchbill", help.MustSub(bookwatchbillFS, "bookwatchbill"), []app.TopicT{app.TopicRuntime}))
+	registration.Fail("sqlapplet.RegisterBook", RegisterBook("appstate", help.MustSub(bookappstateFS, "bookappstate"), []app.TopicT{app.TopicRuntime}))
 	// TopicObservability: what the ClickHouse server did — its profiler, its
 	// pipelines, its merges, its reads. The two documents about what it holds
 	// (dependencies, storage) carry TopicData in their own frontmatter.
-	if err := RegisterBook("chsys", help.MustSub(bookchsysFS, "bookchsys"), []app.TopicT{app.TopicObservability}); err != nil {
-		log.Warn().Err(err).Msg("sqlapplet: failed to register clickhouse-introspection book")
-	}
+	registration.Fail("sqlapplet.RegisterBook", RegisterBook("chsys", help.MustSub(bookchsysFS, "bookchsys"), []app.TopicT{app.TopicObservability}))
 	// TopicCode: the corpus describes what the toolbelt can do, which is the
 	// shape of the repository at a coarser grain than packages. It is not
 	// TopicAbout — that topic is provenance and licence, not a queryable body
 	// of documents someone reads to find something out.
-	if err := RegisterBook("capmap", help.MustSub(bookcapmapFS, "bookcapmap"), []app.TopicT{app.TopicCode}); err != nil {
-		log.Warn().Err(err).Msg("sqlapplet: failed to register capmap book")
-	}
+	registration.Fail("sqlapplet.RegisterBook", RegisterBook("capmap", help.MustSub(bookcapmapFS, "bookcapmap"), []app.TopicT{app.TopicCode}))
 	// TopicObservability, like pprof: what a running process did, measured
 	// from inside it — not TopicCode, which is what the repository is.
-	if err := RegisterBook("coverage", help.MustSub(bookcoverageFS, "bookcoverage"), []app.TopicT{app.TopicObservability}); err != nil {
-		log.Warn().Err(err).Msg("sqlapplet: failed to register coverage book")
-	}
+	registration.Fail("sqlapplet.RegisterBook", RegisterBook("coverage", help.MustSub(bookcoverageFS, "bookcoverage"), []app.TopicT{app.TopicObservability}))
 	// TopicObservability, like pprof and coverage: measurements of what ran,
 	// not a description of what the repository is.
-	if err := RegisterBook("jsonbench", help.MustSub(bookjsonbenchFS, "bookjsonbench"), []app.TopicT{app.TopicObservability}); err != nil {
-		log.Warn().Err(err).Msg("sqlapplet: failed to register jsonbench book")
-	}
+	registration.Fail("sqlapplet.RegisterBook", RegisterBook("jsonbench", help.MustSub(bookjsonbenchFS, "bookjsonbench"), []app.TopicT{app.TopicObservability}))
 	// TopicCode rather than TopicObservability: these tables describe what
 	// the binary is made of — a property of the code that shipped — even
 	// though they are read from the running process. The one applet that
 	// crosses into "what ran" reads the coverage tables to say so explicitly.
-	if err := RegisterBook("codevol", help.MustSub(bookcodevolFS, "bookcodevol"), []app.TopicT{app.TopicCode}); err != nil {
-		log.Warn().Err(err).Msg("sqlapplet: failed to register code-volume book")
-	}
+	registration.Fail("sqlapplet.RegisterBook", RegisterBook("codevol", help.MustSub(bookcodevolFS, "bookcodevol"), []app.TopicT{app.TopicCode}))
 	// TopicData: the subject is the ClickHouse instance's own contents — what
 	// tables exist and what shape they are — not the repository (TopicCode) and
 	// not what a process did (TopicObservability).
-	if err := RegisterBook("catalog", help.MustSub(bookcatalogFS, "bookcatalog"), []app.TopicT{app.TopicData}); err != nil {
-		log.Warn().Err(err).Msg("sqlapplet: failed to register data-catalog book")
-	}
+	registration.Fail("sqlapplet.RegisterBook", RegisterBook("catalog", help.MustSub(bookcatalogFS, "bookcatalog"), []app.TopicT{app.TopicData}))
 	// TopicAbout, the topic docs-search already claims for the same corpus:
 	// the subject is the project's own record of its decisions, not the code
 	// (TopicCode) and not the process (TopicRuntime).
-	if err := RegisterBook("adr", help.MustSub(bookadrFS, "bookadr"), []app.TopicT{app.TopicAbout}); err != nil {
-		log.Warn().Err(err).Msg("sqlapplet: failed to register adr book")
-	}
-	if err := RegisterBook("lading", help.MustSub(bookladingFS, "booklading"), []app.TopicT{app.TopicData}); err != nil {
-		log.Warn().Err(err).Msg("sqlapplet: failed to register lading book")
-	}
+	registration.Fail("sqlapplet.RegisterBook", RegisterBook("adr", help.MustSub(bookadrFS, "bookadr"), []app.TopicT{app.TopicAbout}))
+	registration.Fail("sqlapplet.RegisterBook", RegisterBook("lading", help.MustSub(bookladingFS, "booklading"), []app.TopicT{app.TopicData}))
 	// TopicData, beside catalog: the subject is this ClickHouse instance's own
 	// schema. The two are read together — catalog says whether a table really
 	// is leeway, this says what its names spell out — and neither answers the
 	// other's question (ADR-0226 §SD2).
-	if err := RegisterBook("leeway", help.MustSub(bookleewayFS, "bookleeway"), []app.TopicT{app.TopicData}); err != nil {
-		log.Warn().Err(err).Msg("sqlapplet: failed to register leeway-schema book")
-	}
+	registration.Fail("sqlapplet.RegisterBook", RegisterBook("leeway", help.MustSub(bookleewayFS, "bookleeway"), []app.TopicT{app.TopicData}))
 }
 
 // registeredBook is one contributed applet corpus.

@@ -3,6 +3,8 @@ package notebookview
 import (
 	"sort"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -31,18 +33,29 @@ var renderers = map[string]RendererFactory{}
 // RegisterRenderer makes build the renderer of every `sql <name>` cell in
 // the process. It is called from an init function, by the package that owns
 // the drawing: a host that shows notebooks links that package and does not
-// import it. A name registered twice, or a built-in one, panics.
+// import it. A name registered twice, or a built-in one, is recorded as a
+// registration failure, which stops a host from starting (ADR-0396 §2).
 func RegisterRenderer(name string, build RendererFactory) {
+	registration.Fail("notebookview.RegisterRenderer", AddRenderer(name, build))
+}
+
+// AddRenderer is RegisterRenderer returning the refusal instead of
+// recording it.
+func AddRenderer(name string, build RendererFactory) (err error) {
 	if name == "" || build == nil {
-		panic("notebookview: RegisterRenderer needs a name and a factory")
+		err = eb.Build().Str("renderer", name).Errorf("notebookview: a renderer needs a name and a factory")
+		return
 	}
 	if name == mdnotebook.RendererTable || name == RendererKV {
-		panic("notebookview: the renderer `" + name + "` is built in")
+		err = eb.Build().Str("renderer", name).Errorf("notebookview: the renderer %q is built in", name)
+		return
 	}
 	if _, taken := renderers[name]; taken {
-		panic("notebookview: renderer `" + name + "` registered twice")
+		err = eb.Build().Str("renderer", name).Errorf("notebookview: renderer %q is registered twice", name)
+		return
 	}
 	renderers[name] = build
+	return
 }
 
 // RegisteredRenderers are the names renderers are registered under, sorted.

@@ -1,7 +1,6 @@
 package widgets
 
 import (
-	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audioout"
@@ -73,8 +72,5 @@ func init() {
 			return
 		}
 	}
-	err := app.DefaultRegistry.RegisterFactory(manifest, ctor)
-	if err != nil {
-		log.Warn().Err(err).Msg("widgets: failed to register factory")
-	}
+	app.RegisterFactory(manifest, ctor)
 }

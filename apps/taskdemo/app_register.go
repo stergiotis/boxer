@@ -3,8 +3,6 @@ package taskdemo
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -46,11 +44,8 @@ var manifest = app.Manifest{
 // init registers the demo into app.DefaultRegistry. Factory ctor so each
 // open window owns its own observer state.
 func init() {
-	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = newApp()
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("taskdemo: failed to register factory")
-	}
 }

@@ -1,7 +1,6 @@
 package sccmap
 
 import (
-	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -28,11 +27,8 @@ var manifest = runtimeapp.Manifest{
 }
 
 func init() {
-	err := runtimeapp.DefaultRegistry.RegisterFactory(manifest, func() (a runtimeapp.AppI, ctorErr error) {
+	runtimeapp.RegisterFactory(manifest, func() (a runtimeapp.AppI, ctorErr error) {
 		a = newApp()
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("sccmap: failed to register factory")
-	}
 }

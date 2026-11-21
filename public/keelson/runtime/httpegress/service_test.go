@@ -214,10 +214,8 @@ func TestLocalPrefixes(t *testing.T) {
 }
 
 func TestRegisterRejectsBadNames(t *testing.T) {
-	assert.Panics(t, func() {
-		Register(DestinationSpec{Name: "has.dot", Resolve: func() (Destination, error) { return Destination{}, nil }})
-	})
-	assert.Panics(t, func() { Register(DestinationSpec{Name: "noresolve"}) })
+	assert.Error(t, Add(DestinationSpec{Name: "has.dot", Resolve: func() (Destination, error) { return Destination{}, nil }}))
+	assert.Error(t, Add(DestinationSpec{Name: "noresolve"}))
 }
 
 // The record keeps scheme, host and path, never the query: a tile

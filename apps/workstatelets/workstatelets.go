@@ -12,10 +12,9 @@ package workstatelets
 import (
 	"embed"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
+	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
 	"github.com/stergiotis/boxer/public/keelson/runtime/workstatelet"
 )
 
@@ -26,7 +25,5 @@ const BookId = "workstatelets"
 var bookFS embed.FS
 
 func init() {
-	if err := workstatelet.RegisterBook(BookId, help.MustSub(bookFS, "book"), []app.TopicT{app.TopicRuntime}); err != nil {
-		log.Warn().Err(err).Msg("workstatelets: failed to register the book")
-	}
+	registration.Fail("workstatelet.RegisterBook", workstatelet.RegisterBook(BookId, help.MustSub(bookFS, "book"), []app.TopicT{app.TopicRuntime}))
 }

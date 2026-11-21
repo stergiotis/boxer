@@ -10,7 +10,6 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
@@ -700,11 +699,8 @@ func init() {
 	// wrapper that the legacy-renderer apps need. The manifest passed
 	// to RegisterFactory must match what Manifest() returns.
 	m := (&PlayLauncher{}).Manifest()
-	err := app.DefaultRegistry.RegisterFactory(m, func() (a app.AppI, ctorErr error) {
+	app.RegisterFactory(m, func() (a app.AppI, ctorErr error) {
 		a = &PlayLauncher{}
 		return
 	})
-	if err != nil {
-		log.Warn().Err(err).Msg("play: failed to register factory")
-	}
 }
