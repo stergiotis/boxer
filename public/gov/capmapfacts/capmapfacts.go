@@ -26,8 +26,9 @@
 //
 // # Ids are derived, not counted
 //
-// The runtime mints fact ids from a per-process counter, which is right for an
-// append-only event trail and wrong here. A relation has to point at the
+// The runtime's facts store mints row ids from a leased stream (ADR-0397):
+// unique, and arbitrary, which is right for an append-only event trail and
+// wrong here. A relation has to point at the
 // competence rows it joins, and a re-ingest of an unchanged vault should
 // produce the same rows rather than a second set wearing new ids. So an id is
 // [DeriveId] over the row's natural key: stable across runs and across

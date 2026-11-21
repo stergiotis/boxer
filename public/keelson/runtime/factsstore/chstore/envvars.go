@@ -1,6 +1,9 @@
 package chstore
 
-import "github.com/stergiotis/boxer/public/config/env"
+import (
+	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+)
 
 // BOXER_LOG_FACTS / BOXER_LOG_FACTS_URL are declared here (not in
 // the thestack imzero2 main that originally read them) so they
@@ -32,6 +35,20 @@ var (
 		Category:    env.CategoryObservability,
 	})
 )
+
+// FactsEngine is the engine clause a facts table is created with when the
+// caller passes none (ADR-0397). It reaches only a table that does not exist
+// yet: CREATE TABLE IF NOT EXISTS leaves an existing one in its layout, and
+// `boxer schema plan` names a table whose layout differs. Setting it to the
+// clause an existing table was created with keeps the schema check quiet and
+// the stamp truthful. The clause carries no SETTINGS: the store appends its
+// own.
+var FactsEngine = env.NewString(env.Spec{
+	Name:        "BOXER_FACTS_ENGINE",
+	Default:     factsschema.DefaultEngineClause,
+	Description: `engine clause (engine, PARTITION BY, ORDER BY, optional TTL; no SETTINGS) a newly created boxer.facts table gets; an existing table keeps its own. Before ADR-0397 it was 'MergeTree() ORDER BY "` + factsschema.TsColumn + `"'`,
+	Category:    env.CategoryDatabase,
+})
 
 // LogFactsOn says BOXER_LOG_FACTS asks for the host's log lines on
 // boxer.facts: non-empty and not "0".

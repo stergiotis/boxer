@@ -11,9 +11,8 @@ import (
 
 // Entry is one log row as the viewer reads it back from boxer.facts: the
 // row, the run it was stamped with (ADR-0191 §SD3), and its id in the store.
-// Id restarts in every process and is not shown; it is part of the row's
-// key, because two events can agree on timestamp, caller and message
-// ([factsstore.LogRowRead]).
+// Id is not shown; it is part of the row's key, because two events can
+// agree on timestamp, caller and message ([factsstore.LogRowRead]).
 type Entry struct {
 	Row   factsstore.LogRow
 	RunId string

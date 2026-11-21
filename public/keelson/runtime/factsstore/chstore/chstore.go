@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -22,11 +21,11 @@ import (
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/chversion"
+	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowalloc"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
-	factsddl "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ddl"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
@@ -137,7 +136,9 @@ type Store struct {
 	// Arrow record batches back.
 	exec      *storeexec.Executor
 	allocator memory.Allocator
-	nextId    atomic.Uint64
+	// ids mints the row ids (ADR-0397 §SD2): leased from the id stream of
+	// boxer.facts rows, or process-local while no block can be leased.
+	ids rowIds
 }
 
 var _ factsstore.FactsStoreI = (*Store)(nil)
@@ -159,6 +160,11 @@ func New(cfg Config) (s *Store, err error) {
 	s.exec, err = storeexec.New(s.cli, s.allocator)
 	if err != nil {
 		err = eh.Errorf("chstore: %w", err)
+		return
+	}
+	err = s.ids.init(s.exec, s.leaseLayout())
+	if err != nil {
+		err = eh.Errorf("chstore: %w", err)
 	}
 	return
 }
@@ -169,69 +175,43 @@ func (inst *Store) Ping(ctx context.Context) (err error) {
 	return
 }
 
-// defaultEngineClause is the MergeTree clause ComposeSetupSQL applies when
-// the caller passes an empty engineClause — the shape every first-run
-// initialisation (SetupTable(ctx, "")) uses.
-//
-// Time-ordered by default: every audit read (the log rows, the run events,
-// the latest-wins lists) is ORDER BY ts, so a sorted primary key turns those into a
-// sparse-index range read instead of the full scan that ORDER BY tuple()
-// forced. Retention — TTL / partitioning to bound a forever-growing
-// heartbeat table — is intentionally left to the operator's own engine
-// clause rather than imposed here, since it deletes data.
-const defaultEngineClause = "MergeTree() ORDER BY `ts:ts:z64:47::0:`"
-
 // ComposeSetupSQL returns the exact table DDL script SetupTable applies for cfg:
 // the CREATE DATABASE + CREATE TABLE statements (separated by ';'), composed
 // with no database connection and no side effects. An empty engineClause
-// selects defaultEngineClause — the first-run default. SetupTable is defined
-// in terms of this function, so a caller that only wants the SQL (the
-// `keelsonddl` CLI) emits byte-for-byte what first-run initialisation
-// executes for the table, with no risk of drift. The read surface is not in
-// it: SetupStatements carries both, and `leeway sqlsurface print` is the
-// surface as a script.
+// selects [EngineClause] — the BOXER_FACTS_ENGINE setting, by default
+// factsschema.DefaultEngineClause (ADR-0397). The table carries the insert
+// deduplication window and a stamp naming its columns and its layout.
+// SetupTable is defined in terms of this function, so a caller that only
+// wants the SQL (the `keelsonddl` CLI) emits byte-for-byte what first-run
+// initialisation executes for the table, with no risk of drift. The read
+// surface and the id lease table are not in it: SetupStatements carries all
+// three, and `leeway sqlsurface print` is the surface as a script.
 //
 // The columns are referenced by their leeway-encoded physical names (e.g.
 // "id:id:u64:47::0:") since the table has no logical aliases.
 func ComposeSetupSQL(cfg Config, engineClause string) (sql string, err error) {
-	if cfg.Database == "" || cfg.Table == "" {
-		err = eh.Errorf("chstore: compose setup sql: cfg requires Database + Table")
-		return
-	}
-	if engineClause == "" {
-		engineClause = defaultEngineClause
-	}
-	sql, err = factsddl.ComposeCreateTableSql(engineClause)
-	if err != nil {
-		err = eh.Errorf("chstore: compose setup sql: %w", err)
-		return
-	}
-	sql = strings.ReplaceAll(sql,
-		factsschema.DatabaseName+"."+factsschema.TableName,
-		cfg.Database+"."+cfg.Table)
-	if cfg.Database != factsschema.DatabaseName {
-		sql = strings.ReplaceAll(sql,
-			"CREATE DATABASE IF NOT EXISTS "+factsschema.DatabaseName+";",
-			"CREATE DATABASE IF NOT EXISTS "+cfg.Database+";")
-	}
+	t, err := composeFactsTable(cfg, engineClause)
+	sql = t.sql
 	return
 }
 
 // SetupTable applies the boxer.facts DDL idempotently against the live CH
-// connection, then makes sure the server carries leeway's SQL read surface
-// ([Store.EnsureReadSurface]). engineClause supplies the MergeTree partition
-// / order / TTL settings (empty selects defaultEngineClause). The DDL is
-// composed by ComposeSetupSQL, so this path and the `keelsonddl` CLI cannot
-// drift.
+// connection, provisions the id lease table the store mints row ids through
+// (ADR-0397 §SD2), then makes sure the server carries leeway's SQL read
+// surface ([Store.EnsureReadSurface]). engineClause supplies the engine,
+// partition key, sorting key and TTL (empty selects [EngineClause]). The DDL
+// is composed by ComposeSetupSQL, so this path and the `keelsonddl` CLI
+// cannot drift.
 //
 // Idempotent means CREATE TABLE IF NOT EXISTS, which is not the same as
 // migrating: an existing table is left exactly as it is, including its column
-// names. Physical column names encode the column's aspect bitmask, so a change
-// to the leeway aspect vocabularies renames columns in the generated DDL while
-// the deployed table keeps the old ones — after which inserts naming the new
-// columns fail against it. There is no automatic reconciliation. Recovering
-// means ALTER TABLE ... RENAME COLUMN per renamed column, or dropping and
-// re-creating the table if the trail is expendable.
+// names and its layout. Physical column names encode the column's aspect
+// bitmask, so a change to the leeway aspect vocabularies renames columns in
+// the generated DDL while the deployed table keeps the old ones — after
+// which inserts naming the new columns fail against it. There is no
+// automatic reconciliation. Recovering means ALTER TABLE ... RENAME COLUMN
+// per renamed column, or dropping and re-creating the table if the trail is
+// expendable.
 func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err error) {
 	var stmts []string
 	stmts, err = tableStatements(inst.cfg, engineClause)
@@ -244,6 +224,11 @@ func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err err
 			err = eh.Errorf("chstore: setup: exec: %w", err)
 			return
 		}
+	}
+	err = rowalloc.ProvisionIn(ctx, inst.exec, inst.leaseLayout())
+	if err != nil {
+		err = eh.Errorf("chstore: setup: %w", err)
+		return
 	}
 	err = inst.EnsureReadSurface(ctx)
 	return
@@ -329,9 +314,10 @@ func (inst *Store) serverRelease(ctx context.Context) (release string, err error
 
 // SetupStatements is the whole of setup as statements, for a caller that
 // runs them one by one through its own client (queryrunsvc, which tags every
-// query it sends): the table DDL of ComposeSetupSQL, then leeway's SQL read
-// surface — its function families, the revision marker, and the views — in
-// the order [lwsqlsurface.AllStatements] gives, which is dependency order.
+// query it sends): the table DDL of ComposeSetupSQL, the id lease table's,
+// then leeway's SQL read surface — its function families, the revision
+// marker, and the views — in the order [lwsqlsurface.AllStatements] gives,
+// which is dependency order.
 // A server these ran on can be written and read (ADR-0367, update of
 // 2026-11-11).
 //
@@ -345,6 +331,7 @@ func SetupStatements(cfg Config, engineClause string) (stmts []string, err error
 	if err != nil {
 		return
 	}
+	stmts = append(stmts, rowalloc.ProvisionSQL(rowalloc.Layout{Database: cfg.Database})...)
 	stmts = append(stmts, lwsqlsurface.AllStatements("")...)
 	return
 }
@@ -369,7 +356,10 @@ func (inst *Store) qualifiedTable() string {
 
 // WriteGrant lands one boxer.facts row tagged KindGrant.
 func (inst *Store) WriteGrant(row factsstore.GrantRow) (id uint64, err error) {
-	id = inst.nextId.Add(1)
+	id, err = inst.mintId()
+	if err != nil {
+		return
+	}
 	ts := defaultTs(row.Ts)
 	nk := naturalKeyFor("grant", row.AppId, []byte(row.Pattern), []byte(row.Direction.String()))
 	ent := dml.NewInEntityFacts(inst.allocator, 1)
@@ -412,7 +402,10 @@ func (inst *Store) WriteGrant(row factsstore.GrantRow) (id uint64, err error) {
 // high-card parameter is the field NAME so readers can recover (name,
 // value) pairs without parsing.
 func (inst *Store) WriteLog(row factsstore.LogRow) (id uint64, err error) {
-	id = inst.nextId.Add(1)
+	id, err = inst.mintId()
+	if err != nil {
+		return
+	}
 	ent := dml.NewInEntityFacts(inst.allocator, 1)
 	inst.encodeLogEntity(ent, id, row)
 	err = inst.commitAndShip(context.Background(), ent)
@@ -433,7 +426,11 @@ func (inst *Store) WriteLogs(rows []factsstore.LogRow) (ids []uint64, err error)
 	ent := dml.NewInEntityFacts(inst.allocator, len(rows))
 	ids = make([]uint64, len(rows))
 	for i := range rows {
-		id := inst.nextId.Add(1)
+		id, mErr := inst.mintId()
+		if mErr != nil {
+			err = mErr
+			return
+		}
 		ids[i] = id
 		inst.encodeLogEntity(ent, id, rows[i])
 		if cErr := ent.CommitEntity(); cErr != nil {
@@ -633,7 +630,10 @@ func stampInstance(u64 *dml.InEntityFactsSectionU64Array, instanceKey uint64) {
 // single symbol membership. The run is the host's own work: its origin
 // names no app and no window.
 func (inst *Store) WriteRuntimeStart(row factsstore.RuntimeStartRow) (id uint64, err error) {
-	id = inst.nextId.Add(1)
+	id, err = inst.mintId()
+	if err != nil {
+		return
+	}
 	ts := defaultTs(row.Ts)
 	nk := naturalKeyFor("runtime-run", app.AppIdT(row.RunId), []byte(row.Hostname), nil)
 	ent := dml.NewInEntityFacts(inst.allocator, 1)
@@ -715,7 +715,10 @@ func (inst *Store) WriteRuntimeHeartbeat(row factsstore.HeartbeatRow) (id uint64
 		err = eh.Errorf("chstore: WriteRuntimeHeartbeat requires a non-empty RunId")
 		return
 	}
-	id = inst.nextId.Add(1)
+	id, err = inst.mintId()
+	if err != nil {
+		return
+	}
 	ts := defaultTs(row.Ts)
 	nk := naturalKeyForHeartbeat(row.RunId, ts)
 	ent := dml.NewInEntityFacts(inst.allocator, 1)
@@ -742,7 +745,10 @@ func (inst *Store) WriteRuntimeHeartbeat(row factsstore.HeartbeatRow) (id uint64
 // on the string section. The tile key rides on the u64 section so two
 // concurrent tiles for the same AppId are distinguishable.
 func (inst *Store) WriteAppLifecycle(row factsstore.AppLifecycleRow) (id uint64, err error) {
-	id = inst.nextId.Add(1)
+	id, err = inst.mintId()
+	if err != nil {
+		return
+	}
 	ts := defaultTs(row.Ts)
 	phase := row.Phase.String()
 	nk := naturalKeyForLifecycle(row.RunId, row.AppId, row.TileKey, phase)
@@ -780,7 +786,10 @@ func (inst *Store) WriteAppLifecycle(row factsstore.AppLifecycleRow) (id uint64,
 // the host resolved from a kind (ADR-0361 §SD2) carries
 // MembLaunchResolvedFromKind on the bool section.
 func (inst *Store) WriteLaunch(row factsstore.LaunchRow) (id uint64, err error) {
-	id = inst.nextId.Add(1)
+	id, err = inst.mintId()
+	if err != nil {
+		return
+	}
 	ts := defaultTs(row.Ts)
 	var tk [8]byte
 	for i := range 8 {

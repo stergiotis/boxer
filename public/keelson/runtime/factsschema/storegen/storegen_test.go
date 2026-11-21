@@ -9,6 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/identity/tagmint"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/storegen"
 	"github.com/stergiotis/boxer/public/keelson/vdd"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
@@ -233,8 +234,12 @@ func TestGenerate_EmitsNoDdlExecutionSurface(t *testing.T) {
 
 	// The DDL file is still written: it is the physical schema the store
 	// decodes positionally, and whoever does provision the table needs it.
-	assert.Contains(t, readFile(t, filepath.Join(out, "facts_ddl_clickhouse.out.sql")),
-		"CREATE TABLE IF NOT EXISTS boxer.facts")
+	ddl := readFile(t, filepath.Join(out, "facts_ddl_clickhouse.out.sql"))
+	assert.Contains(t, ddl, "CREATE TABLE IF NOT EXISTS boxer.facts")
+	// It states the layout chstore creates the table with (ADR-0397), not
+	// the generator's own ORDER BY over the envelope roles.
+	assert.Contains(t, ddl, "\n) ENGINE = "+factsschema.DefaultEngineClause+"\n")
+	assert.NotContains(t, ddl, "\nORDER BY")
 }
 
 // TestGenerate_CanonWireBindsTheFactsEncoder is ADR-0327 §SD2:

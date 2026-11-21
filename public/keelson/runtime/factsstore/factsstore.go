@@ -538,11 +538,14 @@ type LogRowsFilter struct {
 // does not persist (only its flat summary in Error), plus the run the row
 // was stamped with and the row's id in the store.
 //
-// Id restarts in every writing process, so it names a row only together
-// with the rest of it. It is what tells apart two events of one process
-// that agree on timestamp, caller and message: the timestamp is no finer
-// than the writer made it (a CBOR float under binary_log, milliseconds for
-// some writers), so such pairs are not rare.
+// Id is unique across processes when the ClickHouse store leased it
+// (ADR-0397 §SD2); a process-local id, minted while no block could be
+// leased, and the in-memory store's are unique only within their process,
+// so a reader names a row by it together with the rest of it. It is what
+// tells apart two events of one process that agree on timestamp, caller and
+// message: the timestamp is no finer than the writer made it (a CBOR float
+// under binary_log, milliseconds for some writers), so such pairs are not
+// rare.
 type LogRowRead struct {
 	Row   LogRow
 	RunId string

@@ -171,7 +171,9 @@ type Input struct {
 	// DDL optionally overrides the emitted table clauses, including the
 	// ADR-0181 §SD4 skip-index policy. Note that the emitted DDL is a
 	// statement of intent here and not applied by the store: `chstore` owns
-	// this table's DDL (ADR-0184 SD2/SD5).
+	// this table's DDL (ADR-0184 SD2/SD5). The engine, partition key and
+	// sorting key are not among the clauses it overrides: they are the facts
+	// layout's, factsschema.DefaultEngineClause (ADR-0397).
 	DDL *clickhouse.TableOptions
 	// CanonWire gives the store DrainCanonical and CanonicalItem over the
 	// facts canonical wire encoder `factsschema/ra` carries (ADR-0327
@@ -232,6 +234,21 @@ var sharedRA = gen.Scaffold{
 // decodes positionally, and whoever does provision the table needs it.
 const externallyProvisioned = true
 
+// factsLayout is the table options the emitted DDL states: ddl's, with the
+// engine clause the facts table is created with (ADR-0397), so the golden
+// says what chstore creates. The clause carries the partition and sorting
+// keys, so the generator's own ORDER BY over the envelope roles is left out.
+func factsLayout(ddl *clickhouse.TableOptions) (opts *clickhouse.TableOptions) {
+	o := clickhouse.TableOptions{}
+	if ddl != nil {
+		o = *ddl
+	}
+	o.Engine = factsschema.DefaultEngineClause
+	o.OrderBy = []clickhouse.ColumnRef{}
+	o.PartitionBy = ""
+	return &o
+}
+
 // Generate emits the store package against the `boxer.facts` schema.
 func (inst Input) Generate() (err error) {
 	if len(inst.Ids) == 0 {
@@ -260,7 +277,7 @@ func (inst Input) Generate() (err error) {
 		ImportPath:     inst.ImportPath,
 		Wrapper:        marshallgen.FixedIdsWrapper{Ids: inst.Ids},
 		SharedRA:       &sharedRA,
-		DDL:            inst.DDL,
+		DDL:            factsLayout(inst.DDL),
 		CanonWire:      inst.CanonWire,
 		Evidence:       inst.Evidence,
 		Contributions:  inst.Contributions,

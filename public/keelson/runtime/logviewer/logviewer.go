@@ -1066,9 +1066,10 @@ func rowTint(level string) (tint color.Color, ok bool) {
 // stored timestamp is only as fine as the writer made it (a CBOR float
 // under binary_log, about a quarter of a microsecond at today's epoch;
 // milliseconds for the task supervisor), so a burst of one log line
-// yields rows equal in all three. The store id separates those; it
-// restarts in every process, which is why it is added to the three
-// rather than replacing them.
+// yields rows equal in all three. The store id separates those; it is
+// unique only within a process when it was not leased
+// ([factsstore.LogRowRead]), which is why it is added to the three rather
+// than replacing them.
 func rowKey(e Entry) (s string) {
 	r := e.Row
 	s = fmt.Sprintf("%d|%d|%s|%s", r.Ts.UnixNano(), e.Id, r.Caller, r.Message)

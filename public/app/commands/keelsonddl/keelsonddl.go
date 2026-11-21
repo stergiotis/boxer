@@ -116,7 +116,7 @@ func NewCliCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:  "engine",
 				Value: "",
-				Usage: "override the MergeTree engine clause (empty selects the first-run default: time-ordered MergeTree, no TTL/partitioning)",
+				Usage: "override the engine clause, without SETTINGS (empty selects BOXER_FACTS_ENGINE, by default time-sorted and partitioned by month, no TTL)",
 			},
 			&cli.BoolFlag{
 				Name:  "trail-views",

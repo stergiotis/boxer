@@ -26,7 +26,7 @@ func ddlCommand() *cli.Command {
 			&cli.StringFlag{Name: "table", Value: "facts"},
 			&cli.StringFlag{
 				Name:  "engine",
-				Usage: "MergeTree clause; empty selects the live store's own default (ORDER BY ts)",
+				Usage: "engine clause, without SETTINGS; empty selects the facts store's own (BOXER_FACTS_ENGINE)",
 			},
 			&cli.BoolFlag{Name: "apply", Usage: "execute the DDL instead of printing it"},
 			&cli.BoolFlag{Name: "drop", Usage: "DROP DATABASE first (benchmark databases only)"},

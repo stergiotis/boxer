@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowalloc"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/factsread"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
@@ -94,8 +95,10 @@ func TestSetupStatements_CarryTheTableAndTheReadSurface(t *testing.T) {
 	table, err := tableStatements(Config{Database: "boxer", Table: "facts"}, "")
 	require.NoError(t, err)
 	require.Equal(t, table, stmts[:len(table)], "the table comes first")
+	lease := rowalloc.ProvisionSQL(rowalloc.Layout{Database: "boxer"})
+	require.Equal(t, lease, stmts[len(table):len(table)+len(lease)], "then the id lease table")
 	surface := lwsqlsurface.AllStatements("")
-	require.Equal(t, surface, stmts[len(table):])
+	require.Equal(t, surface, stmts[len(table)+len(lease):])
 	require.Contains(t, stmts, lwsqlsurface.MarkerStatement())
 	all := strings.Join(stmts, "\n")
 	for name := range authoredReads() {
