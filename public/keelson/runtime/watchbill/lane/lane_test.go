@@ -221,6 +221,29 @@ func TestChildrenAreBounded(t *testing.T) {
 	assert.EqualValues(t, 2, f.c.Spawned())
 }
 
+// A child's announcement wakes the next read, so by the time it is heard
+// the child's slot is free and the child is gone from Running: a read it
+// wakes starts the next row instead of finding the pool full.
+func TestAnExitedChildsSlotIsFreeWhenItIsAnnounced(t *testing.T) {
+	f := newFixture(t, 1)
+	type seen struct{ running, live int }
+	heard := make(chan seen, 4)
+	listener := f.bus.NewClient("test.listener", Caps())
+	_, err := listener.Subscribe(watchbill.SubjectChanged, func(*app.Msg) {
+		heard <- seen{running: len(f.c.Running()), live: f.c.pool.Stats().Live}
+	})
+	require.NoError(t, err)
+	a := f.enqueue(t, "a", true)
+	require.NoError(t, f.c.Tick(context.Background()))
+	f.eventually(t, a, watchbillstore.StateSucceeded)
+	select {
+	case s := <-heard:
+		assert.Equal(t, seen{}, s, "no child in flight and no slot held when the exit is announced")
+	case <-time.After(10 * time.Second):
+		t.Fatal("the child's exit was never announced")
+	}
+}
+
 // A failed child's row tells the notices and the row stays what the child
 // made it; a child that exits without claiming leaves the row queued, and
 // the next tick starts another child for it.

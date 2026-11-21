@@ -467,15 +467,19 @@ func (inst *Coordinator) await(r *run) {
 			}
 		}
 	}
+	// The slot is free before the child leaves the running set, and both
+	// before the announcement: a read the announcement wakes, or anyone who
+	// sees the child gone from Running, finds the place to start the next
+	// row rather than a full pool and a wait for the next poll.
+	_ = r.slot.Close()
+	inst.mu.Lock()
+	delete(inst.running, r.job.ID)
+	inst.mu.Unlock()
 	if inst.cfg.Bus != nil {
 		if perr := inst.cfg.Bus.Publish(watchbill.SubjectChanged, []byte(r.job.ID)); perr != nil {
 			inst.log.Debug().Err(perr).Str("job", r.job.ID).Msg("watchbill lane: changed not announced")
 		}
 	}
-	inst.mu.Lock()
-	delete(inst.running, r.job.ID)
-	inst.mu.Unlock()
-	_ = r.slot.Close()
 }
 
 // noteClaim records whether the child claimed its row: one that exited
