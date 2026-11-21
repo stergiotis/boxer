@@ -80,7 +80,7 @@ type Config struct {
 	Log   zerolog.Logger
 }
 
-// Service answers lading.publish.<tag>.
+// Service answers runtime.lading.publish.<tag>.
 type Service struct {
 	cfg       Config
 	log       zerolog.Logger
@@ -127,7 +127,7 @@ func NewService(cfg Config) (inst *Service, err error) {
 		return
 	}
 	inst.busClient = cfg.Bus.NewClient(ServiceAppId, []app.SubjectFilter{
-		{Pattern: subjectWildcard, Direction: app.CapDirectionBoth, Reason: "the lading publish service serves lading.publish.<tag> (ADR-0341)"},
+		{Pattern: subjectWildcard, Direction: app.CapDirectionBoth, Reason: "the lading publish service serves runtime.lading.publish.<tag> (ADR-0341)"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "the lading publish service replies to inboxes"},
 	})
 	if inst.unsub, err = inst.busClient.Subscribe(subjectWildcard, inst.handle); err != nil {

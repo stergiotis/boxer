@@ -32,7 +32,7 @@ func testLimits() Limits {
 func manifests() []app.Manifest {
 	return []app.Manifest{
 		{Id: appA, Caps: []app.SubjectFilter{{Pattern: Subject(tagA), Direction: app.CapDirectionPub}}},
-		{Id: appB, Caps: []app.SubjectFilter{{Pattern: Subject(tagB), Direction: app.CapDirectionPub}, {Pattern: "lading.publish.>", Direction: app.CapDirectionPub}}},
+		{Id: appB, Caps: []app.SubjectFilter{{Pattern: Subject(tagB), Direction: app.CapDirectionPub}, {Pattern: "runtime.lading.publish.>", Direction: app.CapDirectionPub}}},
 	}
 }
 

@@ -141,7 +141,7 @@ type Services struct {
 	// resolve, retract and the keelson('adhoc') catalog. Reading a dataset
 	// still needs ChLocal and Introspect, which fail visibly on their own.
 	AdhocData bool
-	// LadingPublish is lading.publish.<tag>: writes into the lading store
+	// LadingPublish is runtime.lading.publish.<tag>: writes into the lading store
 	// under the caller's mount tag, after the placement check (ADR-0341,
 	// proposed). It connects from the CLICKHOUSE_* variables on the first
 	// publish; without a reachable store a publish fails with the reason.
@@ -871,7 +871,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			Log:      logger,
 		})
 		if ladingErr != nil {
-			logger.Warn().Err(ladingErr).Msg("ladingpublish: service start failed; lading.publish.* will be unbound")
+			logger.Warn().Err(ladingErr).Msg("ladingpublish: service start failed; runtime.lading.publish.* will be unbound")
 		} else {
 			rt.Lading = ladingSvc
 			rt.onClose(ladingSvc.Close)

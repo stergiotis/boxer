@@ -5,7 +5,7 @@
 // package's: readers keep their own connection.
 //
 // The tag is in the subject. An app declares the capability
-// `lading.publish.<tag>` on its manifest, so the bus's own subject check
+// `runtime.lading.publish.<tag>` on its manifest, so the bus's own subject check
 // keeps it to its tag, and the service refuses a tag two apps declare or a
 // sender whose manifest does not name it.
 package ladingpublish
@@ -26,7 +26,7 @@ import (
 )
 
 // SubjectPrefix opens every publish subject; the tag value follows it.
-const SubjectPrefix = "lading.publish."
+const SubjectPrefix = "runtime.lading.publish."
 
 // subjectWildcard is what the service subscribes to.
 const subjectWildcard = SubjectPrefix + "*"
