@@ -115,6 +115,11 @@ tab           skip     0.00s
 ([ADR-0278](../adr/0278-tab-mode-for-downstream-apps.md)) and is skipped until
 the gate is given one with `--tab-pkg`.
 
+`codelint` applies its app rule (CS017) to `<module>/apps` and its context
+rule (CS020) to the whole module. `--app-prefix` and `--ctx-prefix` name
+other trees, and `--ctx-baseline` a file of grandfathered CS020 findings
+([ADR-0396](../adr/0396-the-app-contract-a-host-promises.md) §8).
+
 ## 4. Accept the adoption ADR
 
 `doc/adr/0001-adopt-boxer-standards.md` is seeded as `proposed`. Read it, fill
@@ -171,7 +176,19 @@ from boxer's `rust/imzero2`; the Go side is boxer's
    ```
 
    `--list` shows every registered app with its alias; an app missing from it
-   was not imported. `scene` finds the headless client and the fonts under
+   was not imported. A registration the registry refuses — an invalid
+   manifest, an alias another app holds — stops the host at start, and the
+   error lists every one. Two apps whose ids end in the same segment collide;
+   set `Manifest.Alias` on yours to a token prefixed with your module's name
+   (`acme_play`). Do not change an alias once users have state: it keys
+   their stored values.
+
+3. **Test them with the conformance kit.** `apptest` runs this repository's
+   app checks over yours: `apptest.ManifestOK`, `apptest.HelpCorpus`,
+   `apptest.HelpNamesCatalog` for an app with a catalog, and
+   `apptest.FrameAll(t, app.DefaultRegistry, apptest.FrameOpts{Strict: true}, nil)`
+   from a test package that imports all your apps, which mounts each window
+   and draws two frames headless. `scene` finds the headless client and the fonts under
    `--repoRoot`, a checkout holding a built `rust/imzero2`; `--clientBinary`
    names a client directly. A scene document's format and step vocabulary are
    in the [imzero2-drive skill](../skills/imzero2-drive/SKILL.md).

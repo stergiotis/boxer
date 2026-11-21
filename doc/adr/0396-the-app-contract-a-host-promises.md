@@ -124,15 +124,33 @@ an app outside this module relied on it:
    guard of their own.
 8. **A conformance kit any module runs.** The headless frame harness moves
    to `thestack/imzero2/egui2/egui2test`; `keelson/runtime/apptest` holds
-   `ManifestOK`, `HelpCorpus`, `CatalogNotWithdrawn`, `FrameHeadless` and
-   `FrameAll`, the last mounting every windowed app and running two frames
-   under the discard harness, strict about duplicate ids and unbalanced
-   pops. Tests run with the render-goroutine check on.
+   `MountContext`, `ManifestOK`, `HelpCorpus`, `HelpNamesCatalog`,
+   `CatalogNotWithdrawn`, `FrameHeadless` and `FrameAll`, the last mounting
+   every windowed app and running two frames under the discard harness,
+   strict about duplicate ids and unbalanced pops. The harness binds the
+   frame to the test's goroutine, and a scene's host runs with the
+   render-goroutine check on. Codelint's app and context rules cover the
+   module the gate runs in (`--app-prefix`, `--ctx-prefix`,
+   `--ctx-baseline`).
 9. **A bus client is free functions plus capability helpers.** A service
    package exports its subjects, one `…Cap(reason)` per capability, and
    functions taking `ctx` and `app.BusI` first. A client type is kept only
    where it implements a runtime interface (`persist.Client` is an
    `app.StorageI`) or holds per-instance state (`task.ForApp`).
+
+### Deferred
+
+- Gate steps for capslock with an app prefix, for designlint and for the
+  widget conformance test with a root, and mechanising W18 and W19 of the
+  widget contract. Trigger: the first module that asks its gate for them.
+- CS020's generated-store check matches on the file name, so a hand-written
+  wrapper that hides `Begin` or `Flush` behind ctx-less methods is not
+  caught; recognising one needs the wrapper's call graph.
+- The log and trail viewer sources keep replacing on a second `Register`:
+  they are a slot a host fills at each boot, not an init-time registry,
+  and a process may boot more than once (tests do).
+- Breaking the crash loop of ADR-0386 (a workingset saved at a panic
+  reopens the window that panicked) is not addressed here.
 
 ## Alternatives
 
@@ -192,8 +210,8 @@ an app outside this module relied on it:
   `NewStaticFrameContext(mc, scope)` → `NewStaticFrameContext(mc)`; the
   removed manifest fields; `app.AllTopics` → `app.Topics()`; the renamed
   subjects.
-- **Path.** The app-contract note under `doc/migration/` carries the
-  old → new table and an app author's checklist.
+- **Path.** [doc/migration/2026-11-app-contract.md](../migration/2026-11-app-contract.md)
+  carries the old → new table and an app author's checklist.
 - **Regeneration.** The package-props table and `doc/SURFACE.md` for the
   new packages; nothing crosses the FFI boundary.
 - **Old shape.** Removed outright; no compatibility names are kept.

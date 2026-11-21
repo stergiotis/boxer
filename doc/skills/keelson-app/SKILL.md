@@ -115,16 +115,26 @@ first app that needs it") is the house way to not block on the hardest
 tenth ([AGENTS.md § Design before code](../../../AGENTS.md#design-before-code)).
 
 **S3 — Register through a factory, keep state on the struct.** Every app
-under `apps/` registers with `app.DefaultRegistry.RegisterFactory`; a
-singleton cannot take a launch config, a workingset or a catalog. Per-window
+under `apps/` registers with `app.RegisterFactory` from `init`; a refused
+registration — an invalid manifest, an alias another app holds, a catalog
+that does not validate — is recorded and stops the host, listed with every
+other ([ADR-0396](../../adr/0396-the-app-contract-a-host-promises.md) §2),
+so there is no error to log at the call. A singleton cannot take a launch
+config, a workingset or a catalog. Per-window
 state lives on the `*App` the factory returns, never in package variables.
 A process-wide source (a sampler, a watcher) is a documented
 `sync.Once` singleton that every window reads, as imztop's and imzrt's
 are. Copy the manifest shape from `apps/watchbill/app_register.go` or
 `apps/jackstay/app_register.go`: `Summary` is one verb-first clause,
-`Topics` is required, `Caps` are composed from the client-caps helpers
+`Topics` is required (a module adds one with `app.RegisterTopic`), the
+app's stored state is keyed by `Manifest.SubjectAlias()` — the id's last
+segment, or `Manifest.Alias` when that collides or the directory was
+renamed — and `Caps` are composed from the capability helpers
 (`task.ProducerCaps()`, `keelsonquery.ClientCaps(table)`,
-`attention.ClientCaps(reason)`) and every `Reason` says what the app does
+`fsbroker.DialogReadCap(reason)`, `windowopen.OpenCap(reason)`), never
+spelled as patterns. A pattern starts with `runtime.`, `app.<alias>.` or,
+for a service another module defines, `ext.<module>.`; registration
+refuses any other root (ADR-0396 §6). Every `Reason` says what the app does
 with the capability; a helper with a fixed reason (`task.ProducerCaps()`
 has one) is the declaration itself and needs no second ([ADR-0026](../../adr/0026-app-runtime-and-capability-subjects.md),
 [ADR-0158](../../adr/0158-app-classification-topics-keywords-kind.md)).
@@ -151,6 +161,38 @@ not configuration. The chat harness is the one exception: its ceilings
 (rounds, the screenshot budget, pixel limits) are environment variables
 by [ADR-0284](../../adr/0284-chat-artefact-screenshots-sealed-under-a-budget.md) §SD4 and [ADR-0280](../../adr/0280-a-ceiling-on-what-a-chats-model-may-do-scored-on-a-ladder.md), because the
 ceiling is the runtime's and the harness is where it is read.
+
+### The contract with the host
+
+Everything the host offers is a method of the context it hands the app
+([ADR-0396](../../adr/0396-the-app-contract-a-host-promises.md) §4), with a
+result that says the host lacks it:
+
+| Method | On | Absent |
+| --- | --- | --- |
+| `Lifetime()` | `MountContextI` | nil: the app owns a root scope |
+| `MountValue(key)` | `MountContextI` | nil |
+| `WindowFocused()` | `FrameContextI` | true |
+| `CloseWindow(reason)` | `FrameContextI` | false: nothing closed |
+| `OperationGesture(op, args)` | `FrameContextI` | a refusal: apply it directly |
+
+`app.ContextOf(ctx)` is the context the instance does its I/O under; keep
+it in a field set in `Mount`. A test that builds an app without mounting
+it takes it from `apptest.MountContext(t, id)`. An operation handler does
+its I/O under `call.Context()`.
+
+The host type-asserts only what the app optionally implements:
+
+| Interface | The host calls it to |
+| --- | --- |
+| `app.PausableAppI` | stop background work while every window is paused |
+| `app.OperationsAppI` | serve the manifest's catalog (required when the manifest declares one; `Open` refuses an instance without it) |
+| `app.OperationsAsyncI` | settle a command that runs past its frame |
+| `app.WorkingsetComposerI` | take the record a workingset stores at close |
+
+The conformance kit, `keelson/runtime/apptest`, runs this repository's
+checks over any module's apps; `egui2/egui2test.Install` is the headless
+harness under it, and binds the frame to the test's goroutine.
 
 ## 2. Data: Arrow in the window, SQL at the edge, the playground as the destination
 
@@ -339,7 +381,7 @@ host closes the stop channel, retires the scope, unmounts, drains off the
 render goroutine for a bounded time, then closes the bus client
 ([ADR-0322](../../adr/0322-app-instances-drain-a-lifetime-scope-between-unmount-and-unload.md)).
 A goroutine the app starts goes through `task.ForApp`, through
-`app.LifetimeOf(ctx)` with `scope.Go`, or through a child
+`ctx.Lifetime()` with `scope.Go`, or through a child
 `lifetime.New(parent)`; a hand-built cancel-and-WaitGroup still works but
 is invisible to the host's drain and to the Running tab. Tails and
 drained hooks make no imzero2 calls. A loop selects on both the scope's
@@ -528,7 +570,7 @@ acknowledge or shelve ([ADR-0324](../../adr/0324-the-persons-decisions-wait-in-a
 Something worth noticing that nothing waits on is a highlight, one per
 source. A job's completion owes no decision and stays on the attention
 scale ([ADR-0323](../../adr/0323-attention-levels-one-table-two-scales-configurable-within-a-floor.md)).
-Process-global input (a chord, a drop) is gated on `app.WindowFocusI`.
+Process-global input (a chord, a drop) is gated on `ctx.WindowFocused()`.
 An inline arm-and-confirm for the person's own consequential click (A2),
 or a two-click guard before discarding their own unsaved work, is neither
 a modal nor a question for the queue; the queue is for decisions someone
@@ -809,9 +851,10 @@ gloss rules, applet books).
 **X2 — A seam is a typed slot, registered in Go, at the wiring site.** The
 shapes in use: a function-typed field with a setter and the default body
 exported so the override can delegate (`PlayApp.SetDetailContent`,
-[play-pluggable-detail](../../howto/play-pluggable-detail.md)); a small
-interface the host type-asserts off the context, costing hosts without it
-nothing ([ADR-0382](../../adr/0382-embedding-is-by-role-a-pane-under-its-host-and-no-host-mediated-embed.md) §SD4); a `Register*`
+[play-pluggable-detail](../../howto/play-pluggable-detail.md)); a mount
+value under a key the owning package exports, read through its typed
+accessor (`colwidth.StoreOf(ctx)`, `cell.OfMount(ctx)`), costing hosts
+without it nothing ([ADR-0382](../../adr/0382-embedding-is-by-role-a-pane-under-its-host-and-no-host-mediated-embed.md) §SD4, ADR-0396 §4); a `Register*`
 function that validates and refuses duplicates (`RegisterSnippetLibrary`,
 `sqlapplet.RegisterBook`); a registry built once with composition declared
 per seam ([ADR-0310](../../adr/0310-harness-profile-and-registry-composition-declared-per-seam.md)).
@@ -865,8 +908,11 @@ headless service ([ADR-0352](../../adr/0352-services-headless-apps-a-service-hos
 the rest is n/a. For a minter (sqlapplet) the manifest, leaf and seam
 lines are the minter's and the rest are each minted window's.
 
-- [ ] Manifest: factory-registered, summary verb-first, topics, caps with
-      reasons, help book with `overview.md` (S3, A4)
+- [ ] Manifest: factory-registered, summary verb-first, topics, caps from
+      the capability helpers with reasons, help book with `overview.md`
+      (S3, A4)
+- [ ] `TestConforms` runs the kit: `apptest.ManifestOK`, `HelpCorpus`,
+      `HelpNamesCatalog` for a catalog, `FrameHeadless` strict (§8)
 - [ ] Launch config leaf with kind check and golden test; precedence
       config > env > persisted (S4, S5)
 - [ ] Tables are Arrow records drawn with recordtable; derived results
