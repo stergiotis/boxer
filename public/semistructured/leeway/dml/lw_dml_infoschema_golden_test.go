@@ -37,7 +37,7 @@ func normaliseGeneratorLocations(code []byte) (out []byte) {
 // goldens under testdata/. The output is kept as testdata rather than as a
 // compiled package because nothing in this module imports it; the generator's
 // compile-ability is covered by the packages it writes elsewhere
-// (dml/example, leeway/test/singledecl). Rerun with -update after an
+// (internal/dml/example, internal/test/singledecl). Rerun with -update after an
 // intentional generator or mapping change.
 func TestInformationSchemaDmlMatchesGolden(t *testing.T) {
 	cases := []struct {

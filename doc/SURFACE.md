@@ -737,13 +737,13 @@ Illustrative and demonstration code. Outside the promise.
 - `public/semistructured/leeway/anchor/codecdemo/nested` — Package nested holds codecdemo DTOs written in the NESTED attribute-struct model (Slice C) — a section is a Go struct field whose fields are the sub-columns, instead of flat `membership,section:column` fields.
 - `public/semistructured/leeway/anchor/ecsdemo/stage1` — Package stage1 is the json/v2 stage of the ecsdemo Entity-Component-System example.
 - `public/semistructured/leeway/anchor/ecsdemo/stage2` — Package stage2 is the leeway-backed mirror of the json/v2 ecsdemo (stage 1).
+- `public/semistructured/leeway/canonicaltypes/internal/test`
 - `public/semistructured/leeway/canonicaltypes/sample`
-- `public/semistructured/leeway/canonicaltypes/test`
-- `public/semistructured/leeway/canonwire/example`
-- `public/semistructured/leeway/dml/example`
-- `public/semistructured/leeway/readaccess/example`
-- `public/semistructured/leeway/test`
-- `public/semistructured/leeway/test/singledecl` — Package singledecl is the compiled fixture of the single-membership declaration (ADR-0213): one schema pair — sdecl declares its channels single-instance, sflat is the byte-for-byte twin without the declaration — driven through the generated DML and read-access classes, the read-back artefacts, the SQL authoring surface and schema discovery, so the declaration's write-time enforcement and read-side fast path are pinned against the undeclared general form.
+- `public/semistructured/leeway/internal/canonwire/example`
+- `public/semistructured/leeway/internal/dml/example`
+- `public/semistructured/leeway/internal/test`
+- `public/semistructured/leeway/internal/test/singledecl` — Package singledecl is the compiled fixture of the single-membership declaration (ADR-0213): one schema pair — sdecl declares its channels single-instance, sflat is the byte-for-byte twin without the declaration — driven through the generated DML and read-access classes, the read-back artefacts, the SQL authoring surface and schema discovery, so the declaration's write-time enforcement and read-side fast path are pinned against the undeclared general form.
+- `public/semistructured/leeway/readaccess/internal/example`
 - `public/semistructured/leeway/tutorial/firsttable` — Package firsttable is the smallest complete leeway table: a schema, its generated write and read sides, and an example that writes rows and reads them back without a database.
 - `public/semistructured/markdown/mdnotebook/samples` — Package samples holds notebooks to read and to start from (ADR-0371), each with the blobs it names: `minimal`, a notebook in two records; `report`, a report that leads with its figures and ends with how they were collected; and `renderers`, one cell per renderer over the smallest record that satisfies it.
 

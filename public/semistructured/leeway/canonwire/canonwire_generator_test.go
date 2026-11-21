@@ -434,18 +434,18 @@ func generateGoldens(t *testing.T, fileStem string, tableName string, tblDesc co
 	raSrc, _, err := readaccess.NewGoCodeGeneratorDriver(conv, chTech, true).
 		GenerateGoClasses("example", name, tblDesc, tableRowConfig, namer)
 	require.NoError(t, err)
-	require.NoError(t, align.WriteAligned(filepath.Join("example", fileStem+"_ra.out.go"), raSrc))
+	require.NoError(t, align.WriteAligned(filepath.Join("../internal/canonwire/example", fileStem+"_ra.out.go"), raSrc))
 
 	dmlSrc, _, err := dml.NewGoCodeGeneratorDriver(conv, chTech).
 		GenerateGoClasses("example", name, tblDesc, tableRowConfig, namer)
 	require.NoError(t, err)
-	require.NoError(t, align.WriteAligned(filepath.Join("example", fileStem+"_dml.out.go"), dmlSrc))
+	require.NoError(t, align.WriteAligned(filepath.Join("../internal/canonwire/example", fileStem+"_dml.out.go"), dmlSrc))
 
 	cwSrc, wellFormed, err := NewGoCodeGeneratorDriver(conv, chTech).
 		GenerateGoClasses("example", name, tblDesc, tableRowConfig, namer)
 	require.NoError(t, err)
 	require.True(t, wellFormed)
-	require.NoError(t, align.WriteAligned(filepath.Join("example", fileStem+"_canonwire.out.go"), cwSrc))
+	require.NoError(t, align.WriteAligned(filepath.Join("../internal/canonwire/example", fileStem+"_canonwire.out.go"), cwSrc))
 }
 
 func TestGenerateCanonWireTestTable(t *testing.T) {
@@ -609,7 +609,7 @@ func TestGeneratedAcceptMasksMatchSpecs(t *testing.T) {
 			var slots SlotTable
 			slots, err = BuildSlotTable(&tblDesc)
 			require.NoError(t, err)
-			got := parseAcceptMasks(t, filepath.Join("example", tc.stem+"_canonwire.out.go"))
+			got := parseAcceptMasks(t, filepath.Join("../internal/canonwire/example", tc.stem+"_canonwire.out.go"))
 			require.Len(t, got, len(slots.Slots))
 			for i := range slots.Slots {
 				secs := slots.Slots[i].Sections
@@ -653,7 +653,7 @@ func loadTypeCheckGraph(t *testing.T) typeCheckImporter {
 	if tags, rerr := os.ReadFile(filepath.Join("..", "..", "..", "..", "tags")); rerr == nil {
 		cfg.BuildFlags = []string{"-tags=" + strings.TrimSpace(string(tags))}
 	}
-	pkgs, err := packages.Load(cfg, "github.com/stergiotis/boxer/public/semistructured/leeway/canonwire/example")
+	pkgs, err := packages.Load(cfg, "github.com/stergiotis/boxer/public/semistructured/leeway/internal/canonwire/example")
 	require.NoError(t, err)
 	require.Len(t, pkgs, 1)
 	require.Empty(t, pkgs[0].Errors)

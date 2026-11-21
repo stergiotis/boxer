@@ -28,10 +28,10 @@ func TestAlignAndFormatHeadOutGoIsAligned(t *testing.T) {
 	require.NoError(t, err)
 
 	targets := []string{
-		"public/semistructured/leeway/dml/example/dml_testtable.out.go",
-		"public/semistructured/leeway/dml/example/dml_json.out.go",
-		"public/semistructured/leeway/readaccess/example/readaccess_testtable_ra.out.go",
-		"public/semistructured/leeway/readaccess/example/readaccess_testtable_dml.out.go",
+		"public/semistructured/leeway/internal/dml/example/dml_testtable.out.go",
+		"public/semistructured/leeway/internal/dml/example/dml_json.out.go",
+		"public/semistructured/leeway/readaccess/internal/example/readaccess_testtable_ra.out.go",
+		"public/semistructured/leeway/readaccess/internal/example/readaccess_testtable_dml.out.go",
 		"public/semistructured/leeway/common/lw_system_table_columns_dml.out.go",
 	}
 	for _, rel := range targets {

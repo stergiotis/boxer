@@ -8,7 +8,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonwire/example"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/internal/canonwire/example"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 )
 

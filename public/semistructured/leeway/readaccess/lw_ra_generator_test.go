@@ -84,7 +84,7 @@ func TestReadAccessGoClassBuilder(t *testing.T) {
 	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("test_table"), tblDesc, tableRowConfig, namingConvention)
 	require.NoError(t, err)
 
-	err = align.WriteAligned("example/readaccess_testtable_ra.out.go", sourceCode)
+	err = align.WriteAligned("internal/example/readaccess_testtable_ra.out.go", sourceCode)
 	require.NoError(t, err)
 }
 
@@ -160,7 +160,7 @@ func TestReadAccessNetworkGolden(t *testing.T) {
 	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("net_table"), tblDesc, tableRowConfig, namingConvention)
 	require.NoError(t, err)
 
-	err = align.WriteAligned("example/readaccess_nettable_ra.out.go", sourceCode)
+	err = align.WriteAligned("internal/example/readaccess_nettable_ra.out.go", sourceCode)
 	require.NoError(t, err)
 
 	src := string(sourceCode)
@@ -196,7 +196,7 @@ func TestReadAccessNetworkDmlGolden(t *testing.T) {
 	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("net_table"), tblDesc, tableRowConfig, namingStyle)
 	require.NoError(t, err)
 
-	p := "./example/readaccess_nettable_dml.out.go"
+	p := "internal/example/readaccess_nettable_dml.out.go"
 	// No unlink: WriteAligned replaces the file atomically, and this writes
 	// into the example/ package next door — removing it first leaves a window
 	// in which a concurrent package load of example/ sees it missing.
@@ -271,7 +271,7 @@ func TestDmlSample(t *testing.T) {
 	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("test_table"), tblDesc, tableRowConfig, namingStyle)
 	require.NoError(t, err)
 
-	p := "./example/readaccess_testtable_dml.out.go"
+	p := "internal/example/readaccess_testtable_dml.out.go"
 	// No unlink: WriteAligned replaces the file atomically, and this writes
 	// into the example/ package next door — removing it first leaves a window
 	// in which a concurrent package load of example/ sees it missing.

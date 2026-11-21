@@ -20,10 +20,10 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonwire/example"
 	cwruntime "github.com/stergiotis/boxer/public/semistructured/leeway/canonwire/runtime"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/internal/canonwire/example"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 )
 

@@ -74,7 +74,7 @@ func TestGenerateDmlRouting(t *testing.T) {
 	}
 	// A single-column group's grouped setter already takes its one column.
 	require.NotContains(t, src, "SetTs(")
-	require.NoError(t, align.WriteAligned("example/dml_routing.out.go", []byte(src)))
+	require.NoError(t, align.WriteAligned("../internal/dml/example/dml_routing.out.go", []byte(src)))
 }
 
 // TestPlainColumnSettersPrivateControl checks that under private control the
