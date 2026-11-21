@@ -91,12 +91,13 @@ func TestDiffNotAdditive(t *testing.T) {
 	assert.Equal(t, len(changes), Unacknowledged(changes))
 
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "2026-11-x.md"), []byte("# x\n\n- `contract: idl/fingerprint`\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "2026-11-x.md"), []byte("# x\n\n- `contract: idl/fingerprint`\n- `contract: cli/boxer gov --root`\n"), 0o644))
 	acks, err := Acks(dir)
 	require.NoError(t, err)
 	Acknowledge(changes, acks)
 	assert.Equal(t, "2026-11-x.md", find(t, changes, "idl/fingerprint").AckedBy)
-	assert.Equal(t, len(changes)-1, Unacknowledged(changes))
+	assert.Equal(t, "2026-11-x.md", find(t, changes, "cli/boxer gov --root").AckedBy, "a key with spaces is acknowledged whole")
+	assert.Equal(t, len(changes)-2, Unacknowledged(changes))
 
 	none, err := Acks(filepath.Join(dir, "absent"))
 	require.NoError(t, err)

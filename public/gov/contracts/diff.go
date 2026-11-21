@@ -145,8 +145,10 @@ func normLine(l string) string {
 	return strings.TrimSuffix(strings.TrimSpace(l), ",")
 }
 
-// ackPattern finds the acknowledgments a migration note makes.
-var ackPattern = regexp.MustCompile("contract:\\s*([^\\s`]+)")
+// ackPattern finds the acknowledgments a migration note makes: the key runs
+// to a closing backtick or the end of the line, so a command-tree key, which
+// holds spaces (`cli/boxer gov --root`), can be named too.
+var ackPattern = regexp.MustCompile("contract:[ \\t]*([^`\\n]+)")
 
 // Acks reads the acknowledgments the migration notes under dir make, key →
 // the note's file name. A missing dir acknowledges nothing.
@@ -168,7 +170,7 @@ func Acks(dir string) (acks map[string]string, err error) {
 			return nil, rerr
 		}
 		for _, m := range ackPattern.FindAllStringSubmatch(string(b), -1) {
-			acks[m[1]] = e.Name()
+			acks[strings.TrimSpace(m[1])] = e.Name()
 		}
 	}
 	return
