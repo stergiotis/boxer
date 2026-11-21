@@ -71,7 +71,7 @@ type Services struct {
 	// a visitor switches on (a map's tiles, a fetch an app makes), and can
 	// still read a file served beside its page (ADR-0299 §SD2).
 	NoEgress bool
-	// AudioOut serves audio.out.open in the tab (ADR-0372 §SD2):
+	// AudioOut serves runtime.audio.out.open in the tab (ADR-0372 §SD2):
 	// an app that asks for an output plays through the page around the
 	// worker, over the tab's audio lane. A native run of the tab binary has
 	// no page, and its apps get the device-less sink.
@@ -140,7 +140,7 @@ func startAudioOut(bus *inprocbus.Inst) {
 	}
 	dev = lanesink.NewDevice(send, hostaudio.Traced(lanesink.Options{Sync: true}, log.Logger))
 	if _, err := audioout.NewService(bus, log.Logger, dev); err != nil {
-		log.Warn().Err(err).Msg("tabhost: audio-output service start failed; audio.out.open will be unbound")
+		log.Warn().Err(err).Msg("tabhost: audio-output service start failed; runtime.audio.out.open will be unbound")
 	}
 }
 

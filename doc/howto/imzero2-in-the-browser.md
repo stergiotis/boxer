@@ -180,7 +180,7 @@ tab is which apps a build links; a tab for one app should link that app.
 
 ## Sound
 
-A tab binary that sets `tabhost.Services.AudioOut` serves `audio.out.open`
+A tab binary that sets `tabhost.Services.AudioOut` serves `runtime.audio.out.open`
 ([ADR-0372](../adr/0372-audio-output-for-the-browser-hosts-a-host-provided-sink-and-a-side-lane.md)):
 an app that asks for an output plays through the page around the worker.
 boxer's `imzero2tab` and the demo binary set it. The browser keeps a

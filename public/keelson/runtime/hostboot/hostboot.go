@@ -148,7 +148,7 @@ type Services struct {
 	LadingPublish bool
 	// Clipboard is clipboard.*: copies drained into egui copy ops each frame.
 	Clipboard bool
-	// AudioOut is audio.out.open: an audio output for an app that asks for
+	// AudioOut is runtime.audio.out.open: an audio output for an app that asks for
 	// one, on Options.AudioDevice (ADR-0372 §SD2). Without it an
 	// app that plays sound gets the device-less sink.
 	AudioOut bool
@@ -905,7 +905,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		}
 		audioSvc, audioErr := audioout.NewService(rt.Bus, logger, dev)
 		if audioErr != nil {
-			logger.Warn().Err(audioErr).Msg("audioout: service start failed; audio.out.open will be unbound")
+			logger.Warn().Err(audioErr).Msg("audioout: service start failed; runtime.audio.out.open will be unbound")
 		} else {
 			rt.AudioOut = audioSvc
 			rt.onClose(audioSvc.Close)

@@ -42,10 +42,10 @@ func TestReportListsGapsAndAnswered(t *testing.T) {
 // neither as a gap nor as answered by other means.
 func TestServicesServeTheirSubjects(t *testing.T) {
 	if (Services{}).serves(audioout.SubjectOpen) {
-		t.Fatal("a tab without the audio-output service does not serve audio.out.open")
+		t.Fatal("a tab without the audio-output service does not serve runtime.audio.out.open")
 	}
 	if !(Services{AudioOut: true}).serves(audioout.SubjectOpen) {
-		t.Fatal("a tab with the audio-output service serves audio.out.open")
+		t.Fatal("a tab with the audio-output service serves runtime.audio.out.open")
 	}
 	if (Services{AudioOut: true}).serves("runtime.fs.dialog.read") {
 		t.Fatal("the audio-output service serves nothing else")

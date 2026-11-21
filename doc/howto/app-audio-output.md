@@ -93,7 +93,7 @@ plays it with no input.
 ## Troubleshooting
 
 - **Symptom:** the app shows "no output device" on a host with sound.
-  **Cause:** the manifest does not declare `audio.out.open`, or the host
+  **Cause:** the manifest does not declare `runtime.audio.out.open`, or the host
   does not run the service.
   **Fix:** add the capability; check `Services.AudioOut` in the host binary.
 - **Symptom:** a remote viewer hears nothing and the app says the browser

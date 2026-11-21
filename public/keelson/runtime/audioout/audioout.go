@@ -20,7 +20,7 @@ import (
 // SubjectOpen is the request subject an app publishes to for an audio output
 // (ADR-0372 §SD1). The request is an [OpenRequest], the reply an
 // [OpenReply].
-const SubjectOpen = "audio.out.open"
+const SubjectOpen = "runtime.audio.out.open"
 
 // ServiceAppId is the synthetic AppId the service registers under.
 const ServiceAppId app.AppIdT = "runtime.audio" // designlint:ignore=L12 (the audio service's bus identity, a runtime service in the dotted NATS-aligned form; renaming changes a wire id)
@@ -145,7 +145,7 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, dev DeviceI) (s *Servic
 		dev: dev,
 	}
 	s.busClient = bus.NewClient(ServiceAppId, []app.SubjectFilter{
-		{Pattern: SubjectOpen, Direction: app.CapDirectionBoth, Reason: "the audio-output service serves audio.out.open"},
+		{Pattern: SubjectOpen, Direction: app.CapDirectionBoth, Reason: "the audio-output service serves runtime.audio.out.open"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "the audio-output service replies to inboxes"},
 	})
 	s.unsub, err = s.busClient.Subscribe(SubjectOpen, s.handleOpen)
