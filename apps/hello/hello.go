@@ -18,7 +18,7 @@ import (
 type App struct {
 	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
 	// run under when no call of its own carries one.
-	ioCtx context.Context
+	ioCtx     context.Context
 	ids       *c.WidgetIdStack
 	log       zerolog.Logger
 	storage   app.StorageI
