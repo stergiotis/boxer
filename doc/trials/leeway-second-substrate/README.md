@@ -150,7 +150,7 @@ Stage by stage, with the seam named:
 | --- | --- | --- |
 | describe → IR → map | none — `common.TableDesc`, canonical types | free |
 | DDL | `ddl/clickhouse` behind `common.TechnologySpecificGeneratorI` ([`lw_types.go:207`](../../../public/semistructured/leeway/common/lw_types.go)); `ddl/arrow` and `ddl/golang` already implement the same interface | a new backend, or none at all if the target reads Parquet |
-| marshal / DML | the generated builders already emit Arrow record batches; `dml.WriteArrowRecords` already writes Parquet and Arrow IPC ([`lw_dml_arrow_utils.go`](../../../public/semistructured/leeway/dml/lw_dml_arrow_utils.go), used in [`dml/example/cli.go`](../../../public/semistructured/leeway/dml/example/cli.go)) | swap the sink |
+| marshal / DML | the generated builders already emit Arrow record batches; `dml.WriteArrowRecords` already writes Parquet and Arrow IPC ([`lw_dml_arrow_utils.go`](../../../public/semistructured/leeway/dml/lw_dml_arrow_utils.go), used in [`dml/example/cli.go`](../../../public/semistructured/leeway/internal/dml/example/cli.go)) | swap the sink |
 | query vocabulary | `chpack`'s fifteen SQL UDFs (ADR-0162) and the readback UDF family — but see H1 | none for the canonical mapping; unknown for facts |
 | handle expansion | `jsonbench resolve` runs ADR-0116's pass through `nanopass`, a ClickHouse parser | ported query files carry physical column names, or something parser-free expands them |
 | native query path | grammar1 / nanopass | out of scope, as arm A was in the sibling trial |

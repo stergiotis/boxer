@@ -153,6 +153,7 @@ is the `main` node; panel-local lanes are ordinary sibling nodes.
 The rigorous shape, `play`-local. Names follow house conventions (`I`-suffixed
 interfaces, `E`-suffixed enums, receiver `inst`):
 
+<!-- boxer:lint disable=DL013 reason="a design sketch; the environment package is dsl/grammarenv since 2026-11-20 (ADR-0394)" -->
 ```go
 // A node in the query-graph: compiled SQL + the signals it reads.
 type NodeID string

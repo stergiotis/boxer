@@ -256,7 +256,7 @@ mean two different tables.
 ## Verification plan — Tier 1
 
 - **Lane.** Default `go test`:
-  [`github.com/stergiotis/boxer/public/semistructured/leeway/test/singledecl`](../../public/semistructured/leeway/test/singledecl)
+  [`github.com/stergiotis/boxer/public/semistructured/leeway/internal/test/singledecl`](../../public/semistructured/leeway/internal/test/singledecl)
   (write-time enforcement, identity accel, fast ≡ general over
   clickhouse-local server truth, `LW_GET` licence, discovery round-trip),
   `canonform.TestSingleMembershipDeclarationIsRepresentation` and
