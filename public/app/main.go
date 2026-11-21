@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/datasource"
 	"github.com/stergiotis/boxer/public/app/commands/designsystem"
 	"github.com/stergiotis/boxer/public/app/commands/egui2gen"
+	"github.com/stergiotis/boxer/public/app/commands/errordemo"
 	fairleadcli "github.com/stergiotis/boxer/public/app/commands/fairlead"
 	"github.com/stergiotis/boxer/public/app/commands/findAnchor"
 	"github.com/stergiotis/boxer/public/app/commands/http"
@@ -47,7 +48,6 @@ import (
 	"github.com/stergiotis/boxer/public/math/numerical/finddivisions"
 	"github.com/stergiotis/boxer/public/observability"
 	"github.com/stergiotis/boxer/public/observability/coverage"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/ph"
 	"github.com/stergiotis/boxer/public/observability/profiling"
@@ -123,7 +123,7 @@ func newApp() (app *cli.Command) {
 			dev.IoOverrideFlags,
 			coverage.CoverageFlags),
 		Commands: cli2.CommandsNilRemoved(
-			eb.NewCliCommand(),
+			errordemo.NewCliCommand(),
 			cbor.NewCommand(),
 			lw.NewCliCommand(),
 			observability.NewCliCommand(),
