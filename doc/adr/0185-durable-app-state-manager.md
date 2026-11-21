@@ -510,6 +510,26 @@ later. SD3's "the broker asks on every Mount" describes ADR-0026 §SD7's
 intent, not a built behaviour; the non-sticky flag stays on the grant for
 the day that prompt exists.
 
+### 2026-11-20 — `forget` is one write through the state backend
+
+A bus request's timeout bounds the requester's wait, and `forget` took one
+store round trip per entry, so its cost grew with what the app kept while
+the manager's deadline stayed fixed. The service now clears through a
+store that deletes in batches (`BatchDeleterI`, which
+`persist.StoreBackend` implements) in one write: the tombstones are flushed
+as one insert, and a forget costs the same few round trips however many
+entries there are. A store without the method is cleared per entry as
+before.
+
+SD4 holds: the record still rests nothing on insert atomicity. A failed
+write is reported per kind from a second read of the entries still live,
+so the reply says what happened rather than assuming the write landed
+whole or not at all.
+
+Choices for review: batching is an optional interface beside `StoreI`
+rather than a new `StoreI` method, so the seam stays source-compatible;
+when the second read fails too, every entry counts as not cleared.
+
 ## References
 
 - [ADR-0026: App runtime and capability subjects](0026-app-runtime-and-capability-subjects.md) — §SD3 the subject taxonomy this family joins, §SD6 the facts table, §SD7 the broker that prompts.

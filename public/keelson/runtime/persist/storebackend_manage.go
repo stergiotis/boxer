@@ -83,3 +83,31 @@ func (inst *StoreBackend) DeleteEntity(entityId string) (err error) {
 	}
 	return
 }
+
+// DeleteEntities tombstones every entry in entityIds and flushes them as
+// one insert, so a forget of a whole app is one round trip to the store
+// instead of one per entry and its cost does not grow with how much the
+// app kept. On an error the pending rows are discarded; which tombstones
+// landed is not promised either way, and a caller that must say so reads
+// the live entries again.
+func (inst *StoreBackend) DeleteEntities(entityIds []string) (err error) {
+	if len(entityIds) == 0 {
+		return
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	now := time.Now().UTC()
+	for _, id := range entityIds {
+		err = inst.st.Delete(id, now)
+		if err != nil {
+			inst.st.DiscardPending()
+			err = eb.Build().Str("entityId", id).Int("entities", len(entityIds)).Errorf("persist: delete entities: %w", err)
+			return
+		}
+	}
+	err = inst.flushLocked()
+	if err != nil {
+		err = eb.Build().Int("entities", len(entityIds)).Errorf("persist: delete entities: %w", err)
+	}
+	return
+}

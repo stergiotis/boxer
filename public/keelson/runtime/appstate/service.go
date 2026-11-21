@@ -30,6 +30,15 @@ type StoreI interface {
 
 var _ StoreI = (*persist.StoreBackend)(nil)
 
+// BatchDeleterI is a store that tombstones many entries in one write. A
+// forget through one is a single round trip to the store, whatever the app
+// kept; through a plain StoreI it is one per entry.
+type BatchDeleterI interface {
+	DeleteEntities(entityIds []string) (err error)
+}
+
+var _ BatchDeleterI = (*persist.StoreBackend)(nil)
+
 // Service answers `runtime.appstate.<op>`. Without a durable store it still
 // subscribes and refuses every request with the reason, so a manager is
 // told what is wrong instead of waiting out a timeout — the in-memory
@@ -143,19 +152,56 @@ func (inst *Service) opDelete(req appstaterequest.AppStateRequest) (reply appsta
 }
 
 // opForget clears every live entry appId keeps, of every kind (ADR-0185
-// §SD4). It attempts every one and never stops at the first failure: a
-// partial clear is the worst outcome of the gesture, so it is reported per
-// kind as exactly what it was.
+// §SD4). A partial clear is the worst outcome of the gesture, so the reply
+// says per kind exactly what happened. A store that deletes in batches
+// clears them in one write, so the forget costs the same few round trips
+// however many entries there are; a failed batch is reported from a
+// second read of what is still live, not assumed whole. Otherwise every
+// entry is attempted on its own, and the first failure stops none of the
+// rest.
 func (inst *Service) opForget(appId app.AppIdT) (reply appstatereply.AppStateReply) {
 	entries, err := inst.store.LiveEntries(appId)
 	if err != nil {
 		return refusalOf(err.Error())
 	}
 	o := outcomes{}
+	if bd, ok := inst.store.(BatchDeleterI); ok && len(entries) > 0 {
+		inst.forgetInOneWrite(bd, appId, entries, &o)
+		return o.reply()
+	}
 	for _, e := range entries {
 		o.record(e.Kind, inst.store.DeleteEntity(e.EntityId))
 	}
 	return o.reply()
+}
+
+// forgetInOneWrite deletes entries through bd. When the write fails, the
+// entries still live afterwards are the failures and the rest were
+// cleared; when that read fails too, none is counted as cleared.
+func (inst *Service) forgetInOneWrite(bd BatchDeleterI, appId app.AppIdT, entries []persist.StateEntry, o *outcomes) {
+	ids := make([]string, 0, len(entries))
+	for _, e := range entries {
+		ids = append(ids, e.EntityId)
+	}
+	err := bd.DeleteEntities(ids)
+	if err == nil {
+		for _, e := range entries {
+			o.record(e.Kind, nil)
+		}
+		return
+	}
+	left, lerr := inst.store.LiveEntries(appId)
+	still := make(map[string]bool, len(left))
+	for _, e := range left {
+		still[e.EntityId] = true
+	}
+	for _, e := range entries {
+		if lerr != nil || still[e.EntityId] {
+			o.record(e.Kind, err)
+			continue
+		}
+		o.record(e.Kind, nil)
+	}
 }
 
 // outcomes tallies deletes per kind and keeps the first failure's message.

@@ -210,6 +210,40 @@ func TestForgetNeverStopsEarly(t *testing.T) {
 	}, res.Outcomes)
 }
 
+// batchStore deletes in batches and fails every batch without clearing
+// anything: every entry is still live afterwards.
+type batchStore struct {
+	failingStore
+	batches [][]string
+}
+
+func (inst *batchStore) DeleteEntities(entityIds []string) error {
+	inst.batches = append(inst.batches, entityIds)
+	return errors.New("synthetic batch failure")
+}
+
+// TestABatchForgetReportsWhatIsStillLive: through a store that deletes in
+// batches, a forget is one write, and a failed one is reported from what
+// is still live afterwards rather than assumed whole.
+func TestABatchForgetReportsWhatIsStillLive(t *testing.T) {
+	store := &batchStore{failingStore: failingStore{entries: []persist.StateEntry{
+		{Kind: persiststore.KindPersist, EntityId: "state/a/1"},
+		{Kind: persiststore.KindPersist, EntityId: "state/a/2"},
+		{Kind: persiststore.KindWorkingset, EntityId: "ws/a/default"},
+	}}}
+	_, client, _ := serve(t, store)
+	res, err := client.Forget("a")
+	require.NoError(t, err)
+	assert.False(t, res.Ok)
+	assert.Contains(t, res.Reason, "synthetic batch failure")
+	assert.Equal(t, [][]string{{"state/a/1", "state/a/2", "ws/a/default"}}, store.batches, "one write for the whole app")
+	assert.Empty(t, store.deleted, "no entry was deleted on its own")
+	assert.Equal(t, []Outcome{
+		{Kind: persiststore.KindPersist, Failed: 2},
+		{Kind: persiststore.KindWorkingset, Failed: 1},
+	}, res.Outcomes)
+}
+
 // TestRefusedWithoutTheCapabilityAndAudited: an app that did not declare
 // ClientCaps cannot clear anything, and the denial is itself an audit row —
 // the reason the verbs are requests, not publishes (ADR-0185 §SD3).
