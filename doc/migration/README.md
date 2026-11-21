@@ -38,6 +38,13 @@ nothing. A host shows the same verdicts as `keelson('schema_tables')`.
 `apply` refuses a table whose plan is refused and stops at the first statement
 the server rejects. No host applies a plan at boot.
 
+A table whose engine, partition key or sorting key differs from the layout the
+build creates carries a note, `layout differs (informational)`, whatever its
+verdict: the store works over either layout, and the note names the recipe
+that copies the table
+([ADR-0397](../adr/0397-the-facts-tables-partition-key-row-id-and-engine-clause.md)
+§SD4).
+
 ## When a recipe is needed
 
 The plan refuses what it cannot derive: a type change, a rename of a column a
