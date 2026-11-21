@@ -17,7 +17,6 @@ boxer --logOsPidOnStart
 boxer --logVcsRevisionOnStart
 boxer --markdownEcho
 boxer --pprofCpuOutputFile
-boxer --pprofHttpAllowNonLoopback
 boxer --pprofHttpListenAddress
 boxer --stderrToFile
 boxer --stdinFromFile
@@ -443,7 +442,6 @@ boxer grib tables --out
 boxer grib tables --version
 boxer http
 boxer http serve
-boxer http serve --allowNonLoopback
 boxer http serve --filePattern
 boxer http serve --listen
 boxer http serve --maxBodyBytes
