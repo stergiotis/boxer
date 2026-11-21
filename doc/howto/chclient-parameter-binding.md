@@ -11,7 +11,7 @@ status: draft
 # How to bind query parameters with `chclient`
 
 This recipe covers server-side parameter binding for runtime services that read
-ClickHouse over `public/keelson/data/chclient` — passing values (ids, search
+ClickHouse over `public/db/clickhouse/chclient` — passing values (ids, search
 terms, id sets) to a statement without concatenating them into the SQL text.
 
 ## When to use this recipe

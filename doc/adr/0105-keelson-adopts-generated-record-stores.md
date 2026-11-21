@@ -55,7 +55,7 @@ Forces measured before deciding (2026-07-05, scripted checks):
   but `ReadRowSupported` still excludes tuple fields — for these kinds the
   remaining gap is store decode only, no longer authoring.
 - **Transport gap:** `recordstore/chexec` ships only a clickhouse-local
-  executor; keelson's transports ([`data/chclient`](../../public/keelson/data/chclient),
+  executor; keelson's transports ([`data/chclient`](../../public/db/clickhouse/chclient),
   [`data/chlocalbroker`](../../public/keelson/data/chlocalbroker)) have no
   `recordstore.ExecutorI` implementation.
 - **Write-path substrate:** [`public/caching`](../../public/caching) ships

@@ -152,7 +152,7 @@ thing's own time ([ADR-0277 §SD9](../adr/0277-one-audit-trail-for-model-calls-a
 ### 2.2 Writers
 
 Every lane below inserts Arrow IPC through one of two HTTP clients:
-[`chclient.Client.InsertArrowSettings`](../../public/keelson/data/chclient/chclient.go)
+[`chclient.Client.InsertArrowSettings`](../../public/db/clickhouse/chclient/chclient.go)
 (`INSERT INTO <table> FORMAT Arrow`, settings as URL parameters) reached
 directly by `chstore`, or through
 [`storeexec.Executor`](../../public/keelson/data/storeexec/storeexec.go) by
@@ -606,7 +606,7 @@ The insert path:
 [`insert_settings.go`](../../public/storage/recordstore/insert_settings.go),
 [`recordstore.go`](../../public/storage/recordstore/recordstore.go),
 [`storeexec.go`](../../public/keelson/data/storeexec/storeexec.go),
-[`chclient.go`](../../public/keelson/data/chclient/chclient.go),
+[`chclient.go`](../../public/db/clickhouse/chclient/chclient.go),
 [`jackstay/digest.go`](../../public/db/clickhouse/jackstay/digest.go).
 Writers and readers: the files linked in §2.2 and §2.3, and
 [`trailviews.go`](../../public/keelson/runtime/trail/trailviews/trailviews.go),

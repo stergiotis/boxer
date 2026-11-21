@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/apps/play"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/gov/datacatalog"
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 )
 
 // TestCatalogBookQueries_LiveServer runs every chapter buffer verbatim against

@@ -534,7 +534,7 @@ result ceiling, a 60 s result cache. What it cannot do is as important as what
 it does: nothing persists, bursts past the warm pool pay a cold spawn, and a
 high-QPS caller "should be using `ch.query.*` against a server".
 
-**The server** is reached over HTTP by [`public/keelson/data/chclient`](../public/keelson/data/chclient)
+**The server** is reached over HTTP by [`public/db/clickhouse/chclient`](../public/db/clickhouse/chclient)
 (Arrow IPC bulk inserts; reads appended with `FORMAT ArrowStream` and decoded
 as they arrive by [`public/keelson/data/storeexec`](../public/keelson/data/storeexec)); the HTTP
 interface takes one statement per request and rejects a multi-statement body

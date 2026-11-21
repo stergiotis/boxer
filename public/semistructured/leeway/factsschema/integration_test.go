@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	factsddl "github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/ddl"
 )
 

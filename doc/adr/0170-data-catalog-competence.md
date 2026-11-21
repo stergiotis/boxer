@@ -52,7 +52,7 @@ wiring and two schema contracts:
   ([ADR-0132](0132-sqlapplet-sql-defined-applets.md)) package such queries as
   navigable chapters.
 - **A CLI shape to copy.** `apps/jsonbench`: urfave/cli +
-  [the `chclient` HTTP client](../../public/keelson/data/chclient), DDL
+  [the `chclient` HTTP client](../../public/db/clickhouse/chclient), DDL
   emit-or-apply.
 
 What does not exist: persistence of discovery results, the pairwise relation

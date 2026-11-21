@@ -123,11 +123,11 @@ The largest single step: ~93 files reference the moving paths.
 
 ### Step 4 — Data pillar: lift `chclient`, `chlocalbroker`, `chlocalpool` out of `runtime/`
 
-- `git mv public/keelson/runtime/chclient public/keelson/data/chclient` (and `chlocalbroker`, `chlocalpool`). The destination `keelson/data/` must exist before the moves; if it has been recursively removed (e.g., by an earlier `rmdir`), recreate it first with `mkdir -p public/keelson/data`.
+- `git mv public/keelson/runtime/chclient public/db/clickhouse/chclient` (and `chlocalbroker`, `chlocalpool`). The destination `keelson/data/` must exist before the moves; if it has been recursively removed (e.g., by an earlier `rmdir`), recreate it first with `mkdir -p public/keelson/data`.
 - Sweep (the sed itself self-edits the lines below; re-run is a no-op):
   ```
   find public apps doc scripts -type f \( -name '*.go' -o -name '*.md' -o -name '*.sh' \) -print0 | xargs -0 sed -i \
-    -e 's|keelson/runtime/chclient|keelson/data/chclient|g' \
+    -e 's|keelson/runtime/chclient|db/clickhouse/chclient|g' \
     -e 's|keelson/runtime/chlocalbroker|keelson/data/chlocalbroker|g' \
     -e 's|keelson/runtime/chlocalpool|keelson/data/chlocalpool|g'
   ```

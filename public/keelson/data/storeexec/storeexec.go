@@ -1,4 +1,4 @@
-// Package storeexec adapts [github.com/stergiotis/boxer/public/keelson/data/chclient]
+// Package storeexec adapts [github.com/stergiotis/boxer/public/db/clickhouse/chclient]
 // to [github.com/stergiotis/boxer/public/storage/recordstore.ExecutorI], the
 // seam a generated record store (ADR-0100) uses to reach ClickHouse.
 //
@@ -69,7 +69,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
@@ -135,7 +135,7 @@ func (inst *Executor) settings(ctx context.Context) map[string]string {
 // It returns once the server has *accepted* the statement, which is not quite
 // the same as having completed it: a failure raised after ClickHouse has
 // answered 200 rides in a response body that
-// [github.com/stergiotis/boxer/public/keelson/data/chclient.Client.Exec]
+// [github.com/stergiotis/boxer/public/db/clickhouse/chclient.Client.Exec]
 // discards, so it reads here as success. That doc carries the detail and the
 // reason nothing catches it yet.
 func (inst *Executor) Exec(ctx context.Context, sql string) (err error) {

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 	"github.com/stergiotis/boxer/public/unsafeperf"
 	"github.com/stretchr/testify/assert"

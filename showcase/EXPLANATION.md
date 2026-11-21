@@ -175,7 +175,7 @@ shapes above:
   ADR-0028) reached over the in-process bus, not a per-query spawn.
 - **`clickhouse` server (HTTP `:8123`) — external.** Only `play` (a SQL
   playground, default `localhost`) dials a server, through
-  [`github.com/stergiotis/boxer/public/keelson/data/chclient`](../public/keelson/data/chclient).
+  [`github.com/stergiotis/boxer/public/db/clickhouse/chclient`](../public/db/clickhouse/chclient).
   The showcase box does not run one.
 
 ## Where the decisions live

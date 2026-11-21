@@ -350,7 +350,7 @@ implementations of it.
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| `keelson/data/chclient` | added: `QueryStream`, `InsertStream` and `StreamOptions` (query id, response and body encodings): a query body returned undecoded, and an insert body streamed from an `io.Reader` | none (additive) |
+| `db/clickhouse/chclient` | added: `QueryStream`, `InsertStream` and `StreamOptions` (query id, response and body encodings): a query body returned undecoded, and an insert body streamed from an `io.Reader` | none (additive) |
 | CLI registry (`public/app/main.go`) | added: `jackstay` command | none |
 | app registry | added: the jackstay app manifest | the demo resolver's and capslock's side-effect import lists |
 | env-var registry | added: `BOXER_JACKSTAY_PLAN`, the window's seed plan file | `doc/env-vars.md` |

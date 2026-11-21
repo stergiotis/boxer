@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 

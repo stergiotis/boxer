@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 )
 
 // udfAgreementMeters is what the SQL family and the Go functions must agree

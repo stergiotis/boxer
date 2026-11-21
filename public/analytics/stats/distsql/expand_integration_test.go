@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/analytics/stats/distsql"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 )
 
 func liveClient(t *testing.T) (client *chclient.Client, ctx context.Context) {

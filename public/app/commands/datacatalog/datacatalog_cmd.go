@@ -32,9 +32,9 @@ import (
 	"github.com/rs/zerolog/log"
 	cli "github.com/urfave/cli/v3"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/gov/datacatalog"
 	"github.com/stergiotis/boxer/public/gov/datacatalog/panelshapes"
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 )
 
 // NewCliCommand wires `boxer datacatalog` and its subcommands.

@@ -160,7 +160,7 @@ Every item below is a choice made on the owner's behalf.
    `recordstore/chexec` among others. The other import rules demoted, for
    example, `leeway/common` (it imports the example package
    `canonicaltypes/sample`), `keelson/runtime/help` (it imports the tool
-   package `gov/docstd`) and `keelson/data/chclient` (it imports
+   package `gov/docstd`) and `db/clickhouse/chclient` (it imports
    `db/fairlead` and `clickhouseenv`). An alternative is to allow an Internal
    import whose types do not appear in the Stable package's exported API; that
    needs a type-checked rule.

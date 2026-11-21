@@ -12,7 +12,7 @@ import (
 )
 
 // QueryI is the one method the live fetcher needs from a ClickHouse client;
-// [github.com/stergiotis/boxer/public/keelson/data/chclient.Client] satisfies
+// [github.com/stergiotis/boxer/public/db/clickhouse/chclient.Client] satisfies
 // it. Narrow on purpose, like [ExecI]: the fetcher is then testable against an
 // httptest server, or against a canned body, with no client at all.
 type QueryI interface {

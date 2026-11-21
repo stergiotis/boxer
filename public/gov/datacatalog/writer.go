@@ -10,7 +10,7 @@ import (
 )
 
 // ExecI is the one method the writer needs from a ClickHouse client;
-// [github.com/stergiotis/boxer/public/keelson/data/chclient.Client] satisfies
+// [github.com/stergiotis/boxer/public/db/clickhouse/chclient.Client] satisfies
 // it. Keeping the surface this narrow is what makes the writer testable with a
 // capture and no server anywhere near it.
 type ExecI interface {

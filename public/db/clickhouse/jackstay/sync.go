@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -81,7 +81,7 @@ func (inst *TableSyncReport) add(r ChunkResult) {
 }
 
 // ClientI is what a sync needs of each server;
-// [github.com/stergiotis/boxer/public/keelson/data/chclient.Client] satisfies it.
+// [github.com/stergiotis/boxer/public/db/clickhouse/chclient.Client] satisfies it.
 type ClientI interface {
 	QueryI
 	ExecI

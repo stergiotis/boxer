@@ -66,7 +66,7 @@ ResolveColumnNames the query-level WITH clause).
 | Artifact | Shows |
 | --- | --- |
 | `card_anchor_passreg_test.go` | The ADR-0108 seam: host-order entries plus the standard set (`passreg/defaults`, with the late-bound resolver factory), the ADR-0094 catalog rows, the per-pass observation trace, and byte-equality with the directly-composed chain. |
-| `card_anchor_integration_test.go`, `card_anchor_integration2_test.go` | The integration lane (`-tags integration`, live server): `keelson/data/chclient` for ping/DDL/Arrow-IPC-insert/query — the client that was originally modelled on this package's hand-rolled HTTP code — with connection coordinates from the `clickhouseenv` registry; the friendly correlation query rewritten live and shipped with `SetFormat`. |
+| `card_anchor_integration_test.go`, `card_anchor_integration2_test.go` | The integration lane (`-tags integration`, live server): `db/clickhouse/chclient` for ping/DDL/Arrow-IPC-insert/query — the client that was originally modelled on this package's hand-rolled HTTP code — with connection coordinates from the `clickhouseenv` registry; the friendly correlation query rewritten live and shipped with `SetFormat`. |
 | `ecsdemo/stage2/roundtrip_test.go` | `keelson/data/chlocalpool` (ADR-0028): the readback scripts run in a pre-spawned single-use `clickhouse-local` worker, binary resolution via the extbin chokepoint (ADR-0118). |
 
 The runtime facts store is the production-scale consumer of the same

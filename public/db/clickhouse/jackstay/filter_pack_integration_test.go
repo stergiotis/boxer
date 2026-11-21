@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/gov/datacatalog"
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 )
 
 func findTable(plan *Plan, r datacatalog.TableRef) (pt *PlanTable) {

@@ -13,5 +13,5 @@ var PackageProps = packageprops.Props{
 }
 
 func init() {
-	packageprops.Register("github.com/stergiotis/boxer/public/keelson/data/chclient", PackageProps)
+	packageprops.Register("github.com/stergiotis/boxer/public/db/clickhouse/chclient", PackageProps)
 }

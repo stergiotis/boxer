@@ -207,6 +207,7 @@ Public and usable, but may change in any MINOR version without a deprecation win
 ### db
 
 - `public/db/badger`
+- `public/db/clickhouse/chclient` — Package chclient is a HTTP-based ClickHouse client for runtime services per ADR-0026 M2.5b.
 - `public/db/clickhouse/chhttp` — Package chhttp implements the server side of the ClickHouse HTTP dialect (ADR-0133 §SD1): what an in-process endpoint needs to answer HTTP like a ClickHouse server, closely enough for clients written against the real one (apps/play posts a statement and reads an ArrowStream back).
 - `public/db/clickhouse/clickhouseenv` — Package clickhouseenv centralises the ClickHouse-related environment variables consumed across boxer: the funccharacterize fuzzer, the play HMI, and the live test harness.
 - `public/db/clickhouse/dsl/grammar1` — Package grammar1 is the ANTLR-generated lexer and parser for ClickHouse SQL that nanopass.Parse uses: the permissive grammar, which accepts the spellings people write.
@@ -264,7 +265,6 @@ Public and usable, but may change in any MINOR version without a deprecation win
 
 ### keelson
 
-- `public/keelson/data/chclient` — Package chclient is a HTTP-based ClickHouse client for runtime services per ADR-0026 M2.5b.
 - `public/keelson/runtime/agent` — Package agent is the host's side of the app operations contract (ADR-0269): the `runtime.agent.*` services through which a caller — a coordinator running a model's tool loop, or a scene or test holding a test grant — discovers what apps can do and calls their operations on the person's behalf.
 - `public/keelson/runtime/agentrun` — Package agentrun is the run journal (ADR-0308): the append-only record a conversation's coordinator writes before every act and the only source of what its model receives.
 - `public/keelson/runtime/agentrun/agentrunstore` — Package agentrunstore is the store half of the run journal (ADR-0308 §SD1): two generated record stores on store-owned tables in the house layout — one row per run, latest-wins through the state view, and one row per entry, append-only — in the shape watchbill's tables take (ADR-0223 §SD1, ADR-0105 D3a).
@@ -818,7 +818,7 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 
 - `public/keelson/data/chlocalbroker` — Package chlocalbroker is the runtime's broker for ADR-0028's `ch.local.exec.<pool>` capability surface.
 - `public/keelson/data/chlocalpool` — Package chlocalpool implements ADR-0028's pool of pre-spawned `clickhouse-local` worker processes.
-- `public/keelson/data/storeexec` — Package storeexec adapts github.com/stergiotis/boxer/public/keelson/data/chclient to github.com/stergiotis/boxer/public/storage/recordstore.ExecutorI, the seam a generated record store (ADR-0100) uses to reach ClickHouse.
+- `public/keelson/data/storeexec` — Package storeexec adapts github.com/stergiotis/boxer/public/db/clickhouse/chclient to github.com/stergiotis/boxer/public/storage/recordstore.ExecutorI, the seam a generated record store (ADR-0100) uses to reach ClickHouse.
 - `public/keelson/designsystem/colors/apca` — Package apca implements the Accessible Perceptual Contrast Algorithm (APCA) per Andrew Somers' Myndex SAPC-APCA Beta 0.1.9 reference.
 - `public/keelson/designsystem/colors/contrast` — Package contrast implements WCAG 2.1 contrast ratios for IDS palette pair verification (ADR-0031 §SD5).
 - `public/keelson/designsystem/colors/cvd` — Package cvd simulates color-vision deficiency via the Brettel-Viénot-Mollon (1997) method, used by the IDS palette verifier (ADR-0031 §SD5, ADR-0033 §SD6) to assert ΔE > 15 between same-emphasis semantic-palette pairs under deuteranopia / protanopia / tritanopia.

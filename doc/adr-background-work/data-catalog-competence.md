@@ -70,7 +70,7 @@ found code instead of re-deriving this survey. Line numbers are as of
 
 **Writing to ClickHouse**:
 
-- `public/keelson/data/chclient` — the HTTP client every CLI uses.
+- `public/db/clickhouse/chclient` — the HTTP client every CLI uses.
 - `public/gov/capmapfacts/capmapfacts.go` — doc comment records that
   `chclient.Client` satisfies its one-method `RecordSinkI` (Arrow batches in).
   Two viable insert paths: Arrow via a `RecordSinkI`-shaped seam
