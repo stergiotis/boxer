@@ -59,5 +59,9 @@ func tourRender(ids *c.WidgetIdStack, state any) {
 		return
 	}
 	inst.ids = ids
-	_ = inst.Frame(nil)
+	_ = inst.Frame(tourFrameCtx)
 }
+
+// tourFrameCtx is the context a tour frame draws under: a host offering
+// nothing, so a gesture is refused and the app applies it itself.
+var tourFrameCtx = app.NewStaticFrameContext(app.NewStaticMountContext(AppId, zerolog.Nop(), nil, nil, nil))
