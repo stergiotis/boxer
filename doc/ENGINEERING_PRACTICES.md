@@ -65,10 +65,11 @@ the module checks, the default lane with the drift check and a cross-package
 coverage profile and table, the `binary_log` lane, the Go lint steps with
 `idl-check`, the integration lane against a ClickHouse server, `gobench.sh
 smoke`, and the viewer and watermark crates. `--only` runs a subset. A step that
-fails, reports a skipped part, or cannot start fails the run; the integration
-lane uses a server already answering on `127.0.0.1:8123` and starts the pinned
-throwaway one only under `--start-clickhouse`, so without either it is a
-failure. On a full green run the script fast-forwards the local
+fails, reports a skipped part, or cannot start fails the run, and so does a
+skipped integration test. The integration lane runs against a ClickHouse server
+the run starts itself, on non-default ports (see §4); a server already
+answering on `127.0.0.1:8123` is used only under `--use-running-clickhouse`.
+On a full green run the script fast-forwards the local
 `refs/heads/last-green` to the tested commit — never forced, never backwards —
 and prints `git push origin last-green`; publishing it is a person's step. Each
 run writes its summary, logs and coverage table under
@@ -282,14 +283,31 @@ packages; the nightly run keeps it with a per-package table from
     | go tool tparse -progress -trimpath auto -slow 20
   ```
 
-  The nightly run and `release.sh` run it, and the default lane a second time,
-  against the ClickHouse server answering on `127.0.0.1:8123` — the
-  workstation's own, which the probe-and-skip tests of the default lane reach
-  in any case — or, when none answers and the caller allows it, a throwaway
-  one from
-  [scripts/ci/clickhouse_server.sh](../scripts/ci/clickhouse_server.sh): the
+  Every ClickHouse client in the tree, tests included, resolves its server
+  through `chclient.ConfigFromEnv`: `CLICKHOUSE_ENDPOINT`, then
+  `CLICKHOUSE_URL`, then `http://localhost:8123/`. A test that builds its
+  client from `chclient.Defaults()` or a literal address reaches the built-in
+  default whatever the environment names; a live-server test takes
+  `ConfigFromEnv` instead.
+
+  The nightly run and `release.sh` run the lane, and the default lane against
+  the same server, on a server of their own: the pinned throwaway from
+  [scripts/ci/clickhouse_server.sh](../scripts/ci/clickhouse_server.sh) — the
   26.8 LTS static build, pinned by version and SHA-256, with `query_log` on and
-  a passwordless default user. The same binary serves `clickhouse local`.
+  a passwordless default user — started on `127.0.0.1` at free ports from
+  18123 (HTTP) and 19000 (native), with its data beside the run's worktree.
+  [scripts/ci/gate_lib.sh](../scripts/ci/gate_lib.sh) (`clickhouse_private`)
+  sets both endpoint variables to it and clears the ones that would name
+  another server, so a workstation's own ClickHouse on the default ports is
+  neither used nor written to; `--use-running-clickhouse` opts back into it.
+  The server is then given what a host's first run leaves on one — the facts
+  table and leeway's SQL read surface, from the commit under test — and the
+  same binary serves `clickhouse local` in those runs. Both scripts pass
+  `--strict-skips`: a skipped member that
+  [scripts/ci/integration-skips-baseline.txt](../scripts/ci/integration-skips-baseline.txt)
+  does not list is printed as a `skipped:` line and fails the step, so a lane
+  whose server was never reached fails rather than passing with its members
+  skipped.
 
   The script takes its ports (`CLICKHOUSE_SERVER_HTTP_PORT`,
   `CLICKHOUSE_SERVER_TCP_PORT`), so a throwaway server can run beside the
@@ -313,9 +331,10 @@ packages; the nightly run keeps it with a per-package table from
     `go build` and `go test -short` do not compile or download it. Gate any
     future test that would introduce a comparably heavy dependency the same
     way, rather than letting it leak into every developer's build.
-  - **Shared live server.** The ClickHouse tests reach one server at
-    localhost:8123 and share `system.query_log` with each other. They create
-    and drop scratch databases and read back rows they just wrote, bounded by
+  - **Shared live server.** The ClickHouse tests reach one server — the one
+    the endpoint variables name — and share `system.query_log` with each
+    other. They create and drop scratch databases and read back rows they
+    just wrote, bounded by
     wall-clock polls — so run beside the rest of the suite they fail on
     contention rather than on behaviour. This is why the runner passes `-p 1`;
     it is a correctness requirement of the lane, not a preference.
@@ -454,12 +473,13 @@ since been retired in favour of trailer-based attribution.
   and `release.sh` each run `go mod tidy --diff` and `go mod verify`.
 - **Release check.** [scripts/ci/release.sh](../scripts/ci/release.sh) checks a
   candidate in a worktree of its own: the module checks, both test lanes with
-  the drift check, the integration lane against a ClickHouse server, `lint.sh`
-  with the baselines, the viewer and watermark crates, govulncheck, cargo
-  advisories, the license gate, the IDL check, the host digest, one fuzz pass,
-  `scripts/ci/apidiff.sh` and a clean-tree check. As in `updatedeps.sh`, a step
-  that reports a skipped part counts as a failure. It prints the signed-tag
-  commands and runs none of them.
+  the drift check, the integration lane against a ClickHouse server it starts
+  itself (§4), `lint.sh` with the baselines, the viewer and watermark crates,
+  govulncheck, cargo advisories, the license gate, the IDL check, the host
+  digest, one fuzz pass, `scripts/ci/apidiff.sh` and a clean-tree check. As in
+  `updatedeps.sh`, a step that reports a skipped part counts as a failure, and
+  so does a skipped integration test. It prints the signed-tag commands and
+  runs none of them.
 - **Release signing.** The tags cut so far (`v0.0.1` to `v0.0.23`) are
   lightweight and unsigned. The documented procedure — an SSH-signed annotated
   tag that whatever builds or deploys from it verifies first (`git verify-tag`)

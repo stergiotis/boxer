@@ -7,8 +7,10 @@
 #
 # `systemctl --user status boxer-nightly` shows the last verdict; the run's
 # summary is in ${XDG_STATE_HOME:-~/.local/state}/boxer/nightly/latest/.
-# Add --start-clickhouse to ExecStart if no ClickHouse server runs on this
-# machine. For the timer to fire while you are logged out:
+# The run starts a ClickHouse server of its own on non-default ports; add
+# --use-running-clickhouse to ExecStart only to test against the one this
+# machine already runs on port 8123, which then receives the lanes' scratch
+# databases. For the timer to fire while you are logged out:
 # loginctl enable-linger.
 [Unit]
 Description=boxer nightly run: tests origin/main and advances the local last-green ref

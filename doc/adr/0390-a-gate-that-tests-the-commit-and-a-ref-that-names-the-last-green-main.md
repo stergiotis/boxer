@@ -65,6 +65,16 @@ undercut the arrangement:
    `scripts/ci/release.sh` runs every gate in a worktree of the candidate,
    counts a skipped part as a failure, and prints the signed-tag commands
    without running them. It shares its step wrapper with the nightly run.
+6. **The nightly run and the release check use a ClickHouse server they
+   started.** Before any test step, `CLICKHOUSE_ENDPOINT` and `CLICKHOUSE_URL`
+   name `127.0.0.1` at free ports away from ClickHouse's defaults, and the
+   variables that would name another server are cleared; the pinned server of
+   `clickhouse_server.sh` is started there under the run's state directory and
+   stopped on exit. A server already answering on the default port is used
+   only on an explicit flag, `--use-running-clickhouse`. The server is
+   provisioned with what a host's first run creates. The integration lane
+   runs with `--strict-skips`, so a skipped member outside a committed
+   baseline of expected skips fails the step.
 
 ## Alternatives
 
@@ -85,6 +95,17 @@ undercut the arrangement:
 - **A moving tag instead of a branch ref for last-green.** Rejected: a tag
   that moves breaks the expectation that tags are fixed, and the release tags
   share the namespace.
+- **Use the ClickHouse server already answering on port 8123, and start the
+  pinned one only when none does.** Rejected: on a workstation that server
+  holds real databases, and the lanes create, drop and write scratch
+  databases and read `system.query_log`; a release check also should not
+  depend on a server whose version and settings it did not choose.
+- **Run the lanes in a network namespace of their own, where 8123 is free.**
+  Not taken: unprivileged namespaces are restricted on some distributions,
+  and the downloads the other steps need would have to be arranged inside it.
+- **Fail the integration step on every skipped member.** Rejected: most
+  skips in the lane are by design — diagnostics, fuzz-seed entries,
+  tag-gated and opt-in tests — so the step could never pass.
 - **Warn-only static analysis with a findings count, or failing on every
   finding outright.** Rejected: a count hides which finding is new, and the
   existing findings, mostly in `apps/`, are unrelated work.
@@ -104,9 +125,13 @@ undercut the arrangement:
 - `main` is tested nightly only where a workstation runs the timer, and
   `last-green` is only as current as the last manual push; nothing on GitHub
   says whether either happened.
-- The integration lane uses the workstation's ClickHouse server when one
-  answers, sharing it with whatever else runs there; the default lane's
-  probe-and-skip tests reach it in any case.
+- Each run starts a ClickHouse server (the first run downloads ~240 MB), and
+  the default lane's probe-and-skip tests share it with the parallel test
+  binaries in the release check. Outside these scripts, the default lane's
+  probe-and-skip tests still reach whatever answers at the address the
+  environment names, `localhost:8123` when it names none.
+- A live-server test that builds its client from a hard-coded address
+  escapes the run's server; nothing but review and a grep catches one.
 - `gate.sh` costs a full module build on its first run at a path; above a
   package cap it drops `-race`.
 - The baselines are files to keep current.
@@ -124,18 +149,39 @@ undercut the arrangement:
 - **What would fail.** A commit whose tests leave generated code dirty fails
   `gate.sh` and the nightly run; a new finding fails the lint step; a nightly
   run that fails, skips or cannot start a step leaves `last-green` where it
-  was and exits non-zero, which the timer unit shows.
+  was and exits non-zero, which the timer unit shows; an integration lane
+  whose server was never reached lists its skipped members and fails.
 - **Gap.** A workstation that does not run the timers runs no nightly check,
-  and nothing reports the absence.
+  and nothing reports the absence. A test that dials a hard-coded address
+  instead of the configured one is not caught by any step.
 
 ## Choices for review
 
 - The nightly run fails when a step reports a skipped part or cannot start,
-  including the integration lane when no ClickHouse server answers and
-  `--start-clickhouse` was not given; `last-green` only moves on a run where
-  everything ran.
-- The integration lane reuses a ClickHouse server already answering on port
-  8123 before it would start the pinned one, and starts one only on request.
+  including the integration lane when its server does not start;
+  `last-green` only moves on a run where everything ran.
+- Both scripts start their own ClickHouse server by default and never fall
+  back to one already answering; `--use-running-clickhouse` is the only way
+  to use that one, and its help says the lanes write scratch databases there.
+  The ports are the first free ones from 18123 (HTTP) and 19000 (native).
+  nightly.sh still accepts `--start-clickhouse`, as a no-op, so an existing
+  unit file keeps working.
+- `release.sh` starts the server before the first gate, so the default lane
+  runs against it as well; `nightly.sh` starts it for the integration step
+  only, and its first default-lane pass runs with the address pointing at a
+  port where nothing answers.
+- `--strict-skips` fails the integration step on a skipped member that
+  `scripts/ci/integration-skips-baseline.txt` does not list, and reports a
+  listed one that ran. The baseline holds the skips by design and those for a
+  tool, a corpus, the headless client or server state the run does not
+  provision, in named groups; deleting a group makes that absence a failure.
+  No ClickHouse-server test is listed, so a lane whose server was never
+  reached fails.
+- The run's server is provisioned as a host's first run leaves one — the
+  facts table and leeway's SQL read surface, built from the commit under
+  test — and keeps `asynchronous_metric_log`; the lading store, the data
+  catalog and the anchor demo table are not provisioned, and their tests are
+  in the baseline.
 - `last-green` is a branch ref, moved only by `nightly.sh`, only on a full run.
 - The example timers fire at 02:17 daily and Saturdays at 04:23, with
   `GOMAXPROCS=8`, `Nice=19`, idle I/O; fuzzing is 30 s per target.
