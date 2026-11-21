@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -333,6 +334,9 @@ type MsgHandlerFunc func(msg *Msg)
 // goroutine — the render goroutine, which a handler waiting on the next
 // frame would block — reads it here. Zero for a publish, whose handlers run
 // on the publisher's goroutine, and on transports that do not carry it.
+//
+// The message's context, read through Context, is what a handler does the
+// message's I/O under.
 type Msg struct {
 	Subject            string
 	Reply              string
@@ -340,6 +344,35 @@ type Msg struct {
 	SenderInstance     uint64
 	Payload            []byte
 	RequesterGoroutine uint64
+	ctx                context.Context
+}
+
+// Context is the context a handler does this message's I/O under. For a
+// request on the in-process bus it is the requester's ctx bounded by the
+// request's wait, and it ends when the requester stops waiting — on the
+// reply, at the deadline, or when the requester's ctx ends — so a handler's
+// round trip does not outlive the caller it answers. It carries the
+// requester's values, the call identity among them. Work a handler goes on
+// with after it has replied, and work that must land whether or not the
+// requester still waits (an audit row), runs under context.WithoutCancel of
+// it or under the handler's own lifetime ctx.
+//
+// A publish, and a message from a transport that carries no requester,
+// has no context of its own: Context then returns a context that never
+// ends, as net/http's Request.Context does for a request built without one.
+func (inst *Msg) Context() (ctx context.Context) {
+	if inst.ctx == nil {
+		return context.Background() //boxer:lint disable=CS020 reason="the root for a message no requester waits on, as http.Request.Context"
+	}
+	return inst.ctx
+}
+
+// WithContext returns a shallow copy of msg whose Context is ctx. A bus
+// implementation uses it to hand a request's context to its handlers.
+func (inst *Msg) WithContext(ctx context.Context) (out *Msg) {
+	cp := *inst
+	cp.ctx = ctx
+	return &cp
 }
 
 // StorageI is the forward declaration of the CH+leeway-backed cold-state

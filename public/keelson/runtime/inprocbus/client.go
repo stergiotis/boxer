@@ -403,7 +403,11 @@ func (inst *Client) request(ctx context.Context, subject string, payload []byte,
 	timer := time.NewTimer(d)
 	defer timer.Stop()
 	dispatched := make(chan struct{})
-	msg := newMsg(inst.appId, inst.instanceKey.Load(), subject, inbox, payload)
+	// The handlers do the request's I/O under the requester's ctx bounded by
+	// the wait; it ends when this call returns (app.Msg.Context).
+	hctx, hcancel := context.WithTimeout(ctx, d)
+	defer hcancel()
+	msg := newMsg(inst.appId, inst.instanceKey.Load(), subject, inbox, payload).WithContext(hctx)
 	msg.RequesterGoroutine = goroutineId()
 	go func() {
 		defer close(dispatched)
