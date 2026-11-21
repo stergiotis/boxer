@@ -9,7 +9,6 @@ import (
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/codegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
@@ -20,7 +19,17 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
-var CodeGeneratorName = "Leeway readaccess (" + vcs.BoxerModuleVersion() + ")"
+// generatedABI is the runtime ABI generation this generator emits against.
+// The guard line and the header both carry it.
+const generatedABI = "1"
+
+// CodeGeneratorName is stamped into the header of every file this generator
+// writes. It names the generator and the runtime ABI generation and no module
+// version: the version a binary reports depends on how it was built (a tagged
+// dependency, the main module, a workspace), so a stamped version would make
+// one generator at one commit write different bytes. A stale file is caught
+// by its ABI guard line, not by its header.
+var CodeGeneratorName = "Leeway readaccess (runtime ABI " + generatedABI + ")"
 
 func NewGoClassBuilder(fatRuntime bool) *GoClassBuilder {
 	return &GoClassBuilder{

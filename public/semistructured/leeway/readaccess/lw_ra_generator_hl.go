@@ -141,5 +141,5 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 }
 
 // abiGuard pins a generated file to the runtime ABI it was generated
-// against (runtime.GeneratedABI1).
-const abiGuard = "// If this line does not compile, the runtime moved on: regenerate this file.\nconst _ = runtime.GeneratedABI1\n"
+// against (runtime.GeneratedABI<generatedABI>).
+const abiGuard = "// If this line does not compile, the runtime moved on: regenerate this file.\nconst _ = runtime.GeneratedABI" + generatedABI + "\n"
