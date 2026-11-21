@@ -897,8 +897,9 @@ func (inst *Service) outcomeOf(t *task, rec *callRec, wait time.Duration) (w wir
 		final := rec.outcome.Phase.Final() || (rec.outcome.Phase == opwire.PhaseInputRequired && rec.heldBy == nil)
 		if final && !rec.finalNoted {
 			rec.finalNoted = true
+			out := rec.outcome
 			inst.mu.Unlock()
-			inst.record(t, rec, "final", rec.outcome)
+			inst.record(t, rec, "final", out)
 			inst.mu.Lock()
 		}
 		if final || !time.Now().Before(deadline) {
@@ -1179,8 +1180,9 @@ func (inst *Service) capture(msg *app.Msg) (rep wireCallReply) {
 	rec.outcome = phaseOutcome(opwire.PhaseRunning, "")
 	rec.outcome.Confined = confined
 	rep.Outcome = inst.outcomeOf(t, rec, 0)
+	out = rec.outcome
 	inst.mu.Unlock()
-	inst.record(t, rec, "dispatch", rec.outcome)
+	inst.record(t, rec, "dispatch", out)
 	return
 }
 

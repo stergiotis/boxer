@@ -101,7 +101,13 @@ type RecordsI interface {
 	Grants() (rows []GrantRow)
 }
 
+// record keeps the row of a call's decision. The caller does not hold mu:
+// record reads rec and t under it, because whichever goroutine routes or
+// settles the call writes them under it, and a request's handlers — a
+// status poll among them — run on a goroutine of the request's own
+// (ADR-0386 SD5), not on the goroutine that routes the call.
 func (inst *Service) record(t *task, rec *callRec, decision string, out opwire.Outcome) {
+	inst.mu.Lock()
 	r := ActionRecord{
 		At: time.Now(), Key: rec.key, CallId: rec.callId, Instance: rec.instance, App: rec.app,
 		Operation: rec.spec.Name, Effect: rec.spec.Effect.String(), ArgsDigest: rec.argsDigest,
@@ -116,13 +122,13 @@ func (inst *Service) record(t *task, rec *callRec, decision string, out opwire.O
 		r.ModelCall, r.ToolCallId, r.ToolIndex = c.Val.ModelCall, c.Val.ToolCall.Val, c.Val.ToolIndex
 	}
 	if t != nil {
-		inst.mu.Lock()
 		r.Task, r.Actor, r.ActorInstance, r.Test = t.id, t.actor, t.actorInstance, t.test
 		r.Epoch, r.Conversation = t.epoch, t.conversation
 		r.BudgetLeft = int32(t.callsBudget - t.callsUsed)
 		r.Tainted = inst.tainted(t)
-		inst.mu.Unlock()
 	}
+	args := rec.args
+	inst.mu.Unlock()
 	inst.recMu.Lock()
 	if len(inst.records) < keepRecords {
 		inst.records = append(inst.records, r)
@@ -131,7 +137,7 @@ func (inst *Service) record(t *task, rec *callRec, decision string, out opwire.O
 		inst.recHead = (inst.recHead + 1) % keepRecords
 	}
 	if inst.cfg.ActionsLog != nil {
-		if line, err := json.Marshal(actionLine{ActionRecord: r, Args: rec.args}); err == nil {
+		if line, err := json.Marshal(actionLine{ActionRecord: r, Args: args}); err == nil {
 			_, _ = inst.cfg.ActionsLog.Write(append(line, '\n'))
 		}
 	}
