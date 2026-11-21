@@ -238,7 +238,7 @@ func (inst *App) openDemo(name string) {
 		}
 	}
 	inst.spawn(func(ctx context.Context) {
-		key, err := windowopen.RequestOpen(bus, target, "", nil)
+		key, err := windowopen.RequestOpen(ctx, bus, target, "", nil)
 		if err != nil {
 			inst.setNote("open: " + err.Error())
 			return

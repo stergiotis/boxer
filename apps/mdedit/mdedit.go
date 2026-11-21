@@ -646,7 +646,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	f := inst.follow
 	inst.follow = followState{}
 	inst.mu.Unlock()
-	teardownFollow(inst.bus, f.handle, f.unsub)
+	teardownFollow(inst.ioCtx, inst.bus, f.handle, f.unsub)
 
 	// The files pane's lanes: cancel what runs, release the connection the
 	// conn lane owns (its dispose closes the stores).
@@ -1434,7 +1434,7 @@ func (inst *App) copyToClipboard(what string, text string, label agentrun.Label,
 	bus := inst.bus
 	payload := clipboardbroker.Payload{Text: text, Label: label, Source: string(manifest.Id) + ":" + what}
 	started := inst.spawn(func(context.Context) {
-		rec, err := clipboardbroker.Write(bus, payload)
+		rec, err := clipboardbroker.Write(inst.ioCtx, bus, payload)
 		inst.mu.Lock()
 		inst.exporting = false
 		inst.exportDone = true

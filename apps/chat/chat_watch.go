@@ -86,7 +86,7 @@ func (inst *App) firstUnseen(i int) int {
 func (inst *App) seen(conversation string) {
 	if bus := inst.bus; bus != nil {
 		inst.offFrame(func(context.Context) {
-			if err := attention.Seen(bus, conversation); err != nil {
+			if err := attention.Seen(inst.ioCtx, bus, conversation); err != nil {
 				inst.log.Debug().Err(err).Msg("chat: tell the host the conversation was seen")
 			}
 		})
@@ -137,7 +137,7 @@ func (inst *App) setWatch(on bool) {
 		delete(l.snap.Conversation, watchKey)
 	}
 	inst.offFrame(func(context.Context) {
-		if err := attention.SetLevel(bus, conv, watchKey, level); err != nil {
+		if err := attention.SetLevel(inst.ioCtx, bus, conv, watchKey, level); err != nil {
 			inst.log.Warn().Err(err).Msg("chat: the host did not take the watch")
 		}
 	})
@@ -189,7 +189,7 @@ func (inst *App) turnEnded(text string) {
 	bus, n := inst.bus, attention.Notice{Conversation: inst.conv.id, Title: inst.conv.title, Kind: ev.Kind, Text: text}
 	inst.looked.noticed = n.Conversation
 	inst.offFrame(func(context.Context) {
-		if _, err := attention.Notify(bus, n); err != nil {
+		if _, err := attention.Notify(inst.ioCtx, bus, n); err != nil {
 			inst.log.Debug().Err(err).Msg("chat: report the turn's end to the host")
 		}
 	})
@@ -231,7 +231,7 @@ func (inst *App) urgent() bool {
 func (inst *App) askUrgent(on bool) {
 	bus, conv, title := inst.bus, inst.conv.id, inst.conv.title
 	inst.offFrame(func(context.Context) {
-		refused, err := attention.RequestUrgent(bus, conv, title, on)
+		refused, err := attention.RequestUrgent(inst.ioCtx, bus, conv, title, on)
 		if err != nil || refused != "" {
 			inst.log.Warn().Err(err).Str("refused", refused).Msg("chat: the host did not take the urgency request")
 		}

@@ -46,7 +46,7 @@ func TestNewBroker_NilPolicyDefaultsToDenyAll(t *testing.T) {
 		SubjectFilter: app.SubjectFilter{Pattern: "x.y", Direction: app.CapDirectionPub},
 	})
 	require.NoError(t, err)
-	replyBytes, err := bus.Request(RequestSubject, payload)
+	replyBytes, err := bus.Request(t.Context(), RequestSubject, payload)
 	require.NoError(t, err)
 	reply, err := UnmarshalReply(replyBytes)
 	require.NoError(t, err)
@@ -77,7 +77,7 @@ func TestBroker_AutoApprove_GrantsAndExtendsCaps(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	replyBytes, err := bus.Request(RequestSubject, payload)
+	replyBytes, err := bus.Request(t.Context(), RequestSubject, payload)
 	require.NoError(t, err)
 	reply, err := UnmarshalReply(replyBytes)
 	require.NoError(t, err)
@@ -106,7 +106,7 @@ func TestBroker_DenyAll_ReplyCarriesReason(t *testing.T) {
 		AppId:         "test.app",
 		SubjectFilter: app.SubjectFilter{Pattern: "x.y", Direction: app.CapDirectionPub},
 	})
-	replyBytes, err := bus.Request(RequestSubject, payload)
+	replyBytes, err := bus.Request(t.Context(), RequestSubject, payload)
 	require.NoError(t, err)
 	reply, err := UnmarshalReply(replyBytes)
 	require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestBroker_FuncPolicy_PerRequestDecision(t *testing.T) {
 			Pattern: "ch.query.boxer", Direction: app.CapDirectionPub,
 		},
 	})
-	yesReplyBytes, err := bus.Request(RequestSubject, yesPayload)
+	yesReplyBytes, err := bus.Request(t.Context(), RequestSubject, yesPayload)
 	require.NoError(t, err)
 	yesReply, _ := UnmarshalReply(yesReplyBytes)
 	assert.True(t, yesReply.Granted)
@@ -149,7 +149,7 @@ func TestBroker_FuncPolicy_PerRequestDecision(t *testing.T) {
 			Pattern: "fs.dialog.read", Direction: app.CapDirectionPub,
 		},
 	})
-	noReplyBytes, err := bus.Request(RequestSubject, noPayload)
+	noReplyBytes, err := bus.Request(t.Context(), RequestSubject, noPayload)
 	require.NoError(t, err)
 	noReply, _ := UnmarshalReply(noReplyBytes)
 	assert.False(t, noReply.Granted)
@@ -169,7 +169,7 @@ func TestBroker_UnknownApp_ErrorReply(t *testing.T) {
 		AppId:         "ghost.app",
 		SubjectFilter: app.SubjectFilter{Pattern: "x.y", Direction: app.CapDirectionPub},
 	})
-	replyBytes, err := bus.Request(RequestSubject, payload)
+	replyBytes, err := bus.Request(t.Context(), RequestSubject, payload)
 	require.NoError(t, err)
 	reply, _ := UnmarshalReply(replyBytes)
 	assert.False(t, reply.Granted)
@@ -184,7 +184,7 @@ func TestBroker_MalformedPayload_ErrorReply(t *testing.T) {
 	defer broker.Close()
 
 	bus := inst.NewClient("test.app", requesterCaps())
-	replyBytes, err := bus.Request(RequestSubject, []byte("not-json"))
+	replyBytes, err := bus.Request(t.Context(), RequestSubject, []byte("not-json"))
 	require.NoError(t, err)
 	reply, _ := UnmarshalReply(replyBytes)
 	assert.False(t, reply.Granted)
@@ -205,7 +205,7 @@ func TestBroker_SetPolicy_AppliesToNextRequest(t *testing.T) {
 	})
 
 	// First request: denied.
-	r1, err := bus.Request(RequestSubject, payload)
+	r1, err := bus.Request(t.Context(), RequestSubject, payload)
 	require.NoError(t, err)
 	rep1, _ := UnmarshalReply(r1)
 	assert.False(t, rep1.Granted)
@@ -214,7 +214,7 @@ func TestBroker_SetPolicy_AppliesToNextRequest(t *testing.T) {
 	broker.SetPolicy(&AutoApprovePolicy{})
 
 	// Second request: approved.
-	r2, err := bus.Request(RequestSubject, payload)
+	r2, err := bus.Request(t.Context(), RequestSubject, payload)
 	require.NoError(t, err)
 	rep2, _ := UnmarshalReply(r2)
 	assert.True(t, rep2.Granted)
@@ -237,7 +237,7 @@ func TestBroker_WithFactsStore_PersistsGrantRow(t *testing.T) {
 			Pattern: "ch.query.boxer", Direction: app.CapDirectionPub, Reason: "test reason", Sticky: true,
 		},
 	})
-	_, err = bus.Request(RequestSubject, payload)
+	_, err = bus.Request(t.Context(), RequestSubject, payload)
 	require.NoError(t, err)
 
 	rows := fs.Grants()
@@ -264,7 +264,7 @@ func TestBroker_WithFactsStore_DenyDoesNotPersist(t *testing.T) {
 		AppId:         "test.app",
 		SubjectFilter: app.SubjectFilter{Pattern: "x.y", Direction: app.CapDirectionPub},
 	})
-	_, err = bus.Request(RequestSubject, payload)
+	_, err = bus.Request(t.Context(), RequestSubject, payload)
 	require.NoError(t, err)
 
 	assert.Empty(t, fs.Grants())
@@ -285,7 +285,7 @@ func TestBroker_GrantRecordPopulated(t *testing.T) {
 		},
 	})
 	before := time.Now().Add(-time.Second)
-	_, err = bus.Request(RequestSubject, payload)
+	_, err = bus.Request(t.Context(), RequestSubject, payload)
 	require.NoError(t, err)
 	after := time.Now().Add(time.Second)
 

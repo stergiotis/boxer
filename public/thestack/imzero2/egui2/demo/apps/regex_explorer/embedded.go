@@ -62,7 +62,9 @@ func NewEmbedded(seed uint64) (inst *EmbeddedApp) {
 		state: newApp(),
 		seed:  seed,
 	}
-	inst.state.setBus(&runtimeapp.NoopBus{})
+	// An embedded explorer has no mount of its own, so no lifetime: its
+	// bus calls run under a root ctx and are bounded by the transport.
+	inst.state.setBus(context.Background(), &runtimeapp.NoopBus{})
 	return
 }
 
@@ -80,10 +82,10 @@ func NewEmbedded(seed uint64) (inst *EmbeddedApp) {
 // nothing else.
 func (inst *EmbeddedApp) SetBus(bus runtimeapp.BusI) {
 	if bus == nil {
-		inst.state.setBus(&runtimeapp.NoopBus{})
+		inst.state.setBus(nil, &runtimeapp.NoopBus{})
 		return
 	}
-	inst.state.setBus(bus)
+	inst.state.setBus(nil, bus)
 }
 
 // SetPattern seeds the embedded explorer's pattern field. The caller

@@ -45,7 +45,7 @@ func TestService_Set_Then_Get_RoundTrips(t *testing.T) {
 	defer svc.Close()
 
 	// Set.
-	setReplyBytes, err := bus.Request(SubjectFor("play", "tabs", OpSet), []byte("value-bytes"))
+	setReplyBytes, err := bus.Request(t.Context(), SubjectFor("play", "tabs", OpSet), []byte("value-bytes"))
 	require.NoError(t, err)
 	setReply, err := UnmarshalReply(setReplyBytes)
 	require.NoError(t, err)
@@ -53,7 +53,7 @@ func TestService_Set_Then_Get_RoundTrips(t *testing.T) {
 	assert.False(t, setReply.Found)
 
 	// Get.
-	getReplyBytes, err := bus.Request(SubjectFor("play", "tabs", OpGet), nil)
+	getReplyBytes, err := bus.Request(t.Context(), SubjectFor("play", "tabs", OpGet), nil)
 	require.NoError(t, err)
 	getReply, err := UnmarshalReply(getReplyBytes)
 	require.NoError(t, err)
@@ -66,7 +66,7 @@ func TestService_Get_MissingKey_ReportsNotFound(t *testing.T) {
 	_, svc, bus, _ := newSetup(t)
 	defer svc.Close()
 
-	replyBytes, err := bus.Request(SubjectFor("play", "absent", OpGet), nil)
+	replyBytes, err := bus.Request(t.Context(), SubjectFor("play", "absent", OpGet), nil)
 	require.NoError(t, err)
 	reply, err := UnmarshalReply(replyBytes)
 	require.NoError(t, err)
@@ -78,15 +78,15 @@ func TestService_Delete_RemovesKey(t *testing.T) {
 	_, svc, bus, mem := newSetup(t)
 	defer svc.Close()
 
-	_, err := bus.Request(SubjectFor("play", "tabs", OpSet), []byte("x"))
+	_, err := bus.Request(t.Context(), SubjectFor("play", "tabs", OpSet), []byte("x"))
 	require.NoError(t, err)
 	assert.Equal(t, 1, mem.Len())
 
-	_, err = bus.Request(SubjectFor("play", "tabs", OpDelete), nil)
+	_, err = bus.Request(t.Context(), SubjectFor("play", "tabs", OpDelete), nil)
 	require.NoError(t, err)
 	assert.Equal(t, 0, mem.Len())
 
-	getReplyBytes, _ := bus.Request(SubjectFor("play", "tabs", OpGet), nil)
+	getReplyBytes, _ := bus.Request(t.Context(), SubjectFor("play", "tabs", OpGet), nil)
 	reply, _ := UnmarshalReply(getReplyBytes)
 	assert.False(t, reply.Found)
 }
@@ -100,7 +100,7 @@ func TestService_UnknownOp_ErrorReply(t *testing.T) {
 	bus := inst.NewClient("play", []app.SubjectFilter{
 		{Pattern: "runtime.persist.play.>", Direction: app.CapDirectionPub},
 	})
-	replyBytes, err := bus.Request("runtime.persist.play.tabs.weird", nil)
+	replyBytes, err := bus.Request(t.Context(), "runtime.persist.play.tabs.weird", nil)
 	require.NoError(t, err)
 	reply, err := UnmarshalReply(replyBytes)
 	require.NoError(t, err)
@@ -115,7 +115,7 @@ func TestService_MalformedSubject_ErrorReply(t *testing.T) {
 	bus := inst.NewClient("play", []app.SubjectFilter{
 		{Pattern: "runtime.persist.>", Direction: app.CapDirectionPub},
 	})
-	replyBytes, err := bus.Request("runtime.persist.play.tabs", nil) // missing op token
+	replyBytes, err := bus.Request(t.Context(), "runtime.persist.play.tabs", nil) // missing op token
 	require.NoError(t, err)
 	reply, _ := UnmarshalReply(replyBytes)
 	assert.Contains(t, reply.Error, "malformed")
@@ -131,16 +131,16 @@ func TestService_AliasSeparation_TwoAppsDontCollide(t *testing.T) {
 	imzBus := inst.NewClient("imztop", []app.SubjectFilter{
 		{Pattern: "runtime.persist.imztop.>", Direction: app.CapDirectionPub},
 	})
-	_, err := playBus.Request(SubjectFor("play", "tabs", OpSet), []byte("p"))
+	_, err := playBus.Request(t.Context(), SubjectFor("play", "tabs", OpSet), []byte("p"))
 	require.NoError(t, err)
-	_, err = imzBus.Request(SubjectFor("imztop", "tabs", OpSet), []byte("i"))
+	_, err = imzBus.Request(t.Context(), SubjectFor("imztop", "tabs", OpSet), []byte("i"))
 	require.NoError(t, err)
 
-	playGet, _ := playBus.Request(SubjectFor("play", "tabs", OpGet), nil)
+	playGet, _ := playBus.Request(t.Context(), SubjectFor("play", "tabs", OpGet), nil)
 	playReply, _ := UnmarshalReply(playGet)
 	assert.Equal(t, "p", string(playReply.Value))
 
-	imzGet, _ := imzBus.Request(SubjectFor("imztop", "tabs", OpGet), nil)
+	imzGet, _ := imzBus.Request(t.Context(), SubjectFor("imztop", "tabs", OpGet), nil)
 	imzReply, _ := UnmarshalReply(imzGet)
 	assert.Equal(t, "i", string(imzReply.Value))
 }
@@ -156,7 +156,7 @@ func TestService_AliasMismatch_LoggedButProceeds(t *testing.T) {
 	imzBus := inst.NewClient("imztop", []app.SubjectFilter{
 		{Pattern: "runtime.persist.>", Direction: app.CapDirectionPub},
 	})
-	_, err := imzBus.Request(SubjectFor("play", "tabs", OpSet), []byte("x"))
+	_, err := imzBus.Request(t.Context(), SubjectFor("play", "tabs", OpSet), []byte("x"))
 	require.NoError(t, err)
 	// The subject's alias is "play", so the value lands under "play"
 	// regardless of the actual sender's identity (M4 NKey would enforce).
@@ -226,7 +226,7 @@ func TestService_AttributesSenderAppId(t *testing.T) {
 		{Pattern: "runtime.persist.factsplay.>", Direction: app.CapDirectionPub, Reason: "own state"},
 	})
 
-	_, err := bus.Request(SubjectFor(id.SubjectAlias(), "lastSql", OpSet), []byte("x"))
+	_, err := bus.Request(t.Context(), SubjectFor(id.SubjectAlias(), "lastSql", OpSet), []byte("x"))
 	require.NoError(t, err)
 
 	got := rec.Last()
@@ -246,7 +246,7 @@ func TestService_WithholdsAppIdOnAliasMismatch(t *testing.T) {
 		{Pattern: "runtime.persist.>", Direction: app.CapDirectionPub, Reason: "permissive for the test"},
 	})
 
-	_, err := imzBus.Request(SubjectFor("play", "tabs", OpSet), []byte("x"))
+	_, err := imzBus.Request(t.Context(), SubjectFor("play", "tabs", OpSet), []byte("x"))
 	require.NoError(t, err)
 
 	got := rec.Last()

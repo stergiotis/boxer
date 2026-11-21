@@ -1,6 +1,7 @@
 package adhocdata
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -245,7 +246,7 @@ func readReplyError(alias string, rep adhocreply.AdhocReply) (err error) {
 // stay play's, and what arrives is what was published. obo is the agent's
 // call the read is work of, nil when it is none. The caller's bus client
 // needs Pub on adhoc.read. Nothing live is a typed ErrNoLiveDataset.
-func ReadAll(bus app.BusI, alias string, obo *app.OnBehalfOf) (res ReadResult, err error) {
+func ReadAll(ctx context.Context, bus app.BusI, alias string, obo *app.OnBehalfOf) (res ReadResult, err error) {
 	payload, err := buscodec.Encode(adhocrequest.AdhocRequest{
 		At: time.Now().UTC(), Op: adhocrequest.OpRead, Alias: alias,
 		OboTask: oboTask(obo), OboEpoch: oboEpoch(obo), OboCall: oboCall(obo),
@@ -253,7 +254,7 @@ func ReadAll(bus app.BusI, alias string, obo *app.OnBehalfOf) (res ReadResult, e
 	if err != nil {
 		return res, eh.Errorf("encode read: %w", err)
 	}
-	raw, err := bus.Request(SubjectRead, payload)
+	raw, err := bus.Request(ctx, SubjectRead, payload)
 	if err != nil {
 		return res, eb.Build().Str("alias", alias).Errorf("read request: %w", err)
 	}

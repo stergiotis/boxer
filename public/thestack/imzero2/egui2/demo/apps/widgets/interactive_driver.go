@@ -184,7 +184,7 @@ func (inst *App) Mount(ctx runtimeapp.MountContextI) (err error) {
 	for _, d := range galleryDemos() {
 		switch {
 		case d.BusInit != nil:
-			inst.demoState[d.Name] = d.BusInit(inst.ids, inst.bus)
+			inst.demoState[d.Name] = d.BusInit(runtimeapp.ContextOf(ctx), inst.ids, inst.bus)
 		case d.Init != nil:
 			inst.demoState[d.Name] = d.Init(inst.ids)
 		}

@@ -2,6 +2,7 @@ package jackstay
 
 import (
 	"bytes"
+	"context"
 	"encoding/json/v2"
 	"errors"
 	"io/fs"
@@ -22,11 +23,11 @@ import (
 type FilesI interface {
 	// ReadFile returns the whole file; a missing one is an error wrapping
 	// fs.ErrNotExist.
-	ReadFile(name string) (data []byte, err error)
+	ReadFile(ctx context.Context, name string) (data []byte, err error)
 	// WriteFile replaces the file atomically, durable when it returns.
-	WriteFile(name string, data []byte) (err error)
+	WriteFile(ctx context.Context, name string, data []byte) (err error)
 	// AppendFile appends to the file, creating it, durable when it returns.
-	AppendFile(name string, data []byte) (err error)
+	AppendFile(ctx context.Context, name string, data []byte) (err error)
 }
 
 // LockerI is a [FilesI] that can hold an exclusive lock on a name. A sync
@@ -46,13 +47,13 @@ type OsFiles struct{}
 var _ FilesI = OsFiles{}
 var _ LockerI = OsFiles{}
 
-func (OsFiles) ReadFile(name string) (data []byte, err error) {
+func (OsFiles) ReadFile(ctx context.Context, name string) (data []byte, err error) {
 	return os.ReadFile(name)
 }
 
 // WriteFile writes to a temporary file in the same directory, syncs it,
 // renames it over name, and syncs the directory.
-func (OsFiles) WriteFile(name string, data []byte) (err error) {
+func (OsFiles) WriteFile(ctx context.Context, name string, data []byte) (err error) {
 	dir := filepath.Dir(name)
 	var f *os.File
 	f, err = os.CreateTemp(dir, ".jackstay-plan-*")
@@ -82,7 +83,7 @@ func (OsFiles) WriteFile(name string, data []byte) (err error) {
 
 // AppendFile appends and syncs; a file it creates has its directory synced
 // too, so the file's name is as durable as its first line.
-func (OsFiles) AppendFile(name string, data []byte) (err error) {
+func (OsFiles) AppendFile(ctx context.Context, name string, data []byte) (err error) {
 	created := false
 	var f *os.File
 	f, err = os.OpenFile(name, os.O_WRONLY|os.O_APPEND, 0)

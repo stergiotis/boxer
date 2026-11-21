@@ -19,17 +19,21 @@ type hostQueueI interface {
 	withdraw(key string)
 }
 
-type busQueue struct{ bus app.BusI }
+// busQueue asks over the bus under ctx, the app's (app.ContextOf).
+type busQueue struct {
+	ctx context.Context
+	bus app.BusI
+}
 
 func (inst busQueue) post(q attention.Question) (key string, refused string, err error) {
-	return attention.Post(inst.bus, q)
+	return attention.Post(inst.ctx, inst.bus, q)
 }
 
 func (inst busQueue) status(key string) (a attention.Answer, err error) {
-	return attention.Status(inst.bus, key)
+	return attention.Status(inst.ctx, inst.bus, key)
 }
 
-func (inst busQueue) withdraw(key string) { _ = attention.Withdraw(inst.bus, key) }
+func (inst busQueue) withdraw(key string) { _ = attention.Withdraw(inst.ctx, inst.bus, key) }
 
 // hostAsk is what the host's card shows of a question beyond its text.
 type hostAsk struct {

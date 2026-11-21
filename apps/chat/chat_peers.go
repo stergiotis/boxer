@@ -95,7 +95,7 @@ func (inst *App) raiseWindow(key string) {
 		return
 	}
 	inst.offFrame(func(context.Context) {
-		if rerr := windowopen.RequestRaise(bus, k); rerr != nil {
+		if rerr := windowopen.RequestRaise(inst.ioCtx, bus, k); rerr != nil {
 			inst.log.Debug().Err(rerr).Str("window", key).Msg("chat: raise the conversation's window")
 		}
 	})

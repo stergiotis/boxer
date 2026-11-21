@@ -87,7 +87,7 @@ func TestTheRostersTitleReachesTheStore(t *testing.T) {
 	}
 	titled := func(scope *lifetime.Scope, storage app.StorageI) (inst *App) {
 		inst = newApp()
-		inst.scope, inst.storage = scope, storage
+		inst.scope, inst.storage, inst.ioCtx = scope, storage, scope.Tail(nil)
 		inst.conv.started, inst.conv.title = true, "Wind field over the Aegean"
 		return
 	}

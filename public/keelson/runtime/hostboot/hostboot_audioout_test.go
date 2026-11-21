@@ -41,7 +41,7 @@ func TestBoot_AudioOutServesTheConfiguredDevice(t *testing.T) {
 	cli := rt.Bus.NewClient("hostboot.test.player", []app.SubjectFilter{
 		{Pattern: audioout.SubjectOpen, Direction: app.CapDirectionPub, Reason: "test"},
 	})
-	s, st := audioout.Open(cli, src)
+	s, st := audioout.Open(t.Context(), cli, src)
 	require.NoError(t, s.Close())
 	assert.True(t, st.Audible(), st.Reason)
 	assert.Equal(t, "fixture", st.Device)
@@ -81,7 +81,7 @@ func TestBoot_AudioOutFollowsTheLaneBehindACarrier(t *testing.T) {
 	cli := rt.Bus.NewClient("hostboot.test.player", []app.SubjectFilter{
 		{Pattern: audioout.SubjectOpen, Direction: app.CapDirectionPub, Reason: "test"},
 	})
-	s, st := audioout.Open(cli, src)
+	s, st := audioout.Open(t.Context(), cli, src)
 	defer func() { require.NoError(t, s.Close()) }()
 	assert.True(t, st.Audible(), st.Reason)
 	assert.Equal(t, "lane", st.Device)

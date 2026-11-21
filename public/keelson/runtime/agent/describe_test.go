@@ -63,7 +63,7 @@ func registry(t *testing.T) *app.Registry {
 func serve(t *testing.T) *Client {
 	t.Helper()
 	bus := inprocbus.NewInst(zerolog.Nop())
-	svc, err := NewService(bus, zerolog.Nop(), Config{Journal: AcceptAnyIntent{}, Registry: registry(t)})
+	svc, err := NewService(t.Context(), bus, zerolog.Nop(), Config{Journal: AcceptAnyIntent{}, Registry: registry(t)})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	cli := NewClient(bus.NewClient("test.coordinator", ClientCaps("test: drive apps")))
@@ -137,7 +137,7 @@ func TestDescribeSearch(t *testing.T) {
 
 func TestDescribeNeedsTheCap(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
-	svc, err := NewService(bus, zerolog.Nop(), Config{Journal: AcceptAnyIntent{}, Registry: registry(t)})
+	svc, err := NewService(t.Context(), bus, zerolog.Nop(), Config{Journal: AcceptAnyIntent{}, Registry: registry(t)})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	cli := NewClient(bus.NewClient("test.nocaps", nil))

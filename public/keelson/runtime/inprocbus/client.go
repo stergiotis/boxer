@@ -297,44 +297,40 @@ func (inst *Client) InboxHeldBy(inbox string, appId app.AppIdT, instanceKey uint
 	return strings.HasPrefix(inbox, InboxPrefix) && inst.inst.heldBy(inbox, appId, instanceKey)
 }
 
-func (inst *Client) Request(subject string, payload []byte) (reply []byte, err error) {
-	return inst.RequestWithTimeout(subject, payload, 0)
-}
-
-// RequestWithTimeout waits d rather than the Inst's configured default. A
-// non-positive d means "the default", which is what Request passes.
+// Request waits under ctx: ctx's deadline, when it has one, is the wait;
+// a ctx without one waits the Inst's configured default.
 //
 // What a requester may rely on (ADR-0386):
 //
 //   - A subject no subscription matches fails at once with ErrNoResponders.
-//   - The wait is bounded by d. The subscribers run on a goroutine of the
+//   - The wait is bounded. The subscribers run on a goroutine of the
 //     request's own, in subscription order, so a handler that blocks holds
-//     that goroutine and not the requester; at d the requester gets
-//     ErrTimeout and a later reply is dropped.
-//   - When every handler returns within d, Request returns after they all
-//     have, as a publish does: a handler's effects before it returned are
-//     visible to the requester. A reply a handler sends later, from a
-//     goroutine of its own, is still waited for until d.
+//     that goroutine and not the requester; when the wait runs out the
+//     requester gets ErrTimeout (wrapping context.DeadlineExceeded when the
+//     wait was ctx's deadline) and a later reply is dropped. A ctx
+//     cancelled first fails the request with ctx's cause.
+//   - When every handler returns within the wait, Request returns after
+//     they all have, as a publish does: a handler's effects before it
+//     returned are visible to the requester. A reply a handler sends later,
+//     from a goroutine of its own, is still waited for.
+//   - The handlers see the request's ctx, bounded by the wait, as
+//     app.Msg.Context; it ends when Request returns.
 //
-// What a handler must not do inline: block on I/O whose bound is not well
-// under the requester's d. It answers from a goroutine of its own instead,
+// What a handler must not do inline: block on I/O that does not end with
+// its message's Context. It answers from a goroutine of its own instead,
 // or the requester sees ErrTimeout while the handler runs on.
-func (inst *Client) RequestWithTimeout(subject string, payload []byte, d time.Duration) (reply []byte, err error) {
-	return inst.request(context.Background(), subject, payload, d)
+func (inst *Client) Request(ctx context.Context, subject string, payload []byte) (reply []byte, err error) {
+	var d time.Duration
+	deadline, ctxBound := ctx.Deadline()
+	if ctxBound {
+		if d = time.Until(deadline); d <= 0 {
+			return inst.cancelledRequest(ctx, subject)
+		}
+	}
+	return inst.request(ctx, subject, payload, d, ctxBound)
 }
 
-// RequestCtx is Request bounded by ctx as well as by the Inst's default
-// timeout: whichever ends first ends the wait. A ctx that ends first fails
-// the request with ctx's cause.
-//
-// deferred: app.BusI gains a context on Request with the change that puts
-// context.Context on the bus and store interfaces; until then this method
-// is on the concrete client only.
-func (inst *Client) RequestCtx(ctx context.Context, subject string, payload []byte) (reply []byte, err error) {
-	return inst.request(ctx, subject, payload, 0)
-}
-
-func (inst *Client) request(ctx context.Context, subject string, payload []byte, d time.Duration) (reply []byte, err error) {
+func (inst *Client) request(ctx context.Context, subject string, payload []byte, d time.Duration, ctxBound bool) (reply []byte, err error) {
 	if d <= 0 {
 		d = inst.inst.currentRequestTimeout()
 	}
@@ -418,7 +414,7 @@ func (inst *Client) request(ctx context.Context, subject string, payload []byte,
 	select {
 	case <-dispatched:
 	case <-timer.C:
-		return inst.lateReply(replyCh, subject)
+		return inst.lateReply(replyCh, subject, ctxBound)
 	case <-ctx.Done():
 		return inst.cancelledRequest(ctx, subject)
 	}
@@ -426,26 +422,39 @@ func (inst *Client) request(ctx context.Context, subject string, payload []byte,
 	case reply = <-replyCh:
 		return
 	case <-timer.C:
-		return inst.lateReply(replyCh, subject)
+		return inst.lateReply(replyCh, subject, ctxBound)
 	case <-ctx.Done():
 		return inst.cancelledRequest(ctx, subject)
 	}
 }
 
 // lateReply takes a reply that arrived as the wait ran out, or answers
-// ErrTimeout.
-func (inst *Client) lateReply(replyCh <-chan []byte, subject string) (reply []byte, err error) {
+// ErrTimeout — wrapping context.DeadlineExceeded when the wait was the
+// requester's ctx deadline.
+func (inst *Client) lateReply(replyCh <-chan []byte, subject string, ctxBound bool) (reply []byte, err error) {
 	select {
 	case reply = <-replyCh:
 		return
 	default:
+	}
+	if ctxBound {
+		err = eb.Build().Str("subject", subject).Errorf("bus request: %w: %w", ErrTimeout, context.DeadlineExceeded)
+		return
 	}
 	err = eb.Build().Str("subject", subject).Errorf("bus request: %w", ErrTimeout)
 	return
 }
 
 func (inst *Client) cancelledRequest(ctx context.Context, subject string) (reply []byte, err error) {
-	err = eb.Build().Str("subject", subject).Errorf("bus request: %w", context.Cause(ctx))
+	cause := context.Cause(ctx)
+	if cause == nil {
+		cause = context.DeadlineExceeded
+	}
+	if errors.Is(cause, context.DeadlineExceeded) {
+		err = eb.Build().Str("subject", subject).Errorf("bus request: %w: %w", ErrTimeout, cause)
+		return
+	}
+	err = eb.Build().Str("subject", subject).Errorf("bus request: %w", cause)
 	return
 }
 

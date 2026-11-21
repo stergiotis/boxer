@@ -8,6 +8,7 @@
 package registry
 
 import (
+	"context"
 	"reflect"
 	"runtime"
 	"sort"
@@ -134,9 +135,10 @@ type Demo struct {
 	Init func(ids *c.WidgetIdStack) (state any)
 	// BusInit is the bus-aware variant of Init. The gallery host
 	// captures BusI from MountContextI at Mount time and forwards it to
-	// any demo that opts in here. Exactly one of Init or BusInit may
-	// be set; setting both is a Register-time error.
-	BusInit func(ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any)
+	// any demo that opts in here, with ctx, the ctx its bus calls run
+	// under (the gallery's app.ContextOf). Exactly one of Init or BusInit
+	// may be set; setting both is a Register-time error.
+	BusInit func(ctx context.Context, ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any)
 	// RenderStateful draws a stateful demo each frame. state is the
 	// pointer Init returned for this Demo + this app instance; the demo
 	// cast it back to its private state struct. nil for stateless demos.

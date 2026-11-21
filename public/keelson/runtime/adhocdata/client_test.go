@@ -26,17 +26,17 @@ func TestPublishAndRetractViaBus(t *testing.T) {
 		{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"},
 	})
 
-	res, err := PublishRequest(caller, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 1, 2, 3)})
+	res, err := PublishRequest(t.Context(), caller, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 1, 2, 3)})
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(res.Handle, "adhoc_"), res.Handle)
 	assert.Equal(t, uint64(3), res.Rows)
 
 	// Republish under the same handle bumps the revision.
-	res2, err := PublishRequest(caller, PublishInput{Alias: "items", Handle: res.Handle, ArrowIPCStream: int64Stream(t, false, 4)})
+	res2, err := PublishRequest(t.Context(), caller, PublishInput{Alias: "items", Handle: res.Handle, ArrowIPCStream: int64Stream(t, false, 4)})
 	require.NoError(t, err)
 	assert.Equal(t, res.Handle, res2.Handle)
 	assert.Equal(t, uint64(2), res2.Revision)
 
-	require.NoError(t, RetractRequest(caller, res.Handle))
-	require.Error(t, RetractRequest(caller, res.Handle), "retracting a gone handle errors over the bus")
+	require.NoError(t, RetractRequest(t.Context(), caller, res.Handle))
+	require.Error(t, RetractRequest(t.Context(), caller, res.Handle), "retracting a gone handle errors over the bus")
 }

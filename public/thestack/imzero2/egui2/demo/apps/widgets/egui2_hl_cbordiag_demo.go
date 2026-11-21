@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"context"
 	"encoding/hex"
 	"sync"
 
@@ -36,6 +37,8 @@ type cbordiagDemoState struct {
 	// bus reaches the clipboard broker; nil on a host without one, which
 	// withholds the copy buttons.
 	bus runtimeapp.BusI
+	// ctx is BusInit's: the ctx the copy's bus call runs under.
+	ctx context.Context
 }
 
 // copyDenied logs once per process that the broker refused the copy: the
@@ -52,7 +55,7 @@ func (inst *cbordiagDemoState) copy() func(text string) {
 	bus := inst.bus
 	return func(text string) {
 		go func() {
-			if _, err := bus.Request(clipboardbroker.SubjectWrite, []byte(text)); err != nil {
+			if _, err := bus.Request(inst.ctx, clipboardbroker.SubjectWrite, []byte(text)); err != nil {
 				copyDenied.Do(func() {
 					log.Warn().Err(err).Msg("gallery: the clipboard broker refused the cbordiag demo's copy")
 				})
@@ -114,8 +117,8 @@ func init() {
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
 		Description: "widgets/cbordiag over the cbor/diag printer: CBOR bytes as RFC 8949 §8 diagnostic notation, pretty-printed one element per line past the line width, with known tags labelled in comments and a host hook annotating positions. Compact mode reproduces the fxamacker library's single-line notation byte for byte. Malformed input degrades: the parsed prefix, one error span, the remainder as hex.",
-		BusInit: func(_ *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
-			state = &cbordiagDemoState{tagComments: true, width: 48, bus: bus}
+		BusInit: func(ctx context.Context, _ *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+			state = &cbordiagDemoState{tagComments: true, width: 48, ctx: ctx, bus: bus}
 			return
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {

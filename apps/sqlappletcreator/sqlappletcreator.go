@@ -11,6 +11,7 @@
 package sqlappletcreator
 
 import (
+	"context"
 	"encoding/json/v2"
 	"fmt"
 	"strings"
@@ -37,9 +38,12 @@ import (
 // heap storage the TextEdit bindings write back across frames (the imzero2
 // stable-pointer rule).
 type App struct {
-	ids *c.WidgetIdStack
-	bus app.BusI
-	log zerolog.Logger
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx context.Context
+	ids   *c.WidgetIdStack
+	bus   app.BusI
+	log   zerolog.Logger
 	// tasks runs Save and Export as keelson tasks owned by this window.
 	tasks task.TaskApiI
 
@@ -81,6 +85,7 @@ var _ app.AppI = (*App)(nil)
 func (inst *App) Manifest() app.Manifest { return manifest }
 
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
+	inst.ioCtx = app.ContextOf(ctx)
 	inst.ids = ctx.Ids()
 	inst.editor = sqleditor.New(inst.ids, "sql")
 	inst.bus = ctx.Bus()
@@ -323,7 +328,7 @@ func (inst *App) startSave() (err error) {
 			inst.mu.Unlock()
 		}()
 		_ = task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: "sqlappletcreator.save", Title: "save " + slug}, func() (failed error) {
-			replyBytes, reqErr := inst.bus.Request(appletstore.SubjectSave, payload)
+			replyBytes, reqErr := inst.bus.Request(inst.ioCtx, appletstore.SubjectSave, payload)
 			if reqErr != nil {
 				inst.log.Warn().Err(reqErr).Str("slug", slug).Msg("sqlappletcreator: save request failed")
 				inst.settleSave(SaveOutcome{Slug: slug, Error: reqErr.Error()}, "save failed: "+reqErr.Error())
@@ -382,7 +387,7 @@ func (inst *App) export() {
 			inst.mu.Unlock()
 		}()
 		_ = task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: "sqlappletcreator.export", Title: "export " + name + ".md"}, func() (failed error) {
-			rawReply, rerr := inst.bus.RequestWithTimeout(fsbroker.SubjectDialogWrite, reqBytes, fsbroker.DialogTimeout)
+			rawReply, rerr := app.RequestWithin(inst.ioCtx, inst.bus, fsbroker.DialogTimeout, fsbroker.SubjectDialogWrite, reqBytes)
 			if rerr != nil {
 				inst.setStatus("file dialog: " + rerr.Error())
 				failed = rerr
@@ -404,7 +409,7 @@ func (inst *App) export() {
 			}
 			// The write-handle op replies a DialogReply acking whether the bytes
 			// landed (unlike the read op, which replies the raw body).
-			writeReply, werr := inst.bus.RequestWithTimeout(dr.HandleSubjectPrefix+".write", doc, fsbroker.HandleOpTimeout)
+			writeReply, werr := app.RequestWithin(inst.ioCtx, inst.bus, fsbroker.HandleOpTimeout, dr.HandleSubjectPrefix+".write", doc)
 			if werr != nil {
 				inst.setStatus("write: " + werr.Error())
 				failed = werr

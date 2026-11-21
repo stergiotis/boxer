@@ -1,6 +1,7 @@
 package imagescope
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"strconv"
@@ -74,6 +75,9 @@ const (
 
 // App is one image scope window.
 type App struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx context.Context
 	// ids is the per-instance WidgetIdStack. The host pre-pushes a
 	// window-unique salt onto it before every Frame() call (ADR-0026 §SD9),
 	// so every widget id the app derives is unique across all concurrently
@@ -207,6 +211,7 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 // A seed that names no sample, or a region seed that does not parse, is
 // reported in the status row and the window opens empty or unmarked.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
+	inst.ioCtx = app.ContextOf(ctx)
 	// The task API first: the viewer made for the host's id stack runs its
 	// level build and histogram counts as tasks of this window.
 	inst.tasks = task.ForApp(ctx)

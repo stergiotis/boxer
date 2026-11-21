@@ -7,6 +7,7 @@
 package sqlapplet
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -19,8 +20,8 @@ import (
 // newDatasetFollower builds the follower for a standalone applet's declared
 // aliases under the applet's fault-injection and interval knobs. nil (and
 // nil bindings) when nothing is declared or there is no bus.
-func newDatasetFollower(bus app.BusI, logger zerolog.Logger, aliases []string) (f *adhocdata.Follower, bindings map[string]string) {
-	return adhocdata.NewFollower(adhocdata.FollowerConfig{
+func newDatasetFollower(ctx context.Context, bus app.BusI, logger zerolog.Logger, aliases []string) (f *adhocdata.Follower, bindings map[string]string) {
+	return adhocdata.NewFollower(ctx, adhocdata.FollowerConfig{
 		Bus:       bus,
 		Log:       logger,
 		Aliases:   aliases,

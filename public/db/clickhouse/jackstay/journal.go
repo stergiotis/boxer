@@ -2,6 +2,7 @@ package jackstay
 
 import (
 	"bytes"
+	"context"
 	"encoding/json/v2"
 	"errors"
 	"io/fs"
@@ -60,6 +61,9 @@ type journalKey struct {
 // the same file are ignored. Each line is durable before the call returns, so
 // a chunk is never recorded as done before it is.
 type Journal struct {
+	// ctx is OpenJournalIn's: the run the journal records, whose writes
+	// run under it.
+	ctx       context.Context
 	files     FilesI
 	name      string
 	run       string
@@ -71,25 +75,25 @@ type Journal struct {
 
 // OpenJournal reads the entries of run from path, if the file exists, and
 // opens it for appending.
-func OpenJournal(path string, run string) (j *Journal, err error) {
-	return OpenJournalIn(OsFiles{}, path, run)
+func OpenJournal(ctx context.Context, path string, run string) (j *Journal, err error) {
+	return OpenJournalIn(ctx, OsFiles{}, path, run)
 }
 
 // OpenJournalIn is [OpenJournal] over files. A last line a crash cut short
 // is repaired before the first append, so the next entry starts a line of
 // its own: a torn line that does not decode is cut off, and one that decodes
 // but lacks its newline gets it.
-func OpenJournalIn(files FilesI, name string, run string) (j *Journal, err error) {
+func OpenJournalIn(ctx context.Context, files FilesI, name string, run string) (j *Journal, err error) {
 	var tail journalTail
-	j, tail, err = readJournal(files, name, run)
+	j, tail, err = readJournal(ctx, files, name, run)
 	if err != nil {
 		return
 	}
 	switch {
 	case tail.torn:
-		err = files.WriteFile(name, tail.data[:tail.at])
+		err = files.WriteFile(ctx, name, tail.data[:tail.at])
 	case tail.unterminated:
-		err = files.AppendFile(name, []byte{'\n'})
+		err = files.AppendFile(ctx, name, []byte{'\n'})
 	}
 	if err != nil {
 		err = eb.Build().Str("name", name).Errorf("unable to repair the journal's last line: %w", err)
@@ -101,13 +105,13 @@ func OpenJournalIn(files FilesI, name string, run string) (j *Journal, err error
 
 // ReadJournal reads the entries of run from path without opening it for
 // writing; a missing file is an empty journal. Record methods fail on it.
-func ReadJournal(path string, run string) (j *Journal, err error) {
-	return ReadJournalIn(OsFiles{}, path, run)
+func ReadJournal(ctx context.Context, path string, run string) (j *Journal, err error) {
+	return ReadJournalIn(ctx, OsFiles{}, path, run)
 }
 
 // ReadJournalIn is [ReadJournal] over files.
-func ReadJournalIn(files FilesI, name string, run string) (j *Journal, err error) {
-	j, _, err = readJournal(files, name, run)
+func ReadJournalIn(ctx context.Context, files FilesI, name string, run string) (j *Journal, err error) {
+	j, _, err = readJournal(ctx, files, name, run)
 	return
 }
 
@@ -121,10 +125,10 @@ type journalTail struct {
 	unterminated bool
 }
 
-func readJournal(files FilesI, name string, run string) (j *Journal, tail journalTail, err error) {
-	j = &Journal{files: files, name: name, run: run, start: make(map[string]JournalEntry, 8), done: make(map[journalKey]JournalEntry, 64), attempted: make(map[journalKey]bool, 8)}
+func readJournal(ctx context.Context, files FilesI, name string, run string) (j *Journal, tail journalTail, err error) {
+	j = &Journal{ctx: ctx, files: files, name: name, run: run, start: make(map[string]JournalEntry, 8), done: make(map[journalKey]JournalEntry, 64), attempted: make(map[journalKey]bool, 8)}
 	var data []byte
-	data, err = files.ReadFile(name)
+	data, err = files.ReadFile(ctx, name)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		err = nil
@@ -201,7 +205,7 @@ func (inst *Journal) write(e JournalEntry) (err error) {
 		return eh.Errorf("unable to encode journal entry: %w", err)
 	}
 	data = append(data, '\n')
-	err = inst.files.AppendFile(inst.name, data)
+	err = inst.files.AppendFile(inst.ctx, inst.name, data)
 	if err != nil {
 		err = eb.Build().Str("name", inst.name).Errorf("unable to write journal: %w", err)
 	}

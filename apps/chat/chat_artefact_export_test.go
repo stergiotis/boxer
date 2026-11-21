@@ -40,6 +40,7 @@ func exportRigWith(t *testing.T, connect func(ctx context.Context) (recordstore.
 	t.Cleanup(pub.Close)
 	inst = newApp()
 	inst.bus = bus.NewClient(ManifestId, manifest.Caps)
+	inst.ioCtx = t.Context()
 	inst.cli = llm.NewClient(inst.bus)
 	inst.cli.Timeout = 5 * time.Second
 	inst.coord = inst.newCoordinator(inst.conv.id)

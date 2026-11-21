@@ -212,7 +212,7 @@ func (inst *App) handover(pic *tiles.Store, region image.Rectangle) (note string
 	if err != nil {
 		return "", eh.Errorf("encode the pixels: %w", err)
 	}
-	pub, err := inst.pub.Publish(inst.bus, stream)
+	pub, err := inst.pub.Publish(inst.ioCtx, inst.bus, stream)
 	if err != nil {
 		return "", eh.Errorf("publish the pixels: %w", err)
 	}
@@ -223,7 +223,7 @@ func (inst *App) handover(pic *tiles.Store, region image.Rectangle) (note string
 		Datasets:     []string{pub.Alias},
 		DatasetNames: []string{datasetAlias},
 	}
-	if _, err = playground.Open(inst.bus, cfg); err != nil {
+	if _, err = playground.Open(inst.ioCtx, inst.bus, cfg); err != nil {
 		return "", eh.Errorf("open play: %w", err)
 	}
 	return fmt.Sprintf("opened in play — %d pixels of %s as %s (rev %d)", rows, regionLine(rect), pub.Handle, pub.Revision), nil

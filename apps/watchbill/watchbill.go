@@ -107,7 +107,7 @@ type verbOutcome struct {
 type App struct {
 	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
 	// run under when no call of its own carries one.
-	ioCtx context.Context
+	ioCtx   context.Context
 	ids     *c.WidgetIdStack
 	logger  zerolog.Logger
 	density styletokens.DensityE
@@ -245,7 +245,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	}
 
 	inst.monitor = taskmonitor.New(inst.ids, "tm", inst.tasks, taskmonitor.Options{DefaultOpen: true})
-	if startErr := inst.monitor.Start(); startErr != nil {
+	if startErr := inst.monitor.Start(app.ContextOf(ctx)); startErr != nil {
 		inst.logger.Debug().Err(startErr).Msg("watchbill app: task monitor not started")
 	}
 	if bus := ctx.Bus(); bus != nil {
@@ -427,7 +427,7 @@ func (inst *App) refresh(ctx context.Context) {
 
 	var next snapshot
 	next.reads = inst.reads != nil
-	jobs, err := inst.client.List(states, nil, listLimit)
+	jobs, err := inst.client.List(ctx, states, nil, listLimit)
 	if err != nil {
 		next.lastError = "list: " + err.Error()
 	} else {
@@ -473,7 +473,7 @@ func firstNonEmpty(a, b string) (s string) {
 
 func (inst *App) cancel(id string) {
 	inst.verb("cancel", id, func() (applied bool, note string, err error) {
-		ok, err := inst.client.Cancel(id, noteFrom)
+		ok, err := inst.client.Cancel(inst.ioCtx, id, noteFrom)
 		if err != nil {
 			return false, "", err
 		}
@@ -486,7 +486,7 @@ func (inst *App) cancel(id string) {
 
 func (inst *App) retry(id string) {
 	inst.verb("retry", id, func() (applied bool, note string, err error) {
-		ok, err := inst.client.Retry(id, noteFrom)
+		ok, err := inst.client.Retry(inst.ioCtx, id, noteFrom)
 		if err != nil {
 			return false, "", err
 		}

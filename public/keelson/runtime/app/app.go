@@ -255,26 +255,39 @@ func MountValueOf(ctx MountContextI, key any) (v any) {
 type BusI interface {
 	Publish(subject string, payload []byte) (err error)
 	Subscribe(subject string, handler MsgHandlerFunc) (unsubscribe func(), err error)
-	Request(subject string, payload []byte) (reply []byte, err error)
-	// RequestWithTimeout is Request with the caller naming the wait instead
-	// of the transport.
-	//
-	// It exists because one class of request is bounded by a HUMAN rather
-	// than by a service: an fs.dialog.{read,write} is answered when someone
-	// finishes choosing in a file picker, which is not a five-second
-	// operation. Under the transport default those flows fail while the
-	// picker is still open, and the app is told "timeout" for a dialog the
-	// user is looking at (found by driving mdedit's Save; the same latency
-	// bound applies to every fsbroker dialog consumer).
-	//
-	// The alternative — raising the transport's default — makes every
-	// request in the process wait as long as the slowest human, which is the
-	// wrong trade for the many requests answered by a service in
-	// milliseconds. A caller that knows what it is waiting for is the only
-	// one positioned to say.
-	//
-	// d <= 0 means "use the transport default", so it degrades to Request.
-	RequestWithTimeout(subject string, payload []byte, d time.Duration) (reply []byte, err error)
+	// Request publishes payload to subject and waits for one reply, under
+	// ctx: the wait ends when ctx does, and ctx's deadline, when it has one,
+	// is the wait; a ctx without a deadline waits the transport's default.
+	// The handlers of the request see ctx as their message's Context.
+	Request(ctx context.Context, subject string, payload []byte) (reply []byte, err error)
+}
+
+// RequestWithin is bus.Request bounded by d as well as by ctx, for the
+// caller that names its wait instead of the transport.
+//
+// It exists because one class of request is bounded by a HUMAN rather
+// than by a service: an fs.dialog.{read,write} is answered when someone
+// finishes choosing in a file picker, which is not a five-second
+// operation. Under the transport default those flows fail while the
+// picker is still open, and the app is told "timeout" for a dialog the
+// user is looking at (found by driving mdedit's Save; the same latency
+// bound applies to every fsbroker dialog consumer).
+//
+// The alternative — raising the transport's default — makes every
+// request in the process wait as long as the slowest human, which is the
+// wrong trade for the many requests answered by a service in
+// milliseconds. A caller that knows what it is waiting for is the only
+// one positioned to say.
+//
+// d <= 0 means "the transport default", so it degrades to Request; a d of
+// zero is not a deadline already passed.
+func RequestWithin(ctx context.Context, bus BusI, d time.Duration, subject string, payload []byte) (reply []byte, err error) {
+	if d > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, d)
+		defer cancel()
+	}
+	return bus.Request(ctx, subject, payload)
 }
 
 // BusProvider mints per-app BusI clients over a concrete transport. The host

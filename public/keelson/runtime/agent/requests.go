@@ -555,7 +555,7 @@ func (inst *Service) routeHeld(h *held) {
 			// in the person's place takes no time of its own.
 			inst.pace(t)
 		}
-		inst.route(t, h.rec, h.req, spec, e)
+		inst.route(inst.ctx, t, h.rec, h.req, spec, e)
 	}()
 }
 

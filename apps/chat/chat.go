@@ -42,8 +42,8 @@ type App struct {
 	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
 	// run under when no call of its own carries one.
 	ioCtx context.Context
-	ids *c.WidgetIdStack
-	cli *llm.Client
+	ids   *c.WidgetIdStack
+	cli   *llm.Client
 
 	// describe asks the host once whether it offers a model.
 	describe bgjob.Runner[llm.Description]
@@ -653,7 +653,7 @@ func (inst *App) launchTurn(req llm.Request, coord *coordinator) (started bool) 
 func (inst *App) newCoordinator(conversation string) (coord *coordinator) {
 	coord = newCoordinatorIn(inst.scope, inst.agentCli, inst.kq, conversation)
 	if inst.bus != nil {
-		coord.ask.host = busQueue{bus: inst.bus}
+		coord.ask.host = busQueue{ctx: inst.ioCtx, bus: inst.bus}
 		coord.ask.focused = inst.windowFocused.Load
 	}
 	coord.setStopRunner(stopRunnerFor(inst.bus))

@@ -107,7 +107,7 @@ func (inst *App) openInNotebook() {
 	inst.mu.Unlock()
 	inst.status = "opening the notebook window…"
 	started := inst.spawn(func(context.Context) {
-		_, oErr := windowopen.RequestOpen(bus, nblaunch.AppId, nblaunch.Kind, cfg)
+		_, oErr := windowopen.RequestOpen(inst.ioCtx, bus, nblaunch.AppId, nblaunch.Kind, cfg)
 		inst.mu.Lock()
 		inst.nbHand.busy = false
 		if oErr != nil {

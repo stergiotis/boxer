@@ -216,7 +216,7 @@ func (inst *PlayApp) copyToClipboard(what string, text string) {
 		return
 	}
 	inst.client.Go(func(context.Context) {
-		rec, err := clipboardbroker.Write(bus, clipboardbroker.Payload{Text: text, Source: string(AppId) + ":" + what})
+		rec, err := clipboardbroker.Write(inst.ioCtx, bus, clipboardbroker.Payload{Text: text, Source: string(AppId) + ":" + what})
 		if err != nil {
 			inst.setActionNote("copy " + what + " failed: " + err.Error())
 			return

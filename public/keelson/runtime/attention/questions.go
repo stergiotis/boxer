@@ -1,6 +1,7 @@
 package attention
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"iter"
@@ -474,12 +475,12 @@ func (inst *BusService) handle(msg *app.Msg) {
 
 // Post puts q in the person's queue. refused is the host's refusal, in words
 // the model can act on.
-func Post(bus app.BusI, q Question) (key string, refused string, err error) {
+func Post(ctx context.Context, bus app.BusI, q Question) (key string, refused string, err error) {
 	payload, err := buscodec.Encode(wirePost{V: wireVersion, Question: q})
 	if err != nil {
 		return
 	}
-	raw, err := bus.Request(SubjectPost, payload)
+	raw, err := bus.Request(ctx, SubjectPost, payload)
 	if err != nil {
 		err = eh.Errorf("post: %w", err)
 		return
@@ -495,12 +496,12 @@ func Post(bus app.BusI, q Question) (key string, refused string, err error) {
 }
 
 // Status reads a posted question's state.
-func Status(bus app.BusI, key string) (a Answer, err error) {
+func Status(ctx context.Context, bus app.BusI, key string) (a Answer, err error) {
 	payload, err := buscodec.Encode(wireKey{V: wireVersion, Key: key})
 	if err != nil {
 		return
 	}
-	raw, err := bus.Request(SubjectStatus, payload)
+	raw, err := bus.Request(ctx, SubjectStatus, payload)
 	if err != nil {
 		err = eb.Build().Str("key", key).Errorf("status: %w", err)
 		return
@@ -509,12 +510,12 @@ func Status(bus app.BusI, key string) (a Answer, err error) {
 }
 
 // Withdraw takes a posted question back.
-func Withdraw(bus app.BusI, key string) (err error) {
+func Withdraw(ctx context.Context, bus app.BusI, key string) (err error) {
 	payload, err := buscodec.Encode(wireKey{V: wireVersion, Key: key})
 	if err != nil {
 		return
 	}
-	if _, err = bus.Request(SubjectWithdraw, payload); err != nil {
+	if _, err = bus.Request(ctx, SubjectWithdraw, payload); err != nil {
 		err = eb.Build().Str("key", key).Errorf("withdraw: %w", err)
 	}
 	return

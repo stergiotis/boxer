@@ -1,6 +1,7 @@
 package adhocdata
 
 import (
+	"context"
 	"encoding/json/v2"
 	"time"
 
@@ -82,7 +83,7 @@ func (inst *Service) handleReadColumns(msg *app.Msg, req adhocrequest.AdhocReque
 // alias, values included, over adhoc.read: the read ReadAll makes, held
 // to the same grant, without the stream. obo is the agent's call the read
 // is work of, nil when it is none.
-func ReadColumns(bus app.BusI, alias string, obo *app.OnBehalfOf) (res ColumnsResult, err error) {
+func ReadColumns(ctx context.Context, bus app.BusI, alias string, obo *app.OnBehalfOf) (res ColumnsResult, err error) {
 	payload, err := buscodec.Encode(adhocrequest.AdhocRequest{
 		At: time.Now().UTC(), Op: adhocrequest.OpRead, Alias: alias, ColumnsOnly: true,
 		OboTask: oboTask(obo), OboEpoch: oboEpoch(obo), OboCall: oboCall(obo),
@@ -90,7 +91,7 @@ func ReadColumns(bus app.BusI, alias string, obo *app.OnBehalfOf) (res ColumnsRe
 	if err != nil {
 		return res, eh.Errorf("encode columns read: %w", err)
 	}
-	raw, err := bus.Request(SubjectRead, payload)
+	raw, err := bus.Request(ctx, SubjectRead, payload)
 	if err != nil {
 		return res, eb.Build().Str("alias", alias).Errorf("columns read request: %w", err)
 	}

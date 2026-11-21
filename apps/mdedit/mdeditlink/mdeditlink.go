@@ -265,7 +265,7 @@ func Launch(r Ref) launchcfg.MdeditLaunch {
 // the audited open subject, which the caller's manifest declares. It blocks
 // on the bus round-trip, so call it off the render thread; [Follow] is the
 // fire-and-log form.
-func Open(bus app.BusI, link string) (windowKey uint64, err error) {
+func Open(ctx context.Context, bus app.BusI, link string) (windowKey uint64, err error) {
 	r, err := Parse(link)
 	if err != nil {
 		return
@@ -275,7 +275,7 @@ func Open(bus app.BusI, link string) (windowKey uint64, err error) {
 		err = eh.Errorf("mdeditlink: encode the launch config: %w", err)
 		return
 	}
-	return windowopen.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg)
+	return windowopen.RequestOpen(ctx, bus, launchcfg.AppId, launchcfg.Kind, cfg)
 }
 
 // Follow is [Open] off the caller's goroutine, logging a failure. For a
@@ -291,8 +291,8 @@ func Follow(bus app.BusI, logger zerolog.Logger, link string, spawn func(f func(
 		logger.Warn().Str("link", link).Msg("mdeditlink: no spawn given, the link was not opened")
 		return
 	}
-	started := spawn(func(context.Context) {
-		if _, err := Open(bus, link); err != nil {
+	started := spawn(func(ctx context.Context) {
+		if _, err := Open(ctx, bus, link); err != nil {
 			logger.Warn().Err(err).Str("link", link).Msg("mdeditlink: the link did not open")
 		}
 	})

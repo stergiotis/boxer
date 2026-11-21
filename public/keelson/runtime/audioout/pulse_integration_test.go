@@ -35,7 +35,7 @@ func TestOpenPlaysThroughThePulseDevice(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
 	src, err := pcm.NewSynthSource(format, format.DurationToFrames(5*time.Second), pcm.Silence())
 	require.NoError(t, err)
-	s, st := audioout.Open(bus.NewClient("test.player", playerCaps()), src)
+	s, st := audioout.Open(t.Context(), bus.NewClient("test.player", playerCaps()), src)
 	defer func() { require.NoError(t, s.Close()) }()
 	require.True(t, st.Audible(), st.Reason)
 	require.Equal(t, "pulse", st.Device)

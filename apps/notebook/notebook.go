@@ -87,10 +87,13 @@ type reading struct {
 
 // App is one window.
 type App struct {
-	ids  *c.WidgetIdStack
-	bus  app.BusI
-	log  zerolog.Logger
-	face faceE
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx context.Context
+	ids   *c.WidgetIdStack
+	bus   app.BusI
+	log   zerolog.Logger
+	face  faceE
 
 	// The embedded play is built at the first use of the Records face,
 	// from what Mount kept: the environment's endpoint binds late.
@@ -198,6 +201,7 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 func (inst *App) Operations() (h app.OperationsHandlerI) { return ops.Bind(inst) }
 
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
+	inst.ioCtx = app.ContextOf(ctx)
 	inst.ids = ctx.Ids()
 	inst.bus = ctx.Bus()
 	inst.log = ctx.Log()
@@ -512,7 +516,7 @@ func (inst *App) renderToolbar(ctx app.FrameContextI) {
 		// only where the host registers one editor app (ADR-0365).
 		if _, ok := externaledit.Editor(); ok && inst.doc != nil && inst.bus != nil {
 			if r := editexternally.Render(editexternally.Input{
-				Ids: inst.ids, ScopeKey: "editExternally", Editing: &inst.externalEdit, Bus: inst.bus,
+				Ids: inst.ids, ScopeKey: "editExternally", Editing: &inst.externalEdit, Bus: inst.bus, BusCtx: inst.scope.Tail(nil),
 				Name: inst.doc.name, Text: string(inst.doc.text), Disabled: inst.collect.job.Running(),
 			}); r.Replace {
 				if inst.setText([]byte(r.Text)) {

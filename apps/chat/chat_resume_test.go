@@ -32,6 +32,7 @@ func appOver(t *testing.T, model openaichat.ClientI, store agentrun.StoreI) (ins
 	t.Cleanup(svc.Close)
 	inst = newApp()
 	inst.bus = bus.NewClient(ManifestId, manifest.Caps)
+	inst.ioCtx = t.Context()
 	inst.cli = llm.NewClient(inst.bus)
 	inst.cli.Timeout = 5 * time.Second
 	inst.coord = inst.newCoordinator(inst.conv.id)
@@ -390,7 +391,7 @@ func TestAResumeRestoresTheSettings(t *testing.T) {
 func waitForStoredTitle(t *testing.T, storage app.StorageI, conversation string, title string) {
 	t.Helper()
 	require.Eventually(t, func() bool {
-		v, found, _ := storage.Get(t.Context(), titleStorePrefix + conversation)
+		v, found, _ := storage.Get(t.Context(), titleStorePrefix+conversation)
 		return found && string(v) == title
 	}, 5*time.Second, 5*time.Millisecond)
 }
@@ -433,6 +434,7 @@ func TestAResumeKeepsTheTitle(t *testing.T) {
 	storage := &mapStorage{}
 	first := appOver(t, &fakeModel{}, store)
 	first.storage = storage
+	first.ioCtx = t.Context()
 	require.True(t, first.startTurn("what is the plan for the week"))
 	drainUntil(t, first)
 	settleTitle(t, first)
@@ -443,6 +445,7 @@ func TestAResumeKeepsTheTitle(t *testing.T) {
 
 	second := appOver(t, &fakeModel{}, store)
 	second.storage = storage
+	second.ioCtx = t.Context()
 	second.resumeRun(id)
 	require.Eventually(t, func() bool { second.drain(); return second.conv.id == id }, 5*time.Second, 5*time.Millisecond)
 	assert.Equal(t, title, second.conv.title)
@@ -462,6 +465,7 @@ func TestAResumeKeepsTheTitle(t *testing.T) {
 	waitForStoredTitle(t, storage, id, "Weekly plan")
 	fourth := appOver(t, &fakeModel{}, store)
 	fourth.storage = storage
+	fourth.ioCtx = t.Context()
 	fourth.resumeRun(id)
 	require.Eventually(t, func() bool { fourth.drain(); return fourth.conv.id == id }, 5*time.Second, 5*time.Millisecond)
 	assert.Equal(t, "Weekly plan", fourth.conv.title)

@@ -130,7 +130,7 @@ func roundTrip[Req any, Rep any](ctx context.Context, inst *Client, subject stri
 	if err != nil {
 		return
 	}
-	raw, err := inst.bus.RequestWithTimeout(subject, payload, inst.wait(ctx))
+	raw, err := app.RequestWithin(ctx, inst.bus, inst.wait(ctx), subject, payload)
 	if err != nil {
 		err = eb.Build().Str("subject", subject).Errorf("agent: request: %w", err)
 		return

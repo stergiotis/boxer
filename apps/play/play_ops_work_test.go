@@ -266,6 +266,8 @@ func TestPublishProjectionIsAnAgentsRoundWithoutTheScaffold(t *testing.T) {
 	assert.Contains(t, refusal.Error(), "no bus")
 
 	p.bus = &recordingBus{}
+
+	p.ioCtx = t.Context()
 	require.ErrorAs(t, publish(), &refusal)
 	assert.Contains(t, refusal.Error(), "no projection to publish")
 

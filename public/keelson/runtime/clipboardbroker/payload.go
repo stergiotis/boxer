@@ -2,6 +2,7 @@ package clipboardbroker
 
 import (
 	"bytes"
+	"context"
 	"strconv"
 	"strings"
 	"time"
@@ -142,12 +143,12 @@ func (inst *RefusedError) Error() string { return "clipboardbroker: refused: " +
 // with it: the record for the journal, with the handle when the copy went
 // by reference. The caller's bus client holds a Pub cap on SubjectWrite.
 // It blocks until the broker acks, so call it off the frame goroutine.
-func Write(bus app.BusI, p Payload) (rec CopyRecord, err error) {
+func Write(ctx context.Context, bus app.BusI, p Payload) (rec CopyRecord, err error) {
 	b, err := p.Encode()
 	if err != nil {
 		return
 	}
-	reply, err := bus.Request(SubjectWrite, b)
+	reply, err := bus.Request(ctx, SubjectWrite, b)
 	if err != nil {
 		err = eh.Errorf("clipboardbroker: write: %w", err)
 		return
@@ -171,8 +172,8 @@ func Write(bus app.BusI, p Payload) (rec CopyRecord, err error) {
 
 // WriteText hands raw text to the broker, the legacy form: plain text with
 // no label.
-func WriteText(bus app.BusI, text string) (err error) {
-	if _, err = bus.Request(SubjectWrite, []byte(text)); err != nil {
+func WriteText(ctx context.Context, bus app.BusI, text string) (err error) {
+	if _, err = bus.Request(ctx, SubjectWrite, []byte(text)); err != nil {
 		err = eh.Errorf("clipboardbroker: write: %w", err)
 	}
 	return
@@ -181,12 +182,12 @@ func WriteText(bus app.BusI, text string) (err error) {
 // Resolve asks the broker for the payload behind a handle, so a paste
 // inside boxer restores the labels; ok is false for a handle it does not
 // hold.
-func Resolve(bus app.BusI, handle string) (p Payload, ok bool, err error) {
+func Resolve(ctx context.Context, bus app.BusI, handle string) (p Payload, ok bool, err error) {
 	id, isHandle := IsHandle(handle)
 	if !isHandle {
 		return
 	}
-	reply, err := bus.Request(SubjectResolve, []byte(id))
+	reply, err := bus.Request(ctx, SubjectResolve, []byte(id))
 	if err != nil {
 		err = eh.Errorf("clipboardbroker: resolve: %w", err)
 		return

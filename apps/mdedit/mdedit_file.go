@@ -39,6 +39,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
@@ -291,9 +292,9 @@ func (inst *App) openFile() {
 		defer func() { inst.finishFile(res) }()
 		// Run to completion: the broker requests take no context.
 		_ = task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: "mdedit.open", Title: "open a file"}, func() error {
-			teardownFollow(bus, prevFollow.handle, prevFollow.unsub)
+			teardownFollow(inst.ioCtx, bus, prevFollow.handle, prevFollow.unsub)
 
-			reply, err := bus.RequestWithTimeout(fsbroker.SubjectDialogRead, nil, dialogTimeout)
+			reply, err := app.RequestWithin(inst.ioCtx, bus, dialogTimeout, fsbroker.SubjectDialogRead, nil)
 			if err != nil {
 				res.err = err
 				return res.err
@@ -309,17 +310,17 @@ func (inst *App) openFile() {
 			}
 			res.displayName = dr.DisplayName
 
-			body, rerr := bus.RequestWithTimeout(dr.HandleSubjectPrefix+opRead, nil, transferTimeout)
+			body, rerr := app.RequestWithin(inst.ioCtx, bus, transferTimeout, dr.HandleSubjectPrefix+opRead, nil)
 			if rerr != nil {
 				res.err = rerr
 				// The read failed but the grant stands; close it rather than
 				// leaving standing authority behind a failed gesture.
-				_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opClose, nil, transferTimeout)
+				_, _ = app.RequestWithin(inst.ioCtx, bus, transferTimeout, dr.HandleSubjectPrefix+opClose, nil)
 				return res.err
 			}
 			if reason, isErr := readReplyError(body); isErr {
 				res.err = errFile(reason)
-				_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opClose, nil, transferTimeout)
+				_, _ = app.RequestWithin(inst.ioCtx, bus, transferTimeout, dr.HandleSubjectPrefix+opClose, nil)
 				return res.err
 			}
 			res.text = string(body)
@@ -331,7 +332,7 @@ func (inst *App) openFile() {
 			// twice, so the handle goes back.
 			if ferr := inst.startFollow(dr.HandleSubjectPrefix); ferr != nil {
 				res.followErr = ferr
-				_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opClose, nil, transferTimeout)
+				_, _ = app.RequestWithin(inst.ioCtx, bus, transferTimeout, dr.HandleSubjectPrefix+opClose, nil)
 				return res.err
 			}
 			res.followOk = true
@@ -372,7 +373,7 @@ func (inst *App) saveFile(chooseFile bool) {
 					res.err = merr
 					return res.err
 				}
-				reply, err := bus.RequestWithTimeout(fsbroker.SubjectDialogWrite, reqBytes, dialogTimeout)
+				reply, err := app.RequestWithin(inst.ioCtx, bus, dialogTimeout, fsbroker.SubjectDialogWrite, reqBytes)
 				if err != nil {
 					res.err = err
 					return res.err
@@ -390,7 +391,7 @@ func (inst *App) saveFile(chooseFile bool) {
 				res.displayName = dr.DisplayName
 			}
 
-			ack, werr := bus.RequestWithTimeout(res.handle+opWrite, []byte(snapshot), transferTimeout)
+			ack, werr := app.RequestWithin(inst.ioCtx, bus, transferTimeout, res.handle+opWrite, []byte(snapshot))
 			if werr != nil {
 				res.err = werr
 				return res.err

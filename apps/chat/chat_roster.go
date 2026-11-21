@@ -225,11 +225,11 @@ func (inst *App) listRoster() {
 		}
 		if bus != nil {
 			// A host without notices leaves the roster without highlights.
-			x.notices, _ = attention.FetchNotices(bus)
+			x.notices, _ = attention.FetchNotices(ctx, bus)
 		}
 		if storage != nil {
 			for _, r := range runs {
-				if b, found, gerr := storage.Get(ctx, titleStorePrefix + r.Conversation); gerr == nil && found {
+				if b, found, gerr := storage.Get(ctx, titleStorePrefix+r.Conversation); gerr == nil && found {
 					x.titles[r.Conversation] = string(b)
 				}
 			}

@@ -1,6 +1,7 @@
 package attention
 
 import (
+	"context"
 	"slices"
 	"sync"
 	"time"
@@ -265,12 +266,12 @@ func (inst *BusService) noticesHandle(msg *app.Msg) (rep any) {
 
 // Notify reports an event of a conversation; level is the one the host gave
 // it, a highlight when kept.
-func Notify(bus app.BusI, n Notice) (level LevelE, err error) {
+func Notify(ctx context.Context, bus app.BusI, n Notice) (level LevelE, err error) {
 	payload, err := buscodec.Encode(wireNotice{V: wireVersion, Notice: n})
 	if err != nil {
 		return
 	}
-	raw, err := bus.Request(SubjectNotify, payload)
+	raw, err := bus.Request(ctx, SubjectNotify, payload)
 	if err != nil {
 		err = eh.Errorf("notify: %w", err)
 		return
@@ -283,24 +284,24 @@ func Notify(bus app.BusI, n Notice) (level LevelE, err error) {
 }
 
 // Seen says the person looked at conversation.
-func Seen(bus app.BusI, conversation string) (err error) {
+func Seen(ctx context.Context, bus app.BusI, conversation string) (err error) {
 	payload, err := buscodec.Encode(wireConversation{V: wireVersion, Conversation: conversation})
 	if err != nil {
 		return
 	}
-	if _, err = bus.Request(SubjectSeen, payload); err != nil {
+	if _, err = bus.Request(ctx, SubjectSeen, payload); err != nil {
 		err = eh.Errorf("seen: %w", err)
 	}
 	return
 }
 
 // FetchNotices lists the notices kept, newest first.
-func FetchNotices(bus app.BusI) (out []Notice, err error) {
+func FetchNotices(ctx context.Context, bus app.BusI) (out []Notice, err error) {
 	payload, err := buscodec.Encode(wireConversation{V: wireVersion})
 	if err != nil {
 		return
 	}
-	raw, err := bus.Request(SubjectNotices, payload)
+	raw, err := bus.Request(ctx, SubjectNotices, payload)
 	if err != nil {
 		err = eh.Errorf("notices: %w", err)
 		return

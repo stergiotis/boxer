@@ -1,6 +1,7 @@
 package watchbill
 
 import (
+	"context"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -34,7 +35,7 @@ func NewClient(bus app.BusI) (inst *Client) {
 // written. The worker rings its own doorbell, so nothing else is owed.
 // OwnerAppId and RequesterRun on req are ignored: the worker attributes
 // both from the bus envelope and its own run.
-func (inst *Client) Enqueue(req Request) (job watchbillstore.Job, err error) {
+func (inst *Client) Enqueue(ctx context.Context, req Request) (job watchbillstore.Job, err error) {
 	if req.Kind == "" {
 		return job, eh.Errorf("watchbill: enqueue without a kind")
 	}
@@ -50,7 +51,7 @@ func (inst *Client) Enqueue(req Request) (job watchbillstore.Job, err error) {
 	if obo := req.OnBehalfOf; obo != nil {
 		wire.OboTask, wire.OboEpoch, wire.OboCall = obo.Task, obo.Epoch, obo.Call
 	}
-	r, err := inst.call(wire)
+	r, err := inst.call(ctx, wire)
 	if err != nil {
 		return
 	}
@@ -68,20 +69,20 @@ func (inst *Client) Enqueue(req Request) (job watchbillstore.Job, err error) {
 // Cancel asks for the job to stop, with a note for the event. ok is false
 // when the job is in a state a cancel does not apply to, or does not
 // exist; err is a transport or store failure.
-func (inst *Client) Cancel(id string, note string) (ok bool, err error) {
-	return inst.verb(watchbillrequest.OpCancel, id, note)
+func (inst *Client) Cancel(ctx context.Context, id string, note string) (ok bool, err error) {
+	return inst.verb(ctx, watchbillrequest.OpCancel, id, note)
 }
 
 // Retry puts a finished job back in the queue with its attempts reset.
-func (inst *Client) Retry(id string, note string) (ok bool, err error) {
-	return inst.verb(watchbillrequest.OpRetry, id, note)
+func (inst *Client) Retry(ctx context.Context, id string, note string) (ok bool, err error) {
+	return inst.verb(ctx, watchbillrequest.OpRetry, id, note)
 }
 
-func (inst *Client) verb(op string, id string, note string) (ok bool, err error) {
+func (inst *Client) verb(ctx context.Context, op string, id string, note string) (ok bool, err error) {
 	if id == "" {
 		return false, eb.Build().Str("op", op).Errorf("watchbill: request without a job id")
 	}
-	r, err := inst.call(watchbillrequest.WatchbillRequest{Op: op, Id: id, Note: note})
+	r, err := inst.call(ctx, watchbillrequest.WatchbillRequest{Op: op, Id: id, Note: note})
 	if err != nil {
 		return
 	}
@@ -90,11 +91,11 @@ func (inst *Client) verb(op string, id string, note string) (ok bool, err error)
 }
 
 // Get reads one job.
-func (inst *Client) Get(id string) (job watchbillstore.Job, found bool, err error) {
+func (inst *Client) Get(ctx context.Context, id string) (job watchbillstore.Job, found bool, err error) {
 	if id == "" {
 		return job, false, eh.Errorf("watchbill: get without a job id")
 	}
-	r, err := inst.call(watchbillrequest.WatchbillRequest{Op: watchbillrequest.OpGet, Id: id})
+	r, err := inst.call(ctx, watchbillrequest.WatchbillRequest{Op: watchbillrequest.OpGet, Id: id})
 	if err != nil {
 		return
 	}
@@ -107,8 +108,8 @@ func (inst *Client) Get(id string) (job watchbillstore.Job, found bool, err erro
 
 // List reads the jobs in any of states and any of kinds (empty: all), at
 // most limit (zero: the worker's bound), newest request first.
-func (inst *Client) List(states []string, kinds []string, limit int) (jobs []watchbillstore.Job, err error) {
-	r, err := inst.call(watchbillrequest.WatchbillRequest{Op: watchbillrequest.OpList, States: states, Kinds: kinds, Limit: uint32(max(limit, 0))})
+func (inst *Client) List(ctx context.Context, states []string, kinds []string, limit int) (jobs []watchbillstore.Job, err error) {
+	r, err := inst.call(ctx, watchbillrequest.WatchbillRequest{Op: watchbillrequest.OpList, States: states, Kinds: kinds, Limit: uint32(max(limit, 0))})
 	if err != nil {
 		return
 	}
@@ -119,7 +120,7 @@ func (inst *Client) List(states []string, kinds []string, limit int) (jobs []wat
 	return
 }
 
-func (inst *Client) call(req watchbillrequest.WatchbillRequest) (r watchbillreply.WatchbillReply, err error) {
+func (inst *Client) call(ctx context.Context, req watchbillrequest.WatchbillRequest) (r watchbillreply.WatchbillReply, err error) {
 	if inst == nil || inst.bus == nil {
 		return r, eh.Errorf("watchbill: client without a bus")
 	}
@@ -128,7 +129,7 @@ func (inst *Client) call(req watchbillrequest.WatchbillRequest) (r watchbillrepl
 	if err != nil {
 		return r, eh.Errorf("encode request: %w", err)
 	}
-	raw, err := inst.bus.RequestWithTimeout(SubjectJob(req.Op), payload, inst.Timeout)
+	raw, err := app.RequestWithin(ctx, inst.bus, inst.Timeout, SubjectJob(req.Op), payload)
 	if err != nil {
 		return r, eb.Build().Str("op", req.Op).Errorf("watchbill request: %w", err)
 	}

@@ -338,7 +338,7 @@ func openAudioSession(ctx context.Context, bus app.BusI, fsys fs.FS, p string, s
 		// precisely so it leaves nothing behind; it is not written.
 		NoCache: true,
 		NewSink: func(s pcm.SourceI) sink.SinkI {
-			out, st := audioout.Open(bus, s)
+			out, st := audioout.Open(ctx, bus, s)
 			inst.deviceErr = st.Reason
 			return out
 		},

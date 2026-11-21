@@ -6,6 +6,7 @@
 package windowopen
 
 import (
+	"context"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -63,8 +64,8 @@ func RaiseCap(reason string) (c app.SubjectFilter) {
 // (unknown app, kind mismatch, oversize, malformed envelope) returns an
 // error carrying the host's reason; on success it returns the opened
 // window's key.
-func RequestOpen(bus app.BusI, targetAppId app.AppIdT, configKind string, config []byte) (windowKey uint64, err error) {
-	return requestOpen(bus, launchrequest.LaunchRequest{
+func RequestOpen(ctx context.Context, bus app.BusI, targetAppId app.AppIdT, configKind string, config []byte) (windowKey uint64, err error) {
+	return requestOpen(ctx, bus, launchrequest.LaunchRequest{
 		At:          time.Now().UTC(),
 		TargetAppId: string(targetAppId),
 		ConfigKind:  configKind,
@@ -80,12 +81,12 @@ func RequestOpen(bus app.BusI, targetAppId app.AppIdT, configKind string, config
 // refusals carrying the reason. Everything after resolution is RequestOpen:
 // same subject, same caller caps, same size cap, same probe, same reply.
 // config must be non-empty: the host refuses a claimed kind with no bytes.
-func RequestOpenKind(bus app.BusI, configKind string, config []byte) (windowKey uint64, err error) {
+func RequestOpenKind(ctx context.Context, bus app.BusI, configKind string, config []byte) (windowKey uint64, err error) {
 	if configKind == "" {
 		err = eh.Errorf("windowhost: RequestOpenKind: no config kind")
 		return
 	}
-	return requestOpen(bus, launchrequest.LaunchRequest{
+	return requestOpen(ctx, bus, launchrequest.LaunchRequest{
 		At:         time.Now().UTC(),
 		ConfigKind: configKind,
 		Config:     config,
@@ -111,7 +112,7 @@ func (inst *RefusedError) Error() string {
 // RequestRaise asks the window host to raise windowKey, a window of the
 // caller's own app, over RaiseSubject. The caller's bus client needs Pub on
 // it (RaiseCap). It blocks on the round-trip, so call it off the frame loop.
-func RequestRaise(bus app.BusI, windowKey uint64) (err error) {
+func RequestRaise(ctx context.Context, bus app.BusI, windowKey uint64) (err error) {
 	if bus == nil {
 		return eh.Errorf("windowhost: RequestRaise: no bus wired")
 	}
@@ -119,7 +120,7 @@ func RequestRaise(bus app.BusI, windowKey uint64) (err error) {
 	if err != nil {
 		return eh.Errorf("windowhost: encode raise: %w", err)
 	}
-	replyBytes, err := bus.Request(RaiseSubject, reqBytes)
+	replyBytes, err := bus.Request(ctx, RaiseSubject, reqBytes)
 	if err != nil {
 		return eh.Errorf("windowhost: raise request: %w", err)
 	}
@@ -135,7 +136,7 @@ func RequestRaise(bus app.BusI, windowKey uint64) (err error) {
 
 // requestOpen runs the launch request/reply over the open subject and turns
 // a refusal reply into a RefusedError.
-func requestOpen(bus app.BusI, req launchrequest.LaunchRequest) (windowKey uint64, err error) {
+func requestOpen(ctx context.Context, bus app.BusI, req launchrequest.LaunchRequest) (windowKey uint64, err error) {
 	if bus == nil {
 		err = eh.Errorf("windowhost: RequestOpen: no bus wired")
 		return
@@ -145,7 +146,7 @@ func requestOpen(bus app.BusI, req launchrequest.LaunchRequest) (windowKey uint6
 		err = eh.Errorf("windowhost: encode launch request: %w", err)
 		return
 	}
-	replyBytes, err := bus.Request(OpenSubject, reqBytes)
+	replyBytes, err := bus.Request(ctx, OpenSubject, reqBytes)
 	if err != nil {
 		err = eh.Errorf("windowhost: open request: %w", err)
 		return

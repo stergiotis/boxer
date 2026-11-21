@@ -1,8 +1,8 @@
 package playground_test
 
 import (
+	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,10 +28,7 @@ func (f *fakeBus) Publish(subject string, payload []byte) (err error) { return }
 func (f *fakeBus) Subscribe(subject string, handler app.MsgHandlerFunc) (unsubscribe func(), err error) {
 	return
 }
-func (f *fakeBus) RequestWithTimeout(subject string, payload []byte, _ time.Duration) ([]byte, error) {
-	return f.Request(subject, payload)
-}
-func (f *fakeBus) Request(subject string, payload []byte) (reply []byte, err error) {
+func (f *fakeBus) Request(ctx context.Context, subject string, payload []byte) (reply []byte, err error) {
 	f.subject, f.payload = subject, payload
 	return buscodec.Encode(f.reply)
 }
@@ -42,7 +39,7 @@ func (f *fakeBus) Request(subject string, payload []byte) (reply []byte, err err
 func TestOpenNamesTheKindAndNoApp(t *testing.T) {
 	bus := &fakeBus{reply: launchreply.LaunchReply{WindowKey: 9}}
 
-	key, err := playground.Open(bus, playground.Launch{Sql: "SELECT 1", AutoRun: true, Endpoint: playground.EndpointIntrospection})
+	key, err := playground.Open(t.Context(), bus, playground.Launch{Sql: "SELECT 1", AutoRun: true, Endpoint: playground.EndpointIntrospection})
 	require.NoError(t, err)
 	assert.Equal(t, uint64(9), key)
 	assert.Equal(t, windowopen.OpenSubject, bus.subject)
@@ -61,6 +58,6 @@ func TestOpenNamesTheKindAndNoApp(t *testing.T) {
 // TestOpenSurfacesARefusal turns a refusal reply into an error.
 func TestOpenSurfacesARefusal(t *testing.T) {
 	bus := &fakeBus{reply: launchreply.LaunchReply{Reason: "no app in this host takes launch kind"}}
-	_, err := playground.Open(bus, playground.Launch{Sql: "SELECT 1"})
+	_, err := playground.Open(t.Context(), bus, playground.Launch{Sql: "SELECT 1"})
 	assert.ErrorContains(t, err, "open refused: no app in this host takes launch kind")
 }

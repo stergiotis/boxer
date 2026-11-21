@@ -27,7 +27,7 @@ func TestLeafSet_Arithmetic(t *testing.T) {
 
 func TestJournal_ReopenAndRuns(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "p.journal")
-	j, err := OpenJournal(path, "r1")
+	j, err := OpenJournal(t.Context(), path, "r1")
 	require.NoError(t, err)
 	now := time.Unix(1, 0)
 	require.NoError(t, j.RecordStart("a.t", true, TableSync{Mode: SyncModeFull, Existing: ExistingPolicyReplace}, "", now))
@@ -35,7 +35,7 @@ func TestJournal_ReopenAndRuns(t *testing.T) {
 	require.NoError(t, j.RecordAttempt("a.u", "1", now))
 	require.NoError(t, j.Close())
 
-	j, err = OpenJournal(path, "r1")
+	j, err = OpenJournal(t.Context(), path, "r1")
 	require.NoError(t, err)
 	e0, started := j.Started("a.t")
 	assert.True(t, e0.Owned && started)
@@ -47,7 +47,7 @@ func TestJournal_ReopenAndRuns(t *testing.T) {
 	assert.True(t, j.Attempted("a.u", "1"))
 	require.NoError(t, j.Close())
 
-	other, err := OpenJournal(path, "r2")
+	other, err := OpenJournal(t.Context(), path, "r2")
 	require.NoError(t, err)
 	_, started = other.Started("a.t")
 	assert.False(t, started, "another run's lines are ignored")
@@ -59,7 +59,7 @@ func TestJournal_ReopenAndRuns(t *testing.T) {
 	_, err = f.WriteString(`{"run":"r1","table":"a.t","ev`)
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
-	j, err = OpenJournal(path, "r1")
+	j, err = OpenJournal(t.Context(), path, "r1")
 	require.NoError(t, err)
 	_, done = j.Done("a.t", "0")
 	assert.True(t, done)

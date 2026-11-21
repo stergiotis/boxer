@@ -84,6 +84,9 @@ const (
 //   - compileCache has its own mutex (compileCacheMu) because the
 //     tripwire goroutine shares it with the render thread.
 type App struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx context.Context
 	// copyDenied logs once that the broker refused a copy.
 	copyDenied sync.Once
 	mu         sync.RWMutex
@@ -230,7 +233,7 @@ func (inst *App) copyToClipboard(text string) {
 		return
 	}
 	go func() {
-		if _, err := bus.Request(clipboardbroker.SubjectWrite, []byte(text)); err != nil {
+		if _, err := bus.Request(inst.ioCtx, clipboardbroker.SubjectWrite, []byte(text)); err != nil {
 			inst.copyDenied.Do(func() {
 				log.Warn().Err(err).Msg("regex_explorer: the clipboard broker refused the copy")
 			})
@@ -241,8 +244,13 @@ func (inst *App) copyToClipboard(text string) {
 // setBus attaches bus as the transport for subsequent queries. Safe to
 // call from the render thread while queries are in flight; an in-flight
 // query keeps whatever [App.busSnapshot] handed it when it started.
-func (inst *App) setBus(bus runtimeapp.BusI) {
+//
+// ctx, when not nil, replaces the ctx the explorer's bus calls run under.
+func (inst *App) setBus(ctx context.Context, bus runtimeapp.BusI) {
 	inst.mu.Lock()
+	if ctx != nil {
+		inst.ioCtx = ctx
+	}
 	inst.bus = bus
 	inst.mu.Unlock()
 }
@@ -292,7 +300,7 @@ func (inst *AppInstance) Manifest() (m runtimeapp.Manifest) { m = manifest; retu
 // label string (e.g. "btm" for their bottom panel).
 func (inst *AppInstance) Mount(ctx runtimeapp.MountContextI) (err error) {
 	if inst.state != nil {
-		inst.state.setBus(ctx.Bus())
+		inst.state.setBus(runtimeapp.ContextOf(ctx), ctx.Bus())
 		inst.state.ids = ctx.Ids()
 	}
 	return

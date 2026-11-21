@@ -58,7 +58,7 @@ const (
 const ServiceAppId app.AppIdT = "runtime.fs"
 
 // DialogTimeout and HandleOpTimeout are what a CLIENT should pass to
-// [app.BusI.RequestWithTimeout] for the two kinds of request this service
+// [app.RequestWithin] for the two kinds of request this service
 // answers. They live here, beside the subjects, because the thing that decides
 // them is a property of the subject rather than of the caller: only this
 // package knows which of its requests waits on a person.

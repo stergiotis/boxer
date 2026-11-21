@@ -51,7 +51,7 @@ func TestTheLadderActsThroughTheServices(t *testing.T) {
 		Client: answer{}, Moderators: []string{string(AppId)}})
 	require.NoError(t, err)
 	t.Cleanup(llmSvc.Close)
-	agentSvc, err := agent.NewService(bus, zerolog.Nop(), agent.Config{})
+	agentSvc, err := agent.NewService(t.Context(), bus, zerolog.Nop(), agent.Config{})
 	require.NoError(t, err)
 	t.Cleanup(agentSvc.Close)
 	agentSvc.SetModerators([]string{string(AppId)})

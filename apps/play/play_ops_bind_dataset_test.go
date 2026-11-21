@@ -32,6 +32,7 @@ func bindLauncher(t *testing.T) (l *PlayLauncher, h app.OperationsHandlerI, publ
 	l, h = opsLauncher(t)
 	l.inner.client = NewClient(ClientConfig{URL: "http://ch.example:8123/"}, nil)
 	l.bus, l.log = bus.NewClient("test.play", caps), logger
+	l.ioCtx = t.Context()
 	t.Cleanup(func() {
 		if l.follower != nil {
 			l.follower.Close()
@@ -51,7 +52,7 @@ func publishInts(t *testing.T, bus app.BusI, alias string) (res adhocdata.Publis
 	defer rec.Release()
 	stream, err := adhocdata.EncodeRecord(rec)
 	require.NoError(t, err)
-	res, err = adhocdata.PublishRequest(bus, adhocdata.PublishInput{Alias: alias, ArrowIPCStream: stream})
+	res, err = adhocdata.PublishRequest(t.Context(), bus, adhocdata.PublishInput{Alias: alias, ArrowIPCStream: stream})
 	require.NoError(t, err)
 	return
 }

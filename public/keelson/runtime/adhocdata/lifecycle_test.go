@@ -29,11 +29,11 @@ func TestInstanceCloseRetractsWhatItPublished(t *testing.T) {
 	sibling := bus.NewClient("test.app", caps)
 	sibling.SetInstanceKey(2)
 
-	mine, err := PublishRequest(window, PublishInput{Alias: "mine", ArrowIPCStream: int64Stream(t, false, 1)})
+	mine, err := PublishRequest(t.Context(), window, PublishInput{Alias: "mine", ArrowIPCStream: int64Stream(t, false, 1)})
 	require.NoError(t, err)
-	kept, err := PublishRequest(window, PublishInput{Alias: "kept", KeepAfterClose: true, ArrowIPCStream: int64Stream(t, false, 2)})
+	kept, err := PublishRequest(t.Context(), window, PublishInput{Alias: "kept", KeepAfterClose: true, ArrowIPCStream: int64Stream(t, false, 2)})
 	require.NoError(t, err)
-	theirs, err := PublishRequest(sibling, PublishInput{Alias: "theirs", ArrowIPCStream: int64Stream(t, false, 3)})
+	theirs, err := PublishRequest(t.Context(), sibling, PublishInput{Alias: "theirs", ArrowIPCStream: int64Stream(t, false, 3)})
 	require.NoError(t, err)
 	require.Equal(t, 3, svc.LiveCount())
 
@@ -43,7 +43,7 @@ func TestInstanceCloseRetractsWhatItPublished(t *testing.T) {
 	assert.True(t, svc.IsLive(theirs.Handle), "a sibling instance's dataset is untouched")
 
 	// The kept dataset is now republishable and retractable by the sibling.
-	_, err = PublishRequest(sibling, PublishInput{Alias: "kept", Handle: kept.Handle, ArrowIPCStream: int64Stream(t, false, 4)})
+	_, err = PublishRequest(t.Context(), sibling, PublishInput{Alias: "kept", Handle: kept.Handle, ArrowIPCStream: int64Stream(t, false, 4)})
 	require.NoError(t, err)
 	require.NoError(t, sibling.Close())
 	assert.False(t, svc.IsLive(theirs.Handle))

@@ -1,6 +1,7 @@
 package audioout
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"sync"
@@ -293,8 +294,8 @@ type Options struct {
 }
 
 // Open is [OpenWith] with no options.
-func Open(bus app.BusI, src pcm.SourceI) (s sink.SinkI, status Status) {
-	return OpenWith(bus, src, Options{})
+func Open(ctx context.Context, bus app.BusI, src pcm.SourceI) (s sink.SinkI, status Status) {
+	return OpenWith(ctx, bus, src, Options{})
 }
 
 // OpenWith asks the host for an audio output over src on the app's bus client.
@@ -305,7 +306,7 @@ func Open(bus app.BusI, src pcm.SourceI) (s sink.SinkI, status Status) {
 //
 // The request waits on the bus and the device may talk to a sound server, so
 // it is called off the render path.
-func OpenWith(bus app.BusI, src pcm.SourceI, opts Options) (s sink.SinkI, status Status) {
+func OpenWith(ctx context.Context, bus app.BusI, src pcm.SourceI, opts Options) (s sink.SinkI, status Status) {
 	null := func(reason string) (sink.SinkI, Status) {
 		return sink.NewNull(src, nil), Status{Reason: reason}
 	}
@@ -320,7 +321,7 @@ func OpenWith(bus app.BusI, src pcm.SourceI, opts Options) (s sink.SinkI, status
 	if err != nil {
 		return null(err.Error())
 	}
-	raw, err := bus.RequestWithTimeout(SubjectOpen, payload, openTimeout)
+	raw, err := app.RequestWithin(ctx, bus, openTimeout, SubjectOpen, payload)
 	if err != nil {
 		// Refused by the bus (the manifest does not declare the subject) or
 		// unanswered (this host runs no audio-output service).

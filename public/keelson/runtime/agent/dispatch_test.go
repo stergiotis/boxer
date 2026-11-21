@@ -337,7 +337,7 @@ func newRigWith(t *testing.T, configure func(cfg *Config)) *rig {
 	if cfg.Journal == nil {
 		cfg.Journal = AcceptAnyIntent{}
 	}
-	svc, err := NewService(bus, zerolog.Nop(), cfg)
+	svc, err := NewService(t.Context(), bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	if svc.captures != nil {

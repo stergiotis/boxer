@@ -47,8 +47,8 @@ var (
 // read worked: no authority outlives the gesture (ADR-0026 §SD7). picked is
 // false when the person closed the dialog. It blocks on the bus: call it off
 // the frame.
-func pickFile(bus app.BusI) (data []byte, fileName string, picked bool, err error) {
-	reply, err := bus.RequestWithTimeout(fsbroker.SubjectDialogRead, nil, fsbroker.DialogTimeout)
+func pickFile(ctx context.Context, bus app.BusI) (data []byte, fileName string, picked bool, err error) {
+	reply, err := app.RequestWithin(ctx, bus, fsbroker.DialogTimeout, fsbroker.SubjectDialogRead, nil)
 	if err != nil {
 		return nil, "", false, eh.Errorf("the file dialog did not answer: %w", err)
 	}
@@ -59,8 +59,8 @@ func pickFile(bus app.BusI) (data []byte, fileName string, picked bool, err erro
 	if !dr.Granted {
 		return nil, "", false, nil
 	}
-	data, err = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opHandleRead, nil, fsbroker.HandleOpTimeout)
-	_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opHandleClose, nil, fsbroker.HandleOpTimeout)
+	data, err = app.RequestWithin(ctx, bus, fsbroker.HandleOpTimeout, dr.HandleSubjectPrefix+opHandleRead, nil)
+	_, _ = app.RequestWithin(ctx, bus, fsbroker.HandleOpTimeout, dr.HandleSubjectPrefix+opHandleClose, nil)
 	if err != nil {
 		return nil, "", false, eh.Errorf("%s could not be read: %w", dr.DisplayName, err)
 	}
@@ -77,7 +77,7 @@ func (inst *App) addImage(art *artefact) {
 		return
 	}
 	ok := inst.adding.Start(inst.tasks, bgjob.Spec{Kind: "chat-add-image", Title: "add an image to the artefact"}, func(ctx context.Context) (note *string, err error) {
-		data, fileName, picked, err := pickFile(bus)
+		data, fileName, picked, err := pickFile(ctx, bus)
 		if err != nil {
 			return nil, err
 		}

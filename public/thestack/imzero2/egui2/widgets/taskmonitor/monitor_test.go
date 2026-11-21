@@ -50,7 +50,7 @@ func newMonitor(t *testing.T, f *busFixture, opts Options) (m *Monitor) {
 	})
 	ids := c.NewWidgetIdStack()
 	m = New(ids, "tm-test", api, opts)
-	require.NoError(t, m.Start())
+	require.NoError(t, m.Start(t.Context()))
 	t.Cleanup(func() {
 		_ = m.Close()
 	})
@@ -155,7 +155,7 @@ func TestMonitor_ErrorPath_CarriesErrorText(t *testing.T) {
 func TestMonitor_StartStopIdempotent(t *testing.T) {
 	f := newBusFixture(t)
 	m := newMonitor(t, f, Options{})
-	require.Error(t, m.Start(), "second Start must error")
+	require.Error(t, m.Start(t.Context()), "second Start must error")
 	require.NoError(t, m.Close())
 	require.NoError(t, m.Close(), "second Stop is a no-op")
 }
@@ -191,7 +191,7 @@ func TestMonitor_SeedFromSupervisor_PopulatesInflight(t *testing.T) {
 	})
 	ids := c.NewWidgetIdStack()
 	m := New(ids, "tm-seed", api, Options{SeedFromSupervisor: true})
-	require.NoError(t, m.Start(), "seed failure must not block Start")
+	require.NoError(t, m.Start(t.Context()), "seed failure must not block Start")
 	defer func() { _ = m.Close() }()
 	assert.Zero(t, m.InflightCount(), "no supervisor ⇒ empty seed")
 }

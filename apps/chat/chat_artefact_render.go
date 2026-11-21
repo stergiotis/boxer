@@ -445,7 +445,7 @@ func (inst *App) openArtefactInMdedit(text string) {
 			err = eh.Errorf("encode the mdedit launch config: %w", err)
 			return
 		}
-		if _, err = windowopen.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg); err != nil {
+		if _, err = windowopen.RequestOpen(ctx, bus, launchcfg.AppId, launchcfg.Kind, cfg); err != nil {
 			err = eh.Errorf("open mdedit: %w", err)
 			return
 		}

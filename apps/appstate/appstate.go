@@ -107,6 +107,9 @@ type snapshot struct {
 
 // App is the per-window instance.
 type App struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx   context.Context
 	ids     *c.WidgetIdStack
 	logger  zerolog.Logger
 	density styletokens.DensityE
@@ -155,6 +158,7 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 // Mount takes the host's bus client, reads the table through it, and starts
 // the poller.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
+	inst.ioCtx = app.ContextOf(ctx)
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	inst.client = as.NewClient(ctx.Bus())
@@ -275,7 +279,7 @@ func (inst *App) refresh(ctx context.Context) {
 // deleteEntry clears one row, named as the table names it.
 func (inst *App) deleteEntry(r entryRow) {
 	inst.verb("delete", func() (note string, err error) {
-		res, err := inst.client.Delete(app.AppIdT(r.AppId), r.Kind, r.Key, r.EntityId)
+		res, err := inst.client.Delete(inst.ioCtx, app.AppIdT(r.AppId), r.Kind, r.Key, r.EntityId)
 		if err != nil {
 			return "", err
 		}
@@ -304,7 +308,7 @@ func (inst *App) confirmForget() {
 		return
 	}
 	inst.verb("forget", func() (note string, err error) {
-		res, err := inst.client.Forget(app.AppIdT(armed.appId))
+		res, err := inst.client.Forget(inst.ioCtx, app.AppIdT(armed.appId))
 		if err != nil {
 			return "", err
 		}

@@ -140,7 +140,7 @@ func TestParamsBindPlaceholders(t *testing.T) {
 	payload, err := buscodec.Encode(keelsonqueryrequest.KeelsonQueryRequest{Table: "env", Sql: "SELECT 1 FROM env",
 		ParamName: []string{"a", "b"}, ParamValue: []string{"1"}})
 	require.NoError(t, err)
-	raw, err := svc.RequestWithTimeout(Subject("env"), payload, 5*time.Second)
+	raw, err := app.RequestWithin(ctx, svc, 5*time.Second, Subject("env"), payload)
 	require.NoError(t, err)
 	r, err := buscodec.Decode[keelsonqueryreply.KeelsonQueryReply](raw)
 	require.NoError(t, err)

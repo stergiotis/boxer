@@ -76,7 +76,7 @@ func TestABundleCrossesWindowsWithItsProvenance(t *testing.T) {
 		// on blanket ones passed while play could not publish at all.
 		c := r.bus.NewClient(manifest.Id, manifest.Caps)
 		c.SetInstanceKey(key)
-		l = play.NewHeadlessLauncherForTest(c, zerolog.Nop(), "http://ch.example:8123/")
+		l = play.NewHeadlessLauncherForTest(t.Context(), c, zerolog.Nop(), "http://ch.example:8123/")
 		e := opengine.New(manifest.Operations, l.Operations())
 		r.host.mu.Lock()
 		r.host.engines[key] = e
@@ -162,7 +162,7 @@ func TestABundleCrossesWindowsWithItsProvenance(t *testing.T) {
 
 	// A third party reads the dataset whole.
 	reader := r.bus.NewClient("test.notebook", caps)
-	read, err := adhocdata.ReadAll(reader, "counts__result", nil)
+	read, err := adhocdata.ReadAll(ctx, reader, "counts__result", nil)
 	require.NoError(t, err)
 	assert.Equal(t, []int64{0, 1, 2, 3, 4}, e2eValues(t, read.ArrowIPCStream), "the producer's rows, as play held them")
 	assert.Equal(t, consumer.DatasetBindingsForTest()["result"], read.Handle, "the consumer bound the dataset that was read")

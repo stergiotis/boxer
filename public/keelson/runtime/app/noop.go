@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
@@ -27,13 +26,9 @@ func (inst *NoopBus) Subscribe(subject string, handler MsgHandlerFunc) (unsubscr
 	return
 }
 
-func (inst *NoopBus) Request(subject string, payload []byte) (reply []byte, err error) {
+func (inst *NoopBus) Request(ctx context.Context, subject string, payload []byte) (reply []byte, err error) {
 	err = eb.Build().Str("subject", subject).Errorf("noopbus: broker not available in M1")
 	return
-}
-
-func (inst *NoopBus) RequestWithTimeout(subject string, payload []byte, _ time.Duration) (reply []byte, err error) {
-	return inst.Request(subject, payload)
 }
 
 // NoopStorage is a StorageI that errors on every call. Used by M1 hosts

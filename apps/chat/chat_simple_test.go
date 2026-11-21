@@ -41,7 +41,7 @@ func simpleRig(t *testing.T) (storage app.StorageI, stored func() (string, bool)
 func simpleWindow(t *testing.T, storage app.StorageI) (inst *App) {
 	t.Helper()
 	inst = newApp()
-	inst.simpleStore = storage
+	inst.simpleStore, inst.ioCtx = storage, t.Context()
 	inst.loadSimpleView()
 	require.Eventually(t, func() bool {
 		inst.syncSimpleView()
@@ -84,7 +84,7 @@ func TestATickBeforeTheStoreAnswersStands(t *testing.T) {
 	storage, stored := simpleRig(t)
 	require.NoError(t, storage.Set(t.Context(), simpleViewKey, []byte(simpleViewOff)))
 	inst := newApp()
-	inst.simpleStore = storage
+	inst.simpleStore, inst.ioCtx = storage, t.Context()
 	inst.loadSimpleView()
 	inst.simple = true
 	keeps(t, inst, stored, simpleViewOn)

@@ -154,13 +154,13 @@ func (inst *PackManifest) Marshal() (data []byte, err error) {
 }
 
 // SaveIn writes the manifest into the pack directory, atomically.
-func (inst *PackManifest) SaveIn(dir string) (err error) {
+func (inst *PackManifest) SaveIn(ctx context.Context, dir string) (err error) {
 	var data []byte
 	data, err = inst.Marshal()
 	if err != nil {
 		return
 	}
-	err = OsFiles{}.WriteFile(filepath.Join(dir, PackManifestName), data)
+	err = OsFiles{}.WriteFile(ctx, filepath.Join(dir, PackManifestName), data)
 	if err != nil {
 		err = eb.Build().Str("dir", dir).Errorf("unable to write pack manifest: %w", err)
 	}

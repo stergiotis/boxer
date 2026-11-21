@@ -44,7 +44,7 @@ func (inst *App) openMdeditLink(link string) {
 	name := path.Base(r.Path)
 	bus := inst.bus
 	inst.runAction("chat-open-link", "open "+name+" in mdedit", func(ctx context.Context) (note string, err error) {
-		if _, err = mdeditlink.Open(bus, link); err != nil {
+		if _, err = mdeditlink.Open(ctx, bus, link); err != nil {
 			return
 		}
 		return "opened " + name + " in mdedit", nil

@@ -381,7 +381,7 @@ func (inst *App) exportNow(ctx context.Context, p *exportPlan, name string) (not
 	if coord != nil {
 		req.Mount = coord.exportMount()
 	}
-	if err = ladingpublish.Check(bus, exportMountTag, req); err != nil {
+	if err = ladingpublish.Check(ctx, bus, exportMountTag, req); err != nil {
 		return "", p.refused(ctx, exportStageCheck, confined, err)
 	}
 	if p.endorse && coord != nil {
@@ -389,7 +389,7 @@ func (inst *App) exportNow(ctx context.Context, p *exportPlan, name string) (not
 			return "", eh.Errorf("endorse the revision: %w", err)
 		}
 	}
-	res, err := ladingpublish.Publish(bus, exportMountTag, req)
+	res, err := ladingpublish.Publish(ctx, bus, exportMountTag, req)
 	if err != nil {
 		return "", p.refused(ctx, exportStagePublish, confined, err)
 	}
@@ -408,7 +408,7 @@ func (inst *App) exportNow(ctx context.Context, p *exportPlan, name string) (not
 	if err != nil {
 		return "", eh.Errorf("encode the mdedit launch config: %w", err)
 	}
-	if _, err = windowopen.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg); err != nil {
+	if _, err = windowopen.RequestOpen(ctx, bus, launchcfg.AppId, launchcfg.Kind, cfg); err != nil {
 		return "", eh.Errorf("open mdedit: %w", err)
 	}
 	return note + ", and opened it in mdedit", nil

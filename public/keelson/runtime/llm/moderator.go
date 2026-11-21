@@ -56,7 +56,7 @@ func (inst *Moderator) request(ctx context.Context, subject string, v any, wait 
 	if deadline, ok := ctx.Deadline(); ok {
 		wait = min(wait, time.Until(deadline))
 	}
-	raw, err := inst.bus.RequestWithTimeout(subject, payload, wait)
+	raw, err := app.RequestWithin(ctx, inst.bus, wait, subject, payload)
 	if err != nil {
 		return rep, eb.Build().Str("subject", subject).Errorf("llm: moderator request: %w", err)
 	}

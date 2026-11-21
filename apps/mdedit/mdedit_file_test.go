@@ -45,6 +45,7 @@ func newFileSetup(t *testing.T) (inst *App, svc *fsbroker.Service, cleanup func(
 	inst = newApp()
 	inst.logger = zerolog.Nop()
 	inst.bus = bus.NewClient(app.AppIdT(manifest.Id), manifest.Caps)
+	inst.ioCtx = t.Context()
 	cleanup = func() { svc.Close() }
 	return
 }
@@ -630,7 +631,7 @@ func TestFile_SecondOpenEndsTheFirstFollow(t *testing.T) {
 
 	// The first handle is dead: closed broker-side and its cap revoked, so a
 	// read through it must fail one way or the other.
-	body, err := inst.bus.RequestWithTimeout(firstHandle+opRead, nil, time.Second)
+	body, err := app.RequestWithin(t.Context(), inst.bus, time.Second, firstHandle+opRead, nil)
 	if err == nil {
 		reason, isErr := readReplyError(body)
 		require.True(t, isErr, "the first handle must refuse after the second open")
@@ -654,7 +655,7 @@ func TestFile_UnmountClosesTheFollowHandle(t *testing.T) {
 
 	require.NoError(t, inst.Unmount(nil))
 
-	body, err := inst.bus.RequestWithTimeout(handle+opRead, nil, time.Second)
+	body, err := app.RequestWithin(t.Context(), inst.bus, time.Second, handle+opRead, nil)
 	if err == nil {
 		reason, isErr := readReplyError(body)
 		require.True(t, isErr, "the handle must be closed by Unmount")

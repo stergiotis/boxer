@@ -1,6 +1,7 @@
 package natsbus
 
 import (
+	"context"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -103,17 +104,15 @@ func (inst *Client) SubscribeInbox(handler app.MsgHandlerFunc) (inbox string, un
 	return
 }
 
-func (inst *Client) Request(subject string, payload []byte) (reply []byte, err error) {
-	return inst.RequestWithTimeout(subject, payload, 0)
-}
-
-// RequestWithTimeout waits d rather than the connection's configured default.
-// A non-positive d means "the default", which is what Request passes.
-func (inst *Client) RequestWithTimeout(subject string, payload []byte, d time.Duration) (reply []byte, err error) {
-	if d <= 0 {
-		d = inst.requestTimeout
+// Request waits under ctx: ctx's deadline, when it has one, is the wait;
+// a ctx without one waits the connection's configured default.
+func (inst *Client) Request(ctx context.Context, subject string, payload []byte) (reply []byte, err error) {
+	if _, has := ctx.Deadline(); !has {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, inst.requestTimeout)
+		defer cancel()
 	}
-	m, rerr := inst.nc.Request(subject, payload, d)
+	m, rerr := inst.nc.RequestWithContext(ctx, subject, payload)
 	if rerr != nil {
 		err = eb.Build().Str("subject", subject).Errorf("natsbus: request: %w", rerr)
 		return

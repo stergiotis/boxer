@@ -297,7 +297,7 @@ func (inst *Client) Describe(ctx context.Context) (d Description, err error) {
 	if err = ctx.Err(); err != nil {
 		return d, eh.Errorf("llm: before request: %w", err)
 	}
-	raw, err := inst.bus.RequestWithTimeout(SubjectDescribe, nil, inst.wait(ctx, 5*time.Second))
+	raw, err := app.RequestWithin(ctx, inst.bus, inst.wait(ctx, 5*time.Second), SubjectDescribe, nil)
 	if err != nil {
 		return d, eh.Errorf("llm.describe request: %w", err)
 	}
@@ -426,7 +426,7 @@ func (inst *Client) request(ctx context.Context, subject string, payload []byte,
 	done := make(chan result, 1)
 	wait := inst.wait(ctx, callWait)
 	go func() {
-		r, e := inst.bus.RequestWithTimeout(subject, payload, wait)
+		r, e := app.RequestWithin(ctx, inst.bus, wait, subject, payload)
 		done <- result{raw: r, err: e}
 	}()
 	select {

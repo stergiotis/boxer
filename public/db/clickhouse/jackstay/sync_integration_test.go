@@ -73,7 +73,7 @@ func TestSync_LiveServer(t *testing.T) {
 
 	journalPath := filepath.Join(t.TempDir(), "plan.json.journal")
 	openJournal := func(run string) *Journal {
-		j, jerr := OpenJournal(journalPath, run)
+		j, jerr := OpenJournal(ctx, journalPath, run)
 		require.NoError(t, jerr)
 		t.Cleanup(func() { _ = j.Close() })
 		return j

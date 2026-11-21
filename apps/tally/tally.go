@@ -77,6 +77,9 @@ const (
 
 // App is one tally window.
 type App struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx   context.Context
 	ids     *c.WidgetIdStack
 	log     zerolog.Logger
 	bus     app.BusI
@@ -252,6 +255,7 @@ func newApp() (inst *App) {
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
+	inst.ioCtx = app.ContextOf(ctx)
 	inst.ids = ctx.Ids()
 	inst.log = ctx.Log()
 	inst.bus = ctx.Bus()
@@ -727,7 +731,7 @@ func (inst *App) copyToClipboard(what string, text string) {
 	started := inst.spawn(func(context.Context) {
 		var rec clipboardbroker.CopyRecord
 		err := task.RunToCompletion(tasks, task.SpawnOpts{Kind: "tally-copy", Title: "tally: copy " + what}, func() (err error) {
-			rec, err = clipboardbroker.Write(bus, payload)
+			rec, err = clipboardbroker.Write(inst.ioCtx, bus, payload)
 			return
 		})
 		inst.gestures.land(false, copyNote(what, rec, err))
@@ -805,7 +809,7 @@ func (inst *App) openInPlay(sc *storeConn, p *pane) {
 	bus, tasks := inst.bus, inst.tasks
 	started := inst.spawn(func(context.Context) {
 		err := task.RunToCompletion(tasks, task.SpawnOpts{Kind: "tally-open-play", Title: "tally: open " + where + " in play"}, func() (err error) {
-			_, err = playground.Open(bus, cfg)
+			_, err = playground.Open(inst.ioCtx, bus, cfg)
 			return
 		})
 		note := "opened in play — " + where

@@ -100,7 +100,7 @@ func (inst *Client) Fetch(ctx context.Context, destination string, r Request) (r
 	if err != nil {
 		return
 	}
-	raw, err := inst.bus.RequestWithTimeout(Subject(destination), payload, inst.wait(ctx))
+	raw, err := app.RequestWithin(ctx, inst.bus, inst.wait(ctx), Subject(destination), payload)
 	if err != nil {
 		return res, eb.Build().Str("destination", destination).Errorf("net.http.fetch request: %w", err)
 	}

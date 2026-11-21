@@ -2,6 +2,7 @@ package adhocdata
 
 import (
 	"bytes"
+	"context"
 	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -67,14 +68,14 @@ func (inst *Publisher) Base() (s string) { return inst.alias }
 // there is one. On success the handle is recorded before anything else,
 // so a later failure in the same round cannot orphan it; the result and
 // generation land for [Publisher.Last].
-func (inst *Publisher) Publish(bus app.BusI, stream []byte) (res PublishResult, err error) {
+func (inst *Publisher) Publish(ctx context.Context, bus app.BusI, stream []byte) (res PublishResult, err error) {
 	if bus == nil {
 		return res, eh.Errorf("adhocdata: no bus to publish over")
 	}
 	inst.mu.Lock()
 	handle := inst.last.Handle
 	inst.mu.Unlock()
-	res, err = PublishRequest(bus, PublishInput{
+	res, err = PublishRequest(ctx, bus, PublishInput{
 		Alias: inst.alias, Handle: handle, ArrowIPCStream: stream, KeepAfterClose: inst.keep, WindowScoped: inst.scoped,
 	})
 	inst.mu.Lock()
@@ -88,7 +89,7 @@ func (inst *Publisher) Publish(bus app.BusI, stream []byte) (res PublishResult, 
 }
 
 // PublishRecord encodes rec as an Arrow IPC stream and publishes it.
-func (inst *Publisher) PublishRecord(bus app.BusI, rec arrow.RecordBatch) (res PublishResult, err error) {
+func (inst *Publisher) PublishRecord(ctx context.Context, bus app.BusI, rec arrow.RecordBatch) (res PublishResult, err error) {
 	stream, err := EncodeRecord(rec)
 	if err != nil {
 		inst.mu.Lock()
@@ -96,7 +97,7 @@ func (inst *Publisher) PublishRecord(bus app.BusI, rec arrow.RecordBatch) (res P
 		inst.mu.Unlock()
 		return
 	}
-	return inst.Publish(bus, stream)
+	return inst.Publish(ctx, bus, stream)
 }
 
 // Handle is the held handle — empty before the first successful publish.
@@ -118,7 +119,7 @@ func (inst *Publisher) Last() (res PublishResult, gen uint64, err error) {
 // Retract withdraws the held dataset, if any, and forgets the handle. The
 // runtime retracts a window's datasets when the window closes (ADR-0240
 // §SD5), so this is for a publisher that wants its dataset gone earlier.
-func (inst *Publisher) Retract(bus app.BusI) (err error) {
+func (inst *Publisher) Retract(ctx context.Context, bus app.BusI) (err error) {
 	inst.mu.Lock()
 	handle := inst.last.Handle
 	inst.last = PublishResult{}
@@ -126,7 +127,7 @@ func (inst *Publisher) Retract(bus app.BusI) (err error) {
 	if handle == "" || bus == nil {
 		return nil
 	}
-	return RetractRequest(bus, handle)
+	return RetractRequest(ctx, bus, handle)
 }
 
 // EncodeRecord writes one record batch as the Arrow IPC stream a publish

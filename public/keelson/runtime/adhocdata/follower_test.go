@@ -140,10 +140,10 @@ func due(f *Follower) {
 // TestNewFollowerAbsent covers the cases that must not allocate a
 // follower: nothing declared, or no bus to bind against.
 func TestNewFollowerAbsent(t *testing.T) {
-	f, bindings := NewFollower(FollowerConfig{Bus: &app.NoopBus{}, Log: zerolog.Nop()})
+	f, bindings := NewFollower(t.Context(), FollowerConfig{Bus: &app.NoopBus{}, Log: zerolog.Nop()})
 	assert.Nil(t, f)
 	assert.Nil(t, bindings)
-	f, bindings = NewFollower(FollowerConfig{Log: zerolog.Nop(), Aliases: []string{"items"}})
+	f, bindings = NewFollower(t.Context(), FollowerConfig{Log: zerolog.Nop(), Aliases: []string{"items"}})
 	assert.Nil(t, f)
 	assert.Nil(t, bindings)
 }
@@ -192,11 +192,11 @@ func TestFollowerFollowsAnAddedAlias(t *testing.T) {
 // exists with no alias declared, and a declared alias waits for the first
 // Sync instead of resolving at construction.
 func TestNewDeferredFollower(t *testing.T) {
-	assert.Nil(t, NewDeferredFollower(FollowerConfig{Log: zerolog.Nop(), Aliases: []string{"items"}}))
-	f := NewDeferredFollower(FollowerConfig{Bus: &app.NoopBus{}, Log: zerolog.Nop()})
+	assert.Nil(t, NewDeferredFollower(t.Context(), FollowerConfig{Log: zerolog.Nop(), Aliases: []string{"items"}}))
+	f := NewDeferredFollower(t.Context(), FollowerConfig{Bus: &app.NoopBus{}, Log: zerolog.Nop()})
 	require.NotNil(t, f)
 	assert.Empty(t, f.Pending())
-	f = NewDeferredFollower(FollowerConfig{Bus: &app.NoopBus{}, Log: zerolog.Nop(), Aliases: []string{"items"}})
+	f = NewDeferredFollower(t.Context(), FollowerConfig{Bus: &app.NoopBus{}, Log: zerolog.Nop(), Aliases: []string{"items"}})
 	require.NotNil(t, f)
 	assert.Equal(t, []string{"items"}, f.Pending())
 	f.Close()
@@ -207,7 +207,7 @@ func TestNewDeferredFollower(t *testing.T) {
 // the pending set reported once and not again, and no second round stacked
 // on an in-flight one.
 func TestFollowerNoopBusFallsBackToPolling(t *testing.T) {
-	f, bindings := NewFollower(FollowerConfig{Bus: &app.NoopBus{}, Log: zerolog.Nop(), Aliases: []string{"pprof_cpu"}})
+	f, bindings := NewFollower(t.Context(), FollowerConfig{Bus: &app.NoopBus{}, Log: zerolog.Nop(), Aliases: []string{"pprof_cpu"}})
 	require.NotNil(t, f)
 	assert.Empty(t, bindings)
 	assert.Nil(t, f.unsub, "no events on a NoopBus")
@@ -428,7 +428,7 @@ func TestFollowerLiveWithdrawal(t *testing.T) {
 		{Pattern: SubjectEventAll, Direction: app.CapDirectionSub, Reason: "test"},
 	})
 
-	f, bindings := NewFollower(FollowerConfig{Bus: consumer, Log: logger, Aliases: []string{"items"}})
+	f, bindings := NewFollower(t.Context(), FollowerConfig{Bus: consumer, Log: logger, Aliases: []string{"items"}})
 	require.NotNil(t, f)
 	t.Cleanup(f.Close)
 	assert.NotNil(t, f.unsub, "events subscribed")
@@ -436,17 +436,17 @@ func TestFollowerLiveWithdrawal(t *testing.T) {
 	assert.Empty(t, bindings)
 	target := newRecordingTarget()
 
-	res, err := PublishRequest(producer, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 1, 2)})
+	res, err := PublishRequest(t.Context(), producer, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 1, 2)})
 	require.NoError(t, err)
 	waitFor(t, func() bool { bound, _ := f.Sync(target); return bound }, "published hint resolved and bound the alias")
 	assert.Equal(t, res.Handle, target.bound["items"])
 
-	require.NoError(t, RetractRequest(producer, res.Handle))
+	require.NoError(t, RetractRequest(t.Context(), producer, res.Handle))
 	waitFor(t, func() bool { _, changed := f.Sync(target); return changed }, "retracted event unbound the alias")
 	assert.Equal(t, []string{"items"}, target.unbound)
 	assert.Equal(t, []string{"items"}, f.Pending())
 
-	res2, err := PublishRequest(producer, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 3)})
+	res2, err := PublishRequest(t.Context(), producer, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 3)})
 	require.NoError(t, err)
 	waitFor(t, func() bool { bound, _ := f.Sync(target); return bound }, "the next publish rebound the alias")
 	assert.Equal(t, res2.Handle, target.bound["items"])
@@ -455,8 +455,8 @@ func TestFollowerLiveWithdrawal(t *testing.T) {
 	// Simulate a lost `retracted`: drop the events subscription, retract,
 	// publish a successor, then let the tick recover the binding.
 	f.Close()
-	require.NoError(t, RetractRequest(producer, res2.Handle))
-	res3, err := PublishRequest(producer, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 4)})
+	require.NoError(t, RetractRequest(t.Context(), producer, res2.Handle))
+	res3, err := PublishRequest(t.Context(), producer, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 4)})
 	require.NoError(t, err)
 	_, changed := f.Sync(target)
 	assert.False(t, changed, "no event arrived; still bound to the dead handle")

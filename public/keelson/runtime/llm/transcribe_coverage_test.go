@@ -70,7 +70,7 @@ func TestATranscriptionStreamInboxMustBeTheSenders(t *testing.T) {
 	require.NoError(t, err)
 	defer unsubscribe()
 	other := bus.NewClient(appId, ClientCaps("test: transcribe"))
-	raw, err := other.RequestWithTimeout(SubjectTranscribe, mustEncode(t, wireTranscribeRequest{V: wireVersion, Audio: wav, CancelKey: "k", StreamInbox: inbox}), 5*time.Second)
+	raw, err := app.RequestWithin(t.Context(), other, 5*time.Second, SubjectTranscribe, mustEncode(t, wireTranscribeRequest{V: wireVersion, Audio: wav, CancelKey: "k", StreamInbox: inbox}))
 	require.NoError(t, err)
 	rep, err := decode[wireTranscribeReply](raw)
 	require.NoError(t, err)
@@ -175,7 +175,7 @@ func TestATranscriptionFailureKeepsWhatIsLeft(t *testing.T) {
 	cli, svc, _ := serve(t, speechCfg(f))
 	require.NoError(t, svc.Ledger().Set(ration.Rule{Id: "calls", Select: ration.Selector{Kind: ration.AccountKindApp, Key: string(appId)},
 		Kind: ration.RuleKindBudget, Quantity: ration.QuantityCalls, Limit: 100, Window: time.Hour}))
-	raw, err := cli.bus.RequestWithTimeout(SubjectTranscribe, mustEncode(t, wireTranscribeRequest{V: wireVersion, Audio: wav}), 5*time.Second)
+	raw, err := app.RequestWithin(t.Context(), cli.bus, 5*time.Second, SubjectTranscribe, mustEncode(t, wireTranscribeRequest{V: wireVersion, Audio: wav}))
 	require.NoError(t, err)
 	w, err := decode[wireTranscribeReply](raw)
 	require.NoError(t, err)

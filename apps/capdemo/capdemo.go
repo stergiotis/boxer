@@ -290,7 +290,7 @@ func (inst *App) runCopy(text string) {
 		inst.setClipboardNote(noBusRemedy, badge.ToneWarning)
 		return
 	}
-	rec, err := clipboardbroker.Write(inst.bus, clipboardbroker.Payload{Text: text, Source: clipboardSource})
+	rec, err := clipboardbroker.Write(inst.ioCtx, inst.bus, clipboardbroker.Payload{Text: text, Source: clipboardSource})
 	if err != nil {
 		inst.setClipboardNote("copy: "+err.Error(), badge.ToneError)
 		return
@@ -396,7 +396,7 @@ func (inst *App) runPick() {
 	inst.setBusy(true)
 	defer inst.setBusy(false)
 
-	rawReply, rerr := inst.bus.RequestWithTimeout(fsbroker.SubjectDialogRead, nil, fsbroker.DialogTimeout)
+	rawReply, rerr := app.RequestWithin(inst.ioCtx, inst.bus, fsbroker.DialogTimeout, fsbroker.SubjectDialogRead, nil)
 	if rerr != nil {
 		inst.setFileErr("fs.dialog.read: " + rerr.Error())
 		return
@@ -412,7 +412,7 @@ func (inst *App) runPick() {
 	}
 
 	readSubj := dr.HandleSubjectPrefix + ".read"
-	body, rerr := inst.bus.RequestWithTimeout(readSubj, nil, fsbroker.HandleOpTimeout)
+	body, rerr := app.RequestWithin(inst.ioCtx, inst.bus, fsbroker.HandleOpTimeout, readSubj, nil)
 	if rerr != nil {
 		inst.mu.Lock()
 		inst.lastHandlePrefix = dr.HandleSubjectPrefix
@@ -441,7 +441,7 @@ func (inst *App) runClose(handlePrefix string) {
 	if inst.bus == nil {
 		return
 	}
-	_, _ = inst.bus.RequestWithTimeout(handlePrefix+".close", nil, fsbroker.HandleOpTimeout)
+	_, _ = app.RequestWithin(inst.ioCtx, inst.bus, fsbroker.HandleOpTimeout, handlePrefix+".close", nil)
 	inst.mu.Lock()
 	inst.lastHandlePrefix = ""
 	inst.previewBytes = nil
@@ -620,7 +620,7 @@ func (inst *App) runWatchPick() {
 		return
 	}
 
-	rawReply, rerr := inst.bus.RequestWithTimeout(fsbroker.SubjectDialogWatch, nil, fsbroker.DialogTimeout)
+	rawReply, rerr := app.RequestWithin(inst.ioCtx, inst.bus, fsbroker.DialogTimeout, fsbroker.SubjectDialogWatch, nil)
 	if rerr != nil {
 		inst.setWatchErr("fs.dialog.watch: " + rerr.Error())
 		return
@@ -663,7 +663,7 @@ func (inst *App) runWatchPick() {
 		reqPayload = payload
 	}
 
-	watchReply, werr := inst.bus.RequestWithTimeout(dr.HandleSubjectPrefix+".watch", reqPayload, fsbroker.HandleOpTimeout)
+	watchReply, werr := app.RequestWithin(inst.ioCtx, inst.bus, fsbroker.HandleOpTimeout, dr.HandleSubjectPrefix+".watch", reqPayload)
 	if werr != nil {
 		unsubscribe()
 		inst.setWatchErr("watch start: " + werr.Error())
@@ -706,7 +706,7 @@ func (inst *App) runWatchStop() {
 	inst.watchUnsubscribe = nil
 	inst.mu.Unlock()
 	if prefix != "" {
-		_, _ = inst.bus.RequestWithTimeout(prefix+".unwatch", nil, fsbroker.HandleOpTimeout)
+		_, _ = app.RequestWithin(inst.ioCtx, inst.bus, fsbroker.HandleOpTimeout, prefix+".unwatch", nil)
 	}
 	if unsub != nil {
 		unsub()
@@ -730,7 +730,7 @@ func (inst *App) runWatchClose() {
 	inst.watchEvents = nil
 	inst.mu.Unlock()
 	if prefix != "" {
-		_, _ = inst.bus.RequestWithTimeout(prefix+".close", nil, fsbroker.HandleOpTimeout)
+		_, _ = app.RequestWithin(inst.ioCtx, inst.bus, fsbroker.HandleOpTimeout, prefix+".close", nil)
 	}
 	if unsub != nil {
 		unsub()

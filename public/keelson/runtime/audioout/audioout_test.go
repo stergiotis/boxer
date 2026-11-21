@@ -62,7 +62,7 @@ func TestOpenReturnsTheDevicesSink(t *testing.T) {
 	bus, svc := served(t, dev)
 	src := source(t)
 
-	s, st := audioout.Open(bus.NewClient("test.player", playerCaps()), src)
+	s, st := audioout.Open(t.Context(), bus.NewClient("test.player", playerCaps()), src)
 	require.True(t, st.Audible(), st.Reason)
 	require.Equal(t, "fake", st.Device)
 	require.Len(t, dev.opened, 1)
@@ -82,7 +82,7 @@ func TestOpenWithoutTheCapabilityGetsTheNullSink(t *testing.T) {
 	dev := &fakeDevice{}
 	bus, svc := served(t, dev)
 
-	s, st := audioout.Open(bus.NewClient("test.undeclared", nil), source(t))
+	s, st := audioout.Open(t.Context(), bus.NewClient("test.undeclared", nil), source(t))
 	require.False(t, st.Audible())
 	require.NotEmpty(t, st.Reason)
 	require.Empty(t, st.Device)
@@ -93,7 +93,7 @@ func TestOpenWithoutTheCapabilityGetsTheNullSink(t *testing.T) {
 
 func TestOpenWithNoServiceGetsTheNullSink(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
-	s, st := audioout.Open(bus.NewClient("test.player", playerCaps()), source(t))
+	s, st := audioout.Open(t.Context(), bus.NewClient("test.player", playerCaps()), source(t))
 	require.False(t, st.Audible())
 	require.IsType(t, &sink.Null{}, s)
 }
@@ -102,7 +102,7 @@ func TestADeviceThatDoesNotOpenIsRecordedWithItsReason(t *testing.T) {
 	dev := &fakeDevice{err: errors.New("no sound server")}
 	bus, svc := served(t, dev)
 
-	s, st := audioout.Open(bus.NewClient("test.player", playerCaps()), source(t))
+	s, st := audioout.Open(t.Context(), bus.NewClient("test.player", playerCaps()), source(t))
 	require.False(t, st.Audible())
 	require.Contains(t, st.Reason, "no sound server")
 	require.IsType(t, &sink.Null{}, s)
@@ -113,10 +113,10 @@ func TestADeviceThatDoesNotOpenIsRecordedWithItsReason(t *testing.T) {
 }
 
 func TestOpenWithoutASourceOrABus(t *testing.T) {
-	s, st := audioout.Open(nil, source(t))
+	s, st := audioout.Open(t.Context(), nil, source(t))
 	require.False(t, st.Audible())
 	require.NotNil(t, s)
-	s, st = audioout.Open(inprocbus.NewInst(zerolog.Nop()).NewClient("test.player", playerCaps()), nil)
+	s, st = audioout.Open(t.Context(), inprocbus.NewInst(zerolog.Nop()).NewClient("test.player", playerCaps()), nil)
 	require.False(t, st.Audible())
 	require.NotNil(t, s)
 }
@@ -127,8 +127,8 @@ func TestEachOpenIsItsOwnGrant(t *testing.T) {
 	dev := &fakeDevice{}
 	bus, svc := served(t, dev)
 	cli := bus.NewClient("test.player", playerCaps())
-	a, _ := audioout.Open(cli, source(t))
-	b, _ := audioout.Open(cli, source(t))
+	a, _ := audioout.Open(t.Context(), cli, source(t))
+	b, _ := audioout.Open(t.Context(), cli, source(t))
 	require.NotSame(t, a, b)
 	require.Len(t, dev.opened, 2)
 	require.Len(t, svc.Records(), 2)
@@ -182,19 +182,19 @@ func TestOpenWithALatency(t *testing.T) {
 	bus, svc := served(t, dev)
 	client := bus.NewClient("test.player", playerCaps())
 
-	_, st := audioout.OpenWith(client, source(t), audioout.Options{Latency: 300 * time.Millisecond})
+	_, st := audioout.OpenWith(t.Context(), client, source(t), audioout.Options{Latency: 300 * time.Millisecond})
 	require.True(t, st.Audible(), st.Reason)
 	require.Equal(t, []time.Duration{300 * time.Millisecond}, dev.latencies)
 	require.Equal(t, 300*time.Millisecond, svc.Records()[0].Request.Latency)
 
-	_, st = audioout.Open(client, source(t))
+	_, st = audioout.Open(t.Context(), client, source(t))
 	require.True(t, st.Audible(), st.Reason)
 	require.Len(t, dev.latencies, 1, "no latency asked, the plain open")
 	require.Len(t, dev.opened, 2)
 
 	plain := &fakeDevice{}
 	bus, _ = served(t, plain)
-	_, st = audioout.OpenWith(bus.NewClient("test.player", playerCaps()), source(t), audioout.Options{Latency: time.Second})
+	_, st = audioout.OpenWith(t.Context(), bus.NewClient("test.player", playerCaps()), source(t), audioout.Options{Latency: time.Second})
 	require.True(t, st.Audible(), st.Reason)
 	require.Len(t, plain.opened, 1)
 }

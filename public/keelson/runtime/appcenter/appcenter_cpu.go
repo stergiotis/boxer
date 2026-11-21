@@ -165,7 +165,7 @@ func takeCpuMeasurement(ctx context.Context, report bgjob.Reporter, length time.
 	report(0, 0, "publishing")
 	conv, cErr := pprofarrow.Convert(bytes.NewReader(raw), pprofarrow.WithKindHint("cpu"))
 	if cErr == nil && bus != nil {
-		_, cErr = cpuPublisher.Publish(bus, conv.IPCStream)
+		_, cErr = cpuPublisher.Publish(ctx, bus, conv.IPCStream)
 	}
 	switch {
 	case cErr != nil:

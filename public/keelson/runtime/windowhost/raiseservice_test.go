@@ -23,14 +23,14 @@ func TestRaiseService_OwnWindowsOnly(t *testing.T) {
 	other, err := fx.host.Open("test.other")
 	require.NoError(t, err)
 
-	require.NoError(t, windowopen.RequestRaise(fx.caller, uint64(own)))
+	require.NoError(t, windowopen.RequestRaise(t.Context(), fx.caller, uint64(own)))
 	assert.Equal(t, own, fx.host.pendingRaise)
 
 	fx.host.pendingRaise = 0
-	err = windowopen.RequestRaise(fx.caller, uint64(other))
+	err = windowopen.RequestRaise(t.Context(), fx.caller, uint64(other))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "refused")
 	assert.Zero(t, fx.host.pendingRaise)
 
-	assert.Error(t, windowopen.RequestRaise(fx.caller, 99))
+	assert.Error(t, windowopen.RequestRaise(t.Context(), fx.caller, 99))
 }

@@ -128,19 +128,19 @@ func TestQuestionsOverTheBus(t *testing.T) {
 	require.NoError(t, err)
 	defer svc.Close()
 	cli := bus.NewClient("chat", ClientCaps("test"))
-	key, refused, err := Post(cli, quickQuestion())
+	key, refused, err := Post(t.Context(), cli, quickQuestion())
 	require.NoError(t, err)
 	require.Empty(t, refused)
-	a, err := Status(cli, key)
+	a, err := Status(t.Context(), cli, key)
 	require.NoError(t, err)
 	assert.Equal(t, PhaseWaiting, a.Phase)
 	for it := range qs.WaitingItems() {
 		require.True(t, qs.Decide(it.Key, true, nil))
 	}
-	a, err = Status(cli, key)
+	a, err = Status(t.Context(), cli, key)
 	require.NoError(t, err)
 	assert.Equal(t, PhaseSkipped, a.Phase)
-	_, refused, err = Post(cli, Question{Kind: "nope", Text: "x"})
+	_, refused, err = Post(t.Context(), cli, Question{Kind: "nope", Text: "x"})
 	require.NoError(t, err)
 	assert.NotEmpty(t, refused)
 }

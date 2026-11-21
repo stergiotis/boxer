@@ -169,8 +169,8 @@ func TestPlan_Validate(t *testing.T) {
 
 	// A file that decodes but does not validate is refused by LoadPlan.
 	path := filepath.Join(t.TempDir(), "plan.json")
-	require.NoError(t, bad.Save(path))
-	_, err := LoadPlan(path)
+	require.NoError(t, bad.Save(t.Context(), path))
+	_, err := LoadPlan(t.Context(), path)
 	assert.Error(t, err)
 }
 

@@ -1,6 +1,7 @@
 package taskmonitor
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -130,13 +131,13 @@ func (inst *Monitor) maxHistory() int {
 // returns an error without altering state. Seeds from supervisor when
 // Opts.SeedFromSupervisor is set; a failed seed is logged-by-caller
 // (the returned err is best-effort) but does not block subscribing.
-func (inst *Monitor) Start() (err error) {
+func (inst *Monitor) Start(ctx context.Context) (err error) {
 	if !inst.started.CompareAndSwap(false, true) {
 		err = eh.Errorf("taskmonitor: already started")
 		return
 	}
 	if inst.Opts.SeedFromSupervisor {
-		entries, lErr := inst.api.ListInflight()
+		entries, lErr := inst.api.ListInflight(ctx)
 		if lErr == nil {
 			inst.seedFromSnapshot(entries)
 		}

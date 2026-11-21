@@ -69,7 +69,7 @@ func (inst *App) sendToPlay() (out SendToPlayResult, err error) {
 	ps.runner.Start(nil, bgjob.Spec{Kind: "trailviewer.send", Title: "Trail viewer: send to play"},
 		func(ctx context.Context) (out *string, err error) {
 			defer rec.Release()
-			note, err := publishToPlay(bus, pub, rec)
+			note, err := publishToPlay(ctx, bus, pub, rec)
 			if err != nil {
 				return
 			}
@@ -90,14 +90,14 @@ func (inst *App) sendToPlayGesture() {
 
 // publishToPlay publishes rec under the publisher's alias and asks the
 // window host for a play window reading it.
-func publishToPlay(bus app.BusI, pub *adhocdata.Publisher, rec arrow.RecordBatch) (note string, err error) {
-	if _, err = pub.PublishRecord(bus, rec); err != nil {
+func publishToPlay(ctx context.Context, bus app.BusI, pub *adhocdata.Publisher, rec arrow.RecordBatch) (note string, err error) {
+	if _, err = pub.PublishRecord(ctx, bus, rec); err != nil {
 		return "", eh.Errorf("publish "+datasetRows+": %w", err)
 	}
 	// The default endpoint, not the introspection one: play routes a statement
 	// naming only keelson tables to the host and one naming plain tables to
 	// the server, so the same window reads the rows and the marts.
-	if _, err = playground.Open(bus, playground.Launch{Sql: playSql, AutoRun: true,
+	if _, err = playground.Open(ctx, bus, playground.Launch{Sql: playSql, AutoRun: true,
 		Datasets: []string{pub.Alias()}, DatasetNames: []string{datasetRows}}); err != nil {
 		return "", eh.Errorf("open play: %w", err)
 	}

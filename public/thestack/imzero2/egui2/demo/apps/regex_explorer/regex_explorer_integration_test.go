@@ -78,7 +78,7 @@ func setupTestBus(t *testing.T) (caller runtimeapp.BusI) {
 func TestRunPatternFnsBlocking(t *testing.T) {
 	bus := setupTestBus(t)
 	inst := newTestApp(t)
-	inst.setBus(bus)
+	inst.setBus(t.Context(), bus)
 	ctx := context.Background()
 
 	t.Run("with-groups", func(t *testing.T) {
@@ -156,7 +156,7 @@ func TestRunPatternFnsBlocking(t *testing.T) {
 func TestRunTripwireBlocking_Ledger(t *testing.T) {
 	bus := setupTestBus(t)
 	inst := newTestApp(t)
-	inst.setBus(bus)
+	inst.setBus(t.Context(), bus)
 
 	drifts, known, err := inst.runTripwireBlocking(context.Background())
 	if err != nil {
@@ -193,7 +193,7 @@ func TestRunTripwireBlocking_Ledger(t *testing.T) {
 // and a cell agrees only if the model's value and its rendering both do.
 func TestPredictFunctions_AgainstClickHouse(t *testing.T) {
 	inst := newTestApp(t)
-	inst.setBus(setupTestBus(t))
+	inst.setBus(t.Context(), setupTestBus(t))
 
 	patterns := []string{
 		`a*`, `a*?`, `a+`, `\w*`, `\s*`, `[^a]*`, `.?`, `a?b?`, `(?:ab)*`,
@@ -382,7 +382,7 @@ func TestExecuteArrowStreamViaBus_InvalidRegex(t *testing.T) {
 // no error), and a missing bus is a transport failure, not a rejection.
 func TestIsVectorScanRejection_RealBroker(t *testing.T) {
 	inst := newTestApp(t)
-	inst.setBus(setupTestBus(t))
+	inst.setBus(t.Context(), setupTestBus(t))
 	ctx := context.Background()
 
 	for _, pattern := range []string{`(?U)a+`, `a{1001}`} {
@@ -405,7 +405,7 @@ func TestIsVectorScanRejection_RealBroker(t *testing.T) {
 		t.Errorf("rejection worded as %q; want the typed pattern and an index into it", got)
 	}
 
-	inst.setBus(nil)
+	inst.setBus(ctx, nil)
 	if _, err := inst.tripwireVectorScanAccepts(ctx, `(?U)a+`, "xa"); err == nil {
 		t.Errorf("no bus: want a transport error, got nil")
 	}

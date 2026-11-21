@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/ration"
@@ -448,7 +449,7 @@ func TestTheCeilingCountsTheSpeakerClips(t *testing.T) {
 func TestATranscriptionFailureKeepsItsAdmission(t *testing.T) {
 	f := &fakeTranscriber{err: openaichat.ErrServer}
 	cli, _, _ := serve(t, speechCfg(f))
-	raw, err := cli.bus.RequestWithTimeout(SubjectTranscribe, mustEncode(t, wireTranscribeRequest{V: wireVersion, Audio: wav}), 5*time.Second)
+	raw, err := app.RequestWithin(t.Context(), cli.bus, 5*time.Second, SubjectTranscribe, mustEncode(t, wireTranscribeRequest{V: wireVersion, Audio: wav}))
 	require.NoError(t, err)
 	w, err := decode[wireTranscribeReply](raw)
 	require.NoError(t, err)

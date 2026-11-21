@@ -171,14 +171,14 @@ func (inst *PlayApp) audioToggle(key string, raw func() string) {
 	inst.audio = s
 	// Off the render thread: opening the device talks to the sound server.
 	noDevice, bus := inst.audioNoDevice, inst.bus
-	inst.client.Go(func(context.Context) { s.open(bus, data, noDevice) })
+	inst.client.Go(func(context.Context) { s.open(inst.ioCtx, bus, data, noDevice) })
 }
 
 // open reads the copy and opens the output the host gives on bus (ADR-0372).
 // A host that gives none gets the device-less clock and a reason on screen
 // rather than a failed open (ADR-0208 §SD6) — the playhead still
 // moves, so the pane still says what playing would look like.
-func (inst *audioSession) open(bus app.BusI, data string, noDevice bool) {
+func (inst *audioSession) open(ctx context.Context, bus app.BusI, data string, noDevice bool) {
 	// Nothing here holds the lock while it talks to the sound server: the
 	// faces read the session's state every frame.
 	var out sink.SinkI
@@ -190,7 +190,7 @@ func (inst *audioSession) open(bus app.BusI, data string, noDevice bool) {
 	case noDevice:
 		deviceErr = "no output device (disabled)"
 	default:
-		dev, st := audioout.Open(bus, f)
+		dev, st := audioout.Open(ctx, bus, f)
 		out = dev
 		if !st.Audible() {
 			deviceErr = "no output device: " + st.Reason

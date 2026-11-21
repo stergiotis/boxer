@@ -1,6 +1,7 @@
 package sqlappletcreator
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,13 +40,7 @@ func (f *fakeSaveBus) Subscribe(subject string, handler app.MsgHandlerFunc) (uns
 	return
 }
 
-// RequestWithTimeout delegates: the fake answers instantly, so the wait
-// never matters here.
-func (f *fakeSaveBus) RequestWithTimeout(subject string, payload []byte, _ time.Duration) ([]byte, error) {
-	return f.Request(subject, payload)
-}
-
-func (f *fakeSaveBus) Request(subject string, payload []byte) (reply []byte, err error) {
+func (f *fakeSaveBus) Request(ctx context.Context, subject string, payload []byte) (reply []byte, err error) {
 	f.mu.Lock()
 	f.gotSubject = subject
 	f.gotPayload = append([]byte(nil), payload...)
@@ -128,7 +123,7 @@ func TestSubmitGuardsEmptyTitle(t *testing.T) {
 	// Title is required (ComposeAppletDoc guard); the guard is synchronous and
 	// no request is made.
 	bus := &fakeSaveBus{reply: appletstore.SaveReply{OK: true}}
-	inst := &App{bus: bus, log: zerolog.Nop(), sql: "SELECT 1", slug: "x"}
+	inst := &App{ioCtx: t.Context(), bus: bus, log: zerolog.Nop(), sql: "SELECT 1", slug: "x"}
 	inst.submit()
 
 	inst.mu.Lock()
@@ -162,22 +157,19 @@ func (f *fakeFsBus) Subscribe(subject string, handler app.MsgHandlerFunc) (unsub
 	return
 }
 
-// RequestWithTimeout records the wait and then answers instantly. The wait is
-// the point of the record: a dialog answered by a person cannot use the
-// transport default, and nothing else in this test would notice if it did.
-func (f *fakeFsBus) RequestWithTimeout(subject string, payload []byte, d time.Duration) ([]byte, error) {
+// Request records the wait — ctx's deadline — and then answers instantly.
+// The wait is the point of the record: a dialog answered by a person cannot
+// use the transport default, and nothing else in this test would notice if
+// it did.
+func (f *fakeFsBus) Request(ctx context.Context, subject string, payload []byte) (reply []byte, err error) {
 	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.waits == nil {
 		f.waits = make(map[string]time.Duration, 2)
 	}
-	f.waits[subject] = d
-	f.mu.Unlock()
-	return f.Request(subject, payload)
-}
-
-func (f *fakeFsBus) Request(subject string, payload []byte) (reply []byte, err error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	if dl, has := ctx.Deadline(); has {
+		f.waits[subject] = time.Until(dl).Round(time.Second)
+	}
 	switch {
 	case subject == fsbroker.SubjectDialogWrite:
 		f.dialogReq = append([]byte(nil), payload...)
@@ -195,7 +187,7 @@ func (f *fakeFsBus) Request(subject string, payload []byte) (reply []byte, err e
 
 func TestExportComposesAndWritesFile(t *testing.T) {
 	bus := &fakeFsBus{grant: true}
-	inst := &App{bus: bus, log: zerolog.Nop(), sql: "SELECT 9", slug: "exp-applet", title: "Exp Applet", summary: "Export fixture applet", icon: "📄"}
+	inst := &App{ioCtx: t.Context(), bus: bus, log: zerolog.Nop(), sql: "SELECT 9", slug: "exp-applet", title: "Exp Applet", summary: "Export fixture applet", icon: "📄"}
 	inst.export()
 
 	require.Eventually(t, func() bool {
@@ -218,7 +210,7 @@ func TestExportComposesAndWritesFile(t *testing.T) {
 
 func TestExportCancelledSurfaces(t *testing.T) {
 	bus := &fakeFsBus{grant: false, grantReason: "cancelled"}
-	inst := &App{bus: bus, log: zerolog.Nop(), sql: "SELECT 1", slug: "x", title: "X", summary: "Export fixture applet"}
+	inst := &App{ioCtx: t.Context(), bus: bus, log: zerolog.Nop(), sql: "SELECT 1", slug: "x", title: "X", summary: "Export fixture applet"}
 	inst.export()
 
 	require.Eventually(t, func() bool {
@@ -235,7 +227,7 @@ func TestExportCancelledSurfaces(t *testing.T) {
 func TestExportGuardsEmptyTitle(t *testing.T) {
 	// The compose guard is synchronous; no dialog is opened without a title.
 	bus := &fakeFsBus{grant: true}
-	inst := &App{bus: bus, log: zerolog.Nop(), sql: "SELECT 1", slug: "x"}
+	inst := &App{ioCtx: t.Context(), bus: bus, log: zerolog.Nop(), sql: "SELECT 1", slug: "x"}
 	inst.export()
 
 	inst.mu.Lock()
@@ -256,7 +248,7 @@ func TestExportGuardsEmptyTitle(t *testing.T) {
 // instantly, so only the requested duration can show the difference.
 func TestExportWaitsLongEnoughForAPerson(t *testing.T) {
 	bus := &fakeFsBus{grant: true}
-	inst := &App{bus: bus, log: zerolog.Nop(), sql: "SELECT 9", slug: "exp-applet", title: "Exp Applet", summary: "Export fixture applet", icon: "📄"}
+	inst := &App{ioCtx: t.Context(), bus: bus, log: zerolog.Nop(), sql: "SELECT 9", slug: "exp-applet", title: "Exp Applet", summary: "Export fixture applet", icon: "📄"}
 	inst.export()
 
 	require.Eventually(t, func() bool {
@@ -294,7 +286,7 @@ func TestExport_RunsOnTheManifestCapsAlone(t *testing.T) {
 	defer fs.Close()
 
 	busC := bus.NewClient(app.AppIdT(manifest.Id), manifest.Caps)
-	inst := &App{bus: busC, log: zerolog.Nop(), sql: "SELECT 7", slug: "caps-check", title: "Caps Check", summary: "Export fixture applet", icon: "📄"}
+	inst := &App{ioCtx: t.Context(), bus: busC, log: zerolog.Nop(), sql: "SELECT 7", slug: "caps-check", title: "Caps Check", summary: "Export fixture applet", icon: "📄"}
 
 	path := filepath.Join(t.TempDir(), "caps-check.md")
 	inst.export()

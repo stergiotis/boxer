@@ -112,7 +112,7 @@ func TestClient_Request_PublishCapRequired(t *testing.T) {
 	bus := inst.NewClient("test.app", []app.SubjectFilter{
 		{Pattern: "other.subject", Direction: app.CapDirectionPub},
 	})
-	_, err := bus.Request("ch.query.boxer", nil)
+	_, err := bus.Request(t.Context(), "ch.query.boxer", nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrPermissionViolation)
 }
@@ -134,7 +134,7 @@ func TestClient_Request_InboxSubscriptionBypasses_Cap(t *testing.T) {
 	require.NoError(t, err)
 	defer unsub()
 
-	reply, err := bus.Request("ch.query.boxer", []byte("ping"))
+	reply, err := bus.Request(t.Context(), "ch.query.boxer", []byte("ping"))
 	require.NoError(t, err)
 	assert.Equal(t, "pong", string(reply))
 }
@@ -153,7 +153,7 @@ func TestInst_AuditSink_RecordsRequestOk(t *testing.T) {
 	require.NoError(t, err)
 	defer unsub()
 
-	_, err = bus.Request("ch.query.boxer", []byte("ping"))
+	_, err = bus.Request(t.Context(), "ch.query.boxer", []byte("ping"))
 	require.NoError(t, err)
 
 	require.Equal(t, 1, sink.Len())
@@ -189,9 +189,9 @@ func TestInst_AuditSink_RecordsTheRequestingWindow(t *testing.T) {
 	w2 := inst.NewClient("test.app", fullCaps())
 	w2.SetInstanceKey(5)
 
-	_, err = w1.Request("ch.query.boxer", []byte("ping"))
+	_, err = w1.Request(t.Context(), "ch.query.boxer", []byte("ping"))
 	require.NoError(t, err)
-	_, err = w2.Request("ch.query.boxer", []byte("ping"))
+	_, err = w2.Request(t.Context(), "ch.query.boxer", []byte("ping"))
 	require.NoError(t, err)
 
 	require.Equal(t, 2, sink.Len())
@@ -216,7 +216,7 @@ func TestInst_AuditSink_ServiceClientHasNoWindow(t *testing.T) {
 	require.NoError(t, err)
 	defer unsub()
 
-	_, err = inst.NewClient("runtime.appletstore", fullCaps()).Request("ch.query.boxer", nil)
+	_, err = inst.NewClient("runtime.appletstore", fullCaps()).Request(t.Context(), "ch.query.boxer", nil)
 	require.NoError(t, err)
 
 	require.Equal(t, 1, sink.Len())
@@ -231,7 +231,7 @@ func TestInst_AuditSink_RecordsRequestDenied(t *testing.T) {
 	bus := inst.NewClient("test.app", []app.SubjectFilter{
 		{Pattern: "fs.>", Direction: app.CapDirectionPub},
 	})
-	_, err := bus.Request("ch.query.boxer", nil)
+	_, err := bus.Request(t.Context(), "ch.query.boxer", nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrPermissionViolation)
 
@@ -248,7 +248,7 @@ func TestInst_AuditSink_RecordsRequestTimeout(t *testing.T) {
 	bus := inst.NewClient("test.app", fullCaps())
 	_, err := bus.Subscribe("silent.here", func(*app.Msg) {})
 	require.NoError(t, err)
-	_, err = bus.Request("silent.here", nil)
+	_, err = bus.Request(t.Context(), "silent.here", nil)
 	require.Error(t, err)
 
 	require.Equal(t, 1, sink.Len())
@@ -261,7 +261,7 @@ func TestInst_AuditSink_RecordsNoRespondersAsAnError(t *testing.T) {
 	inst.SetAuditSink(sink)
 
 	bus := inst.NewClient("test.app", fullCaps())
-	_, err := bus.Request("nobody.here", nil)
+	_, err := bus.Request(t.Context(), "nobody.here", nil)
 	require.ErrorIs(t, err, ErrNoResponders)
 
 	require.Equal(t, 1, sink.Len())
@@ -273,7 +273,7 @@ func TestInst_AuditSink_NilDoesNotPanic(t *testing.T) {
 	inst.SetRequestTimeout(20 * time.Millisecond)
 	bus := inst.NewClient("test.app", fullCaps())
 	// No audit sink set — should not panic.
-	_, _ = bus.Request("nobody", nil)
+	_, _ = bus.Request(t.Context(), "nobody", nil)
 }
 
 func TestInst_AuditSink_SwapAtRuntime(t *testing.T) {
@@ -282,10 +282,10 @@ func TestInst_AuditSink_SwapAtRuntime(t *testing.T) {
 	first := audit.NewInMemoryAuditSink()
 	inst.SetAuditSink(first)
 	bus := inst.NewClient("test.app", fullCaps())
-	_, _ = bus.Request("nobody1", nil)
+	_, _ = bus.Request(t.Context(), "nobody1", nil)
 	second := audit.NewInMemoryAuditSink()
 	inst.SetAuditSink(second)
-	_, _ = bus.Request("nobody2", nil)
+	_, _ = bus.Request(t.Context(), "nobody2", nil)
 	assert.Equal(t, 1, first.Len())
 	assert.Equal(t, 1, second.Len())
 }
@@ -302,13 +302,13 @@ func TestClient_AllocateInbox_UniquePerCall(t *testing.T) {
 	}
 }
 
-// TestRequestWithTimeout_HonoursTheCallerSTimeout is the regression this
+// TestRequestWithin_HonoursTheCallerSTimeout is the regression this
 // method was written to fix and then reintroduced by renaming the function
 // without using its new parameter — the select still waited the Inst default,
 // so a caller asking for longer got the default and a file dialog failed while
 // the picker was still on screen. Compiles and vets clean either way; only a
 // test that actually waits can tell.
-func TestRequestWithTimeout_HonoursTheCallerSTimeout(t *testing.T) {
+func TestRequestWithin_HonoursTheCallerSTimeout(t *testing.T) {
 	inst := newInst(t)
 	inst.SetRequestTimeout(20 * time.Millisecond)
 
@@ -337,13 +337,13 @@ func TestRequestWithTimeout_HonoursTheCallerSTimeout(t *testing.T) {
 	})
 
 	// The default would have given up at 20ms.
-	reply, err := caller.RequestWithTimeout("slow.op", nil, 3*time.Second)
+	reply, err := app.RequestWithin(t.Context(), caller, 3*time.Second, "slow.op", nil)
 	require.NoError(t, err, "the caller's longer timeout must be the one that applies")
 	assert.Equal(t, "late but welcome", string(reply))
 
 	// And a non-positive duration still means "use the default", which the
 	// slow responder outlasts.
-	_, err = caller.RequestWithTimeout("slow.op", nil, 0)
+	_, err = app.RequestWithin(t.Context(), caller, 0, "slow.op", nil)
 	require.Error(t, err, "d <= 0 must fall back to the Inst default")
 }
 

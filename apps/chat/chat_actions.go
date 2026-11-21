@@ -178,7 +178,7 @@ func (inst *App) copyCited(what string, raw string, text string) {
 				return
 			}
 		}
-		rec, err := clipboardbroker.Write(bus, payload)
+		rec, err := clipboardbroker.Write(ctx, bus, payload)
 		if err != nil {
 			err = eb.Build().Str("what", what).Errorf("copy: %w", err)
 			return
@@ -229,7 +229,7 @@ func trailSql(convId string) (sql string) {
 func (inst *App) openPlay(what string, l playground.Launch) {
 	bus := inst.bus
 	inst.runAction("chat-open-play", "open "+what+" in play", func(ctx context.Context) (note string, err error) {
-		if err = requestPlay(bus, l); err != nil {
+		if err = requestPlay(ctx, bus, l); err != nil {
 			return
 		}
 		return "opened " + what + " in play", nil
@@ -238,8 +238,8 @@ func (inst *App) openPlay(what string, l playground.Launch) {
 
 // requestPlay asks the host for a play window on l and waits for its reply.
 // It blocks on the bus: call it off the frame.
-func requestPlay(bus app.BusI, l playground.Launch) (err error) {
-	if _, err = playground.Open(bus, l); err != nil {
+func requestPlay(ctx context.Context, bus app.BusI, l playground.Launch) (err error) {
+	if _, err = playground.Open(ctx, bus, l); err != nil {
 		err = eh.Errorf("open play: %w", err)
 	}
 	return
@@ -249,8 +249,8 @@ func requestPlay(bus app.BusI, l playground.Launch) (err error) {
 // introspection endpoint over the ad-hoc datasets scoped, shown under names
 // (ADR-0240): the Analytics handover's shape. This file is the one that
 // names the playground's launch config.
-func requestPlayOnDatasets(bus app.BusI, sql string, scoped []string, names []string) (err error) {
-	return requestPlay(bus, playground.Launch{Sql: sql, AutoRun: true, Endpoint: playground.EndpointIntrospection,
+func requestPlayOnDatasets(ctx context.Context, bus app.BusI, sql string, scoped []string, names []string) (err error) {
+	return requestPlay(ctx, bus, playground.Launch{Sql: sql, AutoRun: true, Endpoint: playground.EndpointIntrospection,
 		Datasets: scoped, DatasetNames: names})
 }
 

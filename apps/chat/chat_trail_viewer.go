@@ -37,12 +37,12 @@ func trailViewerLaunchConfig(conv string) (cfg []byte, err error) {
 
 // openTrail asks the window host for a trail viewer on conv. It makes a bus
 // round trip, so it runs off the render thread.
-func openTrailViewer(bus app.BusI, conv string) (note string, err error) {
+func openTrailViewer(ctx context.Context, bus app.BusI, conv string) (note string, err error) {
 	cfg, err := trailViewerLaunchConfig(conv)
 	if err != nil {
 		return
 	}
-	if _, err = windowopen.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg); err != nil {
+	if _, err = windowopen.RequestOpen(ctx, bus, launchcfg.AppId, launchcfg.Kind, cfg); err != nil {
 		err = eh.Errorf("open the trail viewer: %w", err)
 		return
 	}
@@ -74,7 +74,7 @@ func (inst *App) openTrailViewerGesture() {
 	inst.handoverNote = ""
 	inst.handover.Start(inst.tasks, bgjob.Spec{Kind: "chat-open-trail", Title: "open the trail viewer on the conversation"},
 		func(ctx context.Context) (note *string, err error) {
-			n, err := openTrailViewer(bus, conv)
+			n, err := openTrailViewer(ctx, bus, conv)
 			if err != nil {
 				return
 			}

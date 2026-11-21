@@ -10,6 +10,7 @@ package playground
 // with SetAppletDocParser (sqlapplet's, when it is linked).
 
 import (
+	"context"
 	"slices"
 	"strings"
 
@@ -133,12 +134,12 @@ func ComposeBundleDoc(spec BundleSpec) (doc []byte, err error) {
 // PublishBundle composes and checks spec's document, then publishes the
 // bundle with its provenance (ADR-0288 §SD2, §SD5). It is a bus
 // round trip: call it off the render goroutine.
-func PublishBundle(bus app.BusI, spec BundleSpec) (res adhocdata.BundleResult, err error) {
+func PublishBundle(ctx context.Context, bus app.BusI, spec BundleSpec) (res adhocdata.BundleResult, err error) {
 	doc, err := ComposeBundleDoc(spec)
 	if err != nil {
 		return
 	}
-	return adhocdata.PublishBundleRequest(bus, adhocdata.BundlePublishInput{
+	return adhocdata.PublishBundleRequest(ctx, bus, adhocdata.BundlePublishInput{
 		Alias: spec.Alias, Document: doc, Datasets: spec.Datasets,
 		KeepAfterClose: spec.KeepAfterClose, OnBehalfOf: spec.OnBehalfOf,
 		Provenance: adhocdata.BundleProvenance{SourceSql: spec.SourceSql, InputHandles: spec.InputHandles},

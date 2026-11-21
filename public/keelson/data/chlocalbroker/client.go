@@ -3,6 +3,7 @@ package chlocalbroker
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"time"
 
@@ -125,7 +126,9 @@ func ExecOnPool(ctx context.Context, bus app.BusI, poolName string, req ExecRequ
 	if err != nil {
 		return
 	}
-	replyBytes, err := bus.Request(SubjectExecPrefix+poolName, reqBytes)
+	wctx, stop := waitPastDeadline(ctx)
+	defer stop()
+	replyBytes, err := bus.Request(wctx, SubjectExecPrefix+poolName, reqBytes)
 	if err != nil {
 		err = eb.Build().Str("subject", SubjectExecPrefix+poolName).Errorf("chlocalbroker: bus request failed: %w", err)
 		return
@@ -146,6 +149,32 @@ func ExecOnPool(ctx context.Context, bus app.BusI, poolName string, req ExecRequ
 		} else {
 			rep.err = eb.Build().Errorf("chlocalbroker: %s", decoded.Error) //boxer:lint disable=CS013 reason="the local engine's own diagnostic; play classifies on ClickHouse text like UNKNOWN_TABLE through err.Error()"
 		}
+	}
+	return
+}
+
+// replyGrace is how long past the caller's deadline the request waits for
+// the reply: the service enforces the deadline the request carries and
+// answers with its own error, which says more than a bus timeout.
+const replyGrace = 2 * time.Second
+
+// waitPastDeadline is ctx for the bus wait of a request whose deadline the
+// service enforces: its values, its cancellation, and its deadline moved
+// replyGrace later. A ctx without a deadline is returned as it is.
+func waitPastDeadline(ctx context.Context) (wctx context.Context, stop func()) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return ctx, func() {}
+	}
+	wctx, cancel := context.WithDeadline(context.WithoutCancel(ctx), deadline.Add(replyGrace))
+	unhook := context.AfterFunc(ctx, func() {
+		if !errors.Is(context.Cause(ctx), context.DeadlineExceeded) {
+			cancel()
+		}
+	})
+	stop = func() {
+		unhook()
+		cancel()
 	}
 	return
 }

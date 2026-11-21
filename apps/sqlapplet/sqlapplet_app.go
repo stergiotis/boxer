@@ -129,7 +129,7 @@ func (inst *appletApp) Mount(ctx app.MountContextI) (err error) {
 	// later withdrawal unbinds (ADR-0188 §SD3), and the window says what it
 	// is waiting for in either case. An embedder still overrides all of
 	// that by binding explicit handles instead (§SD7).
-	binder, bindings := newDatasetFollower(ctx.Bus(), ctx.Log(), inst.def.Datasets)
+	binder, bindings := newDatasetFollower(app.ContextOf(ctx), ctx.Bus(), ctx.Log(), inst.def.Datasets)
 	inner, err := NewEmbedded(app.ContextOf(ctx), inst.def, EmbedConfig{
 		StampAppId:  string(inst.m.Id),
 		RunId:       ctx.RunId(),

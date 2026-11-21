@@ -108,7 +108,7 @@ func TestManifestCapsAuthorizeEscapeHatches(t *testing.T) {
 
 	caller := bus.NewClient(ManifestId, manifest.Caps)
 	for _, subject := range []string{clipboardbroker.SubjectWrite, windowopen.OpenSubject} {
-		reply, err := caller.Request(subject, []byte("payload"))
+		reply, err := caller.Request(t.Context(), subject, []byte("payload"))
 		require.NoError(t, err, subject)
 		assert.Equal(t, []byte("ok"), reply, subject)
 	}
@@ -117,7 +117,7 @@ func TestManifestCapsAuthorizeEscapeHatches(t *testing.T) {
 	// caps the same requests are refused — the pre-fix behaviour.
 	uncapped := bus.NewClient("test.uncapped", nil)
 	for _, subject := range []string{clipboardbroker.SubjectWrite, windowopen.OpenSubject} {
-		_, err := uncapped.Request(subject, []byte("payload"))
+		_, err := uncapped.Request(t.Context(), subject, []byte("payload"))
 		assert.ErrorIs(t, err, inprocbus.ErrPermissionViolation, subject)
 	}
 }

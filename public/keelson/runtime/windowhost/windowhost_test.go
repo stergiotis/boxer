@@ -404,7 +404,7 @@ func TestSetBus_FsBrokerEndToEnd(t *testing.T) {
 	replyCh := make(chan []byte, 1)
 	errCh := make(chan error, 1)
 	go func() {
-		reply, reqErr := clientBus.Request("fs.dialog.read", []byte(`{"hint":"open"}`))
+		reply, reqErr := clientBus.Request(t.Context(), "fs.dialog.read", []byte(`{"hint":"open"}`))
 		if reqErr != nil {
 			errCh <- reqErr
 			return

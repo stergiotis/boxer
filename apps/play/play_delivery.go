@@ -184,7 +184,7 @@ func (inst *PlayApp) openPlayground(cfg launchcfg.PlayLaunch) (err error) {
 			cfg.BandsSql = inst.client.rewriteDatasetAliases(cfg.BandsSql)
 		}
 	}
-	if _, err = playground.Open(inst.bus, cfg); err != nil {
+	if _, err = playground.Open(inst.ioCtx, inst.bus, cfg); err != nil {
 		err = eh.Errorf("play: open playground: %w", err)
 		return
 	}
@@ -230,7 +230,7 @@ func (inst *PlayApp) openCreator(cfg appletcreatecfg.AppletCreate) (err error) {
 		err = eh.Errorf("play: encode applet-create config: %w", err)
 		return
 	}
-	if _, err = windowopen.RequestOpen(inst.bus, appletcreatecfg.AppId, appletcreatecfg.Kind, cfgBytes); err != nil {
+	if _, err = windowopen.RequestOpen(inst.ioCtx, inst.bus, appletcreatecfg.AppId, appletcreatecfg.Kind, cfgBytes); err != nil {
 		err = eh.Errorf("play: save as applet: %w", err)
 		return
 	}
@@ -289,7 +289,7 @@ func (inst *PlayApp) openTally(cfg tallylaunch.TallyLaunch) (err error) {
 		err = eh.Errorf("play: encode tally launch config: %w", err)
 		return
 	}
-	if _, err = windowopen.RequestOpen(inst.bus, tallylaunch.AppId, tallylaunch.Kind, cfgBytes); err != nil {
+	if _, err = windowopen.RequestOpen(inst.ioCtx, inst.bus, tallylaunch.AppId, tallylaunch.Kind, cfgBytes); err != nil {
 		err = eh.Errorf("play: open in tally: %w", err)
 		return
 	}

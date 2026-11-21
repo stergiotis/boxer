@@ -20,7 +20,7 @@ func TestBeginExport_IncompleteBeforeRemoving(t *testing.T) {
 		dir, m := writeTestPack(t, "native-bytes", 2, 3, 3)
 		inv := Inventory{Server: m.Server}
 		plan := Plan{Selection: m.Selection}
-		got, resumed, err := beginExport(dir, m.Source, &inv, &plan, ExportRequest{Restart: restart}, now)
+		got, resumed, err := beginExport(t.Context(), dir, m.Source, &inv, &plan, ExportRequest{Restart: restart}, now)
 		require.NoError(t, err)
 		assert.Equal(t, !restart, resumed)
 		assert.False(t, got.Complete)
@@ -41,7 +41,7 @@ func TestBeginExport_IncompleteBeforeRemoving(t *testing.T) {
 	dir, m := writeTestPack(t, "native-bytes", 2, 3, 3)
 	inv := Inventory{Server: m.Server}
 	plan := Plan{Selection: m.Selection}
-	_, _, err := beginExport(dir, m.Source, &inv, &plan, ExportRequest{SampleNum: 1, SampleDen: 2}, now)
+	_, _, err := beginExport(t.Context(), dir, m.Source, &inv, &plan, ExportRequest{SampleNum: 1, SampleDen: 2}, now)
 	assert.ErrorContains(t, err, "ask for the same")
 	onDisk, err := LoadPackManifest(dir)
 	require.NoError(t, err)

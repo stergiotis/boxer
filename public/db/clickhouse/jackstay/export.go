@@ -95,7 +95,7 @@ func Export(ctx context.Context, src ClientI, srcEp Endpoint, dir string, req Ex
 		return
 	}
 
-	m, resumed, err := beginExport(dir, srcEp, &inv, &plan, req, now())
+	m, resumed, err := beginExport(ctx, dir, srcEp, &inv, &plan, req, now())
 	if err != nil {
 		return
 	}
@@ -124,7 +124,7 @@ func Export(ctx context.Context, src ClientI, srcEp Endpoint, dir string, req Ex
 	}
 	m.Tables = keep
 	m.Complete = false
-	if err = ex.save(); err != nil {
+	if err = ex.save(ctx); err != nil {
 		return
 	}
 	for i := range m.Tables {
@@ -140,7 +140,7 @@ func Export(ctx context.Context, src ClientI, srcEp Endpoint, dir string, req Ex
 		}
 	}
 	m.Complete = out.Failed == 0
-	err = ex.save()
+	err = ex.save(ctx)
 	out.Manifest = m
 	return
 }
@@ -161,11 +161,11 @@ func exportPlan(srcEp Endpoint, inv *Inventory, sel Selection, now time.Time) (p
 // the same, or begins a new one. An earlier manifest is saved as incomplete
 // before the export removes any file it lists, so a pack whose export stops
 // part-way is never read as complete with files missing.
-func beginExport(dir string, srcEp Endpoint, inv *Inventory, plan *Plan, req ExportRequest, now time.Time) (m PackManifest, resumed bool, err error) {
+func beginExport(ctx context.Context, dir string, srcEp Endpoint, inv *Inventory, plan *Plan, req ExportRequest, now time.Time) (m PackManifest, resumed bool, err error) {
 	old, lerr := LoadPackManifest(dir)
 	if lerr == nil && old.Complete && (req.Restart || resumable(&old, srcEp, inv, plan, req) == "") {
 		old.Complete, old.UpdatedAt = false, now.UTC()
-		if err = old.SaveIn(dir); err != nil {
+		if err = old.SaveIn(ctx, dir); err != nil {
 			return
 		}
 	}
@@ -249,9 +249,9 @@ type exporter struct {
 	m   *PackManifest
 }
 
-func (inst *exporter) save() (err error) {
+func (inst *exporter) save(ctx context.Context) (err error) {
 	inst.m.UpdatedAt = inst.now().UTC()
-	return inst.m.SaveIn(inst.dir)
+	return inst.m.SaveIn(ctx, inst.dir)
 }
 
 func (inst *exporter) removeFiles(chunks []PackChunk) {
@@ -334,7 +334,7 @@ func (inst *exporter) exportTable(ctx context.Context, t *PackTable) (failed int
 		}
 	}
 	slices.SortFunc(t.Chunks, func(a, b PackChunk) int { return t.Chunking.compareChunkIds(a.Id, b.Id) })
-	err = inst.save()
+	err = inst.save(ctx)
 	return
 }
 
@@ -395,7 +395,7 @@ func (inst *exporter) exportChunk(ctx context.Context, t *PackTable, spec *Diges
 		} else {
 			t.Chunks = append(t.Chunks, pc)
 		}
-		if err = inst.save(); err != nil {
+		if err = inst.save(ctx); err != nil {
 			r.Status, r.Note = ChunkStatusFailed, err.Error()
 			return
 		}

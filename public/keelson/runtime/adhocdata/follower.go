@@ -1,6 +1,7 @@
 package adhocdata
 
 import (
+	"context"
 	"errors"
 	"maps"
 	"slices"
@@ -144,10 +145,14 @@ type resolverI interface {
 	resolveVerify(alias string, boundHandle string) (handle string, revision uint64, boundLive bool, origin DatasetOrigin, err error)
 }
 
-type busResolver struct{ bus app.BusI }
+// busResolver resolves over a bus under ctx, the follower's lifetime.
+type busResolver struct {
+	ctx context.Context
+	bus app.BusI
+}
 
 func (r busResolver) resolveVerify(alias string, boundHandle string) (handle string, revision uint64, boundLive bool, origin DatasetOrigin, err error) {
-	res, live, rErr := ResolveVerifyRequest(r.bus, alias, boundHandle)
+	res, live, rErr := ResolveVerifyRequest(r.ctx, r.bus, alias, boundHandle)
 	// "no live dataset under alias" is an answer, not a transport failure:
 	// the service replied, and boundLive is meaningful on that reply.
 	if rErr != nil {
@@ -231,12 +236,12 @@ type Follower struct {
 // aliases at open — in that order — and returns the follower together with
 // the bindings the consumer applies at construction. nil (and nil
 // bindings) when there is nothing declared or no bus to bind against.
-func NewFollower(cfg FollowerConfig) (f *Follower, bindings map[string]string) {
+func NewFollower(ctx context.Context, cfg FollowerConfig) (f *Follower, bindings map[string]string) {
 	if len(cfg.Aliases) == 0 || cfg.Bus == nil {
 		return
 	}
-	f = subscribedFollower(cfg)
-	bindings, unresolved := resolveAliases(cfg.Bus, cfg.Log, cfg.Aliases)
+	f = subscribedFollower(ctx, cfg)
+	bindings, unresolved := resolveAliases(ctx, cfg.Bus, cfg.Log, cfg.Aliases)
 	f.seed(bindings, unresolved)
 	bindings = f.localBindings(bindings)
 	return
@@ -248,11 +253,11 @@ func NewFollower(cfg FollowerConfig) (f *Follower, bindings map[string]string) {
 // consumer that starts following from its render thread, where a blocking
 // resolve must not run; it may declare no alias at all. nil when there is
 // no bus to bind against.
-func NewDeferredFollower(cfg FollowerConfig) (f *Follower) {
+func NewDeferredFollower(ctx context.Context, cfg FollowerConfig) (f *Follower) {
 	if cfg.Bus == nil {
 		return
 	}
-	f = subscribedFollower(cfg)
+	f = subscribedFollower(ctx, cfg)
 	for _, alias := range cfg.Aliases {
 		f.Follow(alias)
 	}
@@ -261,8 +266,8 @@ func NewDeferredFollower(cfg FollowerConfig) (f *Follower) {
 
 // subscribedFollower builds a follower over cfg's bus and subscribes it to
 // dataset events; where it cannot, the tick polls instead.
-func subscribedFollower(cfg FollowerConfig) (f *Follower) {
-	f = newFollowerWith(busResolver{bus: cfg.Bus}, cfg.Log)
+func subscribedFollower(ctx context.Context, cfg FollowerConfig) (f *Follower) {
+	f = newFollowerWith(busResolver{ctx: ctx, bus: cfg.Bus}, cfg.Log)
 	maps.Copy(f.local, cfg.LocalNames)
 	if cfg.Reconcile > 0 {
 		f.interval = cfg.Reconcile
@@ -676,10 +681,10 @@ func (f *Follower) Pending() (aliases []string) {
 // nothing rather than failing the consumer's open: it keeps the miss
 // pending rather than stranding the consumer on the wrong side of a
 // capture-then-open ordering.
-func resolveAliases(bus app.BusI, logger zerolog.Logger, aliases []string) (bindings map[string]string, unresolved []string) {
+func resolveAliases(ctx context.Context, bus app.BusI, logger zerolog.Logger, aliases []string) (bindings map[string]string, unresolved []string) {
 	bindings = make(map[string]string, len(aliases))
 	for _, alias := range aliases {
-		res, err := ResolveRequest(bus, alias)
+		res, err := ResolveRequest(ctx, bus, alias)
 		if err != nil {
 			logger.Warn().Err(err).Str("alias", alias).Msg("adhocdata: dataset alias unresolved at open")
 			unresolved = append(unresolved, alias)

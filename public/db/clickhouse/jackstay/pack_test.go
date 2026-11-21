@@ -40,7 +40,7 @@ func writeTestPack(t *testing.T, body string, n uint64, kd uint64, rd uint64) (d
 				Rows: n, Leaves: []PackLeaf{{Leaf: 0, N: n, Kd: kd, Rd: rd}}}},
 		}},
 	}
-	require.NoError(t, m.SaveIn(dir))
+	require.NoError(t, m.SaveIn(t.Context(), dir))
 	return
 }
 
@@ -84,7 +84,7 @@ func TestPack_ManifestAndRefusals(t *testing.T) {
 	}
 
 	m.Complete = false
-	require.NoError(t, m.SaveIn(dir))
+	require.NoError(t, m.SaveIn(t.Context(), dir))
 	_, err = OpenPack(dir)
 	assert.ErrorContains(t, err, "not complete")
 }
@@ -98,41 +98,41 @@ func TestBeginExport_Refusals(t *testing.T) {
 	plan := &Plan{Selection: Selection{Databases: []string{"s"}, Filters: map[string]string{"s.t": "k > 1"}}}
 	req := ExportRequest{Selection: plan.Selection, SampleNum: 1, SampleDen: 10, Compression: "zstd", Chunking: DefaultChunkingOptions()}
 	now := time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC)
-	m, resumed, err := beginExport(dir, srcEp, inv, plan, req, now)
+	m, resumed, err := beginExport(t.Context(), dir, srcEp, inv, plan, req, now)
 	require.NoError(t, err)
 	assert.False(t, resumed)
-	require.NoError(t, m.SaveIn(dir))
+	require.NoError(t, m.SaveIn(t.Context(), dir))
 
-	_, resumed, err = beginExport(dir, srcEp, inv, plan, req, now)
+	_, resumed, err = beginExport(t.Context(), dir, srcEp, inv, plan, req, now)
 	require.NoError(t, err)
 	assert.True(t, resumed)
 
 	otherPlan := &Plan{Selection: Selection{Databases: []string{"s"}, Filters: map[string]string{"s.t": "k > 2"}}}
 	for why, run := range map[string]func() error{
 		"another source server": func() error {
-			_, _, err := beginExport(dir, srcEp, &Inventory{Server: ServerInfo{UUID: "u2"}}, plan, req, now)
+			_, _, err := beginExport(t.Context(), dir, srcEp, &Inventory{Server: ServerInfo{UUID: "u2"}}, plan, req, now)
 			return err
 		},
 		"another selection or filter": func() error {
-			_, _, err := beginExport(dir, srcEp, inv, otherPlan, req, now)
+			_, _, err := beginExport(t.Context(), dir, srcEp, inv, otherPlan, req, now)
 			return err
 		},
 		"another sample": func() error {
 			r := req
 			r.SampleDen = 100
-			_, _, err := beginExport(dir, srcEp, inv, plan, r, now)
+			_, _, err := beginExport(t.Context(), dir, srcEp, inv, plan, r, now)
 			return err
 		},
 		"another compression": func() error {
 			r := req
 			r.Compression = "gzip"
-			_, _, err := beginExport(dir, srcEp, inv, plan, r, now)
+			_, _, err := beginExport(t.Context(), dir, srcEp, inv, plan, r, now)
 			return err
 		},
 		"another chunk layout": func() error {
 			r := req
 			r.Chunking.TargetChunkRows *= 2
-			_, _, err := beginExport(dir, srcEp, inv, plan, r, now)
+			_, _, err := beginExport(t.Context(), dir, srcEp, inv, plan, r, now)
 			return err
 		},
 	} {
@@ -142,7 +142,7 @@ func TestBeginExport_Refusals(t *testing.T) {
 	r := req
 	r.Chunking.TargetChunkRows *= 2
 	r.Restart = true
-	m, resumed, err = beginExport(dir, srcEp, inv, plan, r, now)
+	m, resumed, err = beginExport(t.Context(), dir, srcEp, inv, plan, r, now)
 	require.NoError(t, err)
 	assert.False(t, resumed)
 	assert.Equal(t, r.Chunking, m.Chunking)

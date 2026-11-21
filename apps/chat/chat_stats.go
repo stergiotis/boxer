@@ -281,7 +281,7 @@ func newStatsPublishers() (p statsPublishers) {
 // openStatsInPlay publishes s, and the surface's cells when there are any,
 // and opens a play window on them. It makes bus round trips, so it runs off
 // the render thread.
-func openStatsInPlay(bus app.BusI, pubs statsPublishers, s chatStats, cells []surfaceCell) (note string, err error) {
+func openStatsInPlay(ctx context.Context, bus app.BusI, pubs statsPublishers, s chatStats, cells []surfaceCell) (note string, err error) {
 	if len(s.turns) == 0 {
 		err = eh.Errorf("no turn to show yet")
 		return
@@ -293,7 +293,7 @@ func openStatsInPlay(bus app.BusI, pubs statsPublishers, s chatStats, cells []su
 		if err != nil {
 			return
 		}
-		if _, err = pubs.surface.Publish(bus, surface); err != nil {
+		if _, err = pubs.surface.Publish(ctx, bus, surface); err != nil {
 			err = eb.Build().Str("dataset", aliasSurface).Errorf("publish: %w", err)
 			return
 		}
@@ -307,11 +307,11 @@ func openStatsInPlay(bus app.BusI, pubs statsPublishers, s chatStats, cells []su
 	if err != nil {
 		return
 	}
-	if _, err = pubs.calls.Publish(bus, calls); err != nil {
+	if _, err = pubs.calls.Publish(ctx, bus, calls); err != nil {
 		err = eb.Build().Str("dataset", aliasCalls).Errorf("publish: %w", err)
 		return
 	}
-	if _, err = pubs.turns.Publish(bus, turns); err != nil {
+	if _, err = pubs.turns.Publish(ctx, bus, turns); err != nil {
 		err = eb.Build().Str("dataset", aliasTurns).Errorf("publish: %w", err)
 		return
 	}
@@ -326,7 +326,7 @@ func openStatsInPlay(bus app.BusI, pubs statsPublishers, s chatStats, cells []su
 			scoped = append(scoped, pubs.surface.Alias())
 		}
 	}
-	if err = requestPlayOnDatasets(bus, statsSql, scoped, datasets); err != nil {
+	if err = requestPlayOnDatasets(ctx, bus, statsSql, scoped, datasets); err != nil {
 		return
 	}
 	note = fmt.Sprintf("opened in play: %d turns as %s, %d calls as %s", len(s.turns), aliasTurns, len(s.calls), aliasCalls)

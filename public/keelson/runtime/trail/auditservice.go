@@ -220,7 +220,7 @@ func (inst *AuditClient) Event(ctx context.Context, at time.Time, principal, pur
 			d = until
 		}
 	}
-	raw, err := inst.bus.RequestWithTimeout(AuditSubjectOf(inst.appId), payload, d)
+	raw, err := app.RequestWithin(ctx, inst.bus, d, AuditSubjectOf(inst.appId), payload)
 	if err != nil {
 		return eh.Errorf("request: %w", err)
 	}

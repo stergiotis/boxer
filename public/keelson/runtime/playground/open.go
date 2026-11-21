@@ -1,6 +1,7 @@
 package playground
 
 import (
+	"context"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -14,11 +15,11 @@ import (
 // caller's manifest needs Pub on windowopen.OpenSubject; caller identity is
 // attributed by the bus. Open blocks on the bus round-trip, so call it off
 // the frame loop. On success it returns the opened window's key.
-func Open(bus app.BusI, launch Launch) (windowKey uint64, err error) {
+func Open(ctx context.Context, bus app.BusI, launch Launch) (windowKey uint64, err error) {
 	cfg, err := buscodec.Encode(launch)
 	if err != nil {
 		err = eh.Errorf("playground: encode launch config: %w", err)
 		return
 	}
-	return windowopen.RequestOpenKind(bus, Kind, cfg)
+	return windowopen.RequestOpenKind(ctx, bus, Kind, cfg)
 }

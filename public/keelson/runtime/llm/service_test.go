@@ -547,7 +547,7 @@ func TestCancelIsScopedToTheSender(t *testing.T) {
 	other := bus.NewClient("test.llm.other", ClientCaps("test: other"))
 	payload, err := encode(wireRequest{V: wireVersion, Messages: userMessage(), CancelKey: "k"})
 	require.NoError(t, err)
-	go func() { _, _ = owner.RequestWithTimeout(SubjectComplete, payload, 5*time.Second) }()
+	go func() { _, _ = app.RequestWithin(t.Context(), owner, 5*time.Second, SubjectComplete, payload) }()
 	<-p.started
 	stop, err := encode(wireCancel{V: wireVersion, Key: "k"})
 	require.NoError(t, err)

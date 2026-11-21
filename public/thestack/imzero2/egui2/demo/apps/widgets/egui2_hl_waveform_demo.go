@@ -69,6 +69,8 @@ var waveformDemoAutoplay = env.NewBool(env.Spec{
 })
 
 type waveformDemoState struct {
+	// ctx is BusInit's: the ctx the output device is opened under.
+	ctx    context.Context
 	tr     *track.Track
 	player *waveform.Player
 	ids    *c.WidgetIdStack
@@ -124,13 +126,13 @@ func init() {
 			"'twelve hours' opens a 12 h synthetic track whose peaks build in the " +
 			"background while you scroll it; 'open' loads a recording from disk (WAV " +
 			"natively, other formats through ffmpeg), its peaks cached for the next open.",
-		BusInit: func(ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+		BusInit: func(ctx context.Context, ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
 			var tasks task.TaskApiI
 			if bus != nil {
 				tasks = task.NewBusApi(task.ApiConfig{Bus: bus})
 			}
 			st := newWaveformDemoState(ids, tasks)
-			st.bus = bus
+			st.ctx, st.bus = ctx, bus
 			if waveformDemoAutoplay.Get() && st.tr != nil {
 				st.device = true
 				st.setDevice()
@@ -235,7 +237,7 @@ func (st *waveformDemoState) setDevice() {
 	var err error
 	if st.device {
 		err = st.tr.ReplaceSink(func(src pcm.SourceI) (sink.SinkI, error) {
-			out, status := audioout.Open(st.bus, src)
+			out, status := audioout.Open(st.ctx, st.bus, src)
 			if !status.Audible() {
 				_ = out.Close()
 				return nil, eh.New(status.Reason)

@@ -323,8 +323,8 @@ func TestPlan_SaveLoadRestate(t *testing.T) {
 	plan, err := BuildPlan(ops, srcEp, dstEp, src, dst, Selection{}, now)
 	require.NoError(t, err)
 	path := filepath.Join(t.TempDir(), "plan.json")
-	require.NoError(t, plan.Save(path))
-	loaded, err := LoadPlan(path)
+	require.NoError(t, plan.Save(t.Context(), path))
+	loaded, err := LoadPlan(t.Context(), path)
 	require.NoError(t, err)
 	assert.Equal(t, plan, loaded)
 
@@ -350,8 +350,8 @@ func TestPlan_SaveLoadRestate(t *testing.T) {
 	assert.Equal(t, []string{"app.t1: verdict extend is now incompatible"}, stale)
 
 	loaded.FormatVersion = 99
-	require.NoError(t, loaded.Save(path))
-	_, err = LoadPlan(path)
+	require.NoError(t, loaded.Save(t.Context(), path))
+	_, err = LoadPlan(t.Context(), path)
 	assert.Error(t, err)
 }
 

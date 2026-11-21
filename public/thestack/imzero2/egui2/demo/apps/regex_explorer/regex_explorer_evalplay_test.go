@@ -347,7 +347,7 @@ func setupEvalRig(t *testing.T) (rig *evalTestRig) {
 		{Pattern: windowopen.OpenSubject, Direction: runtimeapp.CapDirectionPub, Reason: "test"},
 	})
 	client.SetInstanceKey(1) // a window's client, so its close is announced
-	inst.setBus(client)
+	inst.setBus(t.Context(), client)
 
 	rig = &evalTestRig{app: inst, opens: opens, client: client, svc: svc}
 	return
@@ -502,7 +502,7 @@ func TestPartialPublishRetainsTheHandleItMinted(t *testing.T) {
 	require.NoError(t, err)
 	bus := inst.busSnapshot()
 	for i := range adhocdata.MaxDatasetsPerOwner - 1 {
-		_, pErr := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
+		_, pErr := adhocdata.PublishRequest(t.Context(), bus, adhocdata.PublishInput{
 			Alias:          fmt.Sprintf("filler_%d", i),
 			ArrowIPCStream: filler,
 		})
@@ -610,7 +610,7 @@ func TestSeededSqlIsValidUtf8(t *testing.T) {
 
 func TestEvalHandoffReportsMissingBus(t *testing.T) {
 	inst := newApp()
-	inst.setBus(&runtimeapp.NoopBus{})
+	inst.setBus(t.Context(), &runtimeapp.NoopBus{})
 	inst.pattern = `a`
 	inst.haystack = "ab"
 

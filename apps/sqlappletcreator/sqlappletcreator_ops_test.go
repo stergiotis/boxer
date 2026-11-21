@@ -122,7 +122,7 @@ func TestSaveSettlesWithTheStoresReply(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			inst := &App{bus: tc.bus, log: zerolog.Nop(), sql: "SELECT 1", slug: "my-applet", title: "My Applet", summary: "one line"}
+			inst := &App{ioCtx: t.Context(), bus: tc.bus, log: zerolog.Nop(), sql: "SELECT 1", slug: "my-applet", title: "My Applet", summary: "one line"}
 			require.NoError(t, command(t, inst, opSave, appops.None{}))
 			var raw []byte
 			require.Eventually(t, func() bool {
@@ -140,7 +140,7 @@ func TestSaveSettlesWithTheStoresReply(t *testing.T) {
 }
 
 func TestSaveRefusesADraftThatDoesNotCompose(t *testing.T) {
-	inst := &App{bus: &fakeSaveBus{}, log: zerolog.Nop(), sql: "SELECT 1", slug: "x"}
+	inst := &App{ioCtx: t.Context(), bus: &fakeSaveBus{}, log: zerolog.Nop(), sql: "SELECT 1", slug: "x"}
 	err := command(t, inst, opSave, appops.None{})
 	require.NotNil(t, refusal(err))
 	assert.Contains(t, refusal(err).Reason, "title is required")

@@ -72,7 +72,7 @@ func publishSalesBundle(t *testing.T, bus app.BusI, doc string, locals ...string
 	for i, l := range locals {
 		in.Datasets = append(in.Datasets, adhocdata.BundleDatasetInput{LocalName: l, ArrowIPCStream: intStream(t, int64(i))})
 	}
-	res, err := adhocdata.PublishBundleRequest(bus, in)
+	res, err := adhocdata.PublishBundleRequest(t.Context(), bus, in)
 	require.NoError(t, err)
 	return
 }
@@ -111,6 +111,7 @@ func bundleLauncher(t *testing.T) (l *PlayLauncher, h app.OperationsHandlerI, pu
 	l, h = opsLauncher(t)
 	l.inner.client = NewClient(ClientConfig{URL: "http://ch.example:8123/"}, nil)
 	l.bus, l.log = bus.NewClient("test.play", caps), logger
+	l.ioCtx = t.Context()
 	t.Cleanup(func() {
 		if l.follower != nil {
 			l.follower.Close()
@@ -194,7 +195,7 @@ func TestABundleWindowFollowsRepublishAndRetract(t *testing.T) {
 	assert.False(t, stillBound, "the local name the new revision dropped is unbound")
 	assert.Equal(t, "sales@2", h.ResourceValue(opsResBundle))
 
-	require.NoError(t, adhocdata.RetractBundleRequest(publisher, "sales", nil))
+	require.NoError(t, adhocdata.RetractBundleRequest(t.Context(), publisher, "sales", nil))
 	settleBundle(t, l, func() bool { return len(l.inner.client.datasetBindings) == 0 })
 	settleBundle(t, l, func() bool {
 		return l.inner.datasetNotice != nil
@@ -344,19 +345,19 @@ func TestListBundlesShowsValuesOnlyWhereTheTaskMayRead(t *testing.T) {
 	}
 
 	got := info()
-	withColumnValues(l.bus, nil, got)
+	withColumnValues(t.Context(), l.bus, nil, got)
 	assert.Equal(t, "0", got[0].Columns[0].Max, "the person's read sees the values")
 	assert.Empty(t, got[0].ValuesNeed)
 
 	got = info()
-	withColumnValues(l.bus, &agentCall, got)
+	withColumnValues(t.Context(), l.bus, &agentCall, got)
 	assert.Empty(t, got[0].Columns[0].Max, "an agent without the grant does not")
 	assert.Equal(t, "keelson-bundle:sales", got[0].ValuesNeed)
 
 	got = info()
 	granted := agentCall
 	granted.Destinations = []string{"keelson-bundle:sales"}
-	withColumnValues(l.bus, &granted, got)
+	withColumnValues(t.Context(), l.bus, &granted, got)
 	assert.Equal(t, "0", got[0].Columns[0].Max, "with the grant it does")
 	assert.Equal(t, "[0]", got[0].Columns[0].Sample)
 }

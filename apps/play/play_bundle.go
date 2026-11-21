@@ -163,7 +163,7 @@ func (inst *PlayLauncher) syncBundle() {
 		// closes the bus client (ADR-0322 §SD2).
 		obo := st.obo
 		st.obo = nil
-		if !inst.inner.client.Go(func(context.Context) { st.resolve(obo) }) {
+		if !inst.inner.client.Go(func(context.Context) { st.resolve(inst.ioCtx, obo) }) {
 			st.mu.Lock()
 			st.inflight = false
 			st.mu.Unlock()
@@ -187,8 +187,8 @@ func (inst *PlayLauncher) syncBundle() {
 
 // resolve asks the service for the bundle off the render goroutine and
 // leaves the answer in the mailbox.
-func (inst *bundleState) resolve(obo *app.OnBehalfOf) {
-	res, err := adhocdata.ResolveBundleRequest(inst.bus, inst.alias, obo)
+func (inst *bundleState) resolve(ctx context.Context, obo *app.OnBehalfOf) {
+	res, err := adhocdata.ResolveBundleRequest(ctx, inst.bus, inst.alias, obo)
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	inst.inflight = false
@@ -245,7 +245,7 @@ func (inst *PlayLauncher) applyBundle(st *bundleState, res adhocdata.BundleResul
 			_ = p.UnbindDataset(local)
 			p.client.setDatasetOrigin(local, "", "")
 		}
-		st.follower = adhocdata.NewDeferredFollower(adhocdata.FollowerConfig{Bus: st.bus, Log: st.log, LocalNames: names})
+		st.follower = adhocdata.NewDeferredFollower(inst.ioCtx, adhocdata.FollowerConfig{Bus: st.bus, Log: st.log, LocalNames: names})
 		if st.follower != nil {
 			for _, a := range aliases {
 				st.follower.FollowAs(a, names[a])
@@ -442,7 +442,7 @@ func listBundles(bus app.BusI, obo *app.OnBehalfOf) (out BundleList, err error) 
 	}
 	out.Bundles, err = decodeBundleRows(res.Body)
 	if err == nil {
-		withColumnValues(bus, obo, out.Bundles)
+		withColumnValues(ctx, bus, obo, out.Bundles)
 	}
 	return
 }
@@ -453,7 +453,7 @@ func listBundles(bus app.BusI, obo *app.OnBehalfOf) (out BundleList, err error) 
 // published it — through the read the dataset service holds to that grant.
 // A bundle it may not read keeps its statistics and says which destination
 // would show the values; the service decides when this guess admits.
-func withColumnValues(bus app.BusI, obo *app.OnBehalfOf, bundles []BundleInfo) {
+func withColumnValues(ctx context.Context, bus app.BusI, obo *app.OnBehalfOf, bundles []BundleInfo) {
 	for b := range bundles {
 		info := &bundles[b]
 		for i, local := range info.LocalNames {
@@ -467,7 +467,7 @@ func withColumnValues(bus app.BusI, obo *app.OnBehalfOf, bundles []BundleInfo) {
 				info.ValuesNeed = DestinationKeelsonBundle(info.Alias)
 				continue
 			}
-			res, err := adhocdata.ReadColumns(bus, alias, obo)
+			res, err := adhocdata.ReadColumns(ctx, bus, alias, obo)
 			if err != nil {
 				var ge *adhocdata.GrantError
 				if errors.As(err, &ge) {

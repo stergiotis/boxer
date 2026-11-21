@@ -52,7 +52,7 @@ func NewClient(bus app.BusI, appId app.AppIdT) (inst *Client, err error) {
 // "selected_app" instead.
 func (inst *Client) Get(ctx context.Context, key string) (value []byte, found bool, err error) {
 	subject := SubjectFor(inst.alias, key, OpGet)
-	raw, rerr := inst.bus.Request(subject, nil)
+	raw, rerr := inst.bus.Request(ctx, subject, nil)
 	if rerr != nil {
 		err = eb.Build().Str("subject", subject).Errorf("persist: get: %w", rerr)
 		return
@@ -76,7 +76,7 @@ func (inst *Client) Get(ctx context.Context, key string) (value []byte, found bo
 // distinct from "key absent" (Get returns found=true, value=[]byte{}).
 func (inst *Client) Set(ctx context.Context, key string, value []byte) (err error) {
 	subject := SubjectFor(inst.alias, key, OpSet)
-	raw, rerr := inst.bus.Request(subject, value)
+	raw, rerr := inst.bus.Request(ctx, subject, value)
 	if rerr != nil {
 		err = eb.Build().Str("subject", subject).Errorf("persist: set: %w", rerr)
 		return
@@ -99,7 +99,7 @@ func (inst *Client) Set(ctx context.Context, key string, value []byte) (err erro
 // to surface a "not found" error if they choose.
 func (inst *Client) Delete(ctx context.Context, key string) (err error) {
 	subject := SubjectFor(inst.alias, key, OpDelete)
-	raw, rerr := inst.bus.Request(subject, nil)
+	raw, rerr := inst.bus.Request(ctx, subject, nil)
 	if rerr != nil {
 		err = eb.Build().Str("subject", subject).Errorf("persist: delete: %w", rerr)
 		return

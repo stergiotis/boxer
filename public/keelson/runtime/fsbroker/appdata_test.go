@@ -38,33 +38,33 @@ func TestAppData_WriteReadAppendStatList(t *testing.T) {
 	inst, _, root := newAppDataSetup(t)
 	c := appDataClient(inst, "example.test/some/app")
 
-	w, err := c.Write("plan.json", []byte("{}\n"))
+	w, err := c.Write(t.Context(), "plan.json", []byte("{}\n"))
 	require.NoError(t, err)
 	want := filepath.Join(root, "example.test", "some", "app", "@files", "plan.json")
 	assert.Equal(t, want, w.Location)
 	assert.EqualValues(t, 3, w.Entry.Size)
 
-	data, err := c.ReadFile("plan.json")
+	data, err := c.ReadFile(t.Context(), "plan.json")
 	require.NoError(t, err)
 	assert.Equal(t, "{}\n", string(data))
 
-	require.NoError(t, c.WriteFile("plan.json", []byte("{\"v\":2}\n")))
-	data, err = c.ReadFile("plan.json")
+	require.NoError(t, c.WriteFile(t.Context(), "plan.json", []byte("{\"v\":2}\n")))
+	data, err = c.ReadFile(t.Context(), "plan.json")
 	require.NoError(t, err)
 	assert.Equal(t, "{\"v\":2}\n", string(data), "a write replaces the file")
 
-	require.NoError(t, c.AppendFile("plan.json.journal", []byte("a\n")))
-	require.NoError(t, c.AppendFile("plan.json.journal", []byte("b\n")))
-	data, err = c.ReadFile("plan.json.journal")
+	require.NoError(t, c.AppendFile(t.Context(), "plan.json.journal", []byte("a\n")))
+	require.NoError(t, c.AppendFile(t.Context(), "plan.json.journal", []byte("b\n")))
+	data, err = c.ReadFile(t.Context(), "plan.json.journal")
 	require.NoError(t, err)
 	assert.Equal(t, "a\nb\n", string(data))
 
-	st, err := c.Stat("plan.json")
+	st, err := c.Stat(t.Context(), "plan.json")
 	require.NoError(t, err)
 	assert.False(t, st.NotExist)
 	assert.Equal(t, want, st.Location)
 
-	entries, err := c.List()
+	entries, err := c.List(t.Context())
 	require.NoError(t, err)
 	names := make([]string, 0, len(entries))
 	for _, e := range entries {
@@ -77,14 +77,14 @@ func TestAppData_MissingFile(t *testing.T) {
 	inst, _, _ := newAppDataSetup(t)
 	c := appDataClient(inst, "example.test/app")
 
-	_, err := c.ReadFile("absent.json")
+	_, err := c.ReadFile(t.Context(), "absent.json")
 	require.ErrorIs(t, err, fs.ErrNotExist)
 
-	st, err := c.Stat("absent.json")
+	st, err := c.Stat(t.Context(), "absent.json")
 	require.NoError(t, err, "a stat of a missing file is an answer")
 	assert.True(t, st.NotExist)
 
-	entries, err := c.List()
+	entries, err := c.List(t.Context())
 	require.NoError(t, err, "an area never written is empty")
 	assert.Empty(t, entries)
 }
@@ -96,7 +96,7 @@ func TestAppData_RefusesNamesThatAreNotOneComponent(t *testing.T) {
 	inst, _, root := newAppDataSetup(t)
 	c := appDataClient(inst, "example.test/app")
 	for _, name := range []string{"", "../escape", "a/b", ".hidden", "..", "a\\b", "sp ace"} {
-		err := c.WriteFile(name, []byte("x"))
+		err := c.WriteFile(t.Context(), name, []byte("x"))
 		assert.Errorf(t, err, "name %q", name)
 		assert.NotErrorIs(t, err, fs.ErrNotExist)
 	}
@@ -110,10 +110,10 @@ func TestAppData_AreasAreSeparateByApp(t *testing.T) {
 	inst, _, _ := newAppDataSetup(t)
 	a := appDataClient(inst, "example.test/a")
 	b := appDataClient(inst, "example.test/b")
-	require.NoError(t, a.WriteFile("x.json", []byte("a")))
-	_, err := b.ReadFile("x.json")
+	require.NoError(t, a.WriteFile(t.Context(), "x.json", []byte("a")))
+	_, err := b.ReadFile(t.Context(), "x.json")
 	assert.ErrorIs(t, err, fs.ErrNotExist)
-	entries, err := b.List()
+	entries, err := b.List(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, entries)
 }
@@ -126,25 +126,25 @@ func TestAppData_NestedAppIdsAreSeparate(t *testing.T) {
 	outer := appDataClient(inst, "example.test/widgets")
 	inner := appDataClient(inst, "example.test/widgets/table")
 
-	require.NoError(t, outer.WriteFile("table", []byte("outer")), "the outer app names a file after the inner app's segment")
-	require.NoError(t, inner.WriteFile("x.json", []byte("inner")), "the inner app's area still works")
+	require.NoError(t, outer.WriteFile(t.Context(), "table", []byte("outer")), "the outer app names a file after the inner app's segment")
+	require.NoError(t, inner.WriteFile(t.Context(), "x.json", []byte("inner")), "the inner app's area still works")
 
-	data, err := outer.ReadFile("table")
+	data, err := outer.ReadFile(t.Context(), "table")
 	require.NoError(t, err)
 	assert.Equal(t, "outer", string(data))
-	entries, err := outer.List()
+	entries, err := outer.List(t.Context())
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Equal(t, "table", entries[0].Name)
 
-	_, err = outer.ReadFile("x.json")
+	_, err = outer.ReadFile(t.Context(), "x.json")
 	assert.ErrorIs(t, err, fs.ErrNotExist)
 }
 
 func TestAppData_NeedsTheCap(t *testing.T) {
 	inst, _, _ := newAppDataSetup(t)
 	c := fsbroker.NewAppDataClient(inst.NewClient("example.test/nocap", nil))
-	err := c.WriteFile("x.json", []byte("x"))
+	err := c.WriteFile(t.Context(), "x.json", []byte("x"))
 	assert.ErrorIs(t, err, inprocbus.ErrPermissionViolation)
 }
 
@@ -152,7 +152,7 @@ func TestAppData_NoRootRefuses(t *testing.T) {
 	inst, svc, _ := newAppDataSetup(t)
 	svc.SetAppDataRoot("")
 	c := appDataClient(inst, "example.test/app")
-	err := c.WriteFile("x.json", []byte("x"))
+	err := c.WriteFile(t.Context(), "x.json", []byte("x"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no app data directory")
 }

@@ -31,7 +31,7 @@ func (inst *fakeTasks) Spawn(ctx context.Context, opts task.SpawnOpts) (h task.H
 }
 func (inst *fakeTasks) WatchAll(_ task.ObserverI) (unsubscribe func(), err error) { return nil, nil }
 func (inst *fakeTasks) RequestCancel(_ task.TaskIdT, _ string) (err error)        { return nil }
-func (inst *fakeTasks) ListInflight() (entries []task.InflightSnapshotEntry, err error) {
+func (inst *fakeTasks) ListInflight(ctx context.Context) (entries []task.InflightSnapshotEntry, err error) {
 	return nil, nil
 }
 func (inst *fakeTasks) AppId() (id app.AppIdT)    { return }

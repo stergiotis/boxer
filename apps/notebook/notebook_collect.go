@@ -96,12 +96,12 @@ func runOnServer() mdnotebook.RunFunc {
 
 // publishOnBus asks the store's write path whether it would take the tree,
 // then publishes it.
-func publishOnBus(bus app.BusI) func(req ladingpublish.Request) (ladingpublish.Result, error) {
+func publishOnBus(ctx context.Context, bus app.BusI) func(req ladingpublish.Request) (ladingpublish.Result, error) {
 	return func(req ladingpublish.Request) (res ladingpublish.Result, err error) {
-		if err = ladingpublish.Check(bus, mountTag, req); err != nil {
+		if err = ladingpublish.Check(ctx, bus, mountTag, req); err != nil {
 			return
 		}
-		return ladingpublish.Publish(bus, mountTag, req)
+		return ladingpublish.Publish(ctx, bus, mountTag, req)
 	}
 }
 
@@ -141,7 +141,7 @@ func (inst *App) startCollect(tier agentrun.TierE) (err error) {
 		run = runOnServer()
 	}
 	if publish == nil {
-		publish = publishOnBus(inst.bus)
+		publish = publishOnBus(inst.ioCtx, inst.bus)
 	}
 	nb, doc, mount := inst.nb, inst.doc, inst.collect.mount
 	total := uint64(len(inst.records()))

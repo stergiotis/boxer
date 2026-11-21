@@ -75,7 +75,7 @@ func TestClientClose_OperationsReturnErrClosed(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrClosed), "subscribe after close: %v", err)
 
-	_, err = c.Request("t.x", nil)
+	_, err = c.Request(t.Context(), "t.x", nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrClosed), "request after close: %v", err)
 }

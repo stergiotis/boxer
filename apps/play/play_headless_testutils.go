@@ -8,6 +8,7 @@ package play
 // uses.
 
 import (
+	"context"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -23,10 +24,11 @@ import (
 // window's bus — and draws nothing. Its frames are the caller's: the
 // operations host applies queued commands, and SyncForTest runs the
 // window's own per-frame work.
-func NewHeadlessLauncherForTest(bus app.BusI, log zerolog.Logger, url string) (inst *PlayLauncher) {
+func NewHeadlessLauncherForTest(ctx context.Context, bus app.BusI, log zerolog.Logger, url string) (inst *PlayLauncher) {
 	inner := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "SELECT 1", nil)
 	inner.client = NewClient(ClientConfig{URL: url}, nil)
-	return &PlayLauncher{inner: inner, bus: bus, log: log}
+	inner.ioCtx = ctx
+	return &PlayLauncher{ioCtx: ctx, inner: inner, bus: bus, log: log}
 }
 
 // SyncForTest is the window's frame minus the drawing: the bundle it

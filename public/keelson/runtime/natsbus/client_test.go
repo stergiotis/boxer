@@ -124,7 +124,7 @@ func TestClient_RequestReply(t *testing.T) {
 	t.Cleanup(unsub)
 	require.NoError(t, c.Flush())
 
-	reply, err := c.Request("svc.echo", []byte("ping"))
+	reply, err := c.Request(t.Context(), "svc.echo", []byte("ping"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("echo:ping"), reply)
 }
@@ -283,7 +283,7 @@ func TestClient_SubscribeInbox(t *testing.T) {
 	})
 	require.NoError(t, err)
 	t.Cleanup(unsubInbox)
-	reply, err := c.Request("svc.stream", []byte(inbox))
+	reply, err := c.Request(t.Context(), "svc.stream", []byte(inbox))
 	require.NoError(t, err)
 	require.Equal(t, []byte("done"), reply)
 	select {

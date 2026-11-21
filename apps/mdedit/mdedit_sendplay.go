@@ -128,7 +128,7 @@ func (inst *App) sendDoc(openPlay bool) {
 			id, err := uploadDoc(ctx, src, fileName, origin)
 			msg = "uploaded to boxer.facts · id " + utoa(id)
 			if err == nil && openPlay {
-				err = openInPlay(bus, id)
+				err = openInPlay(ctx, bus, id)
 				msg = "sent to play"
 			}
 			return err
@@ -176,8 +176,8 @@ func uploadDoc(ctx context.Context, src, fileName string, origin mddocfacts.Orig
 // openInPlay is the view half: play opened on the row an upload just wrote.
 // Sequenced after the Flush by its caller, so the AutoRun query cannot race
 // its own row.
-func openInPlay(bus app.BusI, id uint64) (err error) {
-	_, err = playground.Open(bus, playground.Launch{
+func openInPlay(ctx context.Context, bus app.BusI, id uint64) (err error) {
+	_, err = playground.Open(ctx, bus, playground.Launch{
 		Sql:     playLaunchSQL(id),
 		AutoRun: true,
 		Tab:     "detail",

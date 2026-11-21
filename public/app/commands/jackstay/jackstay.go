@@ -195,7 +195,7 @@ func newStructureCommand() *cli.Command {
 			}
 			path := cmd.String("plan")
 			var old *jk.Plan
-			if o, loadErr := jk.LoadPlan(path); loadErr == nil {
+			if o, loadErr := jk.LoadPlan(ctx, path); loadErr == nil {
 				old = &o
 			} else if !errors.Is(loadErr, fs.ErrNotExist) {
 				// A plan that exists and cannot be read is not overwritten
@@ -207,7 +207,7 @@ func newStructureCommand() *cli.Command {
 			if err != nil {
 				return
 			}
-			err = plan.Save(path)
+			err = plan.Save(ctx, path)
 			if err != nil {
 				return
 			}
@@ -426,7 +426,7 @@ func newApplyDDLCommand() *cli.Command {
 			w := os.Stdout
 			path := cmd.String("plan")
 			var plan jk.Plan
-			plan, err = jk.LoadPlan(path)
+			plan, err = jk.LoadPlan(ctx, path)
 			if err != nil {
 				return
 			}
@@ -482,7 +482,7 @@ func newApplyDDLCommand() *cli.Command {
 			if len(applied) == 0 {
 				_, _ = fmt.Fprintln(w, "the plan had no DDL left to apply")
 			}
-			err = after.Save(path)
+			err = after.Save(ctx, path)
 			if err != nil {
 				return
 			}
@@ -517,7 +517,7 @@ func newDiffCommand() *cli.Command {
 				return
 			}
 			var plan jk.Plan
-			plan, err = jk.LoadPlan(path)
+			plan, err = jk.LoadPlan(ctx, path)
 			if err != nil {
 				return
 			}
@@ -555,7 +555,7 @@ func newDiffCommand() *cli.Command {
 			if len(stale) > 0 {
 				return refuseStale(w, path, stale)
 			}
-			err = fresh.Save(path)
+			err = fresh.Save(ctx, path)
 			if err != nil {
 				return
 			}
@@ -641,7 +641,7 @@ func newSyncCommand() *cli.Command {
 				return
 			}
 			var plan jk.Plan
-			plan, err = jk.LoadPlan(path)
+			plan, err = jk.LoadPlan(ctx, path)
 			if err != nil {
 				return
 			}
@@ -929,7 +929,7 @@ func newStatusCommand() *cli.Command {
 			w := os.Stdout
 			path := cmd.String("plan")
 			var plan jk.Plan
-			plan, err = jk.LoadPlan(path)
+			plan, err = jk.LoadPlan(ctx, path)
 			if err != nil {
 				return
 			}
@@ -939,7 +939,7 @@ func newStatusCommand() *cli.Command {
 			var j *jk.Journal
 			if plan.SyncRun != nil {
 				_, _ = fmt.Fprintf(w, "sync run %s, begun %s\n", plan.SyncRun.RunId, plan.SyncRun.StartedAt.Format(time.RFC3339))
-				j, err = jk.ReadJournal(jk.JournalPath(path), plan.SyncRun.RunId)
+				j, err = jk.ReadJournal(ctx, jk.JournalPath(path), plan.SyncRun.RunId)
 				if err != nil {
 					return
 				}

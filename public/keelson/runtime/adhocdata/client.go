@@ -1,6 +1,7 @@
 package adhocdata
 
 import (
+	"context"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -18,8 +19,8 @@ import (
 // embedder) drives the capability without holding a Service reference; the
 // caller's bus client needs Pub on adhoc.publish. The publisher is the
 // envelope's sender and instance; in.By is ignored on this path.
-func PublishRequest(bus app.BusI, in PublishInput) (res PublishResult, err error) {
-	rep, err := request(bus, SubjectPublish, adhocrequest.AdhocRequest{
+func PublishRequest(ctx context.Context, bus app.BusI, in PublishInput) (res PublishResult, err error) {
+	rep, err := request(ctx, bus, SubjectPublish, adhocrequest.AdhocRequest{
 		At: time.Now().UTC(), Op: adhocrequest.OpPublish, Alias: in.Alias, Handle: in.Handle,
 		KeepAfterClose: in.KeepAfterClose, ArrowStream: in.ArrowIPCStream, WindowScoped: in.WindowScoped,
 	}, "publish")
@@ -35,12 +36,12 @@ func PublishRequest(bus app.BusI, in PublishInput) (res PublishResult, err error
 
 // request encodes req, sends it on subject and decodes the reply; a reply
 // with Ok false comes back as an error carrying its reason.
-func request(bus app.BusI, subject string, req adhocrequest.AdhocRequest, verb string) (rep adhocreply.AdhocReply, err error) {
+func request(ctx context.Context, bus app.BusI, subject string, req adhocrequest.AdhocRequest, verb string) (rep adhocreply.AdhocReply, err error) {
 	payload, err := buscodec.Encode(req)
 	if err != nil {
 		return rep, eb.Build().Str("verb", verb).Errorf("adhocdata: encode request: %w", err)
 	}
-	replyBytes, err := bus.Request(subject, payload)
+	replyBytes, err := bus.Request(ctx, subject, payload)
 	if err != nil {
 		return rep, eb.Build().Str("verb", verb).Errorf("adhocdata: request: %w", err)
 	}
@@ -59,8 +60,8 @@ func request(bus app.BusI, subject string, req adhocrequest.AdhocRequest, verb s
 // 2026-08-01). It is how a standalone applet binds its declared
 // `datasets:` aliases at open; the caller's bus client needs Pub on
 // adhoc.resolve.
-func ResolveRequest(bus app.BusI, alias string) (res ResolveResult, err error) {
-	res, _, err = resolve(bus, alias, "")
+func ResolveRequest(ctx context.Context, bus app.BusI, alias string) (res ResolveResult, err error) {
+	res, _, err = resolve(ctx, bus, alias, "")
 	return
 }
 
@@ -73,22 +74,22 @@ func ResolveRequest(bus app.BusI, alias string) (res ResolveResult, err error) {
 // is set there is nothing live under the alias yet. err is set only for
 // transport failures and for "no live dataset under alias"; boundLive is
 // meaningful in both cases.
-func ResolveVerifyRequest(bus app.BusI, alias string, boundHandle string) (res ResolveResult, boundLive bool, err error) {
-	return resolve(bus, alias, boundHandle)
+func ResolveVerifyRequest(ctx context.Context, bus app.BusI, alias string, boundHandle string) (res ResolveResult, boundLive bool, err error) {
+	return resolve(ctx, bus, alias, boundHandle)
 }
 
 // resolve is the shared body of the two resolve helpers: a typed
 // ErrNoLiveDataset for "nothing under the alias", a transport or refusal
 // error otherwise, and the bound handle's liveness whenever the service
 // answered.
-func resolve(bus app.BusI, alias string, boundHandle string) (res ResolveResult, boundLive bool, err error) {
+func resolve(ctx context.Context, bus app.BusI, alias string, boundHandle string) (res ResolveResult, boundLive bool, err error) {
 	payload, err := buscodec.Encode(adhocrequest.AdhocRequest{
 		At: time.Now().UTC(), Op: adhocrequest.OpResolve, Alias: alias, Handle: boundHandle,
 	})
 	if err != nil {
 		return res, false, eh.Errorf("adhocdata: encode resolve: %w", err)
 	}
-	replyBytes, err := bus.Request(SubjectResolve, payload)
+	replyBytes, err := bus.Request(ctx, SubjectResolve, payload)
 	if err != nil {
 		return res, false, eh.Errorf("adhocdata: resolve request: %w", err)
 	}
@@ -109,8 +110,8 @@ func resolve(bus app.BusI, alias string, boundHandle string) (res ResolveResult,
 }
 
 // RetractRequest retracts a dataset via the adhoc.retract subject.
-func RetractRequest(bus app.BusI, handle string) (err error) {
-	_, err = request(bus, SubjectRetract, adhocrequest.AdhocRequest{
+func RetractRequest(ctx context.Context, bus app.BusI, handle string) (err error) {
+	_, err = request(ctx, bus, SubjectRetract, adhocrequest.AdhocRequest{
 		At: time.Now().UTC(), Op: adhocrequest.OpRetract, Handle: handle,
 	}, "retract")
 	return
@@ -145,7 +146,7 @@ func SubscribeEvents(bus app.BusI, handler func(ev Event)) (unsubscribe func(), 
 // §SD2). The caller's bus client needs Pub on
 // adhoc.bundle.publish; the publisher is the envelope's sender, and in.By
 // is ignored. The result carries no document: the caller has it.
-func PublishBundleRequest(bus app.BusI, in BundlePublishInput) (res BundleResult, err error) {
+func PublishBundleRequest(ctx context.Context, bus app.BusI, in BundlePublishInput) (res BundleResult, err error) {
 	req := adhocrequest.AdhocRequest{
 		At: time.Now().UTC(), Op: adhocrequest.OpPublish, Bundle: in.Alias, Document: in.Document,
 		KeepAfterClose: in.KeepAfterClose,
@@ -157,7 +158,7 @@ func PublishBundleRequest(bus app.BusI, in BundlePublishInput) (res BundleResult
 		req.LocalNames = append(req.LocalNames, d.LocalName)
 		req.ArrowStreams = append(req.ArrowStreams, d.ArrowIPCStream)
 	}
-	rep, err := request(bus, SubjectBundlePublish, req, "publish-bundle")
+	rep, err := request(ctx, bus, SubjectBundlePublish, req, "publish-bundle")
 	if err != nil {
 		return
 	}
@@ -168,7 +169,7 @@ func PublishBundleRequest(bus app.BusI, in BundlePublishInput) (res BundleResult
 // and its datasets' local names, aliases and handles — via
 // adhoc.bundle.resolve. Nothing live is a typed ErrNoLiveBundle. obo is
 // the agent's call the resolve is work of, nil when it is none.
-func ResolveBundleRequest(bus app.BusI, alias string, obo *app.OnBehalfOf) (res BundleResult, err error) {
+func ResolveBundleRequest(ctx context.Context, bus app.BusI, alias string, obo *app.OnBehalfOf) (res BundleResult, err error) {
 	payload, err := buscodec.Encode(adhocrequest.AdhocRequest{
 		At: time.Now().UTC(), Op: adhocrequest.OpResolve, Bundle: alias,
 		OboTask: oboTask(obo), OboEpoch: oboEpoch(obo), OboCall: oboCall(obo),
@@ -176,7 +177,7 @@ func ResolveBundleRequest(bus app.BusI, alias string, obo *app.OnBehalfOf) (res 
 	if err != nil {
 		return res, eh.Errorf("encode bundle resolve: %w", err)
 	}
-	replyBytes, err := bus.Request(SubjectBundleResolve, payload)
+	replyBytes, err := bus.Request(ctx, SubjectBundleResolve, payload)
 	if err != nil {
 		return res, eb.Build().Str("bundle", alias).Errorf("bundle resolve request: %w", err)
 	}
@@ -195,8 +196,8 @@ func ResolveBundleRequest(bus app.BusI, alias string, obo *app.OnBehalfOf) (res 
 
 // RetractBundleRequest retracts a bundle whole via adhoc.bundle.retract;
 // obo is the agent's call the retract is work of, nil when it is none.
-func RetractBundleRequest(bus app.BusI, alias string, obo *app.OnBehalfOf) (err error) {
-	_, err = request(bus, SubjectBundleRetract, adhocrequest.AdhocRequest{
+func RetractBundleRequest(ctx context.Context, bus app.BusI, alias string, obo *app.OnBehalfOf) (err error) {
+	_, err = request(ctx, bus, SubjectBundleRetract, adhocrequest.AdhocRequest{
 		At: time.Now().UTC(), Op: adhocrequest.OpRetract, Bundle: alias,
 		OboTask: oboTask(obo), OboEpoch: oboEpoch(obo), OboCall: oboCall(obo),
 	}, "retract-bundle")

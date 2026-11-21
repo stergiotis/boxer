@@ -76,7 +76,7 @@ func (f *serviceFixture) eventually(t *testing.T, id string, state string) {
 // attributed to the sender (ADR-0234 §SD1).
 func TestClientEnqueueIsAttributedAndWakesTheWorker(t *testing.T) {
 	f := newServiceFixture(t)
-	job, err := f.client.Enqueue(Request{Kind: "svc.kind", Subject: "row-1", Queue: "bulk", Priority: 3, MaxAttempts: 2, Backoff: watchbillstore.BackoffLinear, BackoffBase: time.Second})
+	job, err := f.client.Enqueue(t.Context(), Request{Kind: "svc.kind", Subject: "row-1", Queue: "bulk", Priority: 3, MaxAttempts: 2, Backoff: watchbillstore.BackoffLinear, BackoffBase: time.Second})
 	require.NoError(t, err)
 	assert.NotEmpty(t, job.ID)
 	assert.Equal(t, "apps/consumer", job.OwnerAppId)
@@ -87,7 +87,7 @@ func TestClientEnqueueIsAttributedAndWakesTheWorker(t *testing.T) {
 	assert.Equal(t, watchbillstore.BackoffLinear, job.Backoff)
 	f.eventually(t, job.ID, watchbillstore.StateRunning)
 
-	got, found, err := f.client.Get(job.ID)
+	got, found, err := f.client.Get(t.Context(), job.ID)
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, watchbillstore.StateRunning, got.State)
@@ -103,28 +103,28 @@ func TestClientEnqueueIsAttributedAndWakesTheWorker(t *testing.T) {
 func TestClientCancelAndRetry(t *testing.T) {
 	f := newServiceFixture(t)
 	later := time.Now().Add(time.Hour)
-	queued, err := f.client.Enqueue(Request{Kind: "svc.kind", RunAfter: later})
+	queued, err := f.client.Enqueue(t.Context(), Request{Kind: "svc.kind", RunAfter: later})
 	require.NoError(t, err)
-	ok, err := f.client.Cancel(queued.ID, "not needed")
+	ok, err := f.client.Cancel(t.Context(), queued.ID, "not needed")
 	require.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, watchbillstore.StateCancelled, f.state(t, queued.ID))
-	ok, err = f.client.Cancel(queued.ID, "again")
+	ok, err = f.client.Cancel(t.Context(), queued.ID, "again")
 	require.NoError(t, err)
 	assert.False(t, ok, "a second cancel does not apply")
 	evs := f.store.Events(queued.ID)
 	require.Len(t, evs, 1)
 	assert.Equal(t, "asked by apps/consumer: not needed", evs[0].Event.Note)
 
-	running, err := f.client.Enqueue(Request{Kind: "svc.kind"})
+	running, err := f.client.Enqueue(t.Context(), Request{Kind: "svc.kind"})
 	require.NoError(t, err)
 	f.eventually(t, running.ID, watchbillstore.StateRunning)
-	ok, err = f.client.Cancel(running.ID, "")
+	ok, err = f.client.Cancel(t.Context(), running.ID, "")
 	require.NoError(t, err)
 	assert.True(t, ok)
 	f.eventually(t, running.ID, watchbillstore.StateCancelled)
 
-	ok, err = f.client.Retry(running.ID, "once more")
+	ok, err = f.client.Retry(t.Context(), running.ID, "once more")
 	require.NoError(t, err)
 	assert.True(t, ok)
 	f.eventually(t, running.ID, watchbillstore.StateRunning)
@@ -132,10 +132,10 @@ func TestClientCancelAndRetry(t *testing.T) {
 	f.eventually(t, running.ID, watchbillstore.StateSucceeded)
 	assert.Equal(t, []string{"running", "cancel", "cancelled", "queued", "running", "succeeded"}, states(f.store.Events(running.ID)))
 
-	ok, err = f.client.Retry("no-such-job", "")
+	ok, err = f.client.Retry(t.Context(), "no-such-job", "")
 	require.NoError(t, err)
 	assert.False(t, ok)
-	_, found, err := f.client.Get("no-such-job")
+	_, found, err := f.client.Get(t.Context(), "no-such-job")
 	require.NoError(t, err)
 	assert.False(t, found)
 }
@@ -145,21 +145,21 @@ func TestClientList(t *testing.T) {
 	f := newServiceFixture(t)
 	later := time.Now().Add(time.Hour)
 	for i := 0; i < 3; i++ {
-		_, err := f.client.Enqueue(Request{Kind: "svc.kind", RunAfter: later})
+		_, err := f.client.Enqueue(t.Context(), Request{Kind: "svc.kind", RunAfter: later})
 		require.NoError(t, err)
 	}
 	require.NoError(t, f.store.Enqueue(context.Background(), watchbillstore.Job{ID: "other", Kind: "other.kind", State: watchbillstore.StateDiscarded, Queue: "default"}))
 
-	all, err := f.client.List(nil, nil, 0)
+	all, err := f.client.List(t.Context(), nil, nil, 0)
 	require.NoError(t, err)
 	assert.Len(t, all, 4)
-	queued, err := f.client.List([]string{watchbillstore.StateQueued}, nil, 0)
+	queued, err := f.client.List(t.Context(), []string{watchbillstore.StateQueued}, nil, 0)
 	require.NoError(t, err)
 	assert.Len(t, queued, 3)
-	two, err := f.client.List(nil, []string{"svc.kind"}, 2)
+	two, err := f.client.List(t.Context(), nil, []string{"svc.kind"}, 2)
 	require.NoError(t, err)
 	assert.Len(t, two, 2)
-	other, err := f.client.List([]string{watchbillstore.StateDiscarded}, []string{"other.kind"}, 0)
+	other, err := f.client.List(t.Context(), []string{watchbillstore.StateDiscarded}, []string{"other.kind"}, 0)
 	require.NoError(t, err)
 	require.Len(t, other, 1)
 	assert.Equal(t, "other", other[0].ID)
@@ -171,24 +171,24 @@ func TestClientList(t *testing.T) {
 func TestServiceRefusals(t *testing.T) {
 	f := newServiceFixture(t)
 	bare := NewClient(f.bus.NewClient("apps/bare", nil))
-	_, err := bare.Enqueue(Request{Kind: "svc.kind"})
+	_, err := bare.Enqueue(t.Context(), Request{Kind: "svc.kind"})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, inprocbus.ErrPermissionViolation)
 
 	raw := f.bus.NewClient("apps/raw", ClientCaps())
 	payload, err := buscodec.Encode(watchbillrequest.WatchbillRequest{Op: watchbillrequest.OpCancel, Id: "x"})
 	require.NoError(t, err)
-	b, err := raw.Request(SubjectJob(watchbillrequest.OpGet), payload)
+	b, err := raw.Request(t.Context(), SubjectJob(watchbillrequest.OpGet), payload)
 	require.NoError(t, err)
 	r, err := buscodec.Decode[watchbillreply.WatchbillReply](b)
 	require.NoError(t, err)
 	assert.False(t, r.Ok)
 	assert.Contains(t, r.Reason, "disagree")
 
-	_, err = f.client.Enqueue(Request{Kind: "svc.kind", Backoff: "fibonacci"})
+	_, err = f.client.Enqueue(t.Context(), Request{Kind: "svc.kind", Backoff: "fibonacci"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "backoff")
-	_, err = f.client.Enqueue(Request{})
+	_, err = f.client.Enqueue(t.Context(), Request{})
 	require.Error(t, err)
 }
 
@@ -196,7 +196,7 @@ func TestServiceRefusals(t *testing.T) {
 // it drains, what it holds, whether it serves and sweeps.
 func TestWorkerIntrospectionTable(t *testing.T) {
 	f := newServiceFixture(t)
-	job, err := f.client.Enqueue(Request{Kind: "svc.kind"})
+	job, err := f.client.Enqueue(t.Context(), Request{Kind: "svc.kind"})
 	require.NoError(t, err)
 	f.eventually(t, job.ID, watchbillstore.StateRunning)
 
@@ -284,7 +284,7 @@ func TestClientEnqueueWithDelegationIsAttested(t *testing.T) {
 	f := newServiceFixture(t)
 	obo := &app.OnBehalfOf{Task: "task-7", Epoch: 2, Call: "call-3"}
 
-	_, err := f.client.Enqueue(Request{Kind: "svc.kind", Subject: "unattested", OnBehalfOf: obo})
+	_, err := f.client.Enqueue(t.Context(), Request{Kind: "svc.kind", Subject: "unattested", OnBehalfOf: obo})
 	require.Error(t, err, "no dispatcher is installed")
 	assert.Contains(t, err.Error(), "not attested")
 	rows, lerr := f.store.List(context.Background(), watchbillstore.ListFilter{}, 10)
@@ -293,11 +293,11 @@ func TestClientEnqueueWithDelegationIsAttested(t *testing.T) {
 
 	a := &attester{task: "task-7", epoch: 2, call: "call-3", sender: "apps/consumer"}
 	f.w.SetDelegation(a)
-	_, err = f.client.Enqueue(Request{Kind: "svc.kind", Subject: "wrong call", OnBehalfOf: &app.OnBehalfOf{Task: "task-7", Epoch: 2, Call: "other"}})
+	_, err = f.client.Enqueue(t.Context(), Request{Kind: "svc.kind", Subject: "wrong call", OnBehalfOf: &app.OnBehalfOf{Task: "task-7", Epoch: 2, Call: "other"}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not attested")
 
-	job, err := f.client.Enqueue(Request{Kind: "svc.kind", Subject: "attested", OnBehalfOf: obo})
+	job, err := f.client.Enqueue(t.Context(), Request{Kind: "svc.kind", Subject: "attested", OnBehalfOf: obo})
 	require.NoError(t, err)
 	assert.Equal(t, 2, a.asked)
 	row, found, err := f.store.Get(context.Background(), job.ID)
@@ -308,7 +308,7 @@ func TestClientEnqueueWithDelegationIsAttested(t *testing.T) {
 	assert.Equal(t, "call-3", row.Call)
 	assert.True(t, row.AgentCaused())
 
-	plain, err := f.client.Enqueue(Request{Kind: "svc.kind", Subject: "plain"})
+	plain, err := f.client.Enqueue(t.Context(), Request{Kind: "svc.kind", Subject: "plain"})
 	require.NoError(t, err)
 	assert.Equal(t, 2, a.asked, "a request without a delegation asks nothing")
 	row, _, err = f.store.Get(context.Background(), plain.ID)
@@ -326,22 +326,22 @@ func TestLaneRoutingAtTheEnqueueDoor(t *testing.T) {
 	f.w.SetDelegation(&attester{task: "task-7", epoch: 2, call: "call-3", sender: "apps/consumer"})
 	obo := &app.OnBehalfOf{Task: "task-7", Epoch: 2, Call: "call-3"}
 
-	agent, err := f.client.Enqueue(Request{Kind: "svc.kind", Subject: "agent", Queue: "bulk", OnBehalfOf: obo})
+	agent, err := f.client.Enqueue(t.Context(), Request{Kind: "svc.kind", Subject: "agent", Queue: "bulk", OnBehalfOf: obo})
 	require.NoError(t, err)
 	assert.Equal(t, watchbillstore.QueueLane, agent.Queue)
-	plain, err := f.client.Enqueue(Request{Kind: "svc.kind", Subject: "plain", Queue: "bulk"})
+	plain, err := f.client.Enqueue(t.Context(), Request{Kind: "svc.kind", Subject: "plain", Queue: "bulk"})
 	require.NoError(t, err)
 	assert.Equal(t, "bulk", plain.Queue)
-	_, err = f.client.Enqueue(Request{Kind: "svc.kind", Subject: "parked", Queue: watchbillstore.QueueLane})
+	_, err = f.client.Enqueue(t.Context(), Request{Kind: "svc.kind", Subject: "parked", Queue: watchbillstore.QueueLane})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reserved lane")
 	// An attested delegation may not name the lane either, with the
 	// switch on or off: the lane is routed into, never asked for.
-	_, err = f.client.Enqueue(Request{Kind: "svc.kind", Subject: "parked-agent", Queue: watchbillstore.QueueLane, OnBehalfOf: obo})
+	_, err = f.client.Enqueue(t.Context(), Request{Kind: "svc.kind", Subject: "parked-agent", Queue: watchbillstore.QueueLane, OnBehalfOf: obo})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reserved lane")
 	f.w.cfg.IsolateAgentJobs = false
-	_, err = f.client.Enqueue(Request{Kind: "svc.kind", Subject: "parked-agent-off", Queue: watchbillstore.QueueLane, OnBehalfOf: obo})
+	_, err = f.client.Enqueue(t.Context(), Request{Kind: "svc.kind", Subject: "parked-agent-off", Queue: watchbillstore.QueueLane, OnBehalfOf: obo})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reserved lane")
 	rows, err := f.store.List(context.Background(), watchbillstore.ListFilter{Queues: []string{watchbillstore.QueueLane}}, 10)

@@ -104,7 +104,7 @@ func (inst *App) openFile() {
 	bus := inst.bus
 	inst.startOpen(image.Rectangle{}, func(ctx context.Context, report bgjob.Reporter, arrive func(*tiles.Store)) (pic *tiles.Store, err error) {
 		report(0, 0, "choose a PNG or JPEG file")
-		reply, err := bus.RequestWithTimeout(fsbroker.SubjectDialogRead, nil, fsbroker.DialogTimeout)
+		reply, err := app.RequestWithin(ctx, bus, fsbroker.DialogTimeout, fsbroker.SubjectDialogRead, nil)
 		if err != nil {
 			return nil, eh.Errorf("the file picker did not answer: %w", err)
 		}
@@ -116,10 +116,10 @@ func (inst *App) openFile() {
 			return nil, errOpenCancelled
 		}
 		report(0, 0, "reading "+dr.DisplayName)
-		body, err := bus.RequestWithTimeout(dr.HandleSubjectPrefix+opHandleRead, nil, fsbroker.HandleOpTimeout)
+		body, err := app.RequestWithin(ctx, bus, fsbroker.HandleOpTimeout, dr.HandleSubjectPrefix+opHandleRead, nil)
 		// The file is read once; the grant goes back whether or not the read
 		// worked, so no standing authority outlives the gesture.
-		_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opHandleClose, nil, fsbroker.HandleOpTimeout)
+		_, _ = app.RequestWithin(ctx, bus, fsbroker.HandleOpTimeout, dr.HandleSubjectPrefix+opHandleClose, nil)
 		if err != nil {
 			return nil, eh.Errorf("%s could not be read: %w", dr.DisplayName, err)
 		}

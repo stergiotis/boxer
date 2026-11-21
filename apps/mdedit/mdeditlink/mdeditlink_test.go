@@ -105,6 +105,6 @@ func TestLaunch(t *testing.T) {
 
 // Open refuses a link that does not parse before touching the bus.
 func TestOpenRefusesABadLinkWithoutABus(t *testing.T) {
-	_, err := Open(nil, "https://example.com")
+	_, err := Open(t.Context(), nil, "https://example.com")
 	assert.Error(t, err)
 }

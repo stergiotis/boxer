@@ -6,6 +6,7 @@
 package editexternally
 
 import (
+	"context"
 	"strconv"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -22,6 +23,9 @@ type Input struct {
 	Editing  *externaledit.Editing
 	// Bus is the window's bus; without one nothing is drawn.
 	Bus app.BusI
+	// BusCtx is what the edit's bus calls run under — the window's
+	// app.ContextOf, kept by the Editing from the edit's start.
+	BusCtx context.Context
 	// Name is the file name the editor shows; its extension picks the
 	// editor's syntax.
 	Name string
@@ -77,7 +81,7 @@ func Render(in Input) (r Result) {
 		if !ed.Active() {
 			for range c.EnabledUi(!in.Disabled).KeepIter() {
 				if button("start", "Edit in "+editor) {
-					ed.Start(in.Bus, in.Name, current)
+					ed.Start(in.BusCtx, in.Bus, in.Name, current)
 				}
 			}
 		} else if button("stop", "Stop editing in "+editor) {

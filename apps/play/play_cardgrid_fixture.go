@@ -391,7 +391,7 @@ func (inst *PlayApp) publishCardgridFixture() {
 	go func() {
 		var summary string
 		err := task.RunToCompletion(inst.client.Tasks(), task.SpawnOpts{Kind: "play.fixture.cards", Title: "publish the cards fixture"}, func() (err error) {
-			summary, err = doPublishCardgridFixture(bus, st)
+			summary, err = doPublishCardgridFixture(inst.ioCtx, bus, st)
 			return
 		})
 		st.mu.Lock()
@@ -404,7 +404,7 @@ func (inst *PlayApp) publishCardgridFixture() {
 	}()
 }
 
-func doPublishCardgridFixture(bus busPublisherI, st *cardgridFixtureState) (summary string, err error) {
+func doPublishCardgridFixture(ctx context.Context, bus busPublisherI, st *cardgridFixtureState) (summary string, err error) {
 	rows, err := cardgridFixtureRows()
 	if err != nil {
 		return
@@ -413,7 +413,7 @@ func doPublishCardgridFixture(bus busPublisherI, st *cardgridFixtureState) (summ
 	if err != nil {
 		return
 	}
-	res, err := st.publisher.Publish(bus, ipc)
+	res, err := st.publisher.Publish(ctx, bus, ipc)
 	if err != nil {
 		return "", eb.Build().Str("alias", cardgridFixtureAlias).Errorf("play: cards fixture: publish: %w", err)
 	}

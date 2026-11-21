@@ -152,8 +152,8 @@ func (inst *window) openInNotebook() (err error) {
 	inst.busy, inst.note = true, "opening the notebook window…"
 	inst.mu.Unlock()
 	bus := inst.bus
-	started := inst.scope.Go(func(context.Context) {
-		_, oErr := windowopen.RequestOpen(bus, nblaunch.AppId, nblaunch.Kind, cfg)
+	started := inst.scope.Go(func(ctx context.Context) {
+		_, oErr := windowopen.RequestOpen(ctx, bus, nblaunch.AppId, nblaunch.Kind, cfg)
 		note := "opened in the notebook window; it has the text and none of the stored results"
 		if oErr != nil {
 			note = "the notebook window was not opened: " + oErr.Error()

@@ -214,16 +214,16 @@ func TestRequestOpenKind_RoundTripAndRefusal(t *testing.T) {
 	registerTakers(t, reg, "test.taker")
 	fx := mkOpenServiceFixture(t, reg)
 
-	key, err := windowopen.RequestOpenKind(fx.caller, testCfgKind, testCfgBytes)
+	key, err := windowopen.RequestOpenKind(t.Context(), fx.caller, testCfgKind, testCfgBytes)
 	require.NoError(t, err)
 	assert.NotZero(t, key)
 	require.Len(t, fx.facts.Launches(), 1)
 	assert.Equal(t, app.AppIdT("test.taker"), fx.facts.Launches()[0].TargetAppId)
 
-	_, err = windowopen.RequestOpenKind(fx.caller, "", nil)
+	_, err = windowopen.RequestOpenKind(t.Context(), fx.caller, "", nil)
 	assert.ErrorContains(t, err, "no config kind", "an open by kind needs a kind")
 
-	_, err = windowopen.RequestOpenKind(fx.caller, "someOtherKind", testCfgBytes)
+	_, err = windowopen.RequestOpenKind(t.Context(), fx.caller, "someOtherKind", testCfgBytes)
 	assert.ErrorContains(t, err, "open refused: no app in this host takes launch kind \"someOtherKind\"", "a refusal returns the host's reason, not a timeout")
 	var refused *windowopen.RefusedError
 	require.ErrorAs(t, err, &refused)
@@ -240,11 +240,11 @@ func TestRefusalTextCarriesTheReasonOnce(t *testing.T) {
 	registerTakers(t, reg, "test.taker.a", "test.taker.b")
 	fx := mkOpenServiceFixture(t, reg)
 
-	_, err := windowopen.RequestOpen(fx.caller, "test.nobody", "", nil)
+	_, err := windowopen.RequestOpen(t.Context(), fx.caller, "test.nobody", "", nil)
 	require.Error(t, err)
 	assert.Equal(t, "windowhost: open refused: app not registered", err.Error())
 
-	_, err = windowopen.RequestOpenKind(fx.caller, testCfgKind, testCfgBytes)
+	_, err = windowopen.RequestOpenKind(t.Context(), fx.caller, testCfgKind, testCfgBytes)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "windowhost: open refused: several apps take launch kind")
 	assert.Contains(t, err.Error(), "test.taker.a")

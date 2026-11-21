@@ -72,7 +72,7 @@ func TestService_DialogRead_ResolveGrantsHandleAndReads(t *testing.T) {
 	}
 	resultCh := make(chan res, 1)
 	go func() {
-		reply, err := appBus.Request(fsbroker.SubjectDialogRead, nil)
+		reply, err := appBus.Request(t.Context(), fsbroker.SubjectDialogRead, nil)
 		resultCh <- res{reply, err}
 	}()
 
@@ -98,7 +98,7 @@ func TestService_DialogRead_ResolveGrantsHandleAndReads(t *testing.T) {
 	// Now read via the granted handle subject. The app's caps must have
 	// been augmented by Resolve so this Publish doesn't trip
 	// ErrPermissionViolation.
-	content, err := appBus.Request(reply.HandleSubjectPrefix+".read", nil)
+	content, err := appBus.Request(t.Context(), reply.HandleSubjectPrefix+".read", nil)
 	require.NoError(t, err)
 	assert.Equal(t, want, content)
 }
@@ -114,7 +114,7 @@ func TestService_DialogRead_Cancel(t *testing.T) {
 	}
 	resultCh := make(chan res, 1)
 	go func() {
-		reply, err := appBus.Request(fsbroker.SubjectDialogRead, nil)
+		reply, err := appBus.Request(t.Context(), fsbroker.SubjectDialogRead, nil)
 		resultCh <- res{reply, err}
 	}()
 
@@ -146,7 +146,7 @@ func TestService_Handle_UnknownUuid(t *testing.T) {
 	bus := inst.NewClient("test.app2", []app.SubjectFilter{
 		{Pattern: "fs.handle.>", Direction: app.CapDirectionPub},
 	})
-	reply, err := bus.Request("fs.handle.deadbeef.read", nil)
+	reply, err := bus.Request(t.Context(), "fs.handle.deadbeef.read", nil)
 	require.NoError(t, err)
 	dr, err := fsbroker.UnmarshalDialogReply(reply)
 	require.NoError(t, err)
@@ -174,7 +174,7 @@ func TestService_DialogWrite_ResolveGrantsHandleAndWrites(t *testing.T) {
 	}
 	resultCh := make(chan res, 1)
 	go func() {
-		reply, err := writer.Request(fsbroker.SubjectDialogWrite, nil)
+		reply, err := writer.Request(t.Context(), fsbroker.SubjectDialogWrite, nil)
 		resultCh <- res{reply, err}
 	}()
 
@@ -198,7 +198,7 @@ func TestService_DialogWrite_ResolveGrantsHandleAndWrites(t *testing.T) {
 
 	// Write via the granted handle subject; the ack is a DialogReply so the
 	// app can tell success (Granted) from a filesystem error (Reason).
-	ackRaw, err := writer.Request(reply.HandleSubjectPrefix+".write", want)
+	ackRaw, err := writer.Request(t.Context(), reply.HandleSubjectPrefix+".write", want)
 	require.NoError(t, err)
 	ack, err := fsbroker.UnmarshalDialogReply(ackRaw)
 	require.NoError(t, err)
@@ -227,7 +227,7 @@ func TestService_DialogWrite_SurfacesSuggestedName(t *testing.T) {
 	}
 	resultCh := make(chan res, 1)
 	go func() {
-		reply, rerr := writer.Request(fsbroker.SubjectDialogWrite, payload)
+		reply, rerr := writer.Request(t.Context(), fsbroker.SubjectDialogWrite, payload)
 		resultCh <- res{reply, rerr}
 	}()
 
@@ -258,7 +258,7 @@ func TestService_Handle_WriteRejectedOnReadHandle(t *testing.T) {
 	}
 	resultCh := make(chan res, 1)
 	go func() {
-		reply, err := appBus.Request(fsbroker.SubjectDialogRead, nil)
+		reply, err := appBus.Request(t.Context(), fsbroker.SubjectDialogRead, nil)
 		resultCh <- res{reply, err}
 	}()
 	req := pendingOnce(t, svc)
@@ -273,7 +273,7 @@ func TestService_Handle_WriteRejectedOnReadHandle(t *testing.T) {
 	// A write on a read-mode handle is refused by the service, and the file on
 	// disk is left untouched — the mode gate is what keeps a read grant from
 	// being escalated into a write.
-	ackRaw, err := appBus.Request(dr.HandleSubjectPrefix+".write", []byte("nope"))
+	ackRaw, err := appBus.Request(t.Context(), dr.HandleSubjectPrefix+".write", []byte("nope"))
 	require.NoError(t, err)
 	ack, err := fsbroker.UnmarshalDialogReply(ackRaw)
 	require.NoError(t, err)
@@ -300,7 +300,7 @@ func TestService_Handle_CloseEvictsHandle(t *testing.T) {
 	}
 	resultCh := make(chan res, 1)
 	go func() {
-		reply, err := appBus.Request(fsbroker.SubjectDialogRead, nil)
+		reply, err := appBus.Request(t.Context(), fsbroker.SubjectDialogRead, nil)
 		resultCh <- res{reply, err}
 	}()
 	req := pendingOnce(t, svc)
@@ -313,14 +313,14 @@ func TestService_Handle_CloseEvictsHandle(t *testing.T) {
 	require.True(t, dr.Granted)
 
 	// Close the handle.
-	_, err = appBus.Request(dr.HandleSubjectPrefix+".close", nil)
+	_, err = appBus.Request(t.Context(), dr.HandleSubjectPrefix+".close", nil)
 	require.NoError(t, err)
 
 	// Subsequent access is denied at the bus layer: closing the handle
 	// revokes the fs.handle.{uuid}.> cap, so the app can no longer even
 	// publish to the handle subject (defense in depth on top of the
 	// service-side handle eviction).
-	_, err = appBus.Request(dr.HandleSubjectPrefix+".read", nil)
+	_, err = appBus.Request(t.Context(), dr.HandleSubjectPrefix+".read", nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, inprocbus.ErrPermissionViolation)
 }
@@ -343,7 +343,7 @@ func TestService_AppCannotAccessOtherAppsHandle(t *testing.T) {
 	}
 	resA := make(chan res, 1)
 	go func() {
-		r, err := appA.Request(fsbroker.SubjectDialogRead, nil)
+		r, err := appA.Request(t.Context(), fsbroker.SubjectDialogRead, nil)
 		resA <- res{r, err}
 	}()
 	req := pendingOnce(t, svc)
@@ -358,16 +358,16 @@ func TestService_AppCannotAccessOtherAppsHandle(t *testing.T) {
 	appB := inst.NewClient("test.appB", []app.SubjectFilter{
 		{Pattern: "fs.handle.>", Direction: app.CapDirectionPub},
 	})
-	bReply, err := appB.Request(drA.HandleSubjectPrefix+".read", nil)
+	bReply, err := appB.Request(t.Context(), drA.HandleSubjectPrefix+".read", nil)
 	require.NoError(t, err)
 	denied, err := fsbroker.UnmarshalDialogReply(bReply)
 	require.NoError(t, err, "a refusal, not the file's bytes")
 	assert.False(t, denied.Granted)
 	assert.NotContains(t, string(bReply), "secret")
 
-	_, err = appB.Request(drA.HandleSubjectPrefix+".close", nil)
+	_, err = appB.Request(t.Context(), drA.HandleSubjectPrefix+".close", nil)
 	require.NoError(t, err)
-	aReply, err := appA.Request(drA.HandleSubjectPrefix+".read", nil)
+	aReply, err := appA.Request(t.Context(), drA.HandleSubjectPrefix+".read", nil)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("secret"), aReply, "another app's close must not revoke A's grant")
 }
@@ -398,7 +398,7 @@ func TestService_Pending_InArrivalOrder(t *testing.T) {
 		c := inst.NewClient(app.AppIdT("test.order"+string(rune('a'+i))), []app.SubjectFilter{
 			{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub},
 		})
-		go func() { _, _ = c.Request(fsbroker.SubjectDialogRead, nil) }()
+		go func() { _, _ = c.Request(t.Context(), fsbroker.SubjectDialogRead, nil) }()
 		deadline := time.Now().Add(time.Second)
 		for len(svc.Pending()) != i+1 && time.Now().Before(deadline) {
 			time.Sleep(time.Millisecond)
@@ -428,9 +428,9 @@ func TestService_Pending_DroppedWhenInstanceCloses(t *testing.T) {
 		{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub},
 	})
 	other.SetInstanceKey(8)
-	go func() { _, _ = window.Request(fsbroker.SubjectDialogRead, nil) }()
+	go func() { _, _ = window.Request(t.Context(), fsbroker.SubjectDialogRead, nil) }()
 	req := pendingOnce(t, svc)
-	go func() { _, _ = other.Request(fsbroker.SubjectDialogRead, nil) }()
+	go func() { _, _ = other.Request(t.Context(), fsbroker.SubjectDialogRead, nil) }()
 	deadline := time.Now().Add(time.Second)
 	for len(svc.Pending()) != 2 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
@@ -461,7 +461,7 @@ func TestService_Resolve_GrantsTheRequestingWindow(t *testing.T) {
 
 	replies := make(chan []byte, 1)
 	go func() {
-		reply, _ := older.Request(fsbroker.SubjectDialogRead, nil)
+		reply, _ := older.Request(t.Context(), fsbroker.SubjectDialogRead, nil)
 		replies <- reply
 	}()
 	req := pendingOnce(t, svc)

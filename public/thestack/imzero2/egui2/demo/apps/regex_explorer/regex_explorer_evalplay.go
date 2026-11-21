@@ -249,7 +249,7 @@ func (inst *App) publishEvalDatasets(snap evalSnapshot) (handles evalHandles, er
 		err = eb.Build().Str("goDatasetAlias", goDatasetAlias).Errorf("encode: %w", err)
 		return
 	}
-	res, err := inst.goPub.Publish(bus, stream)
+	res, err := inst.goPub.Publish(inst.ioCtx, bus, stream)
 	if err != nil {
 		err = eb.Build().Str("goDatasetAlias", goDatasetAlias).Errorf("publish: %w", err)
 		return
@@ -264,7 +264,7 @@ func (inst *App) publishEvalDatasets(snap evalSnapshot) (handles evalHandles, er
 			return
 		}
 		var chRes adhocdata.PublishResult
-		chRes, err = inst.chPub.Publish(bus, chStream)
+		chRes, err = inst.chPub.Publish(inst.ioCtx, bus, chStream)
 		if err != nil {
 			err = eb.Build().Str("chDatasetAlias", chDatasetAlias).Errorf("publish: %w", err)
 			return
@@ -288,7 +288,7 @@ func (inst *App) openEvalPlayground(sql string, datasets []string, names []strin
 	// The leaf names the role, not play, so this does not drag the whole
 	// playground — and its registry-registering init() — into every host
 	// that links this app or the regexsummary widget (ADR-0017 §SD4).
-	if _, err = playground.Open(bus, playground.Launch{
+	if _, err = playground.Open(inst.ioCtx, bus, playground.Launch{
 		At:           time.Now().UTC(),
 		Sql:          sql,
 		AutoRun:      true,

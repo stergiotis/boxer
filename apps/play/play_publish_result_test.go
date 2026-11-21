@@ -64,7 +64,7 @@ func TestPublishResultPublishesTheMainResultAsABundle(t *testing.T) {
 	require.Empty(t, last.Error)
 	assert.Equal(t, uint64(1), last.Revision)
 
-	got, err := adhocdata.ResolveBundleRequest(reader, "counts", nil)
+	got, err := adhocdata.ResolveBundleRequest(t.Context(), reader, "counts", nil)
 	require.NoError(t, err)
 	doc := string(got.Document)
 	assert.Contains(t, doc, "datasets: [result]")
@@ -72,7 +72,7 @@ func TestPublishResultPublishesTheMainResultAsABundle(t *testing.T) {
 	assert.Contains(t, doc, "SELECT n FROM keelson('result') ORDER BY n")
 	assert.Contains(t, doc, "SELECT number AS n FROM numbers(3)", "the query that produced the rows rides along")
 
-	read, err := adhocdata.ReadAll(reader, "counts__result", nil)
+	read, err := adhocdata.ReadAll(t.Context(), reader, "counts__result", nil)
 	require.NoError(t, err)
 	rdr, err := ipc.NewReader(bytes.NewReader(read.ArrowIPCStream))
 	require.NoError(t, err)

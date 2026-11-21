@@ -90,7 +90,7 @@ func (inst *App) startFollow(handle string) (err error) {
 	if err != nil {
 		return
 	}
-	reply, err := inst.bus.RequestWithTimeout(handle+".watch", nil, transferTimeout)
+	reply, err := app.RequestWithin(inst.ioCtx, inst.bus, transferTimeout, handle+".watch", nil)
 	if err != nil {
 		unsub()
 		return
@@ -191,7 +191,7 @@ func (inst *App) drainFollow() {
 // rereadFollowed fetches the file's current bytes through the kept read
 // handle, as work of the instance's lifetime scope.
 func (inst *App) rereadFollowed(handle string) {
-	body, err := inst.bus.RequestWithTimeout(handle+opRead, nil, transferTimeout)
+	body, err := app.RequestWithin(inst.ioCtx, inst.bus, transferTimeout, handle+opRead, nil)
 	text := ""
 	if err == nil {
 		if reason, isErr := readReplyError(body); isErr {
@@ -262,8 +262,8 @@ func (inst *App) stopFollow() {
 		return
 	}
 	bus := inst.bus
-	if !inst.spawn(func(context.Context) { teardownFollow(bus, f.handle, f.unsub) }) {
-		teardownFollow(bus, f.handle, f.unsub)
+	if !inst.spawn(func(context.Context) { teardownFollow(inst.ioCtx, bus, f.handle, f.unsub) }) {
+		teardownFollow(inst.ioCtx, bus, f.handle, f.unsub)
 	}
 }
 
@@ -271,17 +271,17 @@ func (inst *App) stopFollow() {
 // close — bounded, best-effort, callable from any goroutine. Close is last
 // and matters most: it is what stops the broker-side pump, which outlives
 // the app's bus client otherwise (cap revocation silences no pump).
-func teardownFollow(bus app.BusI, handle string, unsub func()) {
+func teardownFollow(ctx context.Context, bus app.BusI, handle string, unsub func()) {
 	if handle == "" {
 		return
 	}
 	if bus != nil {
-		_, _ = bus.RequestWithTimeout(handle+opUnwatch, nil, followTeardownTimeout)
+		_, _ = app.RequestWithin(ctx, bus, followTeardownTimeout, handle+opUnwatch, nil)
 	}
 	if unsub != nil {
 		unsub()
 	}
 	if bus != nil {
-		_, _ = bus.RequestWithTimeout(handle+opClose, nil, followTeardownTimeout)
+		_, _ = app.RequestWithin(ctx, bus, followTeardownTimeout, handle+opClose, nil)
 	}
 }

@@ -1,7 +1,7 @@
 package play
 
 import (
-	"time"
+	"context"
 
 	"bytes"
 	"testing"
@@ -211,13 +211,7 @@ func (inst *recordingBus) Subscribe(subject string, h app.MsgHandlerFunc) (func(
 	return func() {}, nil
 }
 
-// RequestWithTimeout delegates: the fake answers instantly, so the wait
-// never matters here.
-func (inst *recordingBus) RequestWithTimeout(subject string, payload []byte, _ time.Duration) ([]byte, error) {
-	return inst.Request(subject, payload)
-}
-
-func (inst *recordingBus) Request(subject string, payload []byte) (reply []byte, err error) {
+func (inst *recordingBus) Request(ctx context.Context, subject string, payload []byte) (reply []byte, err error) {
 	inst.subjects = append(inst.subjects, subject)
 	inst.payloads = append(inst.payloads, payload)
 	return nil, eh.Errorf("no capability in this lane")
@@ -225,7 +219,7 @@ func (inst *recordingBus) Request(subject string, payload []byte) (reply []byte,
 
 func TestPublishFixtureAsksTheCapability(t *testing.T) {
 	bus := &recordingBus{}
-	_, err := doPublishFixture(bus, fixtureSpec{kind: adscore.AnomalyKindTransplant, seed: 2}, newFixtureState())
+	_, err := doPublishFixture(t.Context(), bus, fixtureSpec{kind: adscore.AnomalyKindTransplant, seed: 2}, newFixtureState())
 
 	require.Error(t, err, "a refused publish is reported, never swallowed")
 	assert.Equal(t, fixtureSeriesAlias, ebtest.Fields(t, err)["alias"], "the error names which dataset failed")
@@ -239,7 +233,7 @@ func TestPublishFixtureAsksTheCapability(t *testing.T) {
 // the capability for anything.
 func TestPublishFixtureValidatesBeforeAsking(t *testing.T) {
 	bus := &recordingBus{}
-	_, err := doPublishFixture(bus, fixtureSpec{kind: adscore.AnomalyKindE(200), seed: 1}, newFixtureState())
+	_, err := doPublishFixture(t.Context(), bus, fixtureSpec{kind: adscore.AnomalyKindE(200), seed: 1}, newFixtureState())
 	require.Error(t, err)
 	assert.Empty(t, bus.subjects, "an unbuildable fixture never reaches the bus")
 }

@@ -260,7 +260,7 @@ func (h *profilesHub) startCapture(spec profileKindSpec, bus app.BusI, tasks tas
 			err = eh.Errorf("no bus wired (unmounted window?)")
 			return
 		}
-		res, err := e.pub.Publish(bus, conv.IPCStream)
+		res, err := e.pub.Publish(ctx, bus, conv.IPCStream)
 		if err != nil {
 			err = eh.Errorf("publish: %w", err)
 			return
@@ -301,7 +301,7 @@ func (h *profilesHub) openInPlay(spec profileKindSpec, bus app.BusI, tasks task.
 		Title: "open play on " + key,
 		Tag:   key,
 	}, func(ctx context.Context) (out *profileOpened, err error) {
-		windowKey, err := playground.Open(bus, playground.Launch{
+		windowKey, err := playground.Open(ctx, bus, playground.Launch{
 			At:       time.Now().UTC(),
 			Sql:      profileSeedSql(alias, spec),
 			AutoRun:  true,

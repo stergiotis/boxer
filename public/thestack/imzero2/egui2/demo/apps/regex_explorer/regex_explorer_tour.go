@@ -76,11 +76,11 @@ func init() {
 // seeded with the scene's inputs and wired to the host's id stack and bus.
 // Called once per Mount, so the seeding happens before any frame rather
 // than being re-applied on every one.
-func makeTourInit(pattern string, haystack string, patternList string, tab resultTabE) func(ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
-	return func(ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+func makeTourInit(pattern string, haystack string, patternList string, tab resultTabE) func(ctx context.Context, ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+	return func(ctx context.Context, ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
 		inst := newApp()
 		inst.ids = ids
-		inst.setBus(bus)
+		inst.setBus(ctx, bus)
 		inst.pattern = pattern
 		inst.haystack = haystack
 		inst.patternList = patternList

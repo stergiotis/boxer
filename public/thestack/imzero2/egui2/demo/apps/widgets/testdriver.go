@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 
@@ -108,7 +109,7 @@ func RenderLoopHandlerTestDriver(seed uint64) (err error) {
 				// receive nil and are expected to degrade to picker-
 				// only rendering (no capability publishes). Mirrors
 				// App.Mount's BusInit branch in interactive_driver.go.
-				testDriverState.demoState[d.Name] = d.BusInit(testDriverState.ids, nil)
+				testDriverState.demoState[d.Name] = d.BusInit(context.Background(), testDriverState.ids, nil)
 			case d.Init != nil:
 				testDriverState.demoState[d.Name] = d.Init(testDriverState.ids)
 			}

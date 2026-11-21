@@ -325,7 +325,7 @@ func (inst *galleryScene) setup(ids *c.WidgetIdStack) {
 		}
 		switch {
 		case d.BusInit != nil:
-			inst.state[d.Name] = d.BusInit(ids, nil)
+			inst.state[d.Name] = d.BusInit(context.Background(), ids, nil)
 		case d.Init != nil:
 			inst.state[d.Name] = d.Init(ids)
 		}

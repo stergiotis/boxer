@@ -140,7 +140,7 @@ func TestInst_RequestReply_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	defer unsub()
 
-	reply, err := clientB.Request("ch.query.boxer", []byte("SELECT 1"))
+	reply, err := clientB.Request(t.Context(), "ch.query.boxer", []byte("SELECT 1"))
 	require.NoError(t, err)
 	assert.Equal(t, "ok:SELECT 1", string(reply))
 }
@@ -151,7 +151,7 @@ func TestInst_Request_FailsAtOnceWhenNoResponder(t *testing.T) {
 	bus := inst.NewClient("test.app", fullCaps())
 
 	t0 := time.Now()
-	_, err := bus.Request("nobody.listening", []byte("?"))
+	_, err := bus.Request(t.Context(), "nobody.listening", []byte("?"))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrNoResponders)
 	assert.Less(t, time.Since(t0), 5*time.Second, "no responder costs no wait")
@@ -165,7 +165,7 @@ func TestInst_Request_TimesOutWhenTheSubscriberDoesNotAnswer(t *testing.T) {
 	_, err := bus.Subscribe("silent.one", func(*app.Msg) {})
 	require.NoError(t, err)
 
-	_, err = bus.Request("silent.one", []byte("?"))
+	_, err = bus.Request(t.Context(), "silent.one", []byte("?"))
 	assert.ErrorIs(t, err, ErrTimeout)
 }
 

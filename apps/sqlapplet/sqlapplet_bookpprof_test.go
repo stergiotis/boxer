@@ -238,7 +238,7 @@ func TestPprofBookQueriesExecute(t *testing.T) {
 		{Pattern: adhocdata.SubjectResolve, Direction: app.CapDirectionPub, Reason: "test"},
 		{Pattern: adhocdata.SubjectEventAll, Direction: app.CapDirectionSub, Reason: "test"},
 	})
-	openFollower, bindings := newDatasetFollower(appletBus, logger, []string{"pprof_cpu", "pprof_heap", "pprof_goroutineleak"})
+	openFollower, bindings := newDatasetFollower(t.Context(), appletBus, logger, []string{"pprof_cpu", "pprof_heap", "pprof_goroutineleak"})
 	require.NotNil(t, openFollower)
 	t.Cleanup(openFollower.Close)
 	require.Len(t, bindings, 3)
@@ -292,13 +292,13 @@ func TestPprofBookQueriesExecute(t *testing.T) {
 	// A miss binds nothing and fails nothing, and reports the alias back so
 	// the open window can keep trying: the applet-open path over an alias
 	// never captured.
-	_, missErr := adhocdata.ResolveRequest(appletBus, "pprof_goroutine")
+	_, missErr := adhocdata.ResolveRequest(t.Context(), appletBus, "pprof_goroutine")
 	require.Error(t, missErr, "nothing live under the alias yet")
 
 	// And the after-open path closes it: a follower over that alias picks up
 	// the dataset published after open through the service's `published`
 	// event (ADR-0188 §SD3, ADR-0240 §SD6), without the window being reopened.
-	binder, openBindings := newDatasetFollower(appletBus, logger, []string{"pprof_goroutine"})
+	binder, openBindings := newDatasetFollower(t.Context(), appletBus, logger, []string{"pprof_goroutine"})
 	require.NotNil(t, binder)
 	assert.Empty(t, openBindings, "nothing published under the alias yet")
 	assert.Equal(t, []string{"pprof_goroutine"}, binder.Pending())

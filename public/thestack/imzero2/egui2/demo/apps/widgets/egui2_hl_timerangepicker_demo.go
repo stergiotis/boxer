@@ -50,7 +50,7 @@ func init() {
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
 		Description: "Composite picker: from/to expression fields + Apply + Grafana 7.5 presets. Phase 4 of ADR-0016: evaluator routes through ch.local.exec.timerangepicker (ADR-0028) and the same expression evaluates against two timezones to demonstrate the Tz builder.",
-		BusInit: func(_ *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+		BusInit: func(_ context.Context, _ *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
 			tokyoID, tzErr := timerangepicker.LookupTz("Asia/Tokyo")
 			if tzErr != nil {
 				tokyoID = timerangepicker.TzIDUTC

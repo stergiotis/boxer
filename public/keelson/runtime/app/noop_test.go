@@ -25,7 +25,7 @@ func TestNoopBus_Subscribe_Errors(t *testing.T) {
 
 func TestNoopBus_Request_Errors(t *testing.T) {
 	var b BusI = &NoopBus{}
-	_, err := b.Request("runtime.cap.request", nil)
+	_, err := b.Request(t.Context(), "runtime.cap.request", nil)
 	require.Error(t, err)
 	assert.Equal(t, "runtime.cap.request", ebtest.Fields(t, err)["subject"])
 }

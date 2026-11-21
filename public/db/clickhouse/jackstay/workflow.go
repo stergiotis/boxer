@@ -374,7 +374,7 @@ func RunSyncIn(ctx context.Context, src SourceI, dst ClientI, prep *SyncPrepared
 		return
 	}
 	var j *Journal
-	j, err = OpenJournalIn(files, JournalPath(planName), out.Run.RunId)
+	j, err = OpenJournalIn(ctx, files, JournalPath(planName), out.Run.RunId)
 	if err != nil {
 		return
 	}
@@ -388,7 +388,7 @@ func RunSyncIn(ctx context.Context, src SourceI, dst ClientI, prep *SyncPrepared
 			}
 		}
 	}
-	if err = plan.SaveIn(files, planName); err != nil {
+	if err = plan.SaveIn(ctx, files, planName); err != nil {
 		return
 	}
 	for _, pt := range prep.Chosen {
@@ -399,14 +399,14 @@ func RunSyncIn(ctx context.Context, src SourceI, dst ClientI, prep *SyncPrepared
 		rep, err = SyncTable(ctx, src, dst, pt, j, opts, now)
 		if err != nil {
 			err = eb.Build().Str("table", pt.Source.String()).Errorf("unable to sync table: %w", err)
-			_ = plan.SaveIn(files, planName)
+			_ = plan.SaveIn(ctx, files, planName)
 			return
 		}
 		pt.SyncReport = &rep
 		// The diff described the target before the run.
 		pt.Diff = nil
 		out.Failed += rep.Failed + rep.Stale
-		if err = plan.SaveIn(files, planName); err != nil {
+		if err = plan.SaveIn(ctx, files, planName); err != nil {
 			return
 		}
 		if opts.AfterTable != nil {

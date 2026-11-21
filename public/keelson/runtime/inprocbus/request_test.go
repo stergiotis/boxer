@@ -26,7 +26,7 @@ func TestRequest_ASlowHandlerDoesNotHoldTheRequester(t *testing.T) {
 	require.NoError(t, err)
 
 	t0 := time.Now()
-	reply, err := bus.RequestWithTimeout("slow.svc", nil, 50*time.Millisecond)
+	reply, err := app.RequestWithin(t.Context(), bus, 50*time.Millisecond, "slow.svc", nil)
 	assert.ErrorIs(t, err, ErrTimeout)
 	assert.Nil(t, reply)
 	assert.Less(t, time.Since(t0), 5*time.Second)
@@ -58,7 +58,7 @@ func TestRequest_ReturnsAfterEveryHandlerReturned(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	reply, err := bus.Request("svc.q", nil)
+	reply, err := bus.Request(t.Context(), "svc.q", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "ok", string(reply))
 	assert.True(t, observed.Load())
@@ -77,12 +77,12 @@ func TestRequest_WaitsForAReplySentLater(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	reply, err := bus.RequestWithTimeout("async.svc", nil, 5*time.Second)
+	reply, err := app.RequestWithin(t.Context(), bus, 5*time.Second, "async.svc", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "later", string(reply))
 }
 
-func TestRequestCtx_EndsWithTheContext(t *testing.T) {
+func TestRequest_EndsWithTheContext(t *testing.T) {
 	inst := newInst(t)
 	inst.SetRequestTimeout(time.Minute)
 	bus := inst.NewClient("test.app", fullCaps())
@@ -91,8 +91,33 @@ func TestRequestCtx_EndsWithTheContext(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
-	_, err = bus.RequestCtx(ctx, "silent.svc", nil)
+	_, err = bus.Request(ctx, "silent.svc", nil)
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.ErrorIs(t, err, ErrTimeout, "a wait ended by ctx's deadline is a timeout")
+}
+
+// A handler of a request sees the requester's ctx, bounded by the wait and
+// carrying its values, and it ends when the request returns.
+func TestRequest_TheHandlerSeesTheRequestersContext(t *testing.T) {
+	inst := newInst(t)
+	bus := inst.NewClient("test.app", fullCaps())
+	type key struct{}
+	seen := make(chan context.Context, 1)
+	_, err := bus.Subscribe("ctx.svc", func(msg *app.Msg) {
+		seen <- msg.Context()
+		_ = bus.Publish(msg.Reply, nil)
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.WithValue(t.Context(), key{}, "v"), time.Minute)
+	defer cancel()
+	_, err = bus.Request(ctx, "ctx.svc", nil)
+	require.NoError(t, err)
+	hctx := <-seen
+	assert.Equal(t, "v", hctx.Value(key{}))
+	_, has := hctx.Deadline()
+	assert.True(t, has)
+	assert.Error(t, hctx.Err(), "the handler's ctx ends when the request returns")
 }
 
 // A panicking responder costs the requester its timeout, not its process.
@@ -101,7 +126,7 @@ func TestRequest_APanickingHandlerIsATimeout(t *testing.T) {
 	bus := inst.NewClient("test.app", fullCaps())
 	_, err := bus.Subscribe("bad.svc", func(*app.Msg) { panic("boom") })
 	require.NoError(t, err)
-	_, err = bus.RequestWithTimeout("bad.svc", nil, 30*time.Millisecond)
+	_, err = app.RequestWithin(t.Context(), bus, 30*time.Millisecond, "bad.svc", nil)
 	assert.ErrorIs(t, err, ErrTimeout)
 }
 

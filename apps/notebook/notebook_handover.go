@@ -113,7 +113,7 @@ func (inst *App) editInMdedit() {
 	inst.mu.Unlock()
 	inst.note = "opening mdedit…"
 	started := inst.scope.Go(func(context.Context) {
-		_, oErr := windowopen.RequestOpen(bus, mdlaunch.AppId, mdlaunch.Kind, cfg)
+		_, oErr := windowopen.RequestOpen(inst.ioCtx, bus, mdlaunch.AppId, mdlaunch.Kind, cfg)
 		inst.mu.Lock()
 		inst.handBusy = false
 		if oErr != nil {

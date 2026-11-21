@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"context"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -181,7 +182,7 @@ func init() {
 		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNeedsNetwork | registry.DemoFlagNonDeterministic,
 		Kind:        registry.DemoKindUX,
 		Description: "The slippy-map widget of ADR-0204 — Leaflet's map core ported to Go on the painter lane: raster tiles with cross-level retention, pan with inertia, anchored wheel zoom, animated double-click and box zoom, keyboard pan; markers, a route, an H3 region and a viewport-driven H3 heatmap through the projector hook; a tile-server switch; an H3 choropleth on a NoTiles canvas. Basemap from BOXER_MAP_TILE_URL, OpenStreetMap by default.",
-		BusInit: func(ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+		BusInit: func(_ context.Context, ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
 			return newPortolanDemoState(ids, bus)
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
@@ -194,7 +195,7 @@ func init() {
 		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNeedsNetwork | registry.DemoFlagNonDeterministic,
 		Kind:        registry.DemoKindUX,
 		Description: "The hosted-canvas seam of ADR-0228: one canvas, owned by the portolan map and painted and picked by graphview. The map keeps its drag, wheel, box zoom and keyboard; the graph claims the pointer only where it lands on a node, and the map is told before it handles the same frame's input, so it does not pan under a node drag. Located nodes are pinned once, at their projected position in a fixed-zoom world measured from a local origin, and the map's camera at that zoom draws them — one equilibrium whatever the map shows. Nodes with no coordinates at all are declared unpinned and laid out by the force step among the pinned ones; their retained world position is already geographic. The basemap comes from BOXER_MAP_TILE_URL, OpenStreetMap by default; toggles swap it for the offline Natural Earth outlines of portolan/landoverlay, which need no tile server.",
-		BusInit: func(ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+		BusInit: func(_ context.Context, ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
 			return newGraphOnMapState(ids, bus)
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
@@ -207,7 +208,7 @@ func init() {
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
 		Description: "A gridded vector field drawn as particles on the portolan map (ADR-0249): portolan/flowoverlay is one more guest in the map's overlay callback, reading a windowed, step-indexed source — here an analytic jet and drifting vortices served through the in-memory pyramid of science/geo/vectorfield — and painting every trail in one paintSegments opcode. Particles live in projected world coordinates, advance on a fixed tick by the midpoint rule, and move at a pace that is a screen quantity; colour follows the scalar mean of the magnitude. The animation shows direction and relative speed, not transport, and a trail is a streamlet, not a trajectory. Offline country outlines stand in for tiles, so the capture needs no network; under the tour the layer runs a fixed number of ticks synchronously and rests.",
-		BusInit: func(ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+		BusInit: func(_ context.Context, ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
 			return newFlowOnMapState(ids, bus)
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {

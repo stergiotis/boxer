@@ -57,6 +57,9 @@ const (
 
 // App is the per-window instance.
 type App struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx   context.Context
 	ids     *c.WidgetIdStack
 	logger  zerolog.Logger
 	density styletokens.DensityE
@@ -122,6 +125,7 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 // Mount takes the bus client the host minted, starts the task monitor,
 // subscribes the announcements and starts the poller.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
+	inst.ioCtx = app.ContextOf(ctx)
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	inst.client = watchbill.NewClient(ctx.Bus())
@@ -135,7 +139,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	}
 
 	inst.monitor = taskmonitor.New(inst.ids, "tm", inst.tasks, taskmonitor.Options{DefaultOpen: true})
-	if startErr := inst.monitor.Start(); startErr != nil {
+	if startErr := inst.monitor.Start(app.ContextOf(ctx)); startErr != nil {
 		inst.logger.Debug().Err(startErr).Msg("watchbilldemo: task monitor not started")
 	}
 	if bus := ctx.Bus(); bus != nil {
@@ -228,7 +232,7 @@ func (inst *App) poll(ctx context.Context) {
 }
 
 func (inst *App) refresh() {
-	jobs, err := inst.client.List(nil, nil, listLimit)
+	jobs, err := inst.client.List(inst.ioCtx, nil, nil, listLimit)
 	inst.mu.Lock()
 	if err != nil {
 		inst.lastError = "list: " + err.Error()
@@ -264,7 +268,7 @@ func (inst *App) enqueue() { inst.enqueueAs(app.OperationCall{}) }
 func (inst *App) enqueueAs(call app.OperationCall) {
 	req := inst.request(call.OnBehalfOf)
 	inst.verb("enqueue", call.Key, func() (note string, job watchbillstore.Job, err error) {
-		job, err = inst.client.Enqueue(req)
+		job, err = inst.client.Enqueue(inst.ioCtx, req)
 		if err != nil {
 			return "", job, err
 		}
@@ -274,7 +278,7 @@ func (inst *App) enqueueAs(call app.OperationCall) {
 
 func (inst *App) cancel(id string) {
 	inst.verb("cancel", "", func() (note string, _ watchbillstore.Job, err error) {
-		ok, err := inst.client.Cancel(id, "from the demo window")
+		ok, err := inst.client.Cancel(inst.ioCtx, id, "from the demo window")
 		if err != nil {
 			return "", watchbillstore.Job{}, err
 		}
@@ -287,7 +291,7 @@ func (inst *App) cancel(id string) {
 
 func (inst *App) retry(id string) {
 	inst.verb("retry", "", func() (note string, _ watchbillstore.Job, err error) {
-		ok, err := inst.client.Retry(id, "from the demo window")
+		ok, err := inst.client.Retry(inst.ioCtx, id, "from the demo window")
 		if err != nil {
 			return "", watchbillstore.Job{}, err
 		}

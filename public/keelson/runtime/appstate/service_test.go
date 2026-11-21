@@ -70,7 +70,7 @@ func TestDeleteClearsOneEntryAndTheOwnerSeesItGone(t *testing.T) {
 	seed(t, b)
 	_, client, _ := serve(t, b)
 
-	res, err := client.Delete(playId, persiststore.KindColumnWidth, "instance/master/table/ab12", "")
+	res, err := client.Delete(t.Context(), playId, persiststore.KindColumnWidth, "instance/master/table/ab12", "")
 	require.NoError(t, err)
 	require.True(t, res.Ok, res.Reason)
 	assert.Equal(t, []Outcome{{Kind: persiststore.KindColumnWidth, Cleared: 1}}, res.Outcomes)
@@ -79,7 +79,7 @@ func TestDeleteClearsOneEntryAndTheOwnerSeesItGone(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, rows, "the resolver's read must see the clear")
 
-	res, err = client.Delete(playId, persiststore.KindPersist, "tabs", "")
+	res, err = client.Delete(t.Context(), playId, persiststore.KindPersist, "tabs", "")
 	require.NoError(t, err)
 	require.True(t, res.Ok, res.Reason)
 	_, found, err := b.Get(t.Context(), persist.StorageRef{Alias: "play", AppId: playId}, "tabs")
@@ -102,7 +102,7 @@ func TestDeleteRefusesWhatIsNotThere(t *testing.T) {
 		{"an unknown kind without a store key", string(playId), persiststore.KindUnknown, "", ""},
 		{"a label no kind carries", string(playId), "no-such-kind", "x", ""},
 	} {
-		res, err := client.Delete(app.AppIdT(c.app), c.kind, c.key, c.entity)
+		res, err := client.Delete(t.Context(), app.AppIdT(c.app), c.kind, c.key, c.entity)
 		require.NoError(t, err, c.name)
 		assert.False(t, res.Ok, c.name)
 		assert.NotEmpty(t, res.Reason, c.name)
@@ -134,7 +134,7 @@ func TestDeleteAnUnknownKindByItsStoreKey(t *testing.T) {
 	require.NoError(t, err)
 	_, client, _ := serve(t, b)
 
-	res, err := client.Delete(playId, persiststore.KindUnknown, "", id)
+	res, err := client.Delete(t.Context(), playId, persiststore.KindUnknown, "", id)
 	require.NoError(t, err)
 	require.True(t, res.Ok, res.Reason)
 	_, found, err := b.EntryAt(t.Context(), id)
@@ -149,7 +149,7 @@ func TestForgetClearsEveryKindOfOneApp(t *testing.T) {
 	seed(t, b)
 	_, client, _ := serve(t, b)
 
-	res, err := client.Forget(playId)
+	res, err := client.Forget(t.Context(), playId)
 	require.NoError(t, err)
 	require.True(t, res.Ok, res.Reason)
 	assert.Equal(t, []Outcome{
@@ -199,7 +199,7 @@ func TestForgetNeverStopsEarly(t *testing.T) {
 		failOn: "state/a/1",
 	}
 	_, client, _ := serve(t, store)
-	res, err := client.Forget("a")
+	res, err := client.Forget(t.Context(), "a")
 	require.NoError(t, err)
 	assert.False(t, res.Ok)
 	assert.Contains(t, res.Reason, "synthetic delete failure")
@@ -232,7 +232,7 @@ func TestABatchForgetReportsWhatIsStillLive(t *testing.T) {
 		{Kind: persiststore.KindWorkingset, EntityId: "ws/a/default"},
 	}}}
 	_, client, _ := serve(t, store)
-	res, err := client.Forget("a")
+	res, err := client.Forget(t.Context(), "a")
 	require.NoError(t, err)
 	assert.False(t, res.Ok)
 	assert.Contains(t, res.Reason, "synthetic batch failure")
@@ -254,7 +254,7 @@ func TestRefusedWithoutTheCapabilityAndAudited(t *testing.T) {
 	rogue := NewClient(bus.NewClient(intruder, nil))
 	rogue.Timeout = time.Second
 
-	_, err := rogue.Forget("a")
+	_, err := rogue.Forget(t.Context(), "a")
 	require.Error(t, err)
 	assert.Empty(t, store.deleted, "nothing may be cleared")
 
@@ -272,7 +272,7 @@ func TestRefusedWithoutTheCapabilityAndAudited(t *testing.T) {
 func TestAllowedRequestsAreAudited(t *testing.T) {
 	store := &failingStore{}
 	_, client, sink := serve(t, store)
-	_, err := client.Forget("a")
+	_, err := client.Forget(t.Context(), "a")
 	require.NoError(t, err)
 	var ok bool
 	for _, rec := range sink.Records() {
@@ -287,7 +287,7 @@ func TestAllowedRequestsAreAudited(t *testing.T) {
 // answers, so a manager learns why instead of waiting out a timeout.
 func TestWithoutADurableStoreTheServiceSaysSo(t *testing.T) {
 	_, client, _ := serve(t, nil)
-	res, err := client.Forget("a")
+	res, err := client.Forget(t.Context(), "a")
 	require.NoError(t, err)
 	assert.False(t, res.Ok)
 	assert.Contains(t, res.Reason, "no durable state store")

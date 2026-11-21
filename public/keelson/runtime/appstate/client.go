@@ -1,6 +1,7 @@
 package appstate
 
 import (
+	"context"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -46,19 +47,19 @@ type Result struct {
 // Delete clears one entry, named as keelson('app_state') shows it: kind and
 // key, or — for kind `unknown` — entityId. A refusal is a Result with Ok
 // false, not an error; err is a transport or codec failure.
-func (inst *Client) Delete(appId app.AppIdT, kind string, key string, entityId string) (res Result, err error) {
-	return inst.call(appstaterequest.AppStateRequest{
+func (inst *Client) Delete(ctx context.Context, appId app.AppIdT, kind string, key string, entityId string) (res Result, err error) {
+	return inst.call(ctx, appstaterequest.AppStateRequest{
 		Op: appstaterequest.OpDelete, AppId: string(appId), Kind: kind, Key: key, EntityId: entityId,
 	})
 }
 
 // Forget clears every entry appId keeps, of every kind, and reports per
 // kind what was cleared and what failed.
-func (inst *Client) Forget(appId app.AppIdT) (res Result, err error) {
-	return inst.call(appstaterequest.AppStateRequest{Op: appstaterequest.OpForget, AppId: string(appId)})
+func (inst *Client) Forget(ctx context.Context, appId app.AppIdT) (res Result, err error) {
+	return inst.call(ctx, appstaterequest.AppStateRequest{Op: appstaterequest.OpForget, AppId: string(appId)})
 }
 
-func (inst *Client) call(req appstaterequest.AppStateRequest) (res Result, err error) {
+func (inst *Client) call(ctx context.Context, req appstaterequest.AppStateRequest) (res Result, err error) {
 	if inst == nil || inst.bus == nil {
 		return res, eh.Errorf("appstate: client without a bus")
 	}
@@ -67,7 +68,7 @@ func (inst *Client) call(req appstaterequest.AppStateRequest) (res Result, err e
 	if err != nil {
 		return res, eh.Errorf("encode request: %w", err)
 	}
-	raw, err := inst.bus.RequestWithTimeout(Subject(req.Op), payload, inst.Timeout)
+	raw, err := app.RequestWithin(ctx, inst.bus, inst.Timeout, Subject(req.Op), payload)
 	if err != nil {
 		return res, eb.Build().Str("op", req.Op).Errorf("appstate request: %w", err)
 	}

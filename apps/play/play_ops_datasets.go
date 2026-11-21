@@ -229,7 +229,7 @@ func (inst *PlayLauncher) bindDatasetAlias(alias string, as string) (out BindDat
 		return
 	}
 	if inst.follower == nil {
-		inst.follower = adhocdata.NewDeferredFollower(adhocdata.FollowerConfig{Bus: inst.bus, Log: inst.log})
+		inst.follower = adhocdata.NewDeferredFollower(inst.ioCtx, adhocdata.FollowerConfig{Bus: inst.bus, Log: inst.log})
 		if inst.follower == nil {
 			return out, app.RefuseOperation("the window has no bus to resolve datasets over")
 		}

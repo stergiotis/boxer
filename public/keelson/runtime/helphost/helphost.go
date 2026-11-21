@@ -75,6 +75,8 @@ const navPanelDefaultWidth = 280.0
 // per-instance [c.WidgetIdStack]; Mount() captures it from the
 // host-supplied [app.MountContextI].
 type HelpHost struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its bus calls run under.
+	ioCtx    context.Context
 	manifest app.Manifest
 	ids      *c.WidgetIdStack
 	lib      help.LibraryI
@@ -241,6 +243,7 @@ func (inst *HelpHost) Manifest() (m app.Manifest) {
 func (inst *HelpHost) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.bus = ctx.Bus()
+	inst.ioCtx = app.ContextOf(ctx)
 	return
 }
 
@@ -535,7 +538,7 @@ func (inst *HelpHost) renderReader() {
 		// A doc change without a section target scrolls to the top
 		// exactly once (see renderedDocKey); a pending section scroll
 		// owns the position instead.
-		renderRendered(inst.ids, doc, section, docChanged && section == "", inst.bus)
+		renderRendered(inst.ioCtx, inst.ids, doc, section, docChanged && section == "", inst.bus)
 	}
 }
 
@@ -617,7 +620,7 @@ func spawnBare(f func(ctx context.Context)) (started bool) {
 	return true
 }
 
-func renderRendered(ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection string, scrollTop bool, bus app.BusI) {
+func renderRendered(ctx context.Context, ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection string, scrollTop bool, bus app.BusI) {
 	in := markdown.Input{Ids: ids, ScopeKey: "doc-render-2", Doc: doc, ScrollToSection: scrollToSection}
 	if bus != nil {
 		in.ActionLabels = []string{"Copy"}
@@ -638,7 +641,7 @@ func renderRendered(ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection str
 		for _, act := range res.Actions {
 			text := act.Text
 			go func() {
-				_, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(text))
+				_, _ = bus.Request(ctx, clipboardbroker.SubjectWrite, []byte(text))
 			}()
 		}
 		for _, l := range res.Links {

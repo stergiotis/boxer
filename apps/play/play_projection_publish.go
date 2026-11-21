@@ -1,6 +1,7 @@
 package play
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -140,7 +141,7 @@ func (inst *PlayApp) publishProjection(in projectionPublishInput) {
 		defer in.rec.Release()
 		var summary string
 		err := task.RunToCompletion(inst.client.Tasks(), task.SpawnOpts{Kind: "play.projection.publish", Title: "publish the projection"}, func() (err error) {
-			summary, err = doPublishProjection(inst.bus, in, pubs)
+			summary, err = doPublishProjection(inst.ioCtx, inst.bus, in, pubs)
 			return
 		})
 		st.mu.Lock()
@@ -156,7 +157,7 @@ func (inst *PlayApp) publishProjection(in projectionPublishInput) {
 
 // doPublishProjection is one round: encode both datasets, publish both onto
 // the publishers' held handles.
-func doPublishProjection(bus busPublisherI, in projectionPublishInput, st *projectionPublishers) (summary string, err error) {
+func doPublishProjection(ctx context.Context, bus busPublisherI, in projectionPublishInput, st *projectionPublishers) (summary string, err error) {
 	alloc := memory.NewGoAllocator()
 	rows, err := buildProjectionRows(in, alloc)
 	if err != nil {
@@ -173,11 +174,11 @@ func doPublishProjection(bus busPublisherI, in projectionPublishInput, st *proje
 	if err != nil {
 		return
 	}
-	rowsRes, err := st.rows.Publish(bus, rowsIPC)
+	rowsRes, err := st.rows.Publish(ctx, bus, rowsIPC)
 	if err != nil {
 		return "", eb.Build().Str("alias", st.rows.Base()).Errorf("play: projection: publish: %w", err)
 	}
-	rulesRes, err := st.rules.Publish(bus, rulesIPC)
+	rulesRes, err := st.rules.Publish(ctx, bus, rulesIPC)
 	if err != nil {
 		return "", eb.Build().Str("alias", st.rules.Base()).Errorf("play: projection: publish: %w", err)
 	}

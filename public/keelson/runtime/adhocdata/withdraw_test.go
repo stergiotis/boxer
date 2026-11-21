@@ -72,7 +72,7 @@ func TestWithdrawal_TwoPhaseWithEvents(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(unsub)
 
-	res, err := PublishRequest(producer, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 1, 2)})
+	res, err := PublishRequest(t.Context(), producer, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 1, 2)})
 	require.NoError(t, err)
 	evs := waitEvents(t, log, 1)
 	assert.Equal(t, EventOpPublished, evs[0].Op)
@@ -82,14 +82,14 @@ func TestWithdrawal_TwoPhaseWithEvents(t *testing.T) {
 	assert.Equal(t, uint64(1), evs[0].Revision)
 
 	// A republish is a `published` event too, at the bumped revision.
-	_, err = PublishRequest(producer, PublishInput{Alias: "items", Handle: res.Handle, ArrowIPCStream: int64Stream(t, false, 3)})
+	_, err = PublishRequest(t.Context(), producer, PublishInput{Alias: "items", Handle: res.Handle, ArrowIPCStream: int64Stream(t, false, 3)})
 	require.NoError(t, err)
 	evs = waitEvents(t, log, 2)
 	assert.Equal(t, EventOpPublished, evs[1].Op)
 	assert.Equal(t, uint64(2), evs[1].Revision)
 
 	// LEAVE + notify.
-	require.NoError(t, RetractRequest(producer, res.Handle))
+	require.NoError(t, RetractRequest(t.Context(), producer, res.Handle))
 	evs = waitEvents(t, log, 3)
 	assert.Equal(t, EventOpRetracted, evs[2].Op)
 	assert.Equal(t, res.Handle, evs[2].Handle)
@@ -113,9 +113,9 @@ func TestWithdrawal_TwoPhaseWithEvents(t *testing.T) {
 	}
 
 	// A retracted handle cannot be republished; a fresh publish mints anew.
-	_, err = PublishRequest(producer, PublishInput{Alias: "items", Handle: res.Handle, ArrowIPCStream: int64Stream(t, false, 4)})
+	_, err = PublishRequest(t.Context(), producer, PublishInput{Alias: "items", Handle: res.Handle, ArrowIPCStream: int64Stream(t, false, 4)})
 	require.Error(t, err)
-	res2, err := PublishRequest(producer, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 4)})
+	res2, err := PublishRequest(t.Context(), producer, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 4)})
 	require.NoError(t, err)
 	assert.NotEqual(t, res.Handle, res2.Handle)
 }
@@ -159,35 +159,35 @@ func TestResolveVerify_AnswersLivenessAndSuccessor(t *testing.T) {
 	consumer := bus.NewClient("test.consumer", []app.SubjectFilter{{Pattern: SubjectResolve, Direction: app.CapDirectionPub}})
 
 	// Nothing under the alias, and a handle nobody minted: not live, no successor.
-	_, live, err := ResolveVerifyRequest(consumer, "items", "adhoc_nothing0000000000")
+	_, live, err := ResolveVerifyRequest(t.Context(), consumer, "items", "adhoc_nothing0000000000")
 	require.Error(t, err)
 	assert.False(t, live)
 
-	res1, err := PublishRequest(producer, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 1)})
+	res1, err := PublishRequest(t.Context(), producer, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 1)})
 	require.NoError(t, err)
-	res, live, err := ResolveVerifyRequest(consumer, "items", res1.Handle)
+	res, live, err := ResolveVerifyRequest(t.Context(), consumer, "items", res1.Handle)
 	require.NoError(t, err)
 	assert.True(t, live, "bound handle is live")
 	assert.Equal(t, res1.Handle, res.Handle)
 
 	// A newer sibling under the alias: ours is still live, resolve names the sibling.
-	res2, err := PublishRequest(producer, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 2)})
+	res2, err := PublishRequest(t.Context(), producer, PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 2)})
 	require.NoError(t, err)
-	res, live, err = ResolveVerifyRequest(consumer, "items", res1.Handle)
+	res, live, err = ResolveVerifyRequest(t.Context(), consumer, "items", res1.Handle)
 	require.NoError(t, err)
 	assert.True(t, live, "a sibling does not end our binding")
 	assert.Equal(t, res2.Handle, res.Handle)
 
 	// Ours retracted (in grace, still queryable): not live; the sibling is the successor.
-	require.NoError(t, RetractRequest(producer, res1.Handle))
-	res, live, err = ResolveVerifyRequest(consumer, "items", res1.Handle)
+	require.NoError(t, RetractRequest(t.Context(), producer, res1.Handle))
+	res, live, err = ResolveVerifyRequest(t.Context(), consumer, "items", res1.Handle)
 	require.NoError(t, err)
 	assert.False(t, live, "left the live set at the leave step, before unload")
 	assert.Equal(t, res2.Handle, res.Handle)
 
 	// Everything retracted: not live, nothing to bind.
-	require.NoError(t, RetractRequest(producer, res2.Handle))
-	_, live, err = ResolveVerifyRequest(consumer, "items", res2.Handle)
+	require.NoError(t, RetractRequest(t.Context(), producer, res2.Handle))
+	_, live, err = ResolveVerifyRequest(t.Context(), consumer, "items", res2.Handle)
 	require.Error(t, err)
 	assert.False(t, live)
 }

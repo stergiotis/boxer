@@ -36,9 +36,9 @@ func TestPublisherReusesItsHandle(t *testing.T) {
 	assert.Zero(t, gen)
 	assert.NoError(t, perr)
 
-	first, err := pub.Publish(client, int64Stream(t, false, 1))
+	first, err := pub.Publish(t.Context(), client, int64Stream(t, false, 1))
 	require.NoError(t, err)
-	second, err := pub.Publish(client, int64Stream(t, false, 2, 3))
+	second, err := pub.Publish(t.Context(), client, int64Stream(t, false, 2, 3))
 	require.NoError(t, err)
 	assert.Equal(t, first.Handle, second.Handle, "a republish rides the held handle")
 	assert.Equal(t, uint64(2), second.Revision)
@@ -53,19 +53,19 @@ func TestPublisherReusesItsHandle(t *testing.T) {
 	svc.mu.RUnlock()
 	assert.True(t, kept, "keep-after-close reached the service")
 
-	_, err = pub.Publish(client, []byte("not arrow"))
+	_, err = pub.Publish(t.Context(), client, []byte("not arrow"))
 	require.Error(t, err)
 	_, gen, perr = pub.Last()
 	assert.Equal(t, uint64(2), gen, "a failed publish does not advance the generation")
 	assert.Error(t, perr)
 	assert.Equal(t, first.Handle, pub.Handle(), "and keeps the handle")
 
-	require.NoError(t, pub.Retract(client))
+	require.NoError(t, pub.Retract(t.Context(), client))
 	assert.Empty(t, pub.Handle())
 	assert.Equal(t, 0, svc.LiveCount())
-	require.NoError(t, pub.Retract(client), "retracting nothing is fine")
+	require.NoError(t, pub.Retract(t.Context(), client), "retracting nothing is fine")
 
-	_, err = pub.Publish(nil, int64Stream(t, false, 1))
+	_, err = pub.Publish(t.Context(), nil, int64Stream(t, false, 1))
 	require.Error(t, err, "no bus, no publish")
 }
 

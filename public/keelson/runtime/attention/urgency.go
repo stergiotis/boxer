@@ -1,6 +1,7 @@
 package attention
 
 import (
+	"context"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"iter"
 	"sync"
@@ -183,12 +184,12 @@ type wireUrgent struct {
 // RequestUrgent asks the host to make conversation urgent, or, with on
 // false, to stop. The person decides in the host's card; refused is the
 // host's refusal.
-func RequestUrgent(bus app.BusI, conversation string, title string, on bool) (refused string, err error) {
+func RequestUrgent(ctx context.Context, bus app.BusI, conversation string, title string, on bool) (refused string, err error) {
 	payload, err := buscodec.Encode(wireUrgent{V: wireVersion, Conversation: conversation, Title: title, On: on})
 	if err != nil {
 		return
 	}
-	raw, err := bus.Request(SubjectUrgent, payload)
+	raw, err := bus.Request(ctx, SubjectUrgent, payload)
 	if err != nil {
 		err = eh.Errorf("urgent: %w", err)
 		return

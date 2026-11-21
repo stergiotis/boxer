@@ -1290,7 +1290,7 @@ func (rt *Runtime) bootAgent() {
 	} else {
 		rt.onClose(qs.Close)
 	}
-	svc, err := agent.NewService(rt.Bus, logger, cfg)
+	svc, err := agent.NewService(rt.ctx, rt.Bus, logger, cfg)
 	if err != nil {
 		logger.Warn().Err(err).Msg("agent: service start failed; runtime.agent.* will be unbound")
 		return

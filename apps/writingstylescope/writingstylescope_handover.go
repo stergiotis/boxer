@@ -172,7 +172,7 @@ func (inst *App) handover(res *Analysis) (note string, err error) {
 	if err != nil {
 		return
 	}
-	pub, err := inst.pub.Publish(inst.bus, stream)
+	pub, err := inst.pub.Publish(inst.ioCtx, inst.bus, stream)
 	if err != nil {
 		err = eh.Errorf("publish pairs dataset: %w", err)
 		return
@@ -187,7 +187,7 @@ func (inst *App) handover(res *Analysis) (note string, err error) {
 		Datasets:     []string{pub.Alias},
 		DatasetNames: []string{datasetAlias},
 	}
-	if _, err = playground.Open(inst.bus, cfg); err != nil {
+	if _, err = playground.Open(inst.ioCtx, inst.bus, cfg); err != nil {
 		err = eh.Errorf("open play: %w", err)
 		return
 	}

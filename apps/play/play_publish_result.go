@@ -165,7 +165,7 @@ func (inst *PlayLauncher) publishBundleOff(rec arrow.RecordBatch, bundle string,
 	last := LastPublish{Bundle: bundle, Rows: rows}
 	if err == nil {
 		var res adhocdata.BundleResult
-		res, err = adhocdata.PublishBundleRequest(inst.bus, adhocdata.BundlePublishInput{Alias: bundle, Document: doc,
+		res, err = adhocdata.PublishBundleRequest(inst.ioCtx, inst.bus, adhocdata.BundlePublishInput{Alias: bundle, Document: doc,
 			Datasets: []adhocdata.BundleDatasetInput{{LocalName: local, ArrowIPCStream: stream}}, OnBehalfOf: obo, Provenance: prov})
 		last.Revision = res.Revision
 	}

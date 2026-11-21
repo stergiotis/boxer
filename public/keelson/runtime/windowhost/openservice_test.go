@@ -52,7 +52,7 @@ func (fx openServiceFixture) request(t *testing.T, req launchrequest.LaunchReque
 	t.Helper()
 	payload, err := buscodec.Encode(req)
 	require.NoError(t, err)
-	replyBytes, err := fx.caller.Request(windowopen.OpenSubject, payload)
+	replyBytes, err := fx.caller.Request(t.Context(), windowopen.OpenSubject, payload)
 	require.NoError(t, err, "a refusal must be a reply, not a timeout")
 	rep, err = buscodec.Decode[launchreply.LaunchReply](replyBytes)
 	require.NoError(t, err)
@@ -171,7 +171,7 @@ func TestOpenService_UndecodableRequestIsRepliedTo(t *testing.T) {
 	reg, _ := mkRegistryWithSingleton(t, "test.plain")
 	fx := mkOpenServiceFixture(t, reg)
 
-	replyBytes, err := fx.caller.Request(windowopen.OpenSubject, []byte("not a launch request"))
+	replyBytes, err := fx.caller.Request(t.Context(), windowopen.OpenSubject, []byte("not a launch request"))
 	require.NoError(t, err)
 	rep, err := buscodec.Decode[launchreply.LaunchReply](replyBytes)
 	require.NoError(t, err)

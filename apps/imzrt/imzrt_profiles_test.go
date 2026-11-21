@@ -42,14 +42,14 @@ func TestProfileCapsAuthorize(t *testing.T) {
 
 	caller := bus.NewClient(manifest.Id, manifest.Caps)
 	for _, subject := range subjects {
-		reply, err := caller.Request(subject, []byte("payload"))
+		reply, err := caller.Request(t.Context(), subject, []byte("payload"))
 		require.NoError(t, err, subject)
 		assert.Equal(t, []byte("ok"), reply, subject)
 	}
 
 	uncapped := bus.NewClient("test.uncapped", nil)
 	for _, subject := range subjects {
-		_, err := uncapped.Request(subject, []byte("payload"))
+		_, err := uncapped.Request(t.Context(), subject, []byte("payload"))
 		assert.ErrorIs(t, err, inprocbus.ErrPermissionViolation, subject)
 	}
 }

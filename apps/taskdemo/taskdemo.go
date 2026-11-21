@@ -143,7 +143,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.monitor = taskmonitor.New(inst.ids, "tm", inst.tasks, taskmonitor.Options{
 		DefaultOpen: true,
 	})
-	if startErr := inst.monitor.Start(); startErr != nil {
+	if startErr := inst.monitor.Start(app.ContextOf(ctx)); startErr != nil {
 		inst.logger.Warn().Err(startErr).Msg("taskdemo: monitor start failed")
 	}
 	return

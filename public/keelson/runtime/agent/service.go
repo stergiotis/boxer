@@ -84,6 +84,8 @@ type Config struct {
 
 // Service answers `runtime.agent.*` (ADR-0269 §SD3).
 type Service struct {
+	// ctx is NewService's: the service's lifetime.
+	ctx context.Context
 	cfg Config
 	// captures is the capture service, the PEP every capture passes
 	// through (ADR-0281).
@@ -128,8 +130,10 @@ type Service struct {
 	actionEvents actionQueue
 }
 
-// NewService subscribes the service. The caller MUST invoke Close.
-func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service, err error) {
+// NewService subscribes the service. The caller MUST invoke Close. ctx is
+// the service's lifetime: the work it does on no caller's behalf — an
+// approved proposal or a held request routed later — runs under it.
+func NewService(ctx context.Context, bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service, err error) {
 	if bus == nil {
 		err = eh.Errorf("agent: nil bus")
 		return
@@ -137,7 +141,7 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 	if cfg.Registry == nil {
 		cfg.Registry = app.DefaultRegistry
 	}
-	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), tasks: make(map[string]*task),
+	s = &Service{ctx: ctx, cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), tasks: make(map[string]*task),
 		requests: make(map[string]*request), taints: make(map[string]bool), leftBy: make(map[uint64]string),
 		helpCache: make(map[app.AppIdT]help.BookI)}
 	if cfg.Host != nil {

@@ -1,6 +1,7 @@
 package play
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -263,7 +264,7 @@ func (inst *PlayApp) publishFixture(spec fixtureSpec) {
 	go func() {
 		var summary string
 		err := task.RunToCompletion(inst.client.Tasks(), task.SpawnOpts{Kind: "play.fixture.series", Title: "publish the series fixture"}, func() (err error) {
-			summary, err = doPublishFixture(inst.bus, spec, st)
+			summary, err = doPublishFixture(inst.ioCtx, inst.bus, spec, st)
 			return
 		})
 		st.mu.Lock()
@@ -280,7 +281,7 @@ func (inst *PlayApp) publishFixture(spec fixtureSpec) {
 // doPublishFixture is one round: generate, encode, publish both datasets
 // onto the publishers' held handles, so re-generating replaces the fixture
 // rather than minting two more datasets against the quotas.
-func doPublishFixture(bus busPublisherI, spec fixtureSpec, st *fixtureState) (summary string, err error) {
+func doPublishFixture(ctx context.Context, bus busPublisherI, spec fixtureSpec, st *fixtureState) (summary string, err error) {
 	fixture, err := generateFixture(spec)
 	if err != nil {
 		return
@@ -290,11 +291,11 @@ func doPublishFixture(bus busPublisherI, spec fixtureSpec, st *fixtureState) (su
 	if err != nil {
 		return
 	}
-	seriesRes, err := st.series.Publish(bus, seriesIPC)
+	seriesRes, err := st.series.Publish(ctx, bus, seriesIPC)
 	if err != nil {
 		return "", eb.Build().Str("alias", fixtureSeriesAlias).Errorf("play: fixture: publish: %w", err)
 	}
-	truthRes, err := st.truth.Publish(bus, truthIPC)
+	truthRes, err := st.truth.Publish(ctx, bus, truthIPC)
 	if err != nil {
 		return "", eb.Build().Str("alias", fixtureTruthAlias).Errorf("play: fixture: publish: %w", err)
 	}

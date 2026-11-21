@@ -114,23 +114,23 @@ func TestOverTheBus(t *testing.T) {
 	t.Cleanup(s.Close)
 
 	clientA := bus.NewClient(appA, []app.SubjectFilter{{Pattern: Subject(tagA), Direction: app.CapDirectionPub}})
-	_, err = Publish(clientA, tagA, Request{Confined: true, Files: oneFile()})
+	_, err = Publish(t.Context(), clientA, tagA, Request{Confined: true, Files: oneFile()})
 	var re *RefusedError
 	require.ErrorAs(t, err, &re)
 	assert.True(t, re.Result.Refused)
 
-	_, err = Publish(clientA, tagB, Request{Files: oneFile()})
+	_, err = Publish(t.Context(), clientA, tagB, Request{Files: oneFile()})
 	assert.ErrorIs(t, err, inprocbus.ErrPermissionViolation, "the bus keeps an app to the tags it declared")
 
 	// A dry run answers with the check, and writes nothing: without a store
 	// a publish would fail, the check passes.
-	require.NoError(t, Check(clientA, tagA, Request{Files: oneFile()}))
-	err = Check(clientA, tagA, Request{Tier: uint8(agentrun.TierRed), Files: oneFile()})
+	require.NoError(t, Check(t.Context(), clientA, tagA, Request{Files: oneFile()}))
+	err = Check(t.Context(), clientA, tagA, Request{Tier: uint8(agentrun.TierRed), Files: oneFile()})
 	require.ErrorAs(t, err, &re)
 	assert.Contains(t, re.Result.Reason, "above the AMBER")
 
 	// A request that does not decode is refused, not left unanswered.
-	reply, err := clientA.RequestWithTimeout(Subject(tagA), []byte{0xff}, time.Second)
+	reply, err := app.RequestWithin(t.Context(), clientA, time.Second, Subject(tagA), []byte{0xff})
 	require.NoError(t, err)
 	res, err := buscodec.Decode[Result](reply)
 	require.NoError(t, err)
@@ -145,7 +145,7 @@ func TestACheckWithoutTheServiceSaysSo(t *testing.T) {
 	prior := checkTimeout
 	checkTimeout = 50 * time.Millisecond
 	t.Cleanup(func() { checkTimeout = prior })
-	err := Check(client, tagA, Request{Files: oneFile()})
+	err := Check(t.Context(), client, tagA, Request{Files: oneFile()})
 	assert.ErrorIs(t, err, inprocbus.ErrNoResponders)
 	assert.ErrorContains(t, err, "does this host run it")
 }

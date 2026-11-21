@@ -1,6 +1,7 @@
 package attention
 
 import (
+	"context"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -124,12 +125,12 @@ func (inst *BusService) announce(version uint64) {
 // The client side, for an app holding ClientCaps.
 
 // FetchLevels reads the table conversation sees.
-func FetchLevels(bus app.BusI, conversation string) (s Snapshot, err error) {
+func FetchLevels(ctx context.Context, bus app.BusI, conversation string) (s Snapshot, err error) {
 	payload, err := buscodec.Encode(wireLevelsRequest{V: wireVersion, Conversation: conversation})
 	if err != nil {
 		return
 	}
-	raw, err := bus.Request(SubjectLevels, payload)
+	raw, err := bus.Request(ctx, SubjectLevels, payload)
 	if err != nil {
 		err = eh.Errorf("levels: %w", err)
 		return
@@ -143,13 +144,13 @@ func FetchLevels(bus app.BusI, conversation string) (s Snapshot, err error) {
 
 // SetLevel sets an attention-scale override of conversation, or clears it
 // with LevelUnspecified.
-func SetLevel(bus app.BusI, conversation string, key Key, level LevelE) (err error) {
+func SetLevel(ctx context.Context, bus app.BusI, conversation string, key Key, level LevelE) (err error) {
 	payload, err := buscodec.Encode(wireLevelSet{V: wireVersion, Conversation: conversation,
 		Row: wireLevelRow{Kind: key.Kind, Effect: uint8(key.Effect), App: string(key.App), Level: uint8(level)}})
 	if err != nil {
 		return
 	}
-	raw, err := bus.Request(SubjectLevelSet, payload)
+	raw, err := bus.Request(ctx, SubjectLevelSet, payload)
 	if err != nil {
 		err = eh.Errorf("set level: %w", err)
 		return

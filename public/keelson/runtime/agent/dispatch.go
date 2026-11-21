@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json/v2"
@@ -590,7 +591,7 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 		// model work faster than a person can follow.
 		inst.pace(t)
 	}
-	inst.route(t, rec, req, spec, e)
+	inst.route(msg.Context(), t, rec, req, spec, e)
 	inst.mu.Lock()
 	rep.Outcome = inst.outcomeOf(t, rec, 0)
 	inst.mu.Unlock()
@@ -636,7 +637,7 @@ func (inst *Service) mintCallId(t *task) (id string) {
 }
 
 // route sends a checked call to its instance and settles what it answers.
-func (inst *Service) route(t *task, rec *callRec, req wireCall, spec app.OperationSpec, e *entry) {
+func (inst *Service) route(ctx context.Context, t *task, rec *callRec, req wireCall, spec app.OperationSpec, e *entry) {
 	inst.mu.Lock()
 	expects := inst.expectsFor(t, req, spec)
 	rec.callId = inst.mintCallId(t)
@@ -671,7 +672,7 @@ func (inst *Service) route(t *task, rec *callRec, req wireCall, spec app.Operati
 	inst.mu.Lock()
 	rec.sent = true
 	inst.mu.Unlock()
-	raw, err := inst.busClient.RequestWithTimeout(opwire.Subject(alias, req.Instance, spec.Name), payload, DefaultTimeout)
+	raw, err := app.RequestWithin(ctx, inst.busClient, DefaultTimeout, opwire.Subject(alias, req.Instance, spec.Name), payload)
 	if err != nil {
 		out := phaseOutcome(opwire.PhaseFailed, "the instance did not answer: "+err.Error())
 		inst.settle(t, rec, out, false)

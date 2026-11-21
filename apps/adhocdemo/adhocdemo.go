@@ -55,6 +55,9 @@ func (inst *App) itemsSpec(gen int) playground.BundleSpec {
 // App is the dogfood embedder. Everything on it is the render goroutine's:
 // the runners hand their results to Frame, which is the one writer.
 type App struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx context.Context
 	ids   *c.WidgetIdStack
 	bus   app.BusI
 	runId string
@@ -119,6 +122,7 @@ var _ app.AppI = (*App)(nil)
 func (inst *App) Manifest() app.Manifest { return manifest }
 
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
+	inst.ioCtx = app.ContextOf(ctx)
 	inst.ids = ctx.Ids()
 	inst.bus = ctx.Bus()
 	inst.runId = ctx.RunId()
@@ -145,7 +149,7 @@ func (inst *App) startPublish() (started bool) {
 			publish := inst.publish
 			if publish == nil {
 				publish = func(spec playground.BundleSpec) (adhocdata.BundleResult, error) {
-					return playground.PublishBundle(inst.bus, spec)
+					return playground.PublishBundle(inst.ioCtx, inst.bus, spec)
 				}
 			}
 			r, err := publish(inst.itemsSpec(gen))

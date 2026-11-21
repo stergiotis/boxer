@@ -112,7 +112,7 @@ func (inst *App) openInMdedit() {
 			err = eh.Errorf("encode the mdedit launch config: %w", err)
 			return
 		}
-		if _, err = windowopen.RequestOpen(bus, mdeditlaunch.AppId, mdeditlaunch.Kind, cfg); err != nil {
+		if _, err = windowopen.RequestOpen(ctx, bus, mdeditlaunch.AppId, mdeditlaunch.Kind, cfg); err != nil {
 			err = eh.Errorf("open mdedit: %w", err)
 			return
 		}

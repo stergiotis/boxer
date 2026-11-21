@@ -58,7 +58,7 @@ func writePlan(t *testing.T, inst *App, name string, p jk.Plan) {
 	t.Helper()
 	data, err := p.Marshal()
 	require.NoError(t, err)
-	_, err = inst.files.Write(name, data)
+	_, err = inst.files.Write(t.Context(), name, data)
 	require.NoError(t, err)
 }
 
@@ -275,7 +275,7 @@ func TestTheSeedPlanIsNotOverwrittenUnread(t *testing.T) {
 
 	inst = phaseApp()
 	withFiles(t, inst)
-	_, err := inst.files.Write("bad.json", []byte("{not a plan"))
+	_, err := inst.files.Write(t.Context(), "bad.json", []byte("{not a plan"))
 	require.NoError(t, err)
 	inst.startOpen("bad.json", true)
 	settled(t, inst.fileJob.Running)

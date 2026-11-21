@@ -6,6 +6,7 @@ package play
 // its importers.
 
 import (
+	"context"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
@@ -23,6 +24,6 @@ func ComposeBundleDoc(spec BundleSpec) (doc []byte, err error) {
 // PublishBundle composes, checks and publishes spec; see
 // playground.PublishBundle. It is a bus round trip: call it off the render
 // goroutine.
-func PublishBundle(bus app.BusI, spec BundleSpec) (res adhocdata.BundleResult, err error) {
-	return playground.PublishBundle(bus, spec)
+func PublishBundle(ctx context.Context, bus app.BusI, spec BundleSpec) (res adhocdata.BundleResult, err error) {
+	return playground.PublishBundle(ctx, bus, spec)
 }

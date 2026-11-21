@@ -235,7 +235,7 @@ type preflightResult struct {
 type App struct {
 	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
 	// run under when no call of its own carries one.
-	ioCtx context.Context
+	ioCtx  context.Context
 	ids    *c.WidgetIdStack
 	logger zerolog.Logger
 	store  app.StorageI
@@ -638,9 +638,9 @@ func freeName(base string, ext string, taken []fsbroker.AppDataEntry) (name stri
 
 // savePlan writes p to name in files, from a worker, and reports what the
 // save left. An empty name is chosen from the servers first.
-func savePlan(files *fsbroker.AppDataClient, name string, p *jk.Plan) (saved planSaved) {
+func savePlan(ctx context.Context, files *fsbroker.AppDataClient, name string, p *jk.Plan) (saved planSaved) {
 	if name == "" {
-		taken, err := files.List()
+		taken, err := files.List(ctx)
 		if err != nil {
 			saved.err = err
 			return
@@ -653,7 +653,7 @@ func savePlan(files *fsbroker.AppDataClient, name string, p *jk.Plan) (saved pla
 		saved.err = err
 		return
 	}
-	r, err := files.Write(name, data)
+	r, err := files.Write(ctx, name, data)
 	if err != nil {
 		saved.err = err
 		return
@@ -664,9 +664,9 @@ func savePlan(files *fsbroker.AppDataClient, name string, p *jk.Plan) (saved pla
 
 // statPlan reports where a plan the worker did not write itself lives, and
 // when it was last written.
-func statPlan(files *fsbroker.AppDataClient, name string) (saved planSaved) {
+func statPlan(ctx context.Context, files *fsbroker.AppDataClient, name string) (saved planSaved) {
 	saved.name = name
-	r, err := files.Stat(name)
+	r, err := files.Stat(ctx, name)
 	if err == nil && !r.NotExist {
 		saved.location, saved.at = r.Location, time.Unix(0, r.Entry.ModTime)
 	}
@@ -755,13 +755,13 @@ func (inst *App) startOpen(name string, seed bool) {
 	inst.fileOp = fileOpOpen
 	inst.fileJob.Start(inst.tasks, bgjob.Spec{Kind: "jackstay.open", Title: "open the plan"},
 		func(ctx context.Context) (*fileResult, error) {
-			p, err := jk.LoadPlanIn(files, name)
+			p, err := jk.LoadPlanIn(ctx, files, name)
 			r, err := openOutcome(name, seed, p, err)
 			if err != nil {
 				return nil, err
 			}
 			if r.create == "" && r.saved.err == nil {
-				r.saved = statPlan(files, name)
+				r.saved = statPlan(ctx, files, name)
 			}
 			return r, nil
 		})
@@ -793,11 +793,11 @@ func (inst *App) startReload() {
 	files, name, epoch := inst.files, inst.planName, inst.planEpoch
 	inst.reloadJob.Start(inst.tasks, bgjob.Spec{Kind: "jackstay.reload", Title: "re-read the plan"},
 		func(ctx context.Context) (*fileResult, error) {
-			p, err := jk.LoadPlanIn(files, name)
+			p, err := jk.LoadPlanIn(ctx, files, name)
 			if err != nil {
 				return nil, err
 			}
-			return &fileResult{op: fileOpReload, plan: p, saved: statPlan(files, name), epoch: epoch}, nil
+			return &fileResult{op: fileOpReload, plan: p, saved: statPlan(ctx, files, name), epoch: epoch}, nil
 		})
 }
 
@@ -808,7 +808,7 @@ func (inst *App) startImport() {
 	inst.fileOp = fileOpImport
 	inst.fileJob.Start(inst.tasks, bgjob.Spec{Kind: "jackstay.import", Title: "import a plan"},
 		func(ctx context.Context) (*fileResult, error) {
-			reply, err := bus.RequestWithTimeout(fsbroker.SubjectDialogRead, nil, fsbroker.DialogTimeout)
+			reply, err := app.RequestWithin(ctx, bus, fsbroker.DialogTimeout, fsbroker.SubjectDialogRead, nil)
 			if err != nil {
 				return nil, err
 			}
@@ -819,8 +819,8 @@ func (inst *App) startImport() {
 			if !dr.Granted {
 				return &fileResult{op: fileOpImport, cancelled: true}, nil
 			}
-			body, err := bus.RequestWithTimeout(dr.HandleSubjectPrefix+".read", nil, fsbroker.HandleOpTimeout)
-			_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+".close", nil, fsbroker.HandleOpTimeout)
+			body, err := app.RequestWithin(ctx, bus, fsbroker.HandleOpTimeout, dr.HandleSubjectPrefix+".read", nil)
+			_, _ = app.RequestWithin(ctx, bus, fsbroker.HandleOpTimeout, dr.HandleSubjectPrefix+".close", nil)
 			if err != nil {
 				return nil, err
 			}
@@ -836,12 +836,12 @@ func (inst *App) startImport() {
 			if p.Source.Pack != "" {
 				return nil, errPackPlan
 			}
-			taken, err := files.List()
+			taken, err := files.List(ctx)
 			if err != nil {
 				return nil, err
 			}
 			base, ext := importBase(dr.DisplayName)
-			saved := savePlan(files, freeName(base, ext, taken), &p)
+			saved := savePlan(ctx, files, freeName(base, ext, taken), &p)
 			if saved.err != nil {
 				return nil, saved.err
 			}
@@ -887,7 +887,7 @@ func (inst *App) startExport() {
 			if err != nil {
 				return nil, err
 			}
-			reply, err := bus.RequestWithTimeout(fsbroker.SubjectDialogWrite, req, fsbroker.DialogTimeout)
+			reply, err := app.RequestWithin(ctx, bus, fsbroker.DialogTimeout, fsbroker.SubjectDialogWrite, req)
 			if err != nil {
 				return nil, err
 			}
@@ -898,8 +898,8 @@ func (inst *App) startExport() {
 			if !dr.Granted {
 				return &fileResult{op: fileOpExport, cancelled: true}, nil
 			}
-			ack, err := bus.RequestWithTimeout(dr.HandleSubjectPrefix+".write", data, fsbroker.HandleOpTimeout)
-			_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+".close", nil, fsbroker.HandleOpTimeout)
+			ack, err := app.RequestWithin(ctx, bus, fsbroker.HandleOpTimeout, dr.HandleSubjectPrefix+".write", data)
+			_, _ = app.RequestWithin(ctx, bus, fsbroker.HandleOpTimeout, dr.HandleSubjectPrefix+".close", nil)
 			if err != nil {
 				return nil, err
 			}
@@ -1292,7 +1292,7 @@ func (inst *App) startStructure() {
 			if err != nil {
 				return nil, err
 			}
-			return &stepResult{plan: p, note: "structure planned", saved: savePlan(files, name, &p),
+			return &stepResult{plan: p, note: "structure planned", saved: savePlan(ctx, files, name, &p),
 				epoch: epoch, fresh: fresh, replanned: true}, nil
 		})
 	inst.step = stepStructure
@@ -1340,7 +1340,7 @@ func (inst *App) startApply() {
 			r := &stepResult{plan: after, stale: stale, applied: applied, note: plural(len(applied), "statement") + " ran on the target",
 				epoch: epoch}
 			if len(stale) == 0 {
-				r.saved = savePlan(files, name, &r.plan)
+				r.saved = savePlan(ctx, files, name, &r.plan)
 			}
 			return r, nil
 		})
@@ -1369,7 +1369,7 @@ func (inst *App) startDiff() {
 			if err != nil || len(stale) > 0 {
 				return &stepResult{stale: stale, epoch: epoch}, err
 			}
-			return &stepResult{plan: fresh, skipped: skipped, note: "content compared", saved: savePlan(files, name, &fresh), epoch: epoch}, nil
+			return &stepResult{plan: fresh, skipped: skipped, note: "content compared", saved: savePlan(ctx, files, name, &fresh), epoch: epoch}, nil
 		})
 }
 
@@ -1496,7 +1496,7 @@ func (inst *App) startSync() {
 				return &stepResult{stale: prep.Stale, epoch: epoch}, err
 			}
 			if len(prep.Chosen) == 0 {
-				return &stepResult{plan: prep.Plan, skipped: prep.Skipped, note: "nothing to sync", saved: savePlan(files, planName, &prep.Plan), epoch: epoch}, nil
+				return &stepResult{plan: prep.Plan, skipped: prep.Skipped, note: "nothing to sync", saved: savePlan(ctx, files, planName, &prep.Plan), epoch: epoch}, nil
 			}
 
 			expected := uint64(prep.ExpectedRows)
@@ -1543,7 +1543,7 @@ func (inst *App) startSync() {
 				note = plural(out.Failed, "chunk") + " not synced; see the tables' problems"
 			}
 			// RunSyncIn saved the plan; what is left to learn is where.
-			return &stepResult{plan: prep.Plan, skipped: prep.Skipped, note: note, saved: statPlan(files, planName), epoch: epoch}, nil
+			return &stepResult{plan: prep.Plan, skipped: prep.Skipped, note: note, saved: statPlan(ctx, files, planName), epoch: epoch}, nil
 		})
 	// Seen running from here, so a sync that ends before the next frame
 	// still ends in noteSyncEnd.

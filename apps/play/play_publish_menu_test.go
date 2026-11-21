@@ -37,7 +37,7 @@ func TestThePersonPublishesThroughTheGesturePath(t *testing.T) {
 	require.Empty(t, last.Error)
 	assert.Equal(t, "Published mine (revision 1, 3 rows)", l.inner.publishStatusLine())
 
-	got, err := adhocdata.ResolveBundleRequest(reader, "mine", nil)
+	got, err := adhocdata.ResolveBundleRequest(t.Context(), reader, "mine", nil)
 	require.NoError(t, err)
 	assert.Contains(t, string(got.Document), "tabs: [table, chart]")
 	var logged bool

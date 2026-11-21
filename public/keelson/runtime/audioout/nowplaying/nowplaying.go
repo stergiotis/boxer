@@ -155,7 +155,7 @@ func (inst *session) open(ctx context.Context, bus app.BusI, load Loader) {
 	case bus == nil:
 		note = "no output device: this host gives the window no bus"
 	default:
-		dev, st := audioout.Open(bus, f)
+		dev, st := audioout.Open(ctx, bus, f)
 		out = dev
 		if !st.Audible() {
 			note = "no output device: " + st.Reason

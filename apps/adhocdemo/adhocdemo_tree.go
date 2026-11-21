@@ -148,7 +148,7 @@ func (inst *App) publishAndOpen(ctx context.Context, gen int, mount identifier.T
 		err = eh.Errorf("encode tally launch config: %w", err)
 		return
 	}
-	if _, err = windowopen.RequestOpen(inst.bus, launchcfg.AppId, launchcfg.Kind, cfgBytes); err != nil {
+	if _, err = windowopen.RequestOpen(ctx, inst.bus, launchcfg.AppId, launchcfg.Kind, cfgBytes); err != nil {
 		err = eh.Errorf("open tally: %w", err)
 		return
 	}

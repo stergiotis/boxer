@@ -206,7 +206,7 @@ func TestSupervisor_ListInflightRequestReply(t *testing.T) {
 	h1.Report(task.ProgressReport{Current: 25, Total: 100, Unit: task.UnitItems})
 	h2.Report(task.ProgressReport{Current: 75, Total: 100, Unit: task.UnitItems})
 
-	raw, err := f.requester.Request(task.SubjectListInflight, nil)
+	raw, err := f.requester.Request(t.Context(), task.SubjectListInflight, nil)
 	require.NoError(t, err)
 	reply, err := task.UnmarshalInflightSnapshotReply(raw)
 	require.NoError(t, err)

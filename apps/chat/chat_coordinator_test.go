@@ -420,7 +420,7 @@ func coordRigWith(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opToo
 		_ = buscodec.Reply(hostClient.Publish, msg.Reply, opwire.CallReply{V: opwire.WireVersion, Outcome: host.submit(key, op, req)})
 	})
 	require.NoError(t, err)
-	asvc, err := agent.NewService(bus, zerolog.Nop(), agent.Config{Journal: intents, Registry: reg, Host: host, TestGrants: true, Pace: time.Millisecond})
+	asvc, err := agent.NewService(ctx, bus, zerolog.Nop(), agent.Config{Journal: intents, Registry: reg, Host: host, TestGrants: true, Pace: time.Millisecond})
 	require.NoError(t, err)
 	t.Cleanup(asvc.Close)
 

@@ -47,7 +47,7 @@ type TaskApiI interface {
 	// by the err: a nil err with empty entries means the supervisor
 	// returned an empty snapshot; an error means the supervisor was
 	// unreachable.
-	ListInflight() (entries []InflightSnapshotEntry, err error)
+	ListInflight(ctx context.Context) (entries []InflightSnapshotEntry, err error)
 
 	// AppId returns the owner identity the API will stamp on spawned
 	// tasks. Useful for diagnostic logging at the app boundary.
@@ -220,13 +220,13 @@ func (inst *BusApi) RequestCancel(id TaskIdT, reason string) (err error) {
 // authoritative bound; ListTimeoutMs in ApiConfig is reserved for a
 // future API revision that uses a per-call context (the current
 // app.BusI does not accept one).
-func (inst *BusApi) ListInflight() (entries []InflightSnapshotEntry, err error) {
+func (inst *BusApi) ListInflight(ctx context.Context) (entries []InflightSnapshotEntry, err error) {
 	if inst.cfg.Bus == nil {
 		err = eh.Errorf("task: list inflight: nil bus")
 		return
 	}
 	var raw []byte
-	raw, err = inst.cfg.Bus.Request(SubjectListInflight, nil)
+	raw, err = inst.cfg.Bus.Request(ctx, SubjectListInflight, nil)
 	if err != nil {
 		err = eh.Errorf("task: list inflight: request: %w", err)
 		return
@@ -261,7 +261,7 @@ func (inst *NoopTaskApi) RequestCancel(id TaskIdT, _ string) (err error) {
 	err = eb.Build().Str("taskId", string(id)).Errorf("task api: not available (no host wiring)")
 	return
 }
-func (inst *NoopTaskApi) ListInflight() (entries []InflightSnapshotEntry, err error) {
+func (inst *NoopTaskApi) ListInflight(ctx context.Context) (entries []InflightSnapshotEntry, err error) {
 	err = eh.Errorf("task api: not available (no host wiring)")
 	return
 }

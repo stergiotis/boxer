@@ -162,7 +162,7 @@ func TestAStreamInboxMustBeTheSenders(t *testing.T) {
 	other := bus.NewClient(appId, ClientCaps("test: ask"))
 	payload, err := encode(wireRequest{V: wireVersion, Messages: userMessage(), CancelKey: "k", StreamInbox: inbox})
 	require.NoError(t, err)
-	raw, err := other.RequestWithTimeout(SubjectComplete, payload, 5*time.Second)
+	raw, err := app.RequestWithin(t.Context(), other, 5*time.Second, SubjectComplete, payload)
 	require.NoError(t, err)
 	rep, err := decode[wireReply](raw)
 	require.NoError(t, err)

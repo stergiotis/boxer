@@ -35,7 +35,7 @@ func TestService_Handle_BlockedReadTimesOut(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		_, rerr := appBus.RequestWithTimeout(dr.HandleSubjectPrefix+".read", nil, 100*time.Millisecond)
+		_, rerr := app.RequestWithin(t.Context(), appBus, 100*time.Millisecond, dr.HandleSubjectPrefix+".read", nil)
 		done <- rerr
 	}()
 	select {

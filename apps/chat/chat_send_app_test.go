@@ -29,6 +29,7 @@ func sendRig(t *testing.T, level agent.PixelsE) (inst *App, fm *fakeModel, bus *
 	t.Cleanup(svc.Close)
 	inst = newApp()
 	inst.bus = bus.NewClient(ManifestId, manifest.Caps)
+	inst.ioCtx = t.Context()
 	inst.cli = llm.NewClient(inst.bus)
 	inst.cli.Timeout = 5 * time.Second
 	inst.coord = inst.newCoordinator(inst.conv.id)
@@ -72,7 +73,7 @@ func TestAddImageReadsTheFileTheDialogGrants(t *testing.T) {
 	}
 	out := make(chan picked, 1)
 	pick := func() {
-		d, n, p, err := pickFile(inst.bus)
+		d, n, p, err := pickFile(t.Context(), inst.bus)
 		out <- picked{d, n, p, err}
 	}
 	go pick()

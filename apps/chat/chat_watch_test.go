@@ -50,6 +50,7 @@ func TestAWatchedTurnEndingUnseenReachesTheHost(t *testing.T) {
 	t.Cleanup(bs.Close)
 	inst := newApp()
 	inst.bus = bus.NewClient(ManifestId, manifest.Caps)
+	inst.ioCtx = t.Context()
 	inst.conv.title = "Wind field"
 
 	inst.turnEnded("the turn ended")

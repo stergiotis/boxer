@@ -1,6 +1,7 @@
 package jackstay
 
 import (
+	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"regexp"
@@ -447,18 +448,18 @@ func (inst *Plan) Marshal() (data []byte, err error) {
 
 // Save writes the plan atomically: to a temporary file in the same directory,
 // then renamed over path.
-func (inst *Plan) Save(path string) (err error) {
-	return inst.SaveIn(OsFiles{}, path)
+func (inst *Plan) Save(ctx context.Context, path string) (err error) {
+	return inst.SaveIn(ctx, OsFiles{}, path)
 }
 
 // SaveIn writes the plan to name in files, atomically.
-func (inst *Plan) SaveIn(files FilesI, name string) (err error) {
+func (inst *Plan) SaveIn(ctx context.Context, files FilesI, name string) (err error) {
 	var data []byte
 	data, err = inst.Marshal()
 	if err != nil {
 		return
 	}
-	err = files.WriteFile(name, data)
+	err = files.WriteFile(ctx, name, data)
 	if err != nil {
 		err = eb.Build().Str("name", name).Errorf("unable to write plan: %w", err)
 	}
@@ -466,15 +467,15 @@ func (inst *Plan) SaveIn(files FilesI, name string) (err error) {
 }
 
 // LoadPlan reads a plan written by [Plan.Save].
-func LoadPlan(path string) (plan Plan, err error) {
-	return LoadPlanIn(OsFiles{}, path)
+func LoadPlan(ctx context.Context, path string) (plan Plan, err error) {
+	return LoadPlanIn(ctx, OsFiles{}, path)
 }
 
 // LoadPlanIn reads a plan written by [Plan.SaveIn]. A missing file is an
 // error wrapping fs.ErrNotExist.
-func LoadPlanIn(files FilesI, name string) (plan Plan, err error) {
+func LoadPlanIn(ctx context.Context, files FilesI, name string) (plan Plan, err error) {
 	var data []byte
-	data, err = files.ReadFile(name)
+	data, err = files.ReadFile(ctx, name)
 	if err != nil {
 		err = eb.Build().Str("name", name).Errorf("unable to read plan: %w", err)
 		return

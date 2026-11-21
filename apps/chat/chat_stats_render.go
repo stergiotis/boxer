@@ -119,7 +119,7 @@ func (inst *App) openStats() {
 	inst.handoverNote = ""
 	inst.handover.Start(inst.tasks, bgjob.Spec{Kind: "chat-stats-handover", Title: "open the chat statistics in play"},
 		func(ctx context.Context) (note *string, err error) {
-			n, err := openStatsInPlay(bus, pubs, snap, cells)
+			n, err := openStatsInPlay(ctx, bus, pubs, snap, cells)
 			if err != nil {
 				return
 			}

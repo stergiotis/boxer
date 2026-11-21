@@ -197,7 +197,7 @@ func (inst *App) openPlayground(what string, launch playground.Launch) {
 	inst.wg.Add(1)
 	go func() {
 		defer inst.wg.Done()
-		_, err := playground.Open(inst.bus, launch)
+		_, err := playground.Open(inst.appCtx, inst.bus, launch)
 		note := ""
 		if err != nil {
 			note = what + ": " + err.Error()
@@ -217,7 +217,7 @@ func (inst *App) request(target string, kind string, cfg []byte) {
 	inst.wg.Add(1)
 	go func() {
 		defer inst.wg.Done()
-		_, err := windowopen.RequestOpen(inst.bus, app.AppIdT(target), kind, cfg)
+		_, err := windowopen.RequestOpen(inst.appCtx, inst.bus, app.AppIdT(target), kind, cfg)
 		note := ""
 		if err != nil {
 			note = "open " + shortApp(target) + ": " + err.Error()

@@ -113,9 +113,9 @@ func TestManifest(t *testing.T) {
 // and retry and cancel land on the row with the window in the note.
 func TestListFilterRetryAndCancel(t *testing.T) {
 	f := newFixture(t)
-	running, err := f.consumer.Enqueue(wb.Request{Kind: "mgr.kind", Subject: "hold"})
+	running, err := f.consumer.Enqueue(t.Context(), wb.Request{Kind: "mgr.kind", Subject: "hold"})
 	require.NoError(t, err)
-	failed, err := f.consumer.Enqueue(wb.Request{Kind: "mgr.kind", Subject: "fail"})
+	failed, err := f.consumer.Enqueue(t.Context(), wb.Request{Kind: "mgr.kind", Subject: "fail"})
 	require.NoError(t, err)
 	f.eventuallyState(t, running.ID, watchbillstore.StateRunning)
 	f.eventuallyState(t, failed.ID, watchbillstore.StateDiscarded)
@@ -481,7 +481,7 @@ func TestListJobsTakesItsOwnArguments(t *testing.T) {
 // knows to be ineligible is refused before the round trip.
 func TestCancelSettlesWithTheStoresAnswer(t *testing.T) {
 	f := newFixture(t)
-	running, err := f.consumer.Enqueue(wb.Request{Kind: "mgr.kind", Subject: "hold"})
+	running, err := f.consumer.Enqueue(t.Context(), wb.Request{Kind: "mgr.kind", Subject: "hold"})
 	require.NoError(t, err)
 	f.eventuallyState(t, running.ID, watchbillstore.StateRunning)
 	f.a.markDirty()

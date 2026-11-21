@@ -15,6 +15,7 @@ package fsbroker
 // disk when the reply lands, a stat and a listing.
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -374,13 +375,13 @@ func NewAppDataClient(bus app.BusI) (inst *AppDataClient) {
 	return &AppDataClient{bus: bus, timeout: HandleOpTimeout}
 }
 
-func (inst *AppDataClient) request(op string, req AppDataRequest) (r AppDataReply, err error) {
+func (inst *AppDataClient) request(ctx context.Context, op string, req AppDataRequest) (r AppDataReply, err error) {
 	var payload, body []byte
 	payload, err = MarshalAppDataRequest(req)
 	if err != nil {
 		return
 	}
-	body, err = inst.bus.RequestWithTimeout(SubjectAppDataPrefix+op, payload, inst.timeout)
+	body, err = app.RequestWithin(ctx, inst.bus, inst.timeout, SubjectAppDataPrefix+op, payload)
 	if err != nil {
 		return
 	}
@@ -397,37 +398,37 @@ func (inst *AppDataClient) request(op string, req AppDataRequest) (r AppDataRepl
 	return
 }
 
-func (inst *AppDataClient) ReadFile(name string) (data []byte, err error) {
+func (inst *AppDataClient) ReadFile(ctx context.Context, name string) (data []byte, err error) {
 	var r AppDataReply
-	r, err = inst.request(AppDataOpRead, AppDataRequest{Name: name})
+	r, err = inst.request(ctx, AppDataOpRead, AppDataRequest{Name: name})
 	data = r.Data
 	return
 }
 
-func (inst *AppDataClient) WriteFile(name string, data []byte) (err error) {
-	_, err = inst.Write(name, data)
+func (inst *AppDataClient) WriteFile(ctx context.Context, name string, data []byte) (err error) {
+	_, err = inst.Write(ctx, name, data)
 	return
 }
 
-func (inst *AppDataClient) AppendFile(name string, data []byte) (err error) {
-	_, err = inst.request(AppDataOpAppend, AppDataRequest{Name: name, Data: data})
+func (inst *AppDataClient) AppendFile(ctx context.Context, name string, data []byte) (err error) {
+	_, err = inst.request(ctx, AppDataOpAppend, AppDataRequest{Name: name, Data: data})
 	return
 }
 
 // Write replaces name and returns what the broker reports of it afterwards.
-func (inst *AppDataClient) Write(name string, data []byte) (r AppDataReply, err error) {
-	return inst.request(AppDataOpWrite, AppDataRequest{Name: name, Data: data})
+func (inst *AppDataClient) Write(ctx context.Context, name string, data []byte) (r AppDataReply, err error) {
+	return inst.request(ctx, AppDataOpWrite, AppDataRequest{Name: name, Data: data})
 }
 
 // Stat describes name; r.NotExist is set when it is absent.
-func (inst *AppDataClient) Stat(name string) (r AppDataReply, err error) {
-	return inst.request(AppDataOpStat, AppDataRequest{Name: name})
+func (inst *AppDataClient) Stat(ctx context.Context, name string) (r AppDataReply, err error) {
+	return inst.request(ctx, AppDataOpStat, AppDataRequest{Name: name})
 }
 
 // List names the files of the data area.
-func (inst *AppDataClient) List() (entries []AppDataEntry, err error) {
+func (inst *AppDataClient) List(ctx context.Context) (entries []AppDataEntry, err error) {
 	var r AppDataReply
-	r, err = inst.request(AppDataOpList, AppDataRequest{})
+	r, err = inst.request(ctx, AppDataOpList, AppDataRequest{})
 	entries = r.Entries
 	return
 }

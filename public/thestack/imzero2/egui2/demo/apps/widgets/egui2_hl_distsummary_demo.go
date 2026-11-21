@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"context"
 	"math/rand"
 	"sort"
 	"time"
@@ -68,7 +69,7 @@ func init() {
 			"boxenplot in the second tab — both reading the same caller-owned " +
 			"tdigest per the ADR-0046 shared-sketch rule. Composes tdigest + " +
 			"letterval + boxenplot + ecdf + ecdfbands.",
-		BusInit: func(_ *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+		BusInit: func(_ context.Context, _ *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
 			// Build a task API from the host bus so the band warm-up is a
 			// keelson background job (ADR-0038). nil bus (tour) leaves
 			// distsumDemoTasks unset — the in-process registry still runs

@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"context"
 	"time"
 
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -71,7 +72,7 @@ func init() {
 			"arrow-square-out glyph on any row to open its inspector window — a " +
 			"bezier connector tethers the toggle to the open window, which hosts " +
 			"the full regex_explorer body. Composes regex_explorer + inspector.",
-		BusInit: func(_ *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+		BusInit: func(_ context.Context, _ *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
 			now := time.Now()
 			st := &regexsumDemoState{
 				bus: bus,

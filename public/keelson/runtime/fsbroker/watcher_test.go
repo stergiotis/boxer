@@ -115,7 +115,7 @@ func resolveWatchPath(t *testing.T, svc *fsbroker.Service, appBus *inprocbus.Cli
 	}
 	resultCh := make(chan res, 1)
 	go func() {
-		reply, err := appBus.Request(fsbroker.SubjectDialogWatch, nil)
+		reply, err := appBus.Request(t.Context(), fsbroker.SubjectDialogWatch, nil)
 		resultCh <- res{reply, err}
 	}()
 	req := pendingWatchOnce(t, svc)
@@ -143,7 +143,7 @@ func TestService_Watch_InotifyCreateEvent(t *testing.T) {
 	col := newEventCollector(t, appBus, prefix+"."+fsbroker.HandleEventOp)
 	defer col.stop()
 
-	watchReply, err := appBus.Request(prefix+".watch", nil)
+	watchReply, err := appBus.Request(t.Context(), prefix+".watch", nil)
 	require.NoError(t, err)
 	wr, err := fsbroker.UnmarshalWatchReply(watchReply)
 	require.NoError(t, err)
@@ -177,7 +177,7 @@ func TestService_Watch_PollFallbackCreateEvent(t *testing.T) {
 		PollIntervalMs: 100,
 	})
 	require.NoError(t, err)
-	watchReply, err := appBus.Request(prefix+".watch", reqPayload)
+	watchReply, err := appBus.Request(t.Context(), prefix+".watch", reqPayload)
 	require.NoError(t, err)
 	wr, err := fsbroker.UnmarshalWatchReply(watchReply)
 	require.NoError(t, err)
@@ -201,7 +201,7 @@ func resolveDialog(t *testing.T, svc *fsbroker.Service, appBus *inprocbus.Client
 	}
 	resultCh := make(chan res, 1)
 	go func() {
-		reply, err := appBus.Request(subject, nil)
+		reply, err := appBus.Request(t.Context(), subject, nil)
 		resultCh <- res{reply, err}
 	}()
 	deadline := time.Now().Add(2 * time.Second)
@@ -251,7 +251,7 @@ func TestService_Watch_OnReadHandleFollowsTheFile(t *testing.T) {
 	col := newEventCollector(t, appBus, dr.HandleSubjectPrefix+"."+fsbroker.HandleEventOp)
 	defer col.stop()
 
-	watchReply, err := appBus.Request(dr.HandleSubjectPrefix+".watch", nil)
+	watchReply, err := appBus.Request(t.Context(), dr.HandleSubjectPrefix+".watch", nil)
 	require.NoError(t, err)
 	wr, err := fsbroker.UnmarshalWatchReply(watchReply)
 	require.NoError(t, err)
@@ -302,7 +302,7 @@ func TestService_Watch_RejectedOnWriteHandle(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "out.txt")
 	dr := resolveDialog(t, svc, appBus, fsbroker.SubjectDialogWrite, "write", path)
 
-	reply, err := appBus.Request(dr.HandleSubjectPrefix+".watch", nil)
+	reply, err := appBus.Request(t.Context(), dr.HandleSubjectPrefix+".watch", nil)
 	require.NoError(t, err)
 	rejected, err := fsbroker.UnmarshalDialogReply(reply)
 	require.NoError(t, err)
@@ -336,14 +336,14 @@ func TestService_ReadAndWriteHandlesOnSamePathAreDistinct(t *testing.T) {
 
 	// Both handles live: the read still answers after the write grant, and
 	// closing the write leaves the read untouched.
-	body, err := appBus.Request(readGrant.HandleSubjectPrefix+".read", nil)
+	body, err := appBus.Request(t.Context(), readGrant.HandleSubjectPrefix+".read", nil)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("body"), body)
 
-	_, err = appBus.Request(writeGrant.HandleSubjectPrefix+".close", nil)
+	_, err = appBus.Request(t.Context(), writeGrant.HandleSubjectPrefix+".close", nil)
 	require.NoError(t, err)
 
-	body, err = appBus.Request(readGrant.HandleSubjectPrefix+".read", nil)
+	body, err = appBus.Request(t.Context(), readGrant.HandleSubjectPrefix+".read", nil)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("body"), body, "closing the write handle must not destroy the read handle")
 }
@@ -359,7 +359,7 @@ func TestService_Watch_UnwatchStopsStream(t *testing.T) {
 	col := newEventCollector(t, appBus, prefix+"."+fsbroker.HandleEventOp)
 	defer col.stop()
 
-	_, err := appBus.Request(prefix+".watch", nil)
+	_, err := appBus.Request(t.Context(), prefix+".watch", nil)
 	require.NoError(t, err)
 
 	time.Sleep(50 * time.Millisecond)
@@ -367,7 +367,7 @@ func TestService_Watch_UnwatchStopsStream(t *testing.T) {
 	col.waitFor(t, fsbroker.WatchEventCreate, "a.txt", 2*time.Second)
 
 	// Stop the watch.
-	_, err = appBus.Request(prefix+".unwatch", nil)
+	_, err = appBus.Request(t.Context(), prefix+".unwatch", nil)
 	require.NoError(t, err)
 
 	// Drain anything currently queued, then assert no further events.
@@ -401,17 +401,17 @@ func TestService_Watch_HandleCloseTearsDownWatch(t *testing.T) {
 	col := newEventCollector(t, appBus, prefix+"."+fsbroker.HandleEventOp)
 	defer col.stop()
 
-	_, err := appBus.Request(prefix+".watch", nil)
+	_, err := appBus.Request(t.Context(), prefix+".watch", nil)
 	require.NoError(t, err)
 
 	// Close the handle — the watch should be torn down implicitly.
-	_, err = appBus.Request(prefix+".close", nil)
+	_, err = appBus.Request(t.Context(), prefix+".close", nil)
 	require.NoError(t, err)
 
 	// A subsequent watch op is denied at the bus layer: closing the handle
 	// revokes the fs.handle.{uuid}.> cap, so the app can no longer publish to
 	// the handle subject at all.
-	_, err = appBus.Request(prefix+".watch", nil)
+	_, err = appBus.Request(t.Context(), prefix+".watch", nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, inprocbus.ErrPermissionViolation)
 }
@@ -429,7 +429,7 @@ func startRecursiveWatch(t *testing.T, svc *fsbroker.Service, appBus *inprocbus.
 	}
 	reqPayload, err := fsbroker.MarshalWatchRequest(req)
 	require.NoError(t, err)
-	watchReply, err := appBus.Request(prefix+".watch", reqPayload)
+	watchReply, err := appBus.Request(t.Context(), prefix+".watch", reqPayload)
 	require.NoError(t, err)
 	wr, err := fsbroker.UnmarshalWatchReply(watchReply)
 	require.NoError(t, err)
@@ -527,7 +527,7 @@ func TestService_Watch_NonRecursive_SubdirEventNotReported(t *testing.T) {
 	defer col.stop()
 
 	// Default (non-recursive) watch.
-	_, err := appBus.Request(prefix+".watch", nil)
+	_, err := appBus.Request(t.Context(), prefix+".watch", nil)
 	require.NoError(t, err)
 	time.Sleep(60 * time.Millisecond)
 
@@ -568,10 +568,10 @@ func TestService_TwoReadGrantsOnOnePathCloseIndependently(t *testing.T) {
 	require.NotEqual(t, first.HandleSubjectPrefix, second.HandleSubjectPrefix,
 		"two grants of one file must not share a handle")
 
-	_, err = appBus.Request(first.HandleSubjectPrefix+".close", nil)
+	_, err = appBus.Request(t.Context(), first.HandleSubjectPrefix+".close", nil)
 	require.NoError(t, err)
 
-	body, err := appBus.Request(second.HandleSubjectPrefix+".read", nil)
+	body, err := appBus.Request(t.Context(), second.HandleSubjectPrefix+".read", nil)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("body"), body, "closing one grant must not revoke the other")
 }
@@ -593,7 +593,7 @@ func TestService_Handle_WriteReplacesRatherThanTruncates(t *testing.T) {
 	write := func(path string, body []byte) {
 		t.Helper()
 		grant := resolveDialog(t, svc, appBus, fsbroker.SubjectDialogWrite, "write", path)
-		raw, err := appBus.Request(grant.HandleSubjectPrefix+".write", body)
+		raw, err := appBus.Request(t.Context(), grant.HandleSubjectPrefix+".write", body)
 		require.NoError(t, err)
 		ack, err := fsbroker.UnmarshalDialogReply(raw)
 		require.NoError(t, err)
@@ -660,7 +660,7 @@ func TestService_Watch_ConcurrentStartsOnlyOne(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-gate
-			raw, rerr := appBus.Request(prefix+".watch", reqPayload)
+			raw, rerr := appBus.Request(t.Context(), prefix+".watch", reqPayload)
 			if rerr != nil {
 				return
 			}

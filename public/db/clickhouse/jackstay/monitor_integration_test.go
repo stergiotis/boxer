@@ -72,7 +72,7 @@ func TestMonitor_LiveServer(t *testing.T) {
 	for i, compression := range []string{"zstd", "gzip", ""} {
 		require.NoError(t, client.Exec(ctx, "TRUNCATE TABLE "+itMonTarget+".t"))
 		pt.Sync = &TableSync{Mode: SyncModeFull}
-		j, jerr := OpenJournal(filepath.Join(t.TempDir(), "j"), "run-"+compression)
+		j, jerr := OpenJournal(ctx, filepath.Join(t.TempDir(), "j"), "run-"+compression)
 		require.NoError(t, jerr)
 		opts := DefaultSyncOptions()
 		opts.Compression = compression

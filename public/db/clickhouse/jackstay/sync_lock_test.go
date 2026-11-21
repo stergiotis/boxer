@@ -70,7 +70,7 @@ func TestRunSync_Lock(t *testing.T) {
 	require.NoError(t, unlock())
 
 	// Refused for its settings after the lock was taken: released anyway.
-	j, err := OpenJournal(JournalPath(planPath), "run")
+	j, err := OpenJournal(t.Context(), JournalPath(planPath), "run")
 	require.NoError(t, err)
 	require.NoError(t, j.RecordStart("s.t", false, TableSync{Mode: SyncModeRepair}, "", time.Now()))
 	require.NoError(t, j.Close())
@@ -91,7 +91,7 @@ func TestRunSync_RestartFromRequest(t *testing.T) {
 	prep.Chosen = []*PlanTable{&prep.Plan.Tables[0]}
 	// The old run's start entry would refuse these settings; a new run has
 	// none.
-	j, err := OpenJournal(JournalPath(planPath), "run")
+	j, err := OpenJournal(t.Context(), JournalPath(planPath), "run")
 	require.NoError(t, err)
 	require.NoError(t, j.RecordStart("s.t", false, TableSync{Mode: SyncModeRepair}, "", time.Now()))
 	require.NoError(t, j.Close())

@@ -54,18 +54,18 @@ func TestNoticesOverTheBus(t *testing.T) {
 	defer bs.Close()
 	cli := bus.NewClient("chat", ClientCaps("test"))
 
-	require.NoError(t, SetLevel(cli, "c1", Key{Kind: "turn"}, LevelHighlight))
-	l, err := Notify(cli, Notice{Conversation: "c1", Title: "Wind field", Kind: "turn", Text: "the turn ended"})
+	require.NoError(t, SetLevel(t.Context(), cli, "c1", Key{Kind: "turn"}, LevelHighlight))
+	l, err := Notify(t.Context(), cli, Notice{Conversation: "c1", Title: "Wind field", Kind: "turn", Text: "the turn ended"})
 	require.NoError(t, err)
 	assert.Equal(t, LevelHighlight, l)
-	got, err := FetchNotices(cli)
+	got, err := FetchNotices(t.Context(), cli)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "Wind field", got[0].Title)
 	assert.Equal(t, "chat", string(got[0].App), "the sender is the bus's, not the payload's")
 
-	require.NoError(t, Seen(cli, "c1"))
-	got, err = FetchNotices(cli)
+	require.NoError(t, Seen(t.Context(), cli, "c1"))
+	got, err = FetchNotices(t.Context(), cli)
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }

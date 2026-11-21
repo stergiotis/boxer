@@ -149,6 +149,7 @@ func TestCollectAgainstAServerAndTheLadingStore(t *testing.T) {
 
 	inst := newApp()
 	inst.bus = bus.NewClient(AppId, manifest.Caps)
+	inst.ioCtx = t.Context()
 	h := inst.Operations()
 	require.NoError(t, command(t, h, opOpenSample, OpenSampleArgs{Name: "report"}))
 

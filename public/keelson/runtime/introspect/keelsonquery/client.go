@@ -108,7 +108,7 @@ func (inst *Client) QueryWith(ctx context.Context, r Request) (res Result, err e
 			timeout = until
 		}
 	}
-	raw, err := inst.bus.RequestWithTimeout(Subject(table), payload, timeout)
+	raw, err := app.RequestWithin(ctx, inst.bus, timeout, Subject(table), payload)
 	if err != nil {
 		return res, eb.Build().Str("table", table).Errorf("keelson.query request: %w", err)
 	}

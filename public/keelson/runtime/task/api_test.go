@@ -131,7 +131,7 @@ func TestNoopTaskApi_AllMethodsError(t *testing.T) {
 	assert.Error(t, err)
 	err = api.RequestCancel("id", "reason")
 	assert.Error(t, err)
-	_, err = api.ListInflight()
+	_, err = api.ListInflight(t.Context())
 	assert.Error(t, err)
 	assert.Empty(t, string(api.AppId()))
 	assert.Zero(t, api.InstanceKey())

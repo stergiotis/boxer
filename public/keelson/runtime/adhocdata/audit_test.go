@@ -191,7 +191,7 @@ func TestAClosedWindowsBundleIsAuditedAsWithdrawn(t *testing.T) {
 	window := bus.NewClient("test.app", caps)
 	window.SetInstanceKey(5)
 
-	_, err = PublishBundleRequest(window, BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
+	_, err = PublishBundleRequest(t.Context(), window, BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
 		OnBehalfOf: oboOf(d.call)})
 	require.NoError(t, err)
 	d.mu.Lock()

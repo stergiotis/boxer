@@ -239,12 +239,12 @@ func TestBundleOverTheBus(t *testing.T) {
 
 	window := bus.NewClient("test.app", caps)
 	window.SetInstanceKey(1)
-	pub, err := PublishBundleRequest(window, BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t)})
+	pub, err := PublishBundleRequest(t.Context(), window, BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t)})
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1), pub.Revision)
 	require.Len(t, pub.Datasets, 2)
 
-	got, err := ResolveBundleRequest(window, "sales", nil)
+	got, err := ResolveBundleRequest(t.Context(), window, "sales", nil)
 	require.NoError(t, err)
 	assert.Equal(t, []byte(testDoc), got.Document)
 	assert.Equal(t, pub.Datasets[1].Handle, got.Datasets[1].Handle)
@@ -252,10 +252,10 @@ func TestBundleOverTheBus(t *testing.T) {
 
 	other := bus.NewClient("test.app", caps)
 	other.SetInstanceKey(2)
-	require.Error(t, RetractBundleRequest(other, "sales", nil), "the owner is the envelope's sender")
+	require.Error(t, RetractBundleRequest(t.Context(), other, "sales", nil), "the owner is the envelope's sender")
 
 	require.NoError(t, window.Close())
-	_, err = ResolveBundleRequest(other, "sales", nil)
+	_, err = ResolveBundleRequest(t.Context(), other, "sales", nil)
 	assert.ErrorIs(t, err, ErrNoLiveBundle, "a bundle goes with the window that published it")
 	assert.Equal(t, 0, svc.LiveCount())
 
@@ -276,7 +276,7 @@ func TestResolveBundleRequestNamesNothingLive(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
 	c := bus.NewClient("test.app", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
-	_, err = ResolveBundleRequest(c, "nothing", nil)
+	_, err = ResolveBundleRequest(t.Context(), c, "nothing", nil)
 	assert.True(t, errors.Is(err, ErrNoLiveBundle), err)
 }
 

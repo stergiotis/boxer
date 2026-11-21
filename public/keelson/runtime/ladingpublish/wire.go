@@ -11,6 +11,7 @@
 package ladingpublish
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"strings"
@@ -122,27 +123,27 @@ func (inst *RefusedError) Error() string { return "lading publish: " + inst.Resu
 // refusal is a RefusedError, and a host without the service an error within
 // checkTimeout. A caller with something to do before the publish that should
 // not happen for a publish that cannot (an endorsement) checks first.
-func Check(bus app.BusI, tag identifier.TagValue, req Request) (err error) {
+func Check(ctx context.Context, bus app.BusI, tag identifier.TagValue, req Request) (err error) {
 	req.DryRun = true
-	_, err = request(bus, tag, req, checkTimeout)
+	_, err = request(ctx, bus, tag, req, checkTimeout)
 	return
 }
 
 // Publish sends req under tag and waits for the service's answer. The
 // caller's bus client holds the capability Subject(tag). It blocks for as
 // long as the write takes, so call it off the frame goroutine.
-func Publish(bus app.BusI, tag identifier.TagValue, req Request) (res Result, err error) {
+func Publish(ctx context.Context, bus app.BusI, tag identifier.TagValue, req Request) (res Result, err error) {
 	req.DryRun = false
-	return request(bus, tag, req, publishTimeout)
+	return request(ctx, bus, tag, req, publishTimeout)
 }
 
-func request(bus app.BusI, tag identifier.TagValue, req Request, d time.Duration) (res Result, err error) {
+func request(ctx context.Context, bus app.BusI, tag identifier.TagValue, req Request, d time.Duration) (res Result, err error) {
 	b, err := buscodec.Encode(req)
 	if err != nil {
 		err = eh.Errorf("lading publish: encode: %w", err)
 		return
 	}
-	reply, err := bus.RequestWithTimeout(Subject(tag), b, d)
+	reply, err := app.RequestWithin(ctx, bus, d, Subject(tag), b)
 	if errors.Is(err, inprocbus.ErrNoResponders) || errors.Is(err, inprocbus.ErrTimeout) {
 		err = eb.Build().Uint64("tag", uint64(tag)).Errorf("lading publish: no answer from the publish service; does this host run it? %w", err)
 		return

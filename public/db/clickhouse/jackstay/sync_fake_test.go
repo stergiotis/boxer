@@ -94,7 +94,7 @@ func singleChunkTable(src string, dst string) (pt *PlanTable) {
 
 func openTestJournal(t *testing.T, run string) (j *Journal) {
 	t.Helper()
-	j, err := OpenJournal(filepath.Join(t.TempDir(), "p.journal"), run)
+	j, err := OpenJournal(t.Context(), filepath.Join(t.TempDir(), "p.journal"), run)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = j.Close() })
 	return
@@ -244,7 +244,7 @@ func TestRunSync_RefusesMismatchBeforeSaving(t *testing.T) {
 	pt := singleChunkTable("t", "t")
 	pt.Sync = &TableSync{Mode: SyncModeFull, Existing: ExistingPolicyAppend}
 	planPath := filepath.Join(t.TempDir(), "plan.json")
-	j, err := OpenJournal(JournalPath(planPath), "run")
+	j, err := OpenJournal(t.Context(), JournalPath(planPath), "run")
 	require.NoError(t, err)
 	require.NoError(t, j.RecordStart("s.t", false, TableSync{Mode: SyncModeRepair}, "", time.Now()))
 	require.NoError(t, j.Close())
@@ -255,7 +255,7 @@ func TestRunSync_RefusesMismatchBeforeSaving(t *testing.T) {
 	_, err = RunSync(context.Background(), ServerSource(quiet), quiet, &prep, planPath, DefaultSyncOptions(), time.Now)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "other settings")
-	_, serr := LoadPlan(planPath)
+	_, serr := LoadPlan(t.Context(), planPath)
 	assert.Error(t, serr, "nothing was written")
 	assert.Empty(t, quiet.execs)
 }

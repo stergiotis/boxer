@@ -29,6 +29,7 @@ func appOverRemote(t *testing.T, model openaichat.ClientI, store agentrun.StoreI
 	t.Cleanup(svc.Close)
 	inst = newApp()
 	inst.bus = bus.NewClient(ManifestId, manifest.Caps)
+	inst.ioCtx = t.Context()
 	inst.cli = llm.NewClient(inst.bus)
 	inst.cli.Timeout = 5 * time.Second
 	inst.coord = inst.newCoordinator(inst.conv.id)

@@ -38,7 +38,7 @@ func TestWriteRequestEnqueuesAndAcks(t *testing.T) {
 	bus, svc := newServedBus(t)
 	cli := bus.NewClient("test.app", writerCaps())
 
-	reply, err := cli.Request(clipboardbroker.SubjectWrite, []byte("hello clipboard"))
+	reply, err := cli.Request(t.Context(), clipboardbroker.SubjectWrite, []byte("hello clipboard"))
 	if err != nil {
 		t.Fatalf("Request: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestDrainPreservesArrivalOrder(t *testing.T) {
 	cli := bus.NewClient("test.app", writerCaps())
 
 	for _, s := range []string{"one", "two", "three"} {
-		if _, err := cli.Request(clipboardbroker.SubjectWrite, []byte(s)); err != nil {
+		if _, err := cli.Request(t.Context(), clipboardbroker.SubjectWrite, []byte(s)); err != nil {
 			t.Fatalf("Request(%q): %v", s, err)
 		}
 	}
@@ -89,7 +89,7 @@ func TestWriteWithoutCapDenied(t *testing.T) {
 	bus, svc := newServedBus(t)
 	cli := bus.NewClient("uncapped.app", nil)
 
-	_, err := cli.Request(clipboardbroker.SubjectWrite, []byte("nope"))
+	_, err := cli.Request(t.Context(), clipboardbroker.SubjectWrite, []byte("nope"))
 	if !errors.Is(err, inprocbus.ErrPermissionViolation) {
 		t.Fatalf("Request err = %v, want ErrPermissionViolation", err)
 	}

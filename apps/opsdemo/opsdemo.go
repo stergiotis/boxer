@@ -16,6 +16,9 @@ import (
 // App is one window: the note, the level, and the handles of the widgets
 // bound to them, kept so the catalog can tell when the person is editing.
 type App struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx  context.Context
 	ids    *c.WidgetIdStack
 	bus    app.BusI
 	note   string
@@ -48,6 +51,7 @@ func newApp() (inst *App) {
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
+	inst.ioCtx = app.ContextOf(ctx)
 	inst.ids = ctx.Ids()
 	inst.bus = ctx.Bus()
 	if inst.scope = app.LifetimeOf(ctx); inst.scope == nil {
@@ -73,7 +77,7 @@ func (inst *App) copyNote() {
 		return
 	}
 	inst.scope.Go(func(context.Context) {
-		rec, err := clipboardbroker.Write(bus, clipboardbroker.Payload{Text: text, Source: copySource})
+		rec, err := clipboardbroker.Write(inst.ioCtx, bus, clipboardbroker.Payload{Text: text, Source: copySource})
 		switch {
 		case err != nil && rec.Refused:
 			inst.setCopyLine("refused: " + rec.Reason)

@@ -147,7 +147,7 @@ func saveDoc(t *testing.T, caller *inprocbus.Client, slug string, doc []byte) (r
 	t.Helper()
 	payload, err := appletstore.EncodeSaveRequest(appletstore.SaveRequest{Slug: slug, Doc: doc})
 	require.NoError(t, err)
-	replyBytes, err := caller.Request(appletstore.SubjectSave, payload)
+	replyBytes, err := caller.Request(t.Context(), appletstore.SubjectSave, payload)
 	require.NoError(t, err)
 	rep, err = appletstore.DecodeSaveReply(replyBytes)
 	require.NoError(t, err)

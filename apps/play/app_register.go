@@ -1,6 +1,7 @@
 package play
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -182,6 +183,9 @@ func NewLivePlayApp(client *Client, initialSQL string, maxHistory int, rules *gl
 // LegacyFuncApp wouldn't suffice because the env-var-driven configuration
 // can't be captured cleanly at init time before the cli flag parser has run.
 type PlayLauncher struct {
+	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
+	// run under when no call of its own carries one.
+	ioCtx context.Context
 	inner *PlayApp
 	// follower keeps the window's dataset aliases bound for its life
 	// (ADR-0240 §SD7): those its launch config declared and those bind_dataset
@@ -365,6 +369,7 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 }
 
 func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
+	inst.ioCtx = app.ContextOf(ctx)
 	// Precedence for the initial SQL buffer, highest first:
 	//   1. Caller launch config (ADR-0135 §SD7) — another app opened this
 	//      window over `windowhost.open` with a playLaunch config;
@@ -563,7 +568,7 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		for _, alias := range launch.Datasets {
 			inst.launchAliases = append(inst.launchAliases, names[alias])
 		}
-		follower, bindings := adhocdata.NewFollower(adhocdata.FollowerConfig{
+		follower, bindings := adhocdata.NewFollower(inst.ioCtx, adhocdata.FollowerConfig{
 			Bus: ctx.Bus(), Log: ctx.Log(), Aliases: launch.Datasets, LocalNames: names,
 		})
 		for alias, local := range names {

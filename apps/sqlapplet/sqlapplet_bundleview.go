@@ -272,7 +272,7 @@ func (inst *BundleView) startResolve() {
 }
 
 func (inst *BundleView) resolve() {
-	res, err := adhocdata.ResolveBundleRequest(inst.cfg.Bus, inst.alias, nil)
+	res, err := adhocdata.ResolveBundleRequest(inst.cfg.Lifetime.Tail(nil), inst.cfg.Bus, inst.alias, nil)
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	inst.inflight = false
@@ -349,7 +349,7 @@ func (inst *BundleView) apply(res adhocdata.BundleResult) {
 		names[d.Alias] = d.LocalName
 	}
 	if inst.follower == nil {
-		inst.follower = adhocdata.NewDeferredFollower(adhocdata.FollowerConfig{Bus: inst.cfg.Bus, Log: inst.cfg.Log, LocalNames: names})
+		inst.follower = adhocdata.NewDeferredFollower(inst.cfg.Lifetime.Tail(nil), adhocdata.FollowerConfig{Bus: inst.cfg.Bus, Log: inst.cfg.Log, LocalNames: names})
 	}
 	if inst.follower != nil {
 		for _, d := range res.Datasets {

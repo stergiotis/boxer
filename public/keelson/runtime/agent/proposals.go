@@ -80,7 +80,7 @@ func (inst *Service) accept(p proposalRef) {
 	e := rec.entry
 	inst.grantEventAsked(trail.GrantEventConfirmed, "person", proposalReason(rec), p.t, nil, rec.asked())
 	inst.mu.Unlock()
-	go inst.route(p.t, rec, req, rec.spec, e)
+	go inst.route(inst.ctx, p.t, rec, req, rec.spec, e)
 }
 
 // rejectProposal ends a proposal the person rejected.

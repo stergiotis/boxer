@@ -1,6 +1,7 @@
 package externaledit
 
 import (
+	"context"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -13,6 +14,8 @@ const waitFor = 25 * time.Second
 // over, opens the editor and collects the saved revisions. Its methods run
 // on the render goroutine; the bus calls run off it. The zero value is idle.
 type Editing struct {
+	// ctx is Start's: the bus calls of this edit, to its End, run under it.
+	ctx  context.Context
 	bus  app.BusI
 	id   string
 	base string
@@ -32,17 +35,19 @@ type given struct {
 	err error
 }
 
-// Start hands text over under name and opens the host's editor on it.
-func (inst *Editing) Start(bus app.BusI, name string, text string) {
+// Start hands text over under name and opens the host's editor on it. ctx
+// is the edit's lifetime — for an app, app.ContextOf its mount context —
+// and every bus call the edit makes runs under it.
+func (inst *Editing) Start(ctx context.Context, bus app.BusI, name string, text string) {
 	if inst.Active() || bus == nil {
 		return
 	}
 	ch := make(chan given, 1)
-	inst.bus, inst.giving, inst.base = bus, ch, text
+	inst.ctx, inst.bus, inst.giving, inst.base = ctx, bus, ch, text
 	inst.last, inst.pending = nil, nil
 	inst.status = "handing over…"
 	go func() {
-		id, err := Give(bus, name, []byte(text))
+		id, err := Give(ctx, bus, name, []byte(text))
 		ch <- given{id: id, err: err}
 	}()
 }
@@ -144,10 +149,10 @@ func (inst *Editing) Keep(current string) {
 // End stops editing; the service removes the file.
 func (inst *Editing) End() {
 	if inst.giving != nil {
-		ch, bus := inst.giving, inst.bus
+		ctx, ch, bus := inst.ctx, inst.giving, inst.bus
 		go func() {
 			if g := <-ch; g.err == nil {
-				_ = End(bus, g.id)
+				_ = End(ctx, bus, g.id)
 			}
 		}()
 		inst.giving = nil
@@ -158,8 +163,8 @@ func (inst *Editing) End() {
 		inst.stop = nil
 	}
 	if inst.id != "" && inst.bus != nil {
-		id, bus := inst.id, inst.bus
-		go func() { _ = End(bus, id) }()
+		ctx, id, bus := inst.ctx, inst.id, inst.bus
+		go func() { _ = End(ctx, bus, id) }()
 		inst.status = "stopped; the editor's file was removed"
 	}
 	inst.id, inst.revs, inst.pending, inst.opening = "", nil, nil, nil
@@ -168,15 +173,15 @@ func (inst *Editing) End() {
 func (inst *Editing) open(id string) {
 	ch := make(chan error, 1)
 	inst.opening = ch
-	bus := inst.bus
-	go func() { ch <- Open(bus, id) }()
+	ctx, bus := inst.ctx, inst.bus
+	go func() { ch <- Open(ctx, bus, id) }()
 }
 
 func (inst *Editing) wait(id string) {
 	revs := make(chan Revision, 4)
 	stop := make(chan struct{})
 	inst.revs, inst.stop = revs, stop
-	bus := inst.bus
+	ctx, bus := inst.ctx, inst.bus
 	go func() {
 		var seq uint64
 		for {
@@ -185,7 +190,7 @@ func (inst *Editing) wait(id string) {
 				return
 			default:
 			}
-			rev, err := Next(bus, id, seq, waitFor)
+			rev, err := Next(ctx, bus, id, seq, waitFor)
 			if err != nil {
 				rev = Revision{Closed: true, Reason: err.Error()}
 			}

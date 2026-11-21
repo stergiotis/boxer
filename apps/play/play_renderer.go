@@ -140,7 +140,7 @@ const (
 type PlayApp struct {
 	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
 	// run under when no call of its own carries one.
-	ioCtx context.Context
+	ioCtx  context.Context
 	ids    *c.WidgetIdStack
 	graph  *queryGraph
 	client *Client
@@ -1073,7 +1073,7 @@ func (inst *PlayApp) loadFromPicker() {
 	inst.setLoadBusy(true)
 	defer inst.setLoadBusy(false)
 
-	rawReply, rerr := inst.bus.RequestWithTimeout(fsbroker.SubjectDialogRead, nil, fsbroker.DialogTimeout)
+	rawReply, rerr := app.RequestWithin(inst.ioCtx, inst.bus, fsbroker.DialogTimeout, fsbroker.SubjectDialogRead, nil)
 	if rerr != nil {
 		inst.setLoadErr("fs.dialog.read: " + rerr.Error())
 		return
@@ -1087,7 +1087,7 @@ func (inst *PlayApp) loadFromPicker() {
 		inst.setLoadErr("dialog denied: " + dr.Reason)
 		return
 	}
-	body, rerr := inst.bus.RequestWithTimeout(dr.HandleSubjectPrefix+".read", nil, fsbroker.HandleOpTimeout)
+	body, rerr := app.RequestWithin(inst.ioCtx, inst.bus, fsbroker.HandleOpTimeout, dr.HandleSubjectPrefix+".read", nil)
 	if rerr != nil {
 		inst.setLoadErr("handle read: " + rerr.Error())
 		return
@@ -2566,7 +2566,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 				current = inst.pendingSnippetReplace
 			}
 			if r := editexternally.Render(editexternally.Input{
-				Ids: ids, ScopeKey: "editExternally", Editing: &inst.externalEdit, Bus: inst.bus,
+				Ids: ids, ScopeKey: "editExternally", Editing: &inst.externalEdit, Bus: inst.bus, BusCtx: inst.ioCtx,
 				Name: "query.sql", Text: current,
 			}); r.Replace {
 				inst.ReplaceSql(r.Text)
