@@ -106,6 +106,14 @@ rows. While no block can be leased the store mints under a second stream,
 after a minute: the row lands, and its tag says its id is unique only
 within its process. The in-memory store is unchanged.
 
+Where the blocks come from is the store's configuration (`chstore.RowIds`,
+which a host passes as `hostboot.Options.FactsRowIds`): the lease table is
+the default, and a deployment with an id authority of its own supplies an
+`identgen.AllocatorI`, the tag its ids carry and the block size. The
+uniqueness of an id is then that authority's promise — blocks for the tag
+that overlap no other writer's — and setup leaves the lease table alone.
+The process-local fallback is the same under either source.
+
 **SD3 — The engine clause is a setting with one source.**
 `BOXER_FACTS_ENGINE` selects the clause a newly created table gets; its
 default is `factsschema.DefaultEngineClause`. The record-store generator
@@ -133,7 +141,8 @@ lacks.
 | facts table DDL | `PARTITION BY toYYYYMM(ts)`, the deduplication window, a `COMMENT` stamp | `chstore.ComposeSetupSQL`, `keelsonddl`'s output |
 | facts-bound DDL goldens | engine clause from `factsschema.DefaultEngineClause` | the goldens of trail, sysmfacts, watchbillpresence, ladingpolicy, mddocfacts, stevedorefacts, meshdemo, regenerated |
 | facts row ids | tagged ids from `factsRow` / `factsRowLocal` | `vocab.IdStreams` and the stream claims golden |
-| setup | provisions `<database>.idlease` | `SetupTable`, `SetupStatements` |
+| setup | provisions `<database>.idlease`, unless the configuration brings an allocator | `SetupTable`, `SetupStatements` |
+| `chstore.Config`, `hostboot.Options` | `RowIds` / `FactsRowIds`: allocator, stream, block size | additive; the zero value is the lease table |
 | env registry | `BOXER_FACTS_ENGINE` | `doc/env-vars.md` |
 | `recordstore` | `TableLayout`, `ParseEngineClause`, `TableContract.Layout`, `SchemaVerdict.LayoutDiffers`, `TableStamp.Layout` | additive |
 
@@ -224,6 +233,11 @@ lacks.
   both to this decision.
 - Ids leased, with a process-local stream as the fallback instead of a
   failed write; the lease retried after one minute.
+- A configured allocator keeps the process-local fallback: a deployment
+  whose authority is unreachable still gets the row, under boxer's
+  `factsRowLocal` tag rather than a failed write.
+- The stream is configurable beside the allocator, so a deployment can mint
+  facts ids under a tag it claimed; rows written under one tag keep it.
 - Setup that cannot create the lease table fails, as a failed read-surface
   install does, so a host falls back to the in-memory store rather than
   run on a table whose ids it cannot lease.

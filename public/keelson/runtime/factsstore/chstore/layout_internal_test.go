@@ -1,6 +1,8 @@
 package chstore
 
 import (
+	"github.com/stergiotis/boxer/public/identity/identgen/leased/memalloc"
+	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowalloc"
 	"strings"
 	"testing"
 
@@ -109,4 +111,58 @@ func TestMintId_FallsBackToTheLocalStream(t *testing.T) {
 	}
 	assert.Less(t, a, b, "local ids increase within the process")
 	assert.Greater(t, s.ids.retryAt.Load(), int64(0), "the failed lease is not retried before the interval")
+}
+
+// A store configured with an allocator of its own mints from it and never
+// asks the lease table: the server here is unreachable, and the ids are
+// leased ones all the same, under the facts rows' stream or the stream the
+// configuration names.
+func TestMintId_UsesTheConfiguredAllocator(t *testing.T) {
+	alloc := memalloc.NewAllocator()
+	cfg := Config{URL: "http://127.0.0.1:1/", Database: "boxer", Table: "facts", RowIds: RowIds{Allocator: alloc, BlockSize: 2}}
+	s, err := New(cfg)
+	require.NoError(t, err)
+	seen := map[uint64]bool{}
+	var prev uint64
+	for range 5 {
+		id, err := s.mintId(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, vocab.IdStreamFactsRow.Value(), identifier.TaggedId(id).GetTag().GetValue())
+		assert.Greater(t, id, prev, "ids increase within the store")
+		seen[id], prev = true, id
+	}
+	assert.Zero(t, s.ids.retryAt.Load(), "no lease failed")
+
+	// A second store over the same allocator gets blocks of its own.
+	s2, err := New(cfg)
+	require.NoError(t, err)
+	id, err := s2.mintId(t.Context())
+	require.NoError(t, err)
+	assert.False(t, seen[id], "two stores over one allocator do not share an id")
+
+	cfg.RowIds.Stream = vocab.IdStreamAgentRunEntryMem
+	s3, err := New(cfg)
+	require.NoError(t, err)
+	id, err = s3.mintId(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, vocab.IdStreamAgentRunEntryMem.Value(), identifier.TaggedId(id).GetTag().GetValue(), "the ids carry the configured stream's tag")
+
+	cfg.RowIds.Stream = vocab.IdStreamFactsRowLocal
+	_, err = New(cfg)
+	require.Error(t, err, "the process-local stream is not a stream to lease under")
+}
+
+// The lease table belongs to the default allocator: a configuration that
+// brings its own gets no statement for it.
+func TestSetupStatements_OmitTheLeaseTableUnderAConfiguredAllocator(t *testing.T) {
+	base := Config{Database: "boxer", Table: "facts"}
+	withLease, err := SetupStatements(base, "")
+	require.NoError(t, err)
+	base.RowIds.Allocator = memalloc.NewAllocator()
+	without, err := SetupStatements(base, "")
+	require.NoError(t, err)
+	leaseTable := rowalloc.Layout{Database: "boxer"}.Table()
+	assert.Contains(t, strings.Join(withLease, "\n"), leaseTable)
+	assert.NotContains(t, strings.Join(without, "\n"), leaseTable)
+	assert.Less(t, len(without), len(withLease))
 }

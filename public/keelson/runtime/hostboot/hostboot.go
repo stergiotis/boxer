@@ -260,6 +260,11 @@ type Options struct {
 	// chosen from the CLICKHOUSE_* environment. Tests and adopters that
 	// never persist pass factsstore.NewInMemoryFactsStore().
 	Facts factsstore.FactsStoreI
+	// FactsRowIds says where the ClickHouse facts store's row ids come
+	// from; the zero value is the lease table beside the facts table. A
+	// deployment with an id authority of its own passes its allocator
+	// here (chstore.RowIds). Ignored when Facts is set.
+	FactsRowIds chstore.RowIds
 	// FactsPingTimeout bounds the ClickHouse reachability probe; zero is
 	// DefaultFactsPingTimeout.
 	FactsPingTimeout time.Duration
@@ -478,6 +483,7 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 	if runInst != nil {
 		factsCfg.RunId = runInst.RunId
 	}
+	factsCfg.RowIds = opts.FactsRowIds
 	if opts.Facts != nil {
 		rt.Facts = opts.Facts
 	} else {

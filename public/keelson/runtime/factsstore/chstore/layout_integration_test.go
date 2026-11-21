@@ -66,7 +66,7 @@ func TestFactsLayout_CreateWriteRead_Local(t *testing.T) {
 	assert.Empty(t, schemaplan.PlanTable(ctx, exec, c).Statements, "a fresh table needs nothing")
 
 	s := &Store{cfg: cfg, allocator: memory.NewGoAllocator()}
-	require.NoError(t, s.ids.init(exec, s.leaseLayout()))
+	require.NoError(t, s.ids.init(exec, s.leaseLayout(), RowIds{}))
 	ts := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
 	var ids []uint64
 	for _, at := range []time.Time{ts, ts.AddDate(-2, 0, 0)} {

@@ -53,6 +53,10 @@ type Config struct {
 	Database string
 	Table    string
 	RunId    string
+	// RowIds says where the row ids come from (ADR-0397 §SD2). The zero
+	// value leases the facts rows' stream through the lease table in
+	// Database.
+	RowIds RowIds
 }
 
 // Defaults targets the project's localhost CH at boxer.facts per the
@@ -162,7 +166,7 @@ func New(cfg Config) (s *Store, err error) {
 		err = eh.Errorf("chstore: %w", err)
 		return
 	}
-	err = s.ids.init(s.exec, s.leaseLayout())
+	err = s.ids.init(s.exec, s.leaseLayout(), cfg.RowIds)
 	if err != nil {
 		err = eh.Errorf("chstore: %w", err)
 	}
@@ -197,7 +201,8 @@ func ComposeSetupSQL(cfg Config, engineClause string) (sql string, err error) {
 
 // SetupTable applies the boxer.facts DDL idempotently against the live CH
 // connection, provisions the id lease table the store mints row ids through
-// (ADR-0397 §SD2), then makes sure the server carries leeway's SQL read
+// (ADR-0397 §SD2; not when the configuration brings an allocator of its
+// own), then makes sure the server carries leeway's SQL read
 // surface ([Store.EnsureReadSurface]). engineClause supplies the engine,
 // partition key, sorting key and TTL (empty selects [EngineClause]). The DDL
 // is composed by ComposeSetupSQL, so this path and the `keelsonddl` CLI
@@ -225,10 +230,12 @@ func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err err
 			return
 		}
 	}
-	err = rowalloc.ProvisionIn(ctx, inst.exec, inst.leaseLayout())
-	if err != nil {
-		err = eh.Errorf("chstore: setup: %w", err)
-		return
+	if inst.cfg.RowIds.Allocator == nil {
+		err = rowalloc.ProvisionIn(ctx, inst.exec, inst.leaseLayout())
+		if err != nil {
+			err = eh.Errorf("chstore: setup: %w", err)
+			return
+		}
 	}
 	err = inst.EnsureReadSurface(ctx)
 	return
@@ -331,7 +338,9 @@ func SetupStatements(cfg Config, engineClause string) (stmts []string, err error
 	if err != nil {
 		return
 	}
-	stmts = append(stmts, rowalloc.ProvisionSQL(rowalloc.Layout{Database: cfg.Database})...)
+	if cfg.RowIds.Allocator == nil {
+		stmts = append(stmts, rowalloc.ProvisionSQL(rowalloc.Layout{Database: cfg.Database})...)
+	}
 	stmts = append(stmts, lwsqlsurface.AllStatements("")...)
 	return
 }
