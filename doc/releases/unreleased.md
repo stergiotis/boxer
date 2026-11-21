@@ -12,7 +12,7 @@ generator: boxer gov releasenotes
 
 # Release notes: v0.0.23..HEAD
 
-2104 commit(s) in the range.
+2106 commit(s) in the range.
 
 ## Build requirements
 
@@ -328,47 +328,47 @@ generator: boxer gov releasenotes
 
 ## Contract snapshots
 
-- `contracts/4a3016cab/cli.txt` (A)
-- `contracts/4a3016cab/ddl/public/fs/lading/ladingdata/fsdata_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/ddl/public/fs/lading/ladingmeta/fsmeta_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/ddl/public/fs/lading/ladingpolicy/facts_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/ddl/public/keelson/runtime/agentrun/agentrunstore/agentrun_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/ddl/public/keelson/runtime/agentrun/agentrunstore/agentrunentry_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/ddl/public/keelson/runtime/agentrun/agentrunstore/agentrunentryvault_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/ddl/public/keelson/runtime/persist/persiststore/persiststate_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/ddl/public/keelson/runtime/sysmfacts/facts_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/ddl/public/keelson/runtime/trail/facts_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/ddl/public/keelson/runtime/watchbill/watchbillpresence/facts_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/ddl/public/keelson/runtime/watchbill/watchbillstore/watchbill_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/ddl/public/keelson/runtime/watchbill/watchbillstore/watchbillevent_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/ddl/public/semistructured/markdown/mddocfacts/facts_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/ddl/public/storage/recordstore/dimension/actor/actor_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/ddl/public/storage/recordstore/dimension/provenance/provenance_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/ddl/public/storage/recordstore/pushoutstore/pushout_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/ddl/public/streaming/stevedore/stevedorefacts/facts_ddl_clickhouse.out.sql` (A)
-- `contracts/4a3016cab/env.txt` (A)
-- `contracts/4a3016cab/idl.txt` (A)
-- `contracts/4a3016cab/lwsurface.txt` (A)
-- `contracts/4a3016cab/membership/apps/jsonbench/testdata/membership-assignments.golden` (A)
-- `contracts/4a3016cab/membership/public/fs/lading/ladingvocab/testdata/membership-assignments.golden` (A)
-- `contracts/4a3016cab/membership/public/gov/capmapvocab/testdata/membership-assignments.golden` (A)
-- `contracts/4a3016cab/membership/public/keelson/runtime/sysmvocab/testdata/membership-assignments.golden` (A)
-- `contracts/4a3016cab/membership/public/keelson/runtime/vocab/testdata/membership-assignments.golden` (A)
-- `contracts/4a3016cab/membership/public/keelson/vdd/testdata/membership-assignments.golden` (A)
-- `contracts/4a3016cab/membership/public/semistructured/leeway/factsschema/meshdemo/testdata/membership-assignments.golden` (A)
-- `contracts/4a3016cab/membership/public/semistructured/markdown/mddocvocab/testdata/membership-assignments.golden` (A)
-- `contracts/4a3016cab/membership/public/streaming/stevedore/stevedorevocab/testdata/membership-assignments.golden` (A)
-- `contracts/4a3016cab/versions.txt` (A)
 - `contracts/BASELINE` (A)
+- `contracts/b78507f04/cli.txt` (A)
+- `contracts/b78507f04/ddl/public/fs/lading/ladingdata/fsdata_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/ddl/public/fs/lading/ladingmeta/fsmeta_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/ddl/public/fs/lading/ladingpolicy/facts_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/ddl/public/keelson/runtime/agentrun/agentrunstore/agentrun_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/ddl/public/keelson/runtime/agentrun/agentrunstore/agentrunentry_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/ddl/public/keelson/runtime/agentrun/agentrunstore/agentrunentryvault_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/ddl/public/keelson/runtime/persist/persiststore/persiststate_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/ddl/public/keelson/runtime/sysmfacts/facts_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/ddl/public/keelson/runtime/trail/facts_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/ddl/public/keelson/runtime/watchbill/watchbillpresence/facts_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/ddl/public/keelson/runtime/watchbill/watchbillstore/watchbill_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/ddl/public/keelson/runtime/watchbill/watchbillstore/watchbillevent_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/ddl/public/semistructured/markdown/mddocfacts/facts_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/ddl/public/storage/recordstore/dimension/actor/actor_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/ddl/public/storage/recordstore/dimension/provenance/provenance_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/ddl/public/storage/recordstore/pushoutstore/pushout_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/ddl/public/streaming/stevedore/stevedorefacts/facts_ddl_clickhouse.out.sql` (A)
+- `contracts/b78507f04/env.txt` (A)
+- `contracts/b78507f04/idl.txt` (A)
+- `contracts/b78507f04/lwsurface.txt` (A)
+- `contracts/b78507f04/membership/apps/jsonbench/testdata/membership-assignments.golden` (A)
+- `contracts/b78507f04/membership/public/fs/lading/ladingvocab/testdata/membership-assignments.golden` (A)
+- `contracts/b78507f04/membership/public/gov/capmapvocab/testdata/membership-assignments.golden` (A)
+- `contracts/b78507f04/membership/public/keelson/runtime/sysmvocab/testdata/membership-assignments.golden` (A)
+- `contracts/b78507f04/membership/public/keelson/runtime/vocab/testdata/membership-assignments.golden` (A)
+- `contracts/b78507f04/membership/public/keelson/vdd/testdata/membership-assignments.golden` (A)
+- `contracts/b78507f04/membership/public/semistructured/leeway/factsschema/meshdemo/testdata/membership-assignments.golden` (A)
+- `contracts/b78507f04/membership/public/semistructured/markdown/mddocvocab/testdata/membership-assignments.golden` (A)
+- `contracts/b78507f04/membership/public/streaming/stevedore/stevedorevocab/testdata/membership-assignments.golden` (A)
+- `contracts/b78507f04/versions.txt` (A)
 
 ## Migration notes added
 
-- [2026-10-watchbill-delegation.md](doc/migration/2026-10-watchbill-delegation.md)
-- [2026-11-behaviour-changes.md](doc/migration/2026-11-behaviour-changes.md)
-- [2026-11-facts-layout.md](doc/migration/2026-11-facts-layout.md)
-- [2026-11-io-context.md](doc/migration/2026-11-io-context.md)
-- [2026-11-library-layering.md](doc/migration/2026-11-library-layering.md)
-- [README.md](doc/migration/README.md)
+- [2026-10-watchbill-delegation.md](../../doc/migration/2026-10-watchbill-delegation.md)
+- [2026-11-behaviour-changes.md](../../doc/migration/2026-11-behaviour-changes.md)
+- [2026-11-facts-layout.md](../../doc/migration/2026-11-facts-layout.md)
+- [2026-11-io-context.md](../../doc/migration/2026-11-io-context.md)
+- [2026-11-library-layering.md](../../doc/migration/2026-11-library-layering.md)
+- [README.md](../../doc/migration/README.md)
 
 ## API differences in Stable packages
 
