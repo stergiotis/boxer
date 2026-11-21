@@ -51,10 +51,7 @@ func SchemaContracts(cfg Config) (cs []recordstore.TableContract, err error) {
 	if transformed || read != full.Table {
 		rel := full
 		rel.Table = read
-		rel.Stamp = ""
-		rel.Layout = recordstore.TableLayout{}
-		rel.LayoutRecipe = ""
-		rel.ColumnsOnly = true
+		rel = recordstore.ReadRelationContract(rel, full.Table)
 		cs = append(cs, rel)
 	}
 	return

@@ -365,9 +365,12 @@ func (inst *MintedStore) EnsureTable(ctx context.Context) (err error) {
 
 // SchemaContract is what this store declares about the table it reads:
 // the generated columns and the stamp its CREATE TABLE writes, bound to
-// the configured read table. A schema check needs nothing else.
+// the configured read table. A schema check needs nothing else. A read
+// table that is not the table written to, or one whose inserts a
+// transform sends elsewhere, is judged by its columns only
+// (recordstore.ReadRelationContract).
 func (inst *MintedStore) SchemaContract() recordstore.TableContract {
-	return MintedSchemaContract(inst.readTable())
+	return recordstore.ReadRelationContract(MintedSchemaContract(inst.readTable()), inst.writeTable())
 }
 
 // JudgeSchema reads the live table's columns and stamp and judges them

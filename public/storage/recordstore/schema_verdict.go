@@ -349,6 +349,14 @@ func JudgeFacts(c TableContract, facts TableFacts) (v SchemaVerdict) {
 	if c.ColumnsOnly {
 		return
 	}
+	if TakesNoInsert(facts.Engine) {
+		// The contract is a table the store writes to. Its columns may all
+		// be there — a view over another table's rows returns them — and
+		// every insert would still fail.
+		v.Reasons = append(v.Reasons, "the relation is a "+facts.Engine+", which takes no insert, and this store writes to it; where the rows are stored in another table, the binary needs that table's insert transform (recordstore.RegisterInsertTransform)")
+		v.Verdict = SchemaVerdictIncompatible
+		return
+	}
 	v.Stamp = facts.Comment
 	v.DedupWindow = strings.Contains(facts.CreateQuery, DedupWindowSetting)
 	v.Age = stampAge(c, facts.Comment, v)
@@ -390,6 +398,39 @@ func stampAge(c TableContract, comment string, v SchemaVerdict) StampAgeE {
 		return StampAgeNewer
 	}
 	return StampAgeOther
+}
+
+// ReadRelationContract is c as a store judges the relation it reads, given
+// the table it writes to (ADR-0402 §SD4). When the two are one table and no
+// insert transform is registered for it, c is returned as it is: the store
+// owns the table and judges its stamp, its layout and that it takes
+// inserts. Otherwise the relation is only read — a view over a deployment's
+// own table, a Merge over storage tables — and c is narrowed to its
+// columns: no stamp, no layout, [TableContract.ColumnsOnly].
+func ReadRelationContract(c TableContract, written string) TableContract {
+	if _, transformed := RegisteredInsertTransform(written); !transformed {
+		cw, _, okw := CanonicalTableRef(written)
+		cr, _, okr := CanonicalTableRef(c.Table)
+		if !okw || !okr || cw == cr {
+			return c
+		}
+	}
+	c.Stamp = ""
+	c.Layout = TableLayout{}
+	c.LayoutRecipe = ""
+	c.ColumnsOnly = true
+	return c
+}
+
+// TakesNoInsert reports an engine whose relation holds no rows of its own
+// and refuses an insert: a view, a Merge over other tables, a dictionary.
+// A materialized view is not one: an insert into it reaches its target.
+func TakesNoInsert(engine string) bool {
+	switch engine {
+	case "View", "LiveView", "WindowView", "Merge", "Dictionary":
+		return true
+	}
+	return false
 }
 
 // IsPlainMergeTree reports a non-replicated engine of the MergeTree family,

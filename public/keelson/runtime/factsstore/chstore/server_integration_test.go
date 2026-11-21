@@ -487,3 +487,44 @@ func TestServer_AForeignLayoutIsANote(t *testing.T) {
 	assert.False(t, v.LayoutDiffers, v.Summary())
 	assert.Equal(t, recordstore.StampAgeSame, v.Age)
 }
+
+// A binary without a transform finds a view under the name it writes to:
+// setup fails and says what the binary lacks, instead of succeeding over a
+// CREATE TABLE IF NOT EXISTS that changed nothing (ADR-0402 §SD2).
+func TestServer_AViewUnderTheWrittenNameFailsSetup(t *testing.T) {
+	cfg := serverScratch(t, "viewname")
+	s := serverStore(t, cfg)
+	ctx := context.Background()
+	rows := Config{Database: cfg.Database, Table: "rows"}
+	stmts, err := tableStatements(rows, "")
+	require.NoError(t, err)
+	for _, stmt := range stmts {
+		require.NoError(t, s.exec.Exec(ctx, stmt))
+	}
+	require.NoError(t, s.exec.Exec(ctx, "CREATE VIEW "+cfg.Database+".facts AS SELECT * FROM "+cfg.Database+".rows"))
+
+	err = s.SetupTable(ctx, "")
+	require.ErrorIs(t, err, ErrFactsTableTakesNoInsert)
+	assert.Equal(t, "View", scalar(t, s, "SELECT engine FROM system.tables WHERE database = '"+cfg.Database+"' AND name = 'facts'"))
+
+	c, err := SchemaContract(cfg)
+	require.NoError(t, err)
+	p := schemaplan.PlanTable(ctx, s.exec, c)
+	assert.Equal(t, recordstore.SchemaVerdictIncompatible, p.Verdict.Verdict, p.Verdict.Summary())
+	assert.Empty(t, p.Statements)
+
+	// The same server through the deployment's binary: setup passes and
+	// creates nothing under the name.
+	unregister := recordstore.RegisterInsertTransform(cfg.Database+".facts", recordstore.InsertTransformFunc(
+		func(_ string, records []arrow.RecordBatch) (string, []arrow.RecordBatch, error) {
+			for _, r := range records {
+				r.Retain()
+			}
+			return cfg.Database + ".rows", records, nil
+		}))
+	defer unregister()
+	require.NoError(t, s.SetupTable(ctx, ""))
+	id, err := s.WriteLog(ctx, factsstore.LogRow{AppId: "a", Message: "through the transform"})
+	require.NoError(t, err)
+	assert.Equal(t, "1", scalar(t, s, "SELECT count() FROM "+cfg.Database+".facts WHERE `"+idColumn+"` = "+strconv.FormatUint(id, 10)))
+}

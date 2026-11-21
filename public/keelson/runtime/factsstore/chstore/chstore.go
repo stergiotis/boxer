@@ -12,6 +12,7 @@ package chstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -249,6 +250,10 @@ func ComposeSetupSQL(cfg Config, engineClause string) (sql string, err error) {
 // the deployment's storage is one that reads drain from without an error.
 // Only its database is, which the lease table and the trail views live in;
 // the lease table and the read surface are set up as without one.
+//
+// Without a transform, a facts table that turns out to be a view fails
+// setup with [ErrFactsTableTakesNoInsert]: the binary is on a deployment's
+// server without the deployment's transform.
 func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err error) {
 	var stmts []string
 	stmts, err = tableStatements(inst.cfg, engineClause)
@@ -262,6 +267,10 @@ func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err err
 			return
 		}
 	}
+	err = inst.checkWritable(ctx)
+	if err != nil {
+		return
+	}
 	if inst.cfg.RowIds.Allocator == nil {
 		err = rowalloc.ProvisionIn(ctx, inst.exec, inst.leaseLayout())
 		if err != nil {
@@ -270,6 +279,39 @@ func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err err
 		}
 	}
 	err = inst.EnsureReadSurface(ctx)
+	return
+}
+
+// ErrFactsTableTakesNoInsert is what setup returns when the name the store
+// writes to is a relation that takes no insert — a view — and the process
+// carries no insert transform for it (ADR-0402 §SD2): the server stores the
+// facts in a deployment's own table, and this binary would fail every
+// write. Match with errors.Is.
+var ErrFactsTableTakesNoInsert = errors.New("the facts table is a relation that takes no insert, and no insert transform is registered for it")
+
+// checkWritable fails setup when the store's inserts cannot land where it
+// sends them: CREATE TABLE IF NOT EXISTS succeeds over a view of the same
+// name, so the DDL alone does not tell. Under a transform the inserts go to
+// the deployment's table and the name may be anything.
+func (inst *Store) checkWritable(ctx context.Context) (err error) {
+	if WriteTransformed(inst.cfg) {
+		return
+	}
+	body, err := inst.cli.Query(ctx, "SELECT engine FROM system.tables WHERE database = "+quoteSqlString(inst.cfg.Database)+" AND name = "+quoteSqlString(inst.cfg.Table))
+	if err != nil {
+		err = eh.Errorf("chstore: setup: read the facts table's engine: %w", err)
+		return
+	}
+	raw, err := io.ReadAll(body)
+	_ = body.Close()
+	if err != nil {
+		err = eh.Errorf("chstore: setup: read the facts table's engine: %w", err)
+		return
+	}
+	if engine := strings.TrimSpace(string(raw)); recordstore.TakesNoInsert(engine) {
+		err = eb.Build().Str("table", inst.writeTable()).Str("engine", engine).
+			Errorf("chstore: setup: %w; this binary needs the deployment's transform (recordstore.RegisterInsertTransform) to write facts on this server", ErrFactsTableTakesNoInsert)
+	}
 	return
 }
 

@@ -584,9 +584,12 @@ func (inst *SysmetricsStore) takeWrittenN(n int) iter.Seq[recordstore.WrittenKey
 
 // SchemaContract is what this store declares about the table it reads:
 // the generated columns and the stamp its CREATE TABLE writes, bound to
-// the configured read table. A schema check needs nothing else.
+// the configured read table. A schema check needs nothing else. A read
+// table that is not the table written to, or one whose inserts a
+// transform sends elsewhere, is judged by its columns only
+// (recordstore.ReadRelationContract).
 func (inst *SysmetricsStore) SchemaContract() recordstore.TableContract {
-	return SysmetricsSchemaContract(inst.readTable())
+	return recordstore.ReadRelationContract(SysmetricsSchemaContract(inst.readTable()), inst.writeTable())
 }
 
 // JudgeSchema reads the live table's columns and stamp and judges them

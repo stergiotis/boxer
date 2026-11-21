@@ -224,3 +224,48 @@ func TestInsertSettingsDeduplicationToken(t *testing.T) {
 	assert.Equal(t, " SETTINGS insert_deduplication_token='abc'", s.SQL())
 	assert.Equal(t, map[string]string{"insert_deduplication_token": "abc"}, s.Map())
 }
+
+// A table the store writes to that turns out to be a view is incompatible
+// whatever its columns: every insert would fail. Judged by its columns only
+// — a read relation — the same view is ok.
+func TestJudgeFacts_AWrittenTableThatTakesNoInsert(t *testing.T) {
+	cols := []LiveColumn{{Name: "a", Type: "UInt64"}}
+	c := TableContract{Kind: "k", Table: "db.t", Columns: []ColumnSpec{{Name: "a", Type: "UInt64"}}}
+	for _, engine := range []string{"View", "Merge", "Dictionary"} {
+		v := JudgeFacts(c, TableFacts{Exists: true, Engine: engine, Columns: cols})
+		assert.Equal(t, SchemaVerdictIncompatible, v.Verdict, engine)
+		require.Len(t, v.Reasons, 1)
+		assert.Contains(t, v.Reasons[0], "takes no insert")
+	}
+	assert.Equal(t, SchemaVerdictOk, JudgeFacts(c, TableFacts{Exists: true, Engine: "MaterializedView", Columns: cols}).Verdict,
+		"an insert into a materialized view reaches its target")
+	read := c
+	read.ColumnsOnly = true
+	assert.Equal(t, SchemaVerdictOk, JudgeFacts(read, TableFacts{Exists: true, Engine: "View", Columns: cols}).Verdict)
+}
+
+// A store judges the relation it reads as a table of its own only when it
+// is the table it writes to and no transform sends the inserts elsewhere.
+func TestReadRelationContract(t *testing.T) {
+	full := TableContract{Kind: "k", Table: "db.t", Columns: []ColumnSpec{{Name: "a", Type: "UInt64"}},
+		Stamp: "stamp", Layout: TableLayout{Engine: "MergeTree"}, LayoutRecipe: "recipe"}
+
+	assert.Equal(t, full, ReadRelationContract(full, "db.t"), "the table it writes: judged whole")
+	assert.Equal(t, full, ReadRelationContract(full, "`db`.`t`"), "under any spelling")
+
+	read := full
+	read.Table = "db.t_view"
+	narrowed := ReadRelationContract(read, "db.t")
+	assert.True(t, narrowed.ColumnsOnly)
+	assert.Empty(t, narrowed.Stamp)
+	assert.True(t, narrowed.Layout.IsZero())
+	assert.Empty(t, narrowed.LayoutRecipe)
+	assert.Equal(t, "db.t_view", narrowed.Table)
+	assert.Equal(t, full.Columns, narrowed.Columns)
+
+	unregister := RegisterInsertTransform("db.t", InsertTransformFunc(func(string, []arrow.RecordBatch) (string, []arrow.RecordBatch, error) {
+		return "carrier.rows", nil, nil
+	}))
+	defer unregister()
+	assert.True(t, ReadRelationContract(full, "db.t").ColumnsOnly, "under a transform the name is a relation the store only reads")
+}
