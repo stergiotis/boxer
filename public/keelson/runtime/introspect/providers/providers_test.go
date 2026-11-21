@@ -22,7 +22,7 @@ func TestRegisterStatic(t *testing.T) {
 	assert.Equal(t, []string{"adr", "adrcontent", "adrsections", "app_operations", "apps", "build",
 		"coderef", "competence", "competenceclaim", "competenceevidence", "competencerelation", "competencesection",
 		"components", "env", "extbin", "go_modules", "go_symbols", "helpsections",
-		"lw_components", "memberships", "panel_shapes", "sbom", "sql_passes", "subtask"},
+		"listeners", "lw_components", "memberships", "panel_shapes", "sbom", "sql_passes", "subtask"},
 		r.Names())
 }
 

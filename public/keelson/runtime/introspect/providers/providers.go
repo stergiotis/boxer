@@ -22,9 +22,9 @@ import (
 )
 
 // RegisterStatic registers the GUI-free providers (env, apps, build,
-// sbom, sql_passes, extbin, adr/subtask/coderef/adrcontent,
+// sbom, sql_passes, extbin, listeners, adr/subtask/coderef/adrcontent,
 // capability/capsection/caprelation, components, panel_shapes) into r
-// (ADR-0094 §SD8, ADR-0108 §SD5, ADR-0118, ADR-0122 §SD4, ADR-0126 §SD5,
+// (ADR-0094 §SD8, ADR-0108 §SD5, ADR-0118, ADR-0082, ADR-0122 §SD4, ADR-0126 §SD5,
 // ADR-0168 §SD8, ADR-0170 §SD5).
 //
 // The ADR and capability tables register unconditionally, like the rest:
@@ -37,7 +37,7 @@ import (
 func RegisterStatic(r *introspect.Registry) (err error) {
 	installAnchorResolver()
 	for _, p := range []introspect.Provider{
-		envProvider{}, appsProvider{}, buildProvider{}, sbomProvider{}, sqlPassesProvider{}, extbinProvider{},
+		envProvider{}, appsProvider{}, buildProvider{}, sbomProvider{}, sqlPassesProvider{}, extbinProvider{}, listenersProvider{},
 		adrProvider{}, subtaskProvider{}, coderefProvider{}, adrcontentProvider{}, componentsProvider{},
 		competenceProvider{}, competencesectionProvider{}, competencerelationProvider{},
 		competenceclaimProvider{}, competenceevidenceProvider{},
