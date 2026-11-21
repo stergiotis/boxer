@@ -1,0 +1,18 @@
+Fixtures of public/science/imaging/display (ADR-0401 §SD7, verification
+plan). Everything here is synthetic: written on 2026-11-21 by
+gen_zscale_oracle.py.txt with astropy 8.0.3 and numpy 2.5.5 as the
+reference implementation (astropy.visualization.ZScaleInterval). It carries
+no third-party data and no licence beyond this repository's.
+
+zscale_oracle.tsv   astropy's zscale limits for fifteen fields the script
+                    computes and zscale_test.go recomputes from the same
+                    formulas: flat noise (also under contrast 1, which puts
+                    both ends inside the sample), noise with bright blobs
+                    (also under another contrast and sample count, and as
+                    unsigned 16-bit under a negative value transform), a
+                    gradient, NaNs (also under contrast 1), a declared
+                    invalid value, a heavy tail (also with five times the
+                    samples), images smaller than the sample, one of four
+                    pixels, and a one-pixel-wide strip. astropy is given
+                    the package's own sample of each field whole, so what
+                    is compared is the fit, not the sampling rule.

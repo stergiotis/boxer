@@ -97,12 +97,17 @@ const (
 	// LimitsSourcePercentile: the values at two percentiles of the data,
 	// recorded in [Limits.PercentLo] and [Limits.PercentHi].
 	LimitsSourcePercentile
+	// LimitsSourceZScale: the range zscale finds around the bulk of the
+	// values from a sample of them (ADR-0401 §SD7, [ZScaleLimits]), its
+	// contrast and sample count recorded in [Limits.ZScaleContrast] and
+	// [Limits.ZScaleSamples].
+	LimitsSourceZScale
 )
 
 // AllLimitsSources lists the ways limits are obtained.
-var AllLimitsSources = []LimitsSourceE{LimitsSourceManual, LimitsSourceNominal, LimitsSourceData, LimitsSourcePercentile}
+var AllLimitsSources = []LimitsSourceE{LimitsSourceManual, LimitsSourceNominal, LimitsSourceData, LimitsSourcePercentile, LimitsSourceZScale}
 
-var limitsSourceNames = [...]string{"manual", "nominal", "data", "percentile"}
+var limitsSourceNames = [...]string{"manual", "nominal", "data", "percentile", "zscale"}
 
 func (inst LimitsSourceE) String() string {
 	if int(inst) < len(limitsSourceNames) {
@@ -139,7 +144,9 @@ func (inst *LimitsSourceE) UnmarshalText(text []byte) error {
 // histogram by [PercentileLimits]; this package does not count one, so a
 // recipe that names percentiles without their values cannot be compiled
 // until something resolves it — the image viewer widget does, in its
-// SetRecipe.
+// SetRecipe. [LimitsSourceZScale] is the same: [ZScaleLimits] finds Lo and
+// Hi from the samples, and a recipe naming zscale without them is refused
+// like any other empty range.
 type Limits struct {
 	Lo, Hi float64
 	Source LimitsSourceE
@@ -147,6 +154,12 @@ type Limits struct {
 	// [LimitsSourcePercentile]; zero otherwise.
 	PercentLo float64
 	PercentHi float64
+	// ZScaleContrast and ZScaleSamples are the contrast and the number of
+	// grid points zscale was asked for, for [LimitsSourceZScale]; zero
+	// otherwise. Zero asked of [ZScaleLimits] takes [ZScaleContrast] and
+	// [ZScaleSamples], and what is recorded is the number used.
+	ZScaleContrast float64
+	ZScaleSamples  int32
 }
 
 // Recipe is how an image is shown. It is a plain value: it can be compared,
@@ -185,6 +198,13 @@ func (inst Recipe) Validate() error {
 	if math.IsNaN(inst.Param) || math.IsInf(inst.Param, 0) || inst.Param < 0 {
 		return eb.Build().Float64("param", inst.Param).Errorf("transfer parameter must be a positive number, or 0 for the default")
 	}
+	if int(l.Source) >= len(limitsSourceNames) {
+		return eb.Build().Uint8("source", uint8(l.Source)).Errorf("recipe names no known limits source")
+	}
+	if l.Source == LimitsSourceZScale && (!(l.ZScaleContrast >= 0) || math.IsInf(l.ZScaleContrast, 0) || l.ZScaleSamples < 0) {
+		return eb.Build().Float64("contrast", l.ZScaleContrast).Int32("samples", l.ZScaleSamples).
+			Errorf("zscale needs a positive contrast and sample count, or 0 for the defaults")
+	}
 	return nil
 }
 
@@ -220,18 +240,20 @@ func (inst Recipe) Level(value float64) float64 {
 	return inst.level(x)
 }
 
-// NominalLimits is the whole range an integer sample kind can hold, through
-// the value transform. A float kind has none and reports ok false.
+// NominalLimits is the whole range an integer sample kind can hold, signed or
+// unsigned, through the value transform. A float kind has none and reports
+// ok false.
 func NominalLimits(kind imaging.SampleKindE, transform imaging.ValueTransform) (limits Limits, ok bool) {
-	hi, ok := kind.NominalMax()
+	lo, hi, ok := kind.NominalRange()
 	if !ok {
 		return limits, false
 	}
-	a, b := transform.Apply(0), transform.Apply(hi)
+	a, b := transform.Apply(lo), transform.Apply(hi)
 	return Limits{Lo: min(a, b), Hi: max(a, b), Source: LimitsSourceNominal}, true
 }
 
-// DataLimits is the range of a plane's valid values. A plane whose valid
+// DataLimits is the range of a plane's valid values, NaN and a declared
+// invalid value left out (ADR-0398 §SD2). A plane whose valid
 // samples are all equal, or which has none, has no range to show and reports
 // ok false.
 func DataLimits(plane imaging.Plane) (limits Limits, ok bool) {
@@ -268,7 +290,7 @@ func PercentileLimits(h stats.Histogram, percentLo, percentHi float64) (limits L
 // DefaultRecipe is the view an image opens in (ADR-0373 §SD4): a colour image
 // over the nominal range of its sample kind, a single plane over the range of
 // its data, both linear. Where that range does not exist — a constant plane,
-// a float colour image — it falls back to the other, and to [0, 1] when
+// a colour image of a float kind — it falls back to the other, and to [0, 1] when
 // neither does; [Limits.Source] says which was used.
 func DefaultRecipe(img imaging.Image) Recipe {
 	first := img.Plane(0)

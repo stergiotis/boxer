@@ -1,0 +1,139 @@
+# Provenance of zscale_oracle.tsv (ADR-0401 §SD7, verification plan). Not
+# part of any toolchain: run by hand with astropy as the reference
+# implementation, from this directory:
+#   uv run --no-project --with astropy --with numpy python -I gen_zscale_oracle.py.txt
+#
+# Every field is synthetic and computed here and, from the same formulas, by
+# zscaleField in zscale_test.go: a splitmix64 stream, five uniforms per
+# pixel in row-major order, noise as the Irwin–Hall sum of four of them
+# scaled to unit variance, and only +, −, ×, ÷ and √ on doubles, so both
+# languages compute the same bits. The sample is taken with the package's
+# grid rule (ZScaleLimitsAt, step 1), mirrored in grid() below, and handed to
+# astropy whole: n_samples is at least its length, so astropy reads every
+# value and the comparison is of the fit — sorting, rejection, median,
+# slope, ends — not of two sampling rules.
+#
+# Columns: field name, width, height, contrast, samples asked for, number of
+# valid values sampled, astropy's lower and upper limit (repr).
+import math
+import os
+import sys
+
+import astropy
+import numpy as np
+from astropy.visualization import ZScaleInterval
+
+MASK = (1 << 64) - 1
+
+
+class Stream:
+    def __init__(self, seed):
+        self.state = seed & MASK
+
+    def next(self):
+        self.state = (self.state + 0x9E3779B97F4A7C15) & MASK
+        z = self.state
+        z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & MASK
+        z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & MASK
+        return z ^ (z >> 31)
+
+    def uniform(self):
+        return float(self.next() >> 11) * (1.0 / 9007199254740992.0)
+
+
+SQRT3 = math.sqrt(3.0)
+BLOBS = [(40, 60, 8000.0, 3.0), (200, 30, 20000.0, 2.0), (128, 128, 5000.0, 6.0),
+         (90, 210, 12000.0, 1.5), (230, 220, 30000.0, 4.0)]
+
+
+def field(name, w, h):
+    """Values row-major, None for an invalid sample."""
+    s = Stream(0x5EED0401 + sum(ord(c) for c in name))
+    out = []
+    for y in range(h):
+        for x in range(w):
+            u = [s.uniform() for _ in range(5)]
+            n = (((u[0] + u[1]) + (u[2] + u[3])) - 2.0) * SQRT3
+            base = name.split('-')[0]
+            if base == 'flat':
+                v = 1000.0 + 20.0 * n
+            elif base == 'blobs':
+                v = 500.0 + 10.0 * n
+                for (cx, cy, a, r) in BLOBS:
+                    dx, dy = float(x - cx), float(y - cy)
+                    v = v + a / (1.0 + (dx * dx + dy * dy) / (r * r))
+            elif base == 'gradient':
+                v = 2.0 * x + 5.0 * y + 3.0 * n
+            elif base in ('nan', 'declared'):
+                v = 100.0 + 5.0 * n
+                if u[4] < 0.1:
+                    v = None
+            elif base == 'heavy':
+                v = 100.0 + 5.0 * n
+                if u[4] < 0.05:
+                    v = v + 2000.0 * u[0]
+            elif base in ('small', 'tiny', 'four'):
+                v = 50.0 + 2.0 * n
+            elif base == 'strip':
+                v = 10.0 + n
+            else:
+                raise SystemExit('unknown field ' + name)
+            if name.endswith('-u16') and v is not None:
+                # Stored as unsigned 16-bit, rounded half up, through the
+                # value transform stored · −0.5 + 100.
+                st = min(max(math.floor(v + 0.5), 0.0), 65535.0)
+                v = st * -0.5 + 100.0
+            out.append(v)
+    return out
+
+
+def grid(w, h, n):
+    if w * h <= n:
+        return w, h
+    d = max(1, int(math.sqrt(float(w) * float(h) / float(n))))
+    while True:
+        nx, ny = (w + d - 1) // d, (h + d - 1) // d
+        if nx * ny <= n:
+            return nx, ny
+        d += 1
+
+
+def sample(values, w, h, n):
+    nx, ny = grid(w, h, n)
+    out = []
+    for j in range(ny):
+        row = (2 * j + 1) * h // (2 * ny)
+        for i in range(nx):
+            col = (2 * i + 1) * w // (2 * nx)
+            v = values[row * w + col]
+            if v is not None and math.isfinite(v):
+                out.append(v)
+    return out
+
+
+CASES = [
+    ('flat', 200, 150, 0.25, 1000),
+    ('flat-c1', 200, 150, 1.0, 1000),
+    ('blobs', 256, 256, 0.25, 1000),
+    ('blobs-c', 256, 256, 0.1, 500),
+    ('blobs-u16', 256, 256, 0.25, 1000),
+    ('gradient', 300, 100, 0.25, 1000),
+    ('nan', 128, 128, 0.25, 1000),
+    ('nan-c1', 128, 128, 1.0, 1000),
+    ('declared', 128, 128, 0.25, 1000),
+    ('heavy', 160, 160, 0.25, 1000),
+    ('heavy-dense', 160, 160, 0.25, 5000),
+    ('small', 20, 30, 0.25, 1000),
+    ('tiny', 7, 3, 0.25, 1000),
+    ('four', 4, 1, 0.25, 1000),
+    ('strip', 1, 5000, 0.25, 1000),
+]
+
+out = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else '.'
+with open(os.path.join(out, 'zscale_oracle.tsv'), 'w') as f:
+    f.write('# astropy %s, numpy %s, python %s\n' % (astropy.__version__, np.__version__, sys.version.split()[0]))
+    f.write('# name\twidth\theight\tcontrast\tsamples\tm\tlo\thi\n')
+    for (name, w, h, contrast, n) in CASES:
+        s = np.array(sample(field(name, w, h), w, h, n), dtype=np.float64)
+        lo, hi = ZScaleInterval(n_samples=max(n, len(s)), contrast=contrast).get_limits(s)
+        f.write('%s\t%d\t%d\t%r\t%d\t%d\t%r\t%r\n' % (name, w, h, contrast, n, len(s), float(lo), float(hi)))
