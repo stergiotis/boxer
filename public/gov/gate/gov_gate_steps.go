@@ -129,7 +129,12 @@ func (inst *StepCodelint) Run(ctx context.Context, cfg Config, w io.Writer) (sta
 		return
 	}
 
-	linter := codelint.NewDefaultLinter()
+	var scope codelint.Scope
+	scope, err = cfg.lintScope()
+	if err != nil {
+		return
+	}
+	linter := codelint.NewLinterFor(scope)
 	// Same exclusions as every other step. codelint reports absolute paths, so
 	// they are relativised against the root before matching.
 	excl := pathfilter.NewMatcher(cfg.Exclude)

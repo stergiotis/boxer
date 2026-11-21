@@ -208,6 +208,10 @@ func (inst *RuleCS020) isIoVerb(pass *analysis.Pass, fn *types.Func) (yes bool) 
 	if n != "Begin" && n != "Delete" && !strings.HasPrefix(n, "Ingest") {
 		return
 	}
+	// deferred: a hand-written wrapper that hides a generated store's
+	// Begin or Flush behind ctx-less methods of its own is not matched here;
+	// recognising one needs the wrapper's call graph into the generated
+	// store, not a file-name test.
 	return strings.HasSuffix(pass.Fset.Position(fn.Pos()).Filename, "_store.out.go")
 }
 

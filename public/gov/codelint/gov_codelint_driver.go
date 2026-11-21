@@ -28,6 +28,49 @@ func NewLinter() (inst *Linter) {
 // It exists so those callers cannot silently diverge from the command: a rule
 // added here reaches all of them at once.
 func NewDefaultLinter() (inst *Linter) {
+	inst = NewLinterFor(BoxerScope())
+	return
+}
+
+// Scope is which of a module's packages the module-scoped rules cover:
+// CS017 (a goroutine an app starts outside its lifetime scope) and CS020
+// (a rooted context or a ctx-less I/O signature). The other rules apply to
+// whatever packages are loaded.
+type Scope struct {
+	// AppPrefixes are the import-path prefixes of the module's apps, which
+	// CS017 covers.
+	AppPrefixes []string
+	// ContextPrefixes are the import-path prefixes CS020 covers.
+	ContextPrefixes []string
+	// ContextBaseline is the text of CS020's baseline file: grandfathered
+	// findings, one key per line. Empty means none.
+	ContextBaseline string
+}
+
+// BoxerScope is this repository's scope, with its committed CS020
+// baseline.
+func BoxerScope() (s Scope) {
+	s = Scope{
+		AppPrefixes:     []string{appsTreePkgPath},
+		ContextPrefixes: []string{"github.com/stergiotis/boxer/public"},
+		ContextBaseline: cs020Baseline,
+	}
+	return
+}
+
+// ModuleScope is the scope of another module: its apps tree and the whole
+// module, without a baseline (ADR-0396 §8).
+func ModuleScope(module string) (s Scope) {
+	s = Scope{
+		AppPrefixes:     []string{module + "/apps"},
+		ContextPrefixes: []string{module},
+	}
+	return
+}
+
+// NewLinterFor returns a Linter carrying every shipped CS rule, with the
+// module-scoped rules over scope.
+func NewLinterFor(scope Scope) (inst *Linter) {
 	inst = NewLinter()
 	inst.Register(NewRuleCS001())
 	inst.Register(NewRuleCS002())
@@ -45,10 +88,12 @@ func NewDefaultLinter() (inst *Linter) {
 	inst.Register(NewRuleCS014())
 	inst.Register(NewRuleCS015())
 	inst.Register(NewRuleCS016())
-	inst.Register(NewRuleCS017())
+	inst.Register(NewRuleCS017ForPrefixes(scope.AppPrefixes...))
 	inst.Register(NewRuleCS018())
 	inst.Register(NewRuleCS019())
-	inst.Register(NewRuleCS020())
+	cs020 := NewRuleCS020ForPrefixes(scope.ContextPrefixes...)
+	cs020.baseline = parseCS020Baseline(scope.ContextBaseline)
+	inst.Register(cs020)
 	return
 }
 

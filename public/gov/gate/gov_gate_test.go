@@ -183,3 +183,19 @@ func TestModuleOfReadsGoMod(t *testing.T) {
 	assert.Equal(t, "example.com/owner/thing", moduleOf(dir))
 	assert.Empty(t, moduleOf(t.TempDir()), "an unreadable go.mod matches package paths unmodified")
 }
+
+// Another module's gate covers its own apps and its own tree with the
+// module-scoped codelint rules, not boxer's (ADR-0396 §8).
+func TestLintScopeFollowsTheModule(t *testing.T) {
+	scope, err := Config{Module: "example.com/acme"}.lintScope()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"example.com/acme/apps"}, scope.AppPrefixes)
+	assert.Equal(t, []string{"example.com/acme"}, scope.ContextPrefixes)
+	assert.Empty(t, scope.ContextBaseline)
+	scope, err = Config{Module: "example.com/acme", AppPrefixes: []string{"example.com/acme/cmd"}}.lintScope()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"example.com/acme/cmd"}, scope.AppPrefixes)
+	scope, err = Config{Module: boxerModule}.lintScope()
+	require.NoError(t, err)
+	assert.NotEmpty(t, scope.ContextBaseline)
+}

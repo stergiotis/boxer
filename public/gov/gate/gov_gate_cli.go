@@ -64,6 +64,18 @@ func NewCliCommand() *cli.Command {
 				Usage: "a browser-tab binary package, relative to --root (repeatable): it must compile for wasip1, and its tab report is printed (ADR-0278); none skips the tab step",
 			},
 			&cli.StringSliceFlag{
+				Name:  "app-prefix",
+				Usage: "import-path prefix of the module's apps, which codelint's app rules (CS017) cover (repeatable); empty means <module>/apps",
+			},
+			&cli.StringSliceFlag{
+				Name:  "ctx-prefix",
+				Usage: "import-path prefix codelint's context rule (CS020) covers (repeatable); empty means the whole module",
+			},
+			&cli.StringFlag{
+				Name:  "ctx-baseline",
+				Usage: "CS020 baseline file, relative to --root: the module's grandfathered findings; empty means none",
+			},
+			&cli.StringSliceFlag{
 				Name:  "step",
 				Usage: "run only this step (repeatable); empty runs all",
 			},
@@ -115,6 +127,9 @@ func gateAction(ctx context.Context, cmd *cli.Command) (err error) {
 		Exclude:             cmd.StringSlice("exclude"),
 		Steps:               want,
 		TabPackages:         cmd.StringSlice("tab-pkg"),
+		AppPrefixes:         cmd.StringSlice("app-prefix"),
+		ContextPrefixes:     cmd.StringSlice("ctx-prefix"),
+		ContextBaseline:     cmd.String("ctx-baseline"),
 	}
 
 	rep := Run(ctx, cfg, steps, os.Stdout)

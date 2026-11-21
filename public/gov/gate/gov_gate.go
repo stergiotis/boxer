@@ -23,8 +23,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/stergiotis/boxer/public/gov/codelint"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // StatusE is the outcome of one step.
@@ -112,7 +117,51 @@ type Config struct {
 	// TabPackages are the repository's browser-tab binaries (ADR-0278 SD7,
 	// proposed), relative to Root. Empty skips the tab step.
 	TabPackages []string
+	// AppPrefixes are the import-path prefixes of the module's apps, which
+	// codelint's app rules (CS017) cover. Empty means Module + "/apps", or
+	// this repository's apps tree when Module is boxer's.
+	AppPrefixes []string
+	// ContextPrefixes are the import-path prefixes codelint's context rule
+	// (CS020) covers. Empty means the whole module, or boxer's public tree
+	// with its committed baseline when Module is boxer's.
+	ContextPrefixes []string
+	// ContextBaseline is CS020's baseline file, relative to Root: the
+	// module's grandfathered findings. Empty means none, except for boxer's
+	// own committed one.
+	ContextBaseline string
 }
+
+// lintScope is the scope codelint's module-scoped rules run over.
+func (inst Config) lintScope() (scope codelint.Scope, err error) {
+	module := inst.Module
+	if module == "" {
+		module = moduleOf(inst.root())
+	}
+	if module == boxerModule {
+		scope = codelint.BoxerScope()
+	} else {
+		scope = codelint.ModuleScope(module)
+	}
+	if len(inst.AppPrefixes) > 0 {
+		scope.AppPrefixes = inst.AppPrefixes
+	}
+	if len(inst.ContextPrefixes) > 0 {
+		scope.ContextPrefixes = inst.ContextPrefixes
+	}
+	if inst.ContextBaseline != "" {
+		var b []byte
+		b, err = os.ReadFile(filepath.Join(inst.root(), inst.ContextBaseline))
+		if err != nil {
+			err = eh.Errorf("gate: CS020 baseline: %w", err)
+			return
+		}
+		scope.ContextBaseline = string(b)
+	}
+	return
+}
+
+// boxerModule is this repository's module path.
+const boxerModule = "github.com/stergiotis/boxer"
 
 func (inst Config) root() (s string) {
 	if inst.Root == "" {
