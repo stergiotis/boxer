@@ -4,7 +4,7 @@ import (
 	"slices"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	slices2 "github.com/stergiotis/boxer/public/slices"
+	slices2 "github.com/stergiotis/boxer/public/sliceconv"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/ir"
 )
 

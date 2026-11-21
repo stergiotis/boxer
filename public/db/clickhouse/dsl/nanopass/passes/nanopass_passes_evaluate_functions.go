@@ -10,7 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/slices"
+	"github.com/stergiotis/boxer/public/sliceconv"
 )
 
 // EvalFuncI is the signature for a Go-side function evaluator. It receives
@@ -103,51 +103,51 @@ func (inst *FunctionEvaluator) RegisterBuiltins() {
 	inst.Register("array", func(args []any) (any, error) {
 		if checkHomogenous[string](args) {
 			result := make([]string, 0, len(args))
-			return slices.CopySliceInterfaceCastable(args, result), nil
+			return sliceconv.CopySliceInterfaceCastable(args, result), nil
 		}
 		if checkHomogenous[uint64](args) {
 			result := make([]uint64, 0, len(args))
-			return slices.CopySliceInterfaceCastable(args, result), nil
+			return sliceconv.CopySliceInterfaceCastable(args, result), nil
 		}
 		if checkHomogenous[uint32](args) {
 			result := make([]uint32, 0, len(args))
-			return slices.CopySliceInterfaceCastable(args, result), nil
+			return sliceconv.CopySliceInterfaceCastable(args, result), nil
 		}
 		if checkHomogenous[uint16](args) {
 			result := make([]uint16, 0, len(args))
-			return slices.CopySliceInterfaceCastable(args, result), nil
+			return sliceconv.CopySliceInterfaceCastable(args, result), nil
 		}
 		if checkHomogenous[uint8](args) {
 			result := make([]uint8, 0, len(args))
-			return slices.CopySliceInterfaceCastable(args, result), nil
+			return sliceconv.CopySliceInterfaceCastable(args, result), nil
 		}
 		if checkHomogenous[int64](args) {
 			result := make([]int64, 0, len(args))
-			return slices.CopySliceInterfaceCastable(args, result), nil
+			return sliceconv.CopySliceInterfaceCastable(args, result), nil
 		}
 		if checkHomogenous[int32](args) {
 			result := make([]int32, 0, len(args))
-			return slices.CopySliceInterfaceCastable(args, result), nil
+			return sliceconv.CopySliceInterfaceCastable(args, result), nil
 		}
 		if checkHomogenous[int16](args) {
 			result := make([]int16, 0, len(args))
-			return slices.CopySliceInterfaceCastable(args, result), nil
+			return sliceconv.CopySliceInterfaceCastable(args, result), nil
 		}
 		if checkHomogenous[int8](args) {
 			result := make([]int8, 0, len(args))
-			return slices.CopySliceInterfaceCastable(args, result), nil
+			return sliceconv.CopySliceInterfaceCastable(args, result), nil
 		}
 		if checkHomogenous[float64](args) {
 			result := make([]float64, 0, len(args))
-			return slices.CopySliceInterfaceCastable(args, result), nil
+			return sliceconv.CopySliceInterfaceCastable(args, result), nil
 		}
 		if checkHomogenous[float32](args) {
 			result := make([]float32, 0, len(args))
-			return slices.CopySliceInterfaceCastable(args, result), nil
+			return sliceconv.CopySliceInterfaceCastable(args, result), nil
 		}
 		if checkHomogenous[bool](args) {
 			result := make([]bool, 0, len(args))
-			return slices.CopySliceInterfaceCastable(args, result), nil
+			return sliceconv.CopySliceInterfaceCastable(args, result), nil
 		}
 		result := make([]any, len(args))
 		copy(result, args)

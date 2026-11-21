@@ -965,9 +965,9 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 - `public/semistructured/markdown/obsidian/ext/wikilink`
 - `public/semistructured/markdown/obsidian/resolver`
 
-### slices
+### sliceconv
 
-- `public/slices`
+- `public/sliceconv` — Package sliceconv copies a slice into a slice of another element type, converting each element.
 
 ### statespace
 

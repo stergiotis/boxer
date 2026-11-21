@@ -1,4 +1,4 @@
-package slices
+package sliceconv
 
 import "github.com/stergiotis/boxer/public/packageprops"
 
@@ -11,4 +11,4 @@ var PackageProps = packageprops.Props{
 	WASMFreestanding: packageprops.WASMCompiles,
 }
 
-func init() { packageprops.Register("github.com/stergiotis/boxer/public/slices", PackageProps) }
+func init() { packageprops.Register("github.com/stergiotis/boxer/public/sliceconv", PackageProps) }

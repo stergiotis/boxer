@@ -1,25 +1,39 @@
-package slices
+// Package sliceconv copies a slice into a slice of another element type,
+// converting each element.
+package sliceconv
 
 import (
-	"golang.org/x/exp/constraints"
-	"golang.org/x/exp/slices"
+	"slices"
 )
 
-func CopySliceInt[U constraints.Integer, V constraints.Integer](src []U, dest []V) (retr []V) {
+type integer interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr
+}
+
+type float interface {
+	~float32 | ~float64
+}
+
+type complexNumber interface {
+	~complex64 | ~complex128
+}
+
+func CopySliceInt[U integer, V integer](src []U, dest []V) (retr []V) {
 	retr = slices.Grow(dest, len(src))
 	for i := range src {
 		retr = append(retr, V(src[i]))
 	}
 	return
 }
-func CopySliceFloat[U constraints.Float, V constraints.Float](src []U, dest []V) (retr []V) {
+func CopySliceFloat[U float, V float](src []U, dest []V) (retr []V) {
 	retr = slices.Grow(dest, len(src))
 	for i := range src {
 		retr = append(retr, V(src[i]))
 	}
 	return
 }
-func CopySliceComplex[U constraints.Complex, V constraints.Complex](src []U, dest []V) (retr []V) {
+func CopySliceComplex[U complexNumber, V complexNumber](src []U, dest []V) (retr []V) {
 	retr = slices.Grow(dest, len(src))
 	for i := range src {
 		retr = append(retr, V(src[i]))
