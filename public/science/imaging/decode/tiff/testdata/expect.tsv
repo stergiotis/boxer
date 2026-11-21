@@ -1,0 +1,16 @@
+# file	format	width	height	kind	pages	bands	model	sha256	affine	code	nodata	labels	scales	offsets
+lzw_pred2_u16.tif	tiff	37	23	u16	1	1	gray	004b7cc5c97fc35bab6f0b5eaefe12a10d05c76cca26aac84ba7d8884b012c00	-	-	-	-	-	-
+deflate_pred3_f32_be.tif	tiff	29	17	f32	1	1	gray	f87ae40e8e768eca4ddc50c5b88ceca2f8a1a78b0a43c81e5519a73506008c3a	-	-	-	-	-	-
+bigtiff_tiled_planar_i16.tif	bigtiff	40	21	i16	1	3	-	8f969a39f4edd7904d6a81ba565f04349a737b70b2b140b44100232eccc55afe	-	-	-	-	-	-
+geo_area.tif	tiff	16	12	u8	1	1	gray	9f33925e0df9c9af6c02372f6d32f2a98bd260541eb4abe0dc0e94c3c2eb2981	2600000.0,0.5,0.0,1200000.0,0.0,-0.25	EPSG:2056	-	-	-	-
+geo_point.tif	tiff	16	12	u8	1	1	gray	9f33925e0df9c9af6c02372f6d32f2a98bd260541eb4abe0dc0e94c3c2eb2981	2600000.0,0.5,0.0,1200000.0,0.0,-0.25	EPSG:2056	-	-	-	-
+geo_transform_i32.tif	tiff	11	9	i32	1	1	gray	3855a1c7377ddf3eb58702b8e2540f296e33bb8b5295a3393873f6ff08e0fdac	7.25,0.001,0.0002,46.95,0.0003,-0.001	EPSG:4326	-	-	-	-
+gdal_nodata_meta_i16.tif	tiff	14	10	i16	1	2	-	b03182aa35a8f42c28aba4b961a1767d4e437947c5a251405d14f3afdb526c11	-	-	-9999.0	near infrared|shortwave	0.01|0.02	-5.0|0.0
+multipage_u8.tif	tiff	16	12	u8	3	1	gray	725c3096af1ae373e1b8badb318fb659f550aeff28a2ac3ce5df53f159d2cc66	-	-	-	-	-	-
+palette_u8.tif	tiff	9	7	u16	1	3	rgb	23b9b4c7f9e7d4fe737697991243c50067fed1701255aa7cac3c82d44931a457	-	-	-	-	-	-
+rgba_u8_deflate.tif	tiff	15	13	u8	1	4	rgba	941b093d3616489b46a6c7a6ddd25c0ab385388b321d0598f394d1b8250e6315	-	-	-	-	-	-
+lzw_pred3_f64_planar.tif	bigtiff	19	6	f64	1	3	rgb	9e7fd46315d555c7b0221f5760b69a7002423b22d4d8bc4562e1d0ae84698cc9	-	-	-	-	-	-
+miniswhite_u8.tif	tiff	8	5	u8	1	1	gray	208647955134cc3e9b36d2abade6f9bed0c19d8336ca32111904e25cce75e99b	-	-	-	-	-	-
+resolution_cm_u16.tif	tiff	6	4	u16	1	1	gray	5452cba5af77bead9d5230b32512cbdd740ae8db587dc1d27ecfb4610b2473cb	-	-	-	-	-	-
+deflate_pred3_f32_rgb_le.tif	tiff	21	9	f32	1	3	rgb	a451be8ffdc36a0799b7e90e09049f56351b0f279907a3af549d21f3522496af	-	-	-	-	-	-
+lzw_pred2_u16_rgb_be.tif	tiff	17	11	u16	1	3	rgb	f3190b76db914a1429d9f4c98775418c25ebf2300e784e6072d5795b6232ddb9	-	-	-	-	-	-
