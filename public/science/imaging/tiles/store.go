@@ -4,6 +4,7 @@ import (
 	"context"
 	"image"
 	"math"
+	"slices"
 	"sync"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -39,6 +40,10 @@ type Store struct {
 	kind          imaging.SampleKindE
 	transforms    []imaging.ValueTransform
 	reduced       int
+	invalid       float64
+	hasInvalid    bool
+	labels        []string
+	placement     imaging.Placement
 
 	mu       sync.Mutex
 	levels   []*grid
@@ -72,12 +77,49 @@ func (inst *Store) Transform(i int) imaging.ValueTransform {
 // Reduced is how many reduced levels the store holds, numbered 1 to Reduced.
 func (inst *Store) Reduced() int { return inst.reduced }
 
+// Invalid is the stored value every colour plane declares invalid
+// (ADR-0398 §SD2), and ok false when there is none. Every plane the store
+// hands out — a tile of any level, a region read — declares it; alpha does
+// not.
+func (inst *Store) Invalid() (stored float64, ok bool) { return inst.invalid, inst.hasInvalid }
+
+// declares reports whether plane i declares the store's invalid value: a
+// colour plane does, alpha does not.
+func (inst *Store) declares(i int) bool {
+	return inst.hasInvalid && !(inst.model.HasAlpha() && i == inst.model.PlaneCount()-1)
+}
+
+// PlaneLabels is the label of each plane in storage order, as
+// [imaging.Image.PlaneLabels] gives it: the labels the store was built with,
+// or the colour model's plane names. The slice is a copy.
+func (inst *Store) PlaneLabels() []string {
+	if inst.labels != nil {
+		return slices.Clone(inst.labels)
+	}
+	return slices.Clone(inst.model.PlaneNames())
+}
+
+// Placement is where the image's pixels are (ADR-0398 §SD4); the zero
+// placement when nothing says so. Its Unapplied list is a copy.
+func (inst *Store) Placement() imaging.Placement { return clonePlacement(inst.placement) }
+
+func clonePlacement(p imaging.Placement) imaging.Placement {
+	p.Unapplied = slices.Clone(p.Unapplied)
+	return p
+}
+
+func cloneProvenance(p imaging.Provenance) imaging.Provenance {
+	p.Notes = slices.Clone(p.Notes)
+	return p
+}
+
 // Provenance is where the samples came from. Its SampleHash is the digest
-// of the samples once the store is finished, and zero before.
+// of the samples once the store is finished, and zero before. Its Notes are
+// a copy.
 func (inst *Store) Provenance() imaging.Provenance {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	return inst.prov
+	return cloneProvenance(inst.prov)
 }
 
 // Finished reports whether every tile is built, and Err why building
@@ -210,9 +252,10 @@ func (inst *Store) checkRect(rect image.Rectangle) error {
 }
 
 // Histogram counts plane i over rect from the level-0 tiles, as
-// [stats.OfRegion] would over the whole image: one bin per value for an
-// integer plane; for a float plane, 4096 bins over the region's own range,
-// found by a first pass. Tiles not built yet are waited for.
+// [stats.OfRegion] would over the whole image: one bin per code for a kind
+// with codes; for a binned kind, 4096 bins over the region's own range,
+// found by a first pass. Invalid samples are counted apart. Tiles not built
+// yet are waited for.
 func (inst *Store) Histogram(ctx context.Context, i int, rect image.Rectangle) (h stats.Histogram, err error) {
 	if err = inst.checkRect(rect); err != nil {
 		return
@@ -221,7 +264,7 @@ func (inst *Store) Histogram(ctx context.Context, i int, rect image.Rectangle) (
 		return h, eb.Build().Int("plane", i).Errorf("image has no such plane")
 	}
 	binLo, binHi := 0.0, 0.0
-	if inst.kind == imaging.SampleKindF32 {
+	if _, _, codes := inst.kind.Codes(); !codes {
 		lo, hi := math.Inf(1), math.Inf(-1)
 		err = inst.tilesOver(ctx, rect, func(t Tile, part image.Rectangle) error {
 			th, terr := stats.OfRegion(t.Mean.Plane(i), part)
@@ -250,7 +293,9 @@ func (inst *Store) Histogram(ctx context.Context, i int, rect image.Rectangle) (
 
 // Read copies the samples of rect out of the level-0 tiles into an image of
 // its own, waiting for tiles not built yet. It costs the region's samples;
-// a caller reading a whole large image this way holds it twice.
+// a caller reading a whole large image this way holds it twice. The image
+// declares the store's invalid value and carries its plane labels and its
+// placement, moved to the region's origin.
 func (inst *Store) Read(ctx context.Context, rect image.Rectangle) (img imaging.Image, err error) {
 	if err = inst.checkRect(rect); err != nil {
 		return
@@ -258,15 +303,8 @@ func (inst *Store) Read(ctx context.Context, rect image.Rectangle) (img imaging.
 	n, w, h := inst.model.PlaneCount(), rect.Dx(), rect.Dy()
 	dst := make([]rows, n)
 	for i := range dst {
-		dst[i] = rows{kind: inst.kind, w: w}
-		switch inst.kind {
-		case imaging.SampleKindU8:
-			dst[i].u8 = make([]uint8, w*h)
-		case imaging.SampleKindU16:
-			dst[i].u16 = make([]uint16, w*h)
-		default:
-			dst[i].f32 = make([]float32, w*h)
-		}
+		dst[i] = rows{kind: inst.kind, w: w, inv: inst.invalid, hasInv: inst.declares(i)}
+		dst[i].alloc(w * h)
 	}
 	for row := rect.Min.Y / Size; row*Size < rect.Max.Y; row++ {
 		for col := rect.Min.X / Size; col*Size < rect.Max.X; col++ {
@@ -285,15 +323,7 @@ func (inst *Store) Read(ctx context.Context, rect image.Rectangle) (img imaging.
 				for y := abs.Min.Y; y < abs.Max.Y; y++ {
 					src0 := (y-origin.Y)*tw + abs.Min.X - origin.X
 					dst0 := (y-rect.Min.Y)*w + abs.Min.X - rect.Min.X
-					cw := abs.Dx()
-					switch inst.kind {
-					case imaging.SampleKindU8:
-						copy(dst[i].u8[dst0:dst0+cw], p.U8()[src0:src0+cw])
-					case imaging.SampleKindU16:
-						copy(dst[i].u16[dst0:dst0+cw], p.U16()[src0:src0+cw])
-					default:
-						copy(dst[i].f32[dst0:dst0+cw], p.F32()[src0:src0+cw])
-					}
+					dst[i].copyFrom(dst0, p, src0, abs.Dx())
 				}
 			}
 		}
@@ -306,7 +336,20 @@ func (inst *Store) Read(ctx context.Context, rect image.Rectangle) (img imaging.
 		planes[i], _ = planes[i].WithTransform(inst.Transform(i))
 	}
 	prov := inst.Provenance()
-	return imaging.NewImage(inst.model, planes, prov)
+	if img, err = imaging.NewImage(inst.model, planes, prov); err != nil {
+		return
+	}
+	if inst.labels != nil {
+		if img, err = img.WithPlaneLabels(inst.labels); err != nil {
+			return
+		}
+	}
+	if !inst.placement.IsZero() {
+		pl := clonePlacement(inst.placement)
+		pl.Affine[0], pl.Affine[3] = pl.Intermediate(float64(rect.Min.X), float64(rect.Min.Y))
+		img = img.WithPlacement(pl)
+	}
+	return img, nil
 }
 
 // StoredRange is plane i's smallest and largest valid stored sample, as the

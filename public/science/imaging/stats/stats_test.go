@@ -145,29 +145,7 @@ func TestARegionIsCountedOverItsOwnSamples(t *testing.T) {
 		kind := rapid.SampledFrom(imaging.AllSampleKinds).Draw(t, "kind")
 		w := rapid.IntRange(1, 30).Draw(t, "w")
 		h := rapid.IntRange(1, 30).Draw(t, "h")
-		raw := rapid.SliceOfN(rapid.Uint16(), w*h, w*h).Draw(t, "samples")
-		var p imaging.Plane
-		var err error
-		switch kind {
-		case imaging.SampleKindU8:
-			s := make([]uint8, w*h)
-			for i := range s {
-				s[i] = uint8(raw[i])
-			}
-			p, err = imaging.NewPlaneU8(w, h, s)
-		case imaging.SampleKindU16:
-			p, err = imaging.NewPlaneU16(w, h, slices.Clone(raw))
-		default:
-			s := make([]float32, w*h)
-			for i := range s {
-				s[i] = float32(raw[i])/9 - 2000
-				if raw[i]%7 == 0 {
-					s[i] = float32(math.NaN())
-				}
-			}
-			p, err = imaging.NewPlaneF32(w, h, s)
-		}
-		require.NoError(t, err)
+		p := drawPlane(t, kind, w, h)
 		x0 := rapid.IntRange(0, w-1).Draw(t, "x0")
 		y0 := rapid.IntRange(0, h-1).Draw(t, "y0")
 		rect := image.Rect(x0, y0, rapid.IntRange(x0+1, w).Draw(t, "x1"), rapid.IntRange(y0+1, h).Draw(t, "y1"))
@@ -251,27 +229,7 @@ func TestMergedTilesAreTheWhole(t *testing.T) {
 		kind := rapid.SampledFrom(imaging.AllSampleKinds).Draw(t, "kind")
 		w := rapid.IntRange(1, 40).Draw(t, "w")
 		h := rapid.IntRange(1, 40).Draw(t, "h")
-		raw := rapid.SliceOfN(rapid.Uint16(), w*h, w*h).Draw(t, "samples")
-		var p imaging.Plane
-		switch kind {
-		case imaging.SampleKindU8:
-			s := make([]uint8, w*h)
-			for i := range s {
-				s[i] = uint8(raw[i])
-			}
-			p, _ = imaging.NewPlaneU8(w, h, s)
-		case imaging.SampleKindU16:
-			p, _ = imaging.NewPlaneU16(w, h, slices.Clone(raw))
-		default:
-			s := make([]float32, w*h)
-			for i := range s {
-				s[i] = float32(raw[i])/7 - 900
-				if raw[i]%11 == 0 {
-					s[i] = float32(math.NaN())
-				}
-			}
-			p, _ = imaging.NewPlaneF32(w, h, s)
-		}
+		p := drawPlane(t, kind, w, h)
 		whole, err := OfRegion(p, image.Rect(0, 0, w, h))
 		require.NoError(t, err)
 		lo, hi, _ := whole.StoredRange()

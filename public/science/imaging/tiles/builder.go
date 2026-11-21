@@ -4,6 +4,7 @@ import (
 	"context"
 	"image"
 	"math"
+	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/science/imaging"
@@ -30,6 +31,20 @@ type Options struct {
 	Levels int
 	// Progress, when not nil, is told the rows added so far and the total.
 	Progress func(done, total int64)
+
+	// What the store says of the image beside its samples (ADR-0398 §SD2,
+	// §SD3, §SD4): a source that shows it reads them back.
+
+	// HasInvalid declares Invalid, a stored value, invalid in every colour
+	// plane; alpha declares none. Rows whose planes declare none are given
+	// it; rows that declare another are refused.
+	Invalid    float64
+	HasInvalid bool
+	// PlaneLabels names the planes in storage order, as
+	// [imaging.Image.PlaneLabels] does; nil takes the colour model's names.
+	PlaneLabels []string
+	// Placement is where the pixels are; the zero placement places nothing.
+	Placement imaging.Placement
 }
 
 // maxSide and maxPixels bound the image a store takes: sides a plane can
@@ -58,8 +73,24 @@ func NewBuilder(width, height int, model imaging.ColorModelE, kind imaging.Sampl
 		return nil, eb.Build().Int("width", width).Int("height", height).Errorf("image is larger than a store holds")
 	case model.PlaneCount() == 0 || kind == 0:
 		return nil, eb.Build().Errorf("image names no colour model or sample kind")
+	case !slices.Contains(imaging.AllSampleKinds, kind):
+		return nil, eb.Build().Stringer("kind", kind).Errorf("no store for samples of this kind")
 	case len(transforms) > model.PlaneCount():
 		return nil, eb.Build().Int("transforms", len(transforms)).Errorf("more value transforms than planes")
+	case opts.PlaneLabels != nil && len(opts.PlaneLabels) != model.PlaneCount():
+		return nil, eb.Build().Int("labels", len(opts.PlaneLabels)).Stringer("model", model).Errorf("a store needs one label per plane")
+	}
+	if err = opts.Placement.Validate(); err != nil {
+		return nil, err
+	}
+	if opts.HasInvalid {
+		// The kind must hold the value exactly, as a plane's declaration
+		// requires; a one-sample plane checks it.
+		r := rows{kind: kind, w: 1, inv: opts.Invalid, hasInv: true}
+		r.alloc(1)
+		if _, err = r.take(); err != nil {
+			return nil, err
+		}
 	}
 	reduced := opts.Levels
 	if reduced <= 0 {
@@ -75,8 +106,10 @@ func NewBuilder(width, height int, model imaging.ColorModelE, kind imaging.Sampl
 		}
 	}
 	s := &Store{width: width, height: height, model: model, kind: kind, transforms: tr, reduced: reduced,
-		changed: make(chan struct{}), prov: prov,
+		changed: make(chan struct{}), prov: cloneProvenance(prov),
 		lo: make([]float64, n), hi: make([]float64, n), ok: make([]bool, n)}
+	s.invalid, s.hasInvalid = opts.Invalid, opts.HasInvalid
+	s.labels, s.placement = slices.Clone(opts.PlaneLabels), clonePlacement(opts.Placement)
 	for i := range n {
 		s.lo[i], s.hi[i] = math.Inf(1), math.Inf(-1)
 	}
@@ -90,13 +123,13 @@ func NewBuilder(width, height int, model imaging.ColorModelE, kind imaging.Sampl
 	b = &Builder{s: s, band: make([]rows, n), acc: make([][]rows, reduced+1), accRow: make([]int, reduced+1),
 		digest: imaging.NewDigest(model, kind, width, height), opts: opts}
 	for i := range b.band {
-		b.band[i] = rows{kind: kind, w: width}
+		b.band[i] = rows{kind: kind, w: width, inv: opts.Invalid, hasInv: s.declares(i)}
 	}
 	for k := 1; k <= reduced; k++ {
 		w, _ := levels.Size(width, height, k)
 		b.acc[k] = make([]rows, 3*n)
 		for j := range b.acc[k] {
-			b.acc[k][j] = rows{kind: kind, w: w}
+			b.acc[k][j] = rows{kind: kind, w: w, inv: opts.Invalid, hasInv: s.declares(j / 3)}
 		}
 	}
 	return b, nil
@@ -128,10 +161,22 @@ func (inst *Builder) AddPlanes(planes []imaging.Plane) error {
 		return eb.Build().Int("planes", len(planes)).Stringer("model", s.model).Errorf("rows do not match the image being built")
 	}
 	h := planes[0].Height()
-	for _, p := range planes {
+	planes = slices.Clone(planes)
+	for i, p := range planes {
 		if p.Width() != s.width || p.Kind() != s.kind || p.Height() != h {
 			return eb.Build().Int("width", p.Width()).Stringer("kind", p.Kind()).Int("height", p.Height()).
 				Errorf("rows do not match the image being built")
+		}
+		inv, declared := p.Invalid()
+		switch {
+		case declared && (!s.declares(i) || inv != s.invalid):
+			return eb.Build().Int("plane", i).Float64("invalid", inv).Bool("storeDeclares", s.declares(i)).Float64("storeInvalid", s.invalid).
+				Errorf("rows declare an invalid value the image being built does not")
+		case !declared && s.declares(i):
+			var err error
+			if planes[i], err = p.WithInvalid(s.invalid); err != nil {
+				return err
+			}
 		}
 	}
 	if inst.added+h > s.height {
@@ -357,10 +402,21 @@ func reduceBand(band imaging.Image, count int) (out []levels.Level, err error) {
 }
 
 // FromImage builds a store from an image in memory, all at once. The store
-// holds a copy; the image may be dropped afterwards.
+// holds a copy; the image may be dropped afterwards. What opts leaves unset
+// of the image's description — the declared invalid value, the plane labels,
+// the placement — is taken from the image.
 func FromImage(ctx context.Context, img imaging.Image, opts Options) (s *Store, err error) {
 	if img.IsZero() {
 		return nil, eb.Build().Errorf("no image to store")
+	}
+	if !opts.HasInvalid {
+		opts.Invalid, opts.HasInvalid = img.Plane(0).Invalid()
+	}
+	if opts.PlaneLabels == nil {
+		opts.PlaneLabels = img.PlaneLabels()
+	}
+	if opts.Placement.IsZero() {
+		opts.Placement = img.Placement()
 	}
 	tr := make([]imaging.ValueTransform, img.PlaneCount())
 	for i := range tr {
@@ -393,16 +449,30 @@ func FromImage(ctx context.Context, img imaging.Image, opts Options) (s *Store, 
 	return b.Store(), b.Finish()
 }
 
-// rowsOf is rows [y0, y1) of p as a plane, sharing its samples.
-func rowsOf(p imaging.Plane, y0, y1 int) (imaging.Plane, error) {
+// rowsOf is rows [y0, y1) of p as a plane, sharing its samples, declaring
+// what p declares and under its value transform.
+func rowsOf(p imaging.Plane, y0, y1 int) (out imaging.Plane, err error) {
 	w := p.Width()
 	switch p.Kind() {
 	case imaging.SampleKindU8:
-		return imaging.NewPlaneU8(w, y1-y0, p.U8()[y0*w:y1*w])
+		out, err = imaging.NewPlaneU8(w, y1-y0, p.U8()[y0*w:y1*w])
 	case imaging.SampleKindU16:
-		return imaging.NewPlaneU16(w, y1-y0, p.U16()[y0*w:y1*w])
+		out, err = imaging.NewPlaneU16(w, y1-y0, p.U16()[y0*w:y1*w])
+	case imaging.SampleKindI16:
+		out, err = imaging.NewPlaneI16(w, y1-y0, p.I16()[y0*w:y1*w])
+	case imaging.SampleKindI32:
+		out, err = imaging.NewPlaneI32(w, y1-y0, p.I32()[y0*w:y1*w])
+	case imaging.SampleKindF32:
+		out, err = imaging.NewPlaneF32(w, y1-y0, p.F32()[y0*w:y1*w])
+	case imaging.SampleKindF64:
+		out, err = imaging.NewPlaneF64(w, y1-y0, p.F64()[y0*w:y1*w])
+	default:
+		return out, eb.Build().Stringer("kind", p.Kind()).Errorf("no rows of this sample kind")
 	}
-	return imaging.NewPlaneF32(w, y1-y0, p.F32()[y0*w:y1*w])
+	if err != nil {
+		return
+	}
+	return like(out, p)
 }
 
 // imageRect is the rectangle of a w × h grid from the origin.

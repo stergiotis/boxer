@@ -33,7 +33,34 @@ const (
 	// does not store directly, as a detector's counts stand for a
 	// temperature. Limits, the histogram and statistics are in values.
 	NameScaled = "scaled"
+	// NameElevation is 400 × 300 of signed 16-bit samples, metres of an
+	// elevation model: hills up to about 1700, a basin down to about −500,
+	// and a border of ElevationBorder pixels holding [ElevationInvalid],
+	// declared invalid — the way a raster marks where it has no measurement
+	// (ADR-0398 §SD2).
+	NameElevation = "elevation"
+	// NameDouble is 320 × 240 of 64-bit float samples: ripples of about
+	// 10⁻⁴ on an offset of 10⁹, which 32-bit floats could not tell apart,
+	// with a diagonal line of NaN.
+	NameDouble = "double"
+	// NameCounts is 320 × 240 of signed 32-bit samples, a background-
+	// subtracted count: mostly a few hundred either side of zero, one source
+	// reaching about 1.5 × 10⁹ and a corner of [CountsInvalid], declared
+	// invalid.
+	NameCounts = "counts"
 )
+
+const (
+	// ElevationInvalid is the elevation sample's declared invalid value.
+	ElevationInvalid = -32768
+	// ElevationBorder is the width of the elevation sample's border of
+	// invalid samples.
+	ElevationBorder = 8
+)
+
+// CountsInvalid is the counts sample's declared invalid value, which fills
+// its top left 16 × 16 pixels.
+const CountsInvalid = math.MinInt32
 
 // FloatInvalid is the float sample's block of invalid samples: columns
 // [40, 120) and rows [300, 380).
@@ -43,7 +70,9 @@ var FloatInvalid = image.Rect(40, 300, 120, 380)
 var ScaledTransform = imaging.ValueTransform{Scale: 0.01, Offset: -40}
 
 // Names lists the sample images in the order a menu shows them.
-func Names() []string { return []string{NameField, NameColour, NameSmall, NameFloat, NameScaled} }
+func Names() []string {
+	return []string{NameField, NameColour, NameSmall, NameFloat, NameScaled, NameElevation, NameDouble, NameCounts}
+}
 
 // ByName makes the named sample image. Its provenance names it as
 // synthetic.
@@ -59,6 +88,12 @@ func ByName(name string) (img imaging.Image, err error) {
 		return float()
 	case NameScaled:
 		return scaled()
+	case NameElevation:
+		return elevation()
+	case NameDouble:
+		return double()
+	case NameCounts:
+		return counts()
 	}
 	return img, eb.Build().Str("name", name).Strs("names", slices.Clone(Names())).Errorf("no sample image of that name")
 }
@@ -172,4 +207,150 @@ func scaled() (imaging.Image, error) {
 		return imaging.Image{}, err
 	}
 	return imaging.NewImage(imaging.ColorModelGray, []imaging.Plane{p}, imaging.Provenance{SourceName: "synthetic scaled"})
+}
+
+func elevation() (imaging.Image, error) {
+	const w, h = 400, 300
+	s := make([]int16, w*h)
+	for y := range h {
+		for x := range w {
+			if x < ElevationBorder || y < ElevationBorder || x >= w-ElevationBorder || y >= h-ElevationBorder {
+				s[y*w+x] = ElevationInvalid
+				continue
+			}
+			hx, hy := float64(x-270), float64(y-110)
+			hills := 1500*math.Exp(-(hx*hx+hy*hy)/(2*60*60)) + 300*math.Sin(float64(x)/31)*math.Cos(float64(y)/27)
+			bx, by := float64(x-110), float64(y-200)
+			basin := -650 * math.Exp(-(bx*bx+by*by)/(2*45*45))
+			s[y*w+x] = int16(math.Round(250 + hills + basin))
+		}
+	}
+	p, err := imaging.NewPlaneI16(w, h, s)
+	if err != nil {
+		return imaging.Image{}, err
+	}
+	if p, err = p.WithInvalid(ElevationInvalid); err != nil {
+		return imaging.Image{}, err
+	}
+	return imaging.NewImage(imaging.ColorModelGray, []imaging.Plane{p}, imaging.Provenance{SourceName: "synthetic elevation"})
+}
+
+func double() (imaging.Image, error) {
+	const w, h = 320, 240
+	s := make([]float64, w*h)
+	for y := range h {
+		for x := range w {
+			v := 1e9 + 1e-4*math.Sin(float64(x)/9)*math.Cos(float64(y)/13)
+			if x == y {
+				v = math.NaN()
+			}
+			s[y*w+x] = v
+		}
+	}
+	p, err := imaging.NewPlaneF64(w, h, s)
+	if err != nil {
+		return imaging.Image{}, err
+	}
+	return imaging.NewImage(imaging.ColorModelGray, []imaging.Plane{p}, imaging.Provenance{SourceName: "synthetic double"})
+}
+
+func counts() (imaging.Image, error) {
+	const w, h = 320, 240
+	s := make([]int32, w*h)
+	for y := range h {
+		for x := range w {
+			if x < 16 && y < 16 {
+				s[y*w+x] = CountsInvalid
+				continue
+			}
+			dx, dy := float64(x-200), float64(y-90)
+			source := 1.5e9 * math.Exp(-(dx*dx+dy*dy)/(2*6*6))
+			noise := 300 * math.Sin(float64(x*7+y*13))
+			s[y*w+x] = int32(math.Round(source + noise))
+		}
+	}
+	p, err := imaging.NewPlaneI32(w, h, s)
+	if err != nil {
+		return imaging.Image{}, err
+	}
+	if p, err = p.WithInvalid(CountsInvalid); err != nil {
+		return imaging.Image{}, err
+	}
+	return imaging.NewImage(imaging.ColorModelGray, []imaging.Plane{p}, imaging.Provenance{SourceName: "synthetic counts"})
+}
+
+// The names [StackByName] takes.
+const (
+	// StackBands is 160 × 120 of 16-bit samples along two axes: "time", a
+	// selector of three acquisitions 16 days apart, and "band", a band axis
+	// of four spectral bands labelled B2, B3, B4 and B8 with their centre
+	// wavelengths in nanometres. 0 is declared invalid and fills a strip
+	// that moves with the time, as a swath edge does; the placement is a
+	// projected reference system at 10 m a pixel (ADR-0398 §SD3, §SD4).
+	StackBands = "bands"
+)
+
+// BandsInvalid is the bands stack's declared invalid value.
+const BandsInvalid = 0
+
+// BandsPlacement is the bands stack's placement.
+var BandsPlacement = imaging.Placement{
+	Affine: [6]float64{500_000, 10, 0, 5_200_000, 0, -10},
+	Frame: imaging.Frame{Kind: imaging.FrameKindReferenceSystem, Code: "EPSG:32632",
+		AxisNames: [2]string{"E", "N"}, Units: [2]string{"m", "m"}},
+	Source: "synthetic",
+}
+
+// StackNames lists the sample stacks in the order a menu shows them.
+func StackNames() []string { return []string{StackBands} }
+
+// StackByName makes the named sample stack. Its provenance names it as
+// synthetic.
+func StackByName(name string) (stack imaging.Stack, err error) {
+	switch name {
+	case StackBands:
+		return bands()
+	}
+	return stack, eb.Build().Str("name", name).Strs("names", StackNames()).Errorf("no sample stack of that name")
+}
+
+func bands() (imaging.Stack, error) {
+	const w, h = 160, 120
+	axes := []imaging.Axis{
+		{Name: "time", Role: imaging.AxisRoleSelector, Size: 3, Unit: "d", Coords: []float64{0, 16, 32},
+			Labels: []string{"day 0", "day 16", "day 32"}},
+		{Name: "band", Role: imaging.AxisRoleBand, Size: 4, Unit: "nm", Coords: []float64{490, 560, 665, 842},
+			Labels: []string{"B2", "B3", "B4", "B8"}},
+	}
+	// Reflectance-like levels per band over two covers — water on the left,
+	// vegetation on the right — so that B8 against B4 separates them.
+	water := [4]float64{900, 700, 500, 300}
+	green := [4]float64{500, 900, 400, 4000}
+	planes := make([]imaging.Plane, 0, 12)
+	for ti := range 3 {
+		for bi := range 4 {
+			s := make([]uint16, w*h)
+			for y := range h {
+				for x := range w {
+					if x < 6+4*ti {
+						s[y*w+x] = BandsInvalid
+						continue
+					}
+					f := 0.5 + 0.5*math.Tanh(float64(x-70-6*ti)/8)
+					v := water[bi]*(1-f) + green[bi]*f
+					v *= 1 + 0.05*math.Sin(float64(y)/7+float64(ti))
+					s[y*w+x] = uint16(max(1, math.Round(v)))
+				}
+			}
+			p, err := imaging.NewPlaneU16(w, h, s)
+			if err != nil {
+				return imaging.Stack{}, err
+			}
+			if p, err = p.WithInvalid(BandsInvalid); err != nil {
+				return imaging.Stack{}, err
+			}
+			planes = append(planes, p)
+		}
+	}
+	return imaging.NewStack(axes, planes, 0, BandsPlacement, imaging.Provenance{SourceName: "synthetic bands"})
 }

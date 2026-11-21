@@ -10,8 +10,19 @@
 // nearest, and a block cut short by the image's edge is averaged over the
 // samples it has. The minimum and maximum are exact, so a cell's extremes
 // bound every sample it summarises — a bright pixel that the mean averages
-// away is still in the maximum. In a float plane invalid samples are left
-// out of all three, and a cell with no valid sample is itself invalid.
+// away is still in the maximum. Invalid samples — NaN in a float plane, and
+// the value a plane declares invalid (ADR-0398 §SD2) — are left out of all
+// three, a cell with no valid sample is itself invalid, and every plane of a
+// level declares what the plane it was reduced from declares. A rounded mean
+// that would land on the declared value is moved to the neighbouring code on
+// the side of the cell's exact mean, up when the exact mean is the declared
+// value itself, so a level can differ by one code from the mean of its valid
+// samples; a level is for drawing.
+//
+// Means of every sample kind are in the plane's own kind. Integer samples are
+// summed in 64 bits, which holds the sum of any cell of fewer than 2^32
+// samples of the widest kind exactly; a level whose cells could hold more is
+// refused.
 //
 // [Build] makes every level in one pass per level, each from the sums of the
 // one below. [Reduce] computes one region of one level directly from the
