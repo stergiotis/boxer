@@ -21,14 +21,17 @@ var ReadTableSetting = env.NewString(env.Spec{
 	Category: env.CategoryDatabase,
 })
 
-// tableRefRe is the shape recordstore.CheckTableRef accepts: an unquoted
-// identifier, optionally database-qualified. It is repeated here so that the
-// schema package does not depend on the record-store runtime.
-var tableRefRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$`)
+// qualifiedRefRe is a database-qualified reference of the shape
+// recordstore.CheckTableRef accepts, unquoted identifiers. It is repeated
+// here so that the schema package does not depend on the record-store
+// runtime. The qualification is required: the readers resolve the facts
+// columns against the relation's database, and a bare name would resolve in
+// whatever database a session starts in.
+var qualifiedRefRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$`)
 
 // ReadTable is the relation reads of facts go to: [ReadTableSetting], or
-// [QualifiedTableName] when it is empty. A setting that is not an unquoted,
-// optionally database-qualified identifier is an error rather than a
+// [QualifiedTableName] when it is empty. A setting that is not a
+// database-qualified, unquoted identifier is an error rather than a
 // reference spliced into SQL. The registry resolves the setting once per
 // process.
 func ReadTable() (ref string, err error) {
@@ -36,9 +39,9 @@ func ReadTable() (ref string, err error) {
 	if ref == "" {
 		return QualifiedTableName, nil
 	}
-	if !tableRefRe.MatchString(ref) {
+	if !qualifiedRefRe.MatchString(ref) {
 		err = eb.Build().Str("setting", ReadTableSetting.Spec().Name).Str("value", ref).
-			Errorf("factsschema: the read table must be an unquoted identifier, optionally database-qualified")
+			Errorf("factsschema: the read table must be a database-qualified, unquoted identifier")
 		ref = ""
 	}
 	return

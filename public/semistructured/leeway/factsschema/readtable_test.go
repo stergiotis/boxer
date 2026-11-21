@@ -38,4 +38,7 @@ func TestReadTable_RefusesAReferenceItCannotSplice(t *testing.T) {
 	require.Error(t, err)
 	_, err = ReadTableFor(QualifiedTableName)
 	require.Error(t, err)
+	envtest.Set(t, ReadTableSetting, "facts_view")
+	_, err = ReadTable()
+	require.Error(t, err, "a bare name would resolve in whatever database a session starts in")
 }
