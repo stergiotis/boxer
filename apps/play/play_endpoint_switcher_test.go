@@ -21,6 +21,15 @@ const (
 	testLocalURL    = "http://127.0.0.1:59999/query"
 )
 
+// withExternalTarget makes testExternalURL the server the environment names.
+// CLICKHOUSE_ENDPOINT takes precedence over CLICKHOUSE_URL, so it is cleared:
+// a value set around the test run would otherwise win.
+func withExternalTarget(t *testing.T) {
+	t.Helper()
+	envtest.Set(t, clickhouseenv.Endpoint, "")
+	envtest.Set(t, clickhouseenv.URL, testExternalURL)
+}
+
 // withLocalQueryEndpoint publishes an in-process introspection /query URL for
 // the duration of the test, restoring whatever was there before. The registry
 // is process-global, so leaking one would retarget every later test that opens
@@ -43,7 +52,7 @@ func withLocalQueryEndpoint(t *testing.T, url string) {
 // clickhouse-local's own system tables rather than the server's, which is a
 // wrong answer rather than an error.
 func TestMount_IntrospectionLaunchKeepsExternalResetTarget(t *testing.T) {
-	envtest.Set(t, clickhouseenv.URL, testExternalURL)
+	withExternalTarget(t)
 	withLocalQueryEndpoint(t, testLocalURL)
 
 	cfg := encodePlayLaunch(t, launchcfg.PlayLaunch{
@@ -71,7 +80,7 @@ func TestMount_IntrospectionLaunchKeepsExternalResetTarget(t *testing.T) {
 // TestMount_PlainOpenExternalIsTheEnvTarget: with no retarget, the external
 // target is simply where the window opened.
 func TestMount_PlainOpenExternalIsTheEnvTarget(t *testing.T) {
-	envtest.Set(t, clickhouseenv.URL, testExternalURL)
+	withExternalTarget(t)
 	withLocalQueryEndpoint(t, testLocalURL)
 
 	inst, err := mountLauncher(t, nil, mapStorage{})
@@ -86,7 +95,7 @@ func TestMount_PlainOpenExternalIsTheEnvTarget(t *testing.T) {
 // failed one — and the external target is untouched, so the switcher is in the
 // same state a plain open leaves it.
 func TestMount_IntrospectionLaunchWithoutLocalEndpointDegrades(t *testing.T) {
-	envtest.Set(t, clickhouseenv.URL, testExternalURL)
+	withExternalTarget(t)
 	withLocalQueryEndpoint(t, "")
 
 	cfg := encodePlayLaunch(t, launchcfg.PlayLaunch{
