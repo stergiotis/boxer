@@ -12,7 +12,6 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	useaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
-	"golang.org/x/exp/maps"
 )
 
 func NewTableManipulator() (inst *TableManipulator, err error) {
@@ -44,9 +43,9 @@ func (inst *TableManipulator) Reset() {
 	inst.buffer.Reset()
 	inst.table.Reset()
 	for _, lu := range inst.plainValueItemNameToIndex {
-		maps.Clear(lu)
+		clear(lu)
 	}
-	maps.Clear(inst.sectionNameToIndex)
+	clear(inst.sectionNameToIndex)
 	inst.upsertedCount = 0
 }
 func (inst *TableManipulator) BuildTableDesc() (tbl TableDesc, err error) {

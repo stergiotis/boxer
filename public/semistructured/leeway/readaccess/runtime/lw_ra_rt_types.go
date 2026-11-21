@@ -2,8 +2,6 @@ package runtime
 
 import (
 	"iter"
-
-	"golang.org/x/exp/constraints"
 )
 
 type ReferenceCountingI interface {
@@ -33,8 +31,10 @@ type (
 	EntityIdx int
 )
 
+// IndexConstraintI is the integer types an index column may hold.
 type IndexConstraintI interface {
-	constraints.Integer | constraints.Unsigned
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr
 }
 type RandomAccessLookupAccel[F IndexConstraintI, B IndexConstraintI] struct {
 	forwardBeginIncl []F
