@@ -9,12 +9,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 func defaults() chstore.Config {
@@ -67,6 +69,23 @@ func TestTrailViewsReadTheReadTable(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, have, "FROM carrier.facts_view\n")
 	require.Contains(t, have, "CREATE OR REPLACE VIEW boxer.")
+}
+
+// Under an insert transform there is no facts DDL: the bare command
+// refuses, and --trail-views prints the views without it (ADR-0402 §SD5).
+func TestUnderATransformNoFactsDDL(t *testing.T) {
+	cfg := chstore.Config{Database: "scratch_ddl", Table: "facts"}
+	unregister := recordstore.RegisterInsertTransform("scratch_ddl.facts", recordstore.InsertTransformFunc(
+		func(_ string, records []arrow.RecordBatch) (string, []arrow.RecordBatch, error) {
+			return "scratch_ddl.carrier", records, nil
+		}))
+	defer unregister()
+	_, err := compose(options{cfg: cfg})
+	require.ErrorIs(t, err, recordstore.ErrTransformedTable)
+	have, err := compose(options{cfg: cfg, trailViews: true, readTable: "carrier.facts_view"})
+	require.NoError(t, err)
+	require.NotContains(t, have, "CREATE TABLE")
+	require.Contains(t, have, "FROM carrier.facts_view\n")
 }
 
 func TestWithSurfaceNeedsTrailViews(t *testing.T) {

@@ -27,7 +27,10 @@
 //
 // The views read the facts table, or the read table --read-table or
 // BOXER_FACTS_READ_TABLE names (ADR-0402 §SD3), and are created in
-// --database either way.
+// --database either way. Under an insert transform for the table the facts
+// are stored in a deployment's own table and there is no setup DDL: the
+// command refuses without --trail-views, and with it prints the database
+// and the views alone.
 //
 // Re-running the views half after a surface upgrade is what refreshes them:
 // every view is CREATE OR REPLACE and stamped in its COMMENT with the
@@ -46,8 +49,10 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // options is what one invocation prints.
@@ -67,9 +72,19 @@ func compose(opts options) (sql string, err error) {
 	if opts.withSurface && !opts.trailViews {
 		return "", eh.Errorf("keelsonddl: --with-surface only accompanies --trail-views; `leeway sqlsurface print` prints the surface alone")
 	}
-	sql, err = chstore.ComposeSetupSQL(opts.cfg, opts.engineClause)
-	if err != nil {
-		return "", eh.Errorf("keelsonddl: %w", err)
+	if chstore.WriteTransformed(opts.cfg) {
+		// The facts are stored in the deployment's own table (ADR-0402
+		// §SD5): there is no facts DDL to print, only the views over the
+		// read table.
+		if !opts.trailViews {
+			return "", eb.Build().Str("table", opts.cfg.Database+"."+opts.cfg.Table).Errorf("keelsonddl: an insert transform is registered for the table, so its storage is the deployment's and there is no setup DDL; --trail-views prints the views over the read table: %w", recordstore.ErrTransformedTable)
+		}
+		sql = "-- " + opts.cfg.Database + "." + opts.cfg.Table + ": stored in the deployment's own table under an insert transform; no setup DDL (ADR-0402)\nCREATE DATABASE IF NOT EXISTS " + opts.cfg.Database + ";\n"
+	} else {
+		sql, err = chstore.ComposeSetupSQL(opts.cfg, opts.engineClause)
+		if err != nil {
+			return "", eh.Errorf("keelsonddl: %w", err)
+		}
 	}
 	if !opts.trailViews {
 		return sql, nil
