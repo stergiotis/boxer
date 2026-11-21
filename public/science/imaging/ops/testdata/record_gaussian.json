@@ -1,0 +1,41 @@
+{
+  "schema": "boxer.imaging.ops.record/1",
+  "operator": "gaussian",
+  "version": 1,
+  "request": "c09ee73616f72d076a0fbf5fb4709022902a55987f8637190961a7386c0aa997",
+  "params": {
+    "border": "nearest",
+    "sigma": 0.8
+  },
+  "canonical": {
+    "border": "nearest",
+    "sigma": 0.8
+  },
+  "inputs": [
+    {
+      "name": "f",
+      "digest": "096fe91654b6559c753090af24927585e88048739a6e744c573b3e0e32078978",
+      "model": "gray",
+      "kind": "f32",
+      "transforms": [
+        {
+          "scale": 1,
+          "offset": 0
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "The Gaussian is truncated at a radius of 4 px (⌈4σ⌉), its 9 taps normalised to sum to one; it is applied down the columns, then along the rows."
+  ],
+  "output": {
+    "width": 4,
+    "height": 3,
+    "model": "gray",
+    "kind": "f32",
+    "planeLabels": [
+      "gray"
+    ],
+    "digest": "d9f5f44caa8940b09f1e44eb0c21479e9c36ea4a41aa223a59b528a6f18a8308"
+  }
+}

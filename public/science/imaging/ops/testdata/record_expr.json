@@ -1,0 +1,49 @@
+{
+  "schema": "boxer.imaging.ops.record/1",
+  "operator": "expr",
+  "version": 1,
+  "request": "11f45653ef83f47c73f8826c117d85e66d6343db8757a8d2b85d242827373d25",
+  "params": {
+    "expression": "(a-b)/(a+b)"
+  },
+  "canonical": {
+    "expression": "(a - b) / (a + b)"
+  },
+  "inputs": [
+    {
+      "name": "a",
+      "digest": "69f19ba25d023ded8a136ec1e5a0e7568889c8f3374d7e88c4c71e32f5259f4b",
+      "model": "gray",
+      "kind": "u8",
+      "transforms": [
+        {
+          "scale": 1,
+          "offset": 0
+        }
+      ],
+      "invalid": 255
+    },
+    {
+      "name": "b",
+      "digest": "f145ead22232bf559f3f31e37653ddd9a7d48d65a03e1591c35f8b787c8e0ece",
+      "model": "gray",
+      "kind": "u16",
+      "transforms": [
+        {
+          "scale": 2,
+          "offset": -1
+        }
+      ]
+    }
+  ],
+  "output": {
+    "width": 5,
+    "height": 4,
+    "model": "gray",
+    "kind": "f32",
+    "planeLabels": [
+      "(a - b) / (a + b)"
+    ],
+    "digest": "857d7f7293db8d9247691dfe3d9a8cf04920c8be92f7146eb711819761c69192"
+  }
+}

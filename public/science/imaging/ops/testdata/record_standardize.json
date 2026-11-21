@@ -1,0 +1,52 @@
+{
+  "schema": "boxer.imaging.ops.record/1",
+  "operator": "standardize",
+  "version": 1,
+  "request": "3e85efc440bdf9269497fa1ddb8705575d1e36cfb2731cdbd68f8456716e2b92",
+  "params": {},
+  "canonical": {},
+  "inputs": [
+    {
+      "name": "b",
+      "digest": "f145ead22232bf559f3f31e37653ddd9a7d48d65a03e1591c35f8b787c8e0ece",
+      "model": "gray",
+      "kind": "u16",
+      "transforms": [
+        {
+          "scale": 2,
+          "offset": -1
+        }
+      ]
+    }
+  ],
+  "quantities": [
+    {
+      "name": "count",
+      "plane": 0,
+      "value": 20
+    },
+    {
+      "name": "mean",
+      "plane": 0,
+      "value": 20
+    },
+    {
+      "name": "stddev",
+      "plane": 0,
+      "value": 11.532562594670797
+    }
+  ],
+  "notes": [
+    "The mean and the standard deviation (divisor n) are taken over each plane's valid samples, in two passes of compensated sums in row-major order: the mean, then the squared deviations from it."
+  ],
+  "output": {
+    "width": 5,
+    "height": 4,
+    "model": "gray",
+    "kind": "f32",
+    "planeLabels": [
+      "gray"
+    ],
+    "digest": "2dc2309cdd75a50f187d9ea229d385cfecf116662a53c4c66d69088fb3a9dedf"
+  }
+}

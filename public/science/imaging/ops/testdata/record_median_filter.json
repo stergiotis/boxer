@@ -1,0 +1,41 @@
+{
+  "schema": "boxer.imaging.ops.record/1",
+  "operator": "median-filter",
+  "version": 1,
+  "request": "a5f81fdb886cc3423cd67f37af2bef31cb399b18e131bb7b3d3fae0b81e2f79b",
+  "params": {
+    "border": "invalid"
+  },
+  "canonical": {
+    "border": "invalid",
+    "radius": 1
+  },
+  "inputs": [
+    {
+      "name": "e",
+      "digest": "01fea51c17e579557c71241a894110e35cae747de6bcb4b243417d3e85943509",
+      "model": "gray",
+      "kind": "i16",
+      "transforms": [
+        {
+          "scale": 1,
+          "offset": 0
+        }
+      ],
+      "invalid": -32768
+    }
+  ],
+  "notes": [
+    "A window holding an invalid sample, or under border=invalid reaching outside the image, gives an invalid sample, so every median is of a full, odd-sized window."
+  ],
+  "output": {
+    "width": 4,
+    "height": 4,
+    "model": "gray",
+    "kind": "f32",
+    "planeLabels": [
+      "gray"
+    ],
+    "digest": "2809efb60f0c5157b0fda18a9a6f3eca86b19598670e95f6e4269aa241a753cd"
+  }
+}

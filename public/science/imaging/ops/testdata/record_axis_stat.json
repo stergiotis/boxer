@@ -1,0 +1,63 @@
+{
+  "schema": "boxer.imaging.ops.record/1",
+  "operator": "axis-stat",
+  "version": 1,
+  "request": "27628d57cd9fd04c9c60248752ea7bf3208812f64bab74f51b4c1e8205c35ae3",
+  "params": {
+    "stat": "median"
+  },
+  "canonical": {
+    "stat": "median"
+  },
+  "inputs": [
+    {
+      "name": "t0",
+      "digest": "69f19ba25d023ded8a136ec1e5a0e7568889c8f3374d7e88c4c71e32f5259f4b",
+      "model": "gray",
+      "kind": "u8",
+      "transforms": [
+        {
+          "scale": 1,
+          "offset": 0
+        }
+      ],
+      "invalid": 255,
+      "positions": [
+        {
+          "axis": "time",
+          "index": 0,
+          "label": "day 0"
+        }
+      ]
+    },
+    {
+      "name": "t1",
+      "digest": "f145ead22232bf559f3f31e37653ddd9a7d48d65a03e1591c35f8b787c8e0ece",
+      "model": "gray",
+      "kind": "u16",
+      "transforms": [
+        {
+          "scale": 2,
+          "offset": -1
+        }
+      ],
+      "positions": [
+        {
+          "axis": "time",
+          "index": 1,
+          "label": "day 16"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "width": 5,
+    "height": 4,
+    "model": "gray",
+    "kind": "f32",
+    "planeLabels": [
+      "median"
+    ],
+    "digest": "b64624bd3c123768c8bfb15dd99a3b5f00f582a717432a4a81187cb152d802da"
+  }
+}
