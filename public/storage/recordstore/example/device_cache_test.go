@@ -34,6 +34,14 @@ func (inst *countingExecutor) InsertArrow(ctx context.Context, table string, rec
 	return inst.inner.InsertArrow(ctx, table, records)
 }
 
+// InsertArrowWith passes the store's per-insert settings through, so its
+// deduplication token reaches the executor (ADR-0387).
+func (inst *countingExecutor) InsertArrowWith(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (bool, error) {
+	return recordstore.InsertArrowWith(ctx, inst.inner, table, records, settings)
+}
+
+var _ recordstore.InsertSettingsI = (*countingExecutor)(nil)
+
 // failingExecutor accepts writes and fails every read — the fetch-error
 // path without a ClickHouse dependency.
 type failingExecutor struct {

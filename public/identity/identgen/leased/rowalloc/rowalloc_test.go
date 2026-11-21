@@ -240,3 +240,11 @@ func (inst *faultExec) QueryArrow(ctx context.Context, sql string) iter.Seq2[arr
 func (inst *faultExec) InsertArrow(ctx context.Context, table string, records []arrow.RecordBatch) (err error) {
 	return inst.inner.InsertArrow(ctx, table, records)
 }
+
+// InsertArrowWith passes the store's per-insert settings through, so its
+// deduplication token reaches the executor (ADR-0387).
+func (inst *faultExec) InsertArrowWith(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (bool, error) {
+	return recordstore.InsertArrowWith(ctx, inst.inner, table, records, settings)
+}
+
+var _ recordstore.InsertSettingsI = (*faultExec)(nil)

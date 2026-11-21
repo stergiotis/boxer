@@ -127,10 +127,19 @@ func (inst *serialExec) Exec(ctx context.Context, sql string) error {
 }
 
 func (inst *serialExec) InsertArrow(ctx context.Context, table string, records []arrow.RecordBatch) error {
+	_, err := inst.InsertArrowWith(ctx, table, records, recordstore.InsertSettings{})
+	return err
+}
+
+// InsertArrowWith passes the store's per-insert settings through, so its
+// deduplication token reaches the executor (ADR-0387).
+func (inst *serialExec) InsertArrowWith(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (bool, error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	return inst.inner.InsertArrow(ctx, table, records)
+	return recordstore.InsertArrowWith(ctx, inst.inner, table, records, settings)
 }
+
+var _ recordstore.InsertSettingsI = (*serialExec)(nil)
 
 // QueryArrow holds the lock for the whole iteration: the records are the
 // query's output, and the next statement must not start before it ends.

@@ -30,12 +30,21 @@ func (inst *flakyExecutor) QueryArrow(ctx context.Context, sql string) iter.Seq2
 }
 
 func (inst *flakyExecutor) InsertArrow(ctx context.Context, table string, records []arrow.RecordBatch) error {
+	_, err := inst.InsertArrowWith(ctx, table, records, recordstore.InsertSettings{})
+	return err
+}
+
+// InsertArrowWith passes the store's per-insert settings through, so its
+// deduplication token reaches the executor (ADR-0387).
+func (inst *flakyExecutor) InsertArrowWith(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (bool, error) {
 	inst.inserts++
 	if inst.inserts == inst.failNth {
-		return errors.New("synthetic insert failure")
+		return true, errors.New("synthetic insert failure")
 	}
-	return inst.inner.InsertArrow(ctx, table, records)
+	return recordstore.InsertArrowWith(ctx, inst.inner, table, records, settings)
 }
+
+var _ recordstore.InsertSettingsI = (*flakyExecutor)(nil)
 
 func ph(b byte) (out types.PatchHash) {
 	for i := range out {

@@ -41,12 +41,21 @@ func (inst *hangingExecutor) QueryArrow(ctx context.Context, sql string) iter.Se
 }
 
 func (inst *hangingExecutor) InsertArrow(ctx context.Context, table string, records []arrow.RecordBatch) error {
+	_, err := inst.InsertArrowWith(ctx, table, records, recordstore.InsertSettings{})
+	return err
+}
+
+// InsertArrowWith passes the store's per-insert settings through, so its
+// deduplication token reaches the executor (ADR-0387).
+func (inst *hangingExecutor) InsertArrowWith(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (bool, error) {
 	if inst.hang.Load() {
 		<-ctx.Done()
-		return ctx.Err()
+		return true, ctx.Err()
 	}
-	return inst.inner.InsertArrow(ctx, table, records)
+	return recordstore.InsertArrowWith(ctx, inst.inner, table, records, settings)
 }
+
+var _ recordstore.InsertSettingsI = (*hangingExecutor)(nil)
 
 // A server that stops answering costs a call CallTimeout, then an error,
 // and the mutex is free for the next call.
