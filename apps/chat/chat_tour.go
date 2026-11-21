@@ -9,6 +9,9 @@
 package chat
 
 import (
+	"github.com/rs/zerolog"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -74,5 +77,9 @@ func tourRender(ids *c.WidgetIdStack, state any) {
 		return
 	}
 	inst.ids = ids
-	_ = inst.Frame(nil)
+	_ = inst.Frame(tourFrameCtx)
 }
+
+// tourFrameCtx is the context a tour frame draws under: a host offering
+// nothing, so the window reads as focused and asks for no close.
+var tourFrameCtx = app.NewStaticFrameContext(app.NewStaticMountContext(ManifestId, zerolog.Nop(), nil, nil, nil))
