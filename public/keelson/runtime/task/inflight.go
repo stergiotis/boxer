@@ -4,9 +4,9 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/inflightsnapshotreply"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // InflightSnapshotReply is the wire payload an M3 supervisor publishes on

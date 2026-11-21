@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchrequest"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 func encodeRequest(t *testing.T) (b []byte) {

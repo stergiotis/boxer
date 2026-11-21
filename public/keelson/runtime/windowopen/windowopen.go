@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchrequest"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // OpenSubject is the audited request/reply subject apps use to open

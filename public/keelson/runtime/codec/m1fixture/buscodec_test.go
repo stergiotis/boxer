@@ -7,8 +7,8 @@ import (
 	"github.com/RoaringBitmap/roaring"
 
 	"github.com/stergiotis/boxer/public/functional/option"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/m1fixture"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 func sampleForBuscodec() m1fixture.M1Sample {

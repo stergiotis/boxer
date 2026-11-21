@@ -10,9 +10,9 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/instanceclosed"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // The person's side of a grant (ADR-0269 §SD5, §SD6): a coordinator's

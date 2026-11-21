@@ -9,10 +9,10 @@ import (
 
 	"github.com/stergiotis/boxer/public/identity/callident"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 )
 

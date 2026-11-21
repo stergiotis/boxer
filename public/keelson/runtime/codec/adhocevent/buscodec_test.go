@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/adhocevent"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 func TestBuscodecAutoRegistersAdhocEvent(t *testing.T) {

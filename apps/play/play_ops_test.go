@@ -18,8 +18,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 )
 

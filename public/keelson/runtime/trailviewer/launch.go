@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trailviewer/launchcfg"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // AppId is the viewer's durable id, the target of a launch request.

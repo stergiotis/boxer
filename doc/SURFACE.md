@@ -84,7 +84,6 @@ Covered by the compatibility promise in [VERSIONING.md](../VERSIONING.md): an in
 - `public/keelson/designsystem/styletokens` — Package styletokens is the Go-side mirror of the IDS token layer (Rust source-of-truth at src/rust/imzero2_egui/src/style/tokens/).
 - `public/keelson/runtime/app` — Package app is the runtime's first-class app abstraction.
 - `public/keelson/runtime/appops` — Package appops is how an app declares its operations catalog (ADR-0269 §SD2) and the handlers behind it in one place.
-- `public/keelson/runtime/buscodec` — Package buscodec is the runtime's canonical message-bus codec (ADR-0036).
 - `public/keelson/runtime/codec/kindcheck` — Package kindcheck answers "do these facts-CBOR bytes claim kind K?" for hosts that must validate a payload at a boundary without importing the payload's Go type (ADR-0135 §SD1: the window host refuses a malformed or mistargeted launch config before the target app sees it).
 - `public/keelson/runtime/icons` — Package icons supplies the IDS iconography catalogue.
 - `public/keelson/runtime/lifetime` — Package lifetime groups work that is retired as one, and lets the owner wait for it to finish (ADR-0322).
@@ -103,6 +102,7 @@ Covered by the compatibility promise in [VERSIONING.md](../VERSIONING.md): an in
 
 ### semistructured
 
+- `public/semistructured/cbor/buscodec` — Package buscodec is the runtime's canonical message-bus codec (ADR-0036).
 - `public/semistructured/cbor/diag` — Package diag renders CBOR bytes as RFC 8949 §8 diagnostic notation — ADR-0219 §SD6: the pretty-printer under the cbordiag widget and the `cbor diagnostics --pretty` CLI.
 - `public/semistructured/leeway/dml/runtime` — Package runtime is the support code leeway-generated write sides import: the interfaces a generated attribute and membership builder implement (one per membership channel), the error-accumulating contract ([ErrorHandlingI]), helpers such as [AppendFixedText], and [DeferredSectionBuffer], which lets several typed contributions to one entity be emitted section by section in a fixed order.
 - `public/semistructured/leeway/marshall/clickhouse/componentsql` — Package componentsql publishes the ADR-0066 read-back artefacts a component definition generates, and the registry a SQL-authoring surface looks them up in (ADR-0189).

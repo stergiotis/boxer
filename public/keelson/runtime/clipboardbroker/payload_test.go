@@ -11,10 +11,10 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 func policyBus(t *testing.T, p clipboardbroker.Policy) (bus *inprocbus.Inst, svc *clipboardbroker.Service, cli *inprocbus.Client) {

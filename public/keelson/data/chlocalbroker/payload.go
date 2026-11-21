@@ -1,9 +1,9 @@
 package chlocalbroker
 
 import (
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // wireRequest is the envelope sent on ch.local.exec.<pool>, wire-encoded

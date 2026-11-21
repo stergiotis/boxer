@@ -9,7 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // The phase is the session's state; its details are not phases.

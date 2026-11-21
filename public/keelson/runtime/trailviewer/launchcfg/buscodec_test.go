@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trailviewer/launchcfg"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // Every field survives the codec, and the kind check accepts the bytes.

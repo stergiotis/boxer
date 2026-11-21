@@ -13,5 +13,5 @@ var PackageProps = packageprops.Props{
 }
 
 func init() {
-	packageprops.Register("github.com/stergiotis/boxer/public/keelson/runtime/buscodec", PackageProps)
+	packageprops.Register("github.com/stergiotis/boxer/public/semistructured/cbor/buscodec", PackageProps)
 }

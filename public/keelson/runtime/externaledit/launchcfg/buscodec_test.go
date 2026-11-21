@@ -6,9 +6,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
 	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit/launchcfg"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 func TestRoundTripAndKindCheck(t *testing.T) {

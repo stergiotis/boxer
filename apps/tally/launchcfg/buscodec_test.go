@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/apps/tally/launchcfg"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 func TestRoundTrip(t *testing.T) {

@@ -63,7 +63,7 @@ The memory note `reference_clickhouse_local` records that CBOR is already the co
 
 ## Decision
 
-We introduce `public/keelson/runtime/buscodec/` as the single seam for serialising every bus payload. The package exports:
+We introduce `public/semistructured/cbor/buscodec/` as the single seam for serialising every bus payload. The package exports:
 
 - A `CodecI` interface with `Encode(any) ([]byte, error)`, `Decode([]byte, any) error`, plus `Name()` and `ContentType()` for diagnostics.
 - A process-wide default codec accessed through `Default()` and replaced through `SetDefault(c CodecI)` — a single `atomic.Pointer` swap, safe for init-time use by tests and replay tools.
@@ -103,7 +103,7 @@ Every broker exposes typed `Marshal{Name}`/`Unmarshal{Name}` one-liners in its o
 
 ## Status
 
-Accepted — 2026-06-08 (reviewed by p@stergiotis). Filed retrospectively: the codec landed in [`runtime/buscodec`](../../public/keelson/runtime/buscodec/) ahead of review, so the *decision* is recorded here independently of the diff.
+Accepted — 2026-06-08 (reviewed by p@stergiotis). Filed retrospectively: the codec landed in [`runtime/buscodec`](../../public/semistructured/cbor/buscodec/) ahead of review, so the *decision* is recorded here independently of the diff.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.
@@ -175,10 +175,20 @@ milestone sequence. The two ADRs cooperate: ADR-0036 owns the seam
 shape (this dispatch order, `CodecI` contract, error wraps);
 ADR-0042 owns the codec implementations that plug into it.
 
+### 2026-11-20 — the package lives at `semistructured/cbor/buscodec`
+
+The codec moved from `public/keelson/runtime/buscodec` to
+`public/semistructured/cbor/buscodec`, package name unchanged. Libraries and
+generated code encode configs and facts with it, and as a keelson package it
+pulled them into the app platform's import tree
+([ADR-0394](./0394-library-packages-do-not-import-the-app-platform.md)). The
+wire, the `CodecI` seam and the rule that brokers encode through it are
+unchanged.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — app runtime, in-proc bus, cap-as-subject taxonomy.
 - [ADR-0028](./0028-chlocal-low-latency-sql-cap.md) — chlocalbroker, one of the first consumers; its `V` field versioning illustrates the payload-side versioning pattern the codec deliberately does not subsume.
-- `public/keelson/runtime/buscodec/` — package source.
+- `public/semistructured/cbor/buscodec/` — package source.
 - `fxamacker/cbor/v2` — the CBOR implementation (`CanonicalEncOptions` for deterministic output, `cbor:`-then-`json:` tag fallback).
 - Leeway fact-row codec workstream (parallel) — the second `CodecI` implementation this seam exists to accept.

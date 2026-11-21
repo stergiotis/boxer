@@ -11,21 +11,21 @@ realised_by:
   - adr:0290
   - pkg:public/keelson/runtime/inprocbus
   - pkg:public/keelson/runtime/natsbus
-  - pkg:public/keelson/runtime/buscodec
+  - pkg:public/semistructured/cbor/buscodec
 assessment:
   - dimension: readiness
     rating: 4
-    basis: [adr:0036, adr:0143, pkg:public/keelson/runtime/buscodec]
+    basis: [adr:0036, adr:0143, pkg:public/semistructured/cbor/buscodec]
     by: claude-fable
     at: 2026-10-26
   - dimension: evolution
     rating: custom
-    basis: [adr:0036, adr:0143, pkg:public/keelson/runtime/buscodec]
+    basis: [adr:0036, adr:0143, pkg:public/semistructured/cbor/buscodec]
     by: claude-fable
     at: 2026-10-26
   - dimension: importance
     rating: foundational
-    basis: [adr:0036, adr:0143, pkg:public/keelson/runtime/buscodec]
+    basis: [adr:0036, adr:0143, pkg:public/semistructured/cbor/buscodec]
     by: claude-fable
     at: 2026-10-26
 tags: [needs-review]

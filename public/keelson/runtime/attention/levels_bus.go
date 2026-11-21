@@ -2,9 +2,9 @@ package attention
 
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // The levels on the bus (ADR-0323 §SD5, §SD7): an app reads the table its

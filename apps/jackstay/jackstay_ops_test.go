@@ -10,7 +10,7 @@ import (
 
 	jk "github.com/stergiotis/boxer/public/db/clickhouse/jackstay"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 func query[In any, Out any](t *testing.T, inst *App, name string, in In) (out Out, err error) {

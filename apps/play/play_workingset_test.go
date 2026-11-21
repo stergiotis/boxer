@@ -9,10 +9,10 @@ import (
 
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // newWorkingsetTestApp is a PlayApp with no client, already past its

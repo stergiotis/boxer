@@ -16,9 +16,9 @@ import (
 
 	"github.com/stergiotis/boxer/apps/notebook"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 )

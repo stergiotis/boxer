@@ -9,11 +9,11 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/science/audio/pcm"
 	"github.com/stergiotis/boxer/public/science/audio/sink"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // SubjectOpen is the request subject an app publishes to for an audio output

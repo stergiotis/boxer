@@ -12,7 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/fibonacci"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 func opsApp() (inst *App) {

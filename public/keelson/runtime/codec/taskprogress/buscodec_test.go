@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskprogress"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 func sampleProgress() taskprogress.TaskProgress {

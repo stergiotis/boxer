@@ -10,8 +10,8 @@ import (
 	"github.com/stergiotis/boxer/apps/tally/launchcfg"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/identity/identifier"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // composeLaunch is the window as a launch config (ADR-0200 §SD9, ADR-0222

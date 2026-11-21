@@ -5,11 +5,11 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/adhocreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/adhocrequest"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // ColumnsResult is a dataset's column summaries, read on their own.

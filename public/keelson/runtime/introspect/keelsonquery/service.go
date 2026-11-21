@@ -8,7 +8,6 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryrequest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
@@ -16,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspectengine"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // Service answers `keelson.query.<table>` over the in-process engine: the

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/adhocevent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/adhocreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/adhocrequest"
@@ -13,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // Capability subjects (request/reply, audited — ADR-0240 §SD2, the

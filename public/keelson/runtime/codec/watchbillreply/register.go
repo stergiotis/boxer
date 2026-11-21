@@ -1,8 +1,8 @@
 package watchbillreply
 
 import (
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // The kindcheck registration lives beside the DTO declaration (not in

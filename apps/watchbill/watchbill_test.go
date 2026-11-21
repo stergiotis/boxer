@@ -15,7 +15,6 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryrequest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
@@ -24,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	wb "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 )

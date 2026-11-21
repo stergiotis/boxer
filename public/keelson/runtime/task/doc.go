@@ -31,7 +31,7 @@
 //     internal context.
 //
 // Observers watch via WatchAll(bus, observer). The wire is canonical CBOR
-// through runtime/buscodec; subjects are flat: task.<id>.<verb> with
+// through buscodec; subjects are flat: task.<id>.<verb> with
 // verbs created | progress | cancel | done | error.
 //
 // See ADR-0038 (background task primitive) for the rationale and

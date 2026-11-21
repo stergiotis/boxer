@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskerror"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 func sampleError() taskerror.TaskError {

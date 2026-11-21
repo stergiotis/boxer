@@ -9,8 +9,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/entrypoint"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // witness is a test app whose one command records the entry frame it ran

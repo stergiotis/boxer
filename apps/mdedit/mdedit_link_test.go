@@ -9,7 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/apps/mdedit/launchcfg"
 	"github.com/stergiotis/boxer/apps/mdedit/mdeditlink"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 

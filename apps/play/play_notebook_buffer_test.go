@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook/fixture"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook/samples"

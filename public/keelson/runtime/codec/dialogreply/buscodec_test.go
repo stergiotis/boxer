@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/dialogreply"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 func TestBuscodecAutoRegistersDialogReply(t *testing.T) {

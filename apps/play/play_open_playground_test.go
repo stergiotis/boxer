@@ -13,11 +13,11 @@ import (
 	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
 	tallylaunch "github.com/stergiotis/boxer/apps/tally/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchrequest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // fakeOpenBus captures the one Request the Open in Playground path makes

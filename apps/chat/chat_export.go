@@ -13,10 +13,10 @@ import (
 	"time"
 
 	mdeditlaunch "github.com/stergiotis/boxer/apps/mdedit/launchcfg"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // transcriptMeta is what the transcript's header says beside the

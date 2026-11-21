@@ -147,7 +147,7 @@ func (inst FactsWrapper) Imports(plan *mappingplan.Plan) []string {
 		`"github.com/apache/arrow-go/v18/arrow/ipc"`,
 		`"github.com/apache/arrow-go/v18/arrow/memory"`,
 		``,
-		`"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"`,
+		`"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"`,
 		`"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/arrowrowcbor"`,
 		`cbdml "github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml_cbor"`,
 		`"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/ra"`,

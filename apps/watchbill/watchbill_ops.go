@@ -9,10 +9,10 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/fsmops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
 	wb "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // The window's operations catalog (ADR-0269 M4): a table-shaped participant

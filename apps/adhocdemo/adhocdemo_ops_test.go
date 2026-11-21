@@ -19,8 +19,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // opsFixture is a window without a bus whose publishes land through the

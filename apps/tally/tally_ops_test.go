@@ -12,8 +12,8 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingadapter"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsbrowser"
 )
 

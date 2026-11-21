@@ -1,8 +1,8 @@
 package launchcfg
 
 import (
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // The kind probe the window host runs before it delivers or stores a config

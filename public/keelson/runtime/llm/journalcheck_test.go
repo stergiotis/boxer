@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // journaled opens a run in the sender's name with one request entry for req

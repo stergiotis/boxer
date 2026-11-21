@@ -10,11 +10,11 @@ import (
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/adhocreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/adhocrequest"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // SubjectRead reads a dataset whole (ADR-0288 §SD6): the

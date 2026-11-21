@@ -3,12 +3,12 @@ package fsbroker
 import (
 	"time"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/dialogreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/watchevent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/watchreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/watchrequest"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // MarshalDialogReply serialises a DialogReply via the canonical bus

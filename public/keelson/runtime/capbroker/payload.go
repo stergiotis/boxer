@@ -9,10 +9,10 @@ package capbroker
 
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/grantreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/grantrequest"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // RequestSubject is the well-known subject apps publish cap requests to.

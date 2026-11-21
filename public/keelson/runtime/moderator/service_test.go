@@ -13,11 +13,11 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/ration"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 type answer struct{}

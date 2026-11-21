@@ -5,11 +5,11 @@ import (
 	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
 	tallylaunch "github.com/stergiotis/boxer/apps/tally/launchcfg"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // play_delivery.go is the editor-delivery seam (ADR-0097 slice-6 D5 Update,

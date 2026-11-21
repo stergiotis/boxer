@@ -13,8 +13,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // seeded is a window holding the tour's list and one row of another kind,

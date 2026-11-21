@@ -18,7 +18,6 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	as "github.com/stergiotis/boxer/public/keelson/runtime/appstate"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryrequest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
@@ -27,6 +26,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 )

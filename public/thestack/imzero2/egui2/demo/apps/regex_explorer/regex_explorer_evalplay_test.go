@@ -25,13 +25,13 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchrequest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // ---------------------------------------------------------------------------

@@ -8,7 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/apps/mdedit/launchcfg"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsftp/sftptree"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // A handed-over document opens as one of its own: the buffer holds it,

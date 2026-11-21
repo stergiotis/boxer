@@ -12,9 +12,9 @@
 package appletstore
 
 import (
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // SubjectSave is the request subject: publish a [SaveRequest], receive a

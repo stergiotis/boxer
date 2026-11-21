@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 func sampleAppletCreate() appletcreatecfg.AppletCreate {

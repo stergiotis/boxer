@@ -5,8 +5,8 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 const wireVersion uint8 = 1

@@ -22,8 +22,8 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/vdd"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/arrowrowcbor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/cborarrow"
 	cbdml "github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml_cbor"

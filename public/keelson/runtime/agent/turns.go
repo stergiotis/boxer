@@ -8,8 +8,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // Intervention (ADR-0269 §SD8): a task depends on what it read since its

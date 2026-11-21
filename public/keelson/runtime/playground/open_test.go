@@ -8,11 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchrequest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // fakeBus captures the one Request Open makes and answers it.

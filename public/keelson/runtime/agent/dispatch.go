@@ -20,9 +20,9 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opjson"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/capture"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // The dispatcher (ADR-0269 §SD6): every call is checked against the task's

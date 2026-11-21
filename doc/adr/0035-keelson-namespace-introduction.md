@@ -219,5 +219,5 @@ ADRs are append-only; supersession is recorded, not deleted.
 - [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) — imztop app (subject to Step 3 / Step 5 amendments).
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — app runtime; Manifest.Id identity rule; capslock §SD10 (subject to amendments).
 - [ADR-0028](./0028-chlocal-low-latency-sql-cap.md) — chlocal data-pillar consumer (subject to amendments).
-- [ADR-0036](./0036-runtime-buscodec.md) — buscodec; example of a path that *does not* move (lives at `keelson/runtime/buscodec/` post-Step-3).
+- [ADR-0036](./0036-runtime-buscodec.md) — buscodec; example of a path that *does not* move (lives at `semistructured/cbor/buscodec/` post-Step-3).
 - Memory `project_keelson_namespace` — naming decision (2026-05-15), three-pillar scope, deferral choices recorded out of conversation.

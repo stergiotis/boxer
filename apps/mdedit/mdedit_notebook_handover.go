@@ -13,8 +13,8 @@ import (
 	"path"
 
 	nblaunch "github.com/stergiotis/boxer/apps/notebook/launchcfg"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )

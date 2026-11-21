@@ -12,8 +12,8 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appcenter/launchcfg"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // cpuProfile is a CPU profile of samples, each a window label ("" for none)

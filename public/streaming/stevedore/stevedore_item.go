@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/stergiotis/boxer/public/identity/identifier"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	"github.com/stergiotis/boxer/public/streaming/stevedore/stevedoreitem"
 )
 
