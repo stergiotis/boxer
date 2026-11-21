@@ -141,7 +141,7 @@ func runResults(ctx context.Context, cmd *cli.Command) (err error) {
 			r.Release()
 		}
 	}()
-	err = cli0.InsertArrow(context.Background(), table, records)
+	err = insertArrow(context.Background(), cli0, table, records)
 	if err != nil {
 		err = eh.Errorf("insert arrow: %w", err)
 		return

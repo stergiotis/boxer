@@ -55,7 +55,7 @@ func relay(ctx context.Context, src SourceI, dst ClientI, srcSpec *DigestSpec, d
 		seenCh <- pollWrittenRows(ctx, dst, queryId, max(opts.PollPeriod, 100*time.Millisecond), opts.Rows, stop)
 	}()
 	cr := &countingReader{r: body, total: opts.Bytes}
-	err = dst.InsertStream(ctx, dstSpec.InsertNative(), cr, chclient.StreamOptions{QueryId: queryId, ContentEncoding: encoding})
+	err = dst.InsertStream(ctx, dstSpec.InsertNative(), cr, chclient.StreamOptions{QueryId: queryId, ContentEncoding: encoding}) //boxer:lint disable=CS021 reason="relays a table's stored blocks to the same table on another server; what is copied is the stored shape, which no insert transform applies to"
 	close(stop)
 	counted = <-seenCh
 	bytes = uint64(cr.n.Load())

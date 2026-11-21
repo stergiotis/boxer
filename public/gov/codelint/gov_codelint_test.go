@@ -852,3 +852,45 @@ func TestCS020_PassesCtxTakersUnexportedAndAnnotatedRoots(t *testing.T) {
 		t.Fatalf("unexpected finding: %+v", f)
 	}
 }
+
+func TestCS021_FlagsClientInserts(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs021/bad")
+	require.NoError(t, err)
+
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS021())
+
+	var findings []codelint.Finding
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		findings = append(findings, f)
+	}
+
+	require.Len(t, findings, 4, "expected 4 CS021 findings (InsertArrow, InsertArrowSettings, InsertStream, a method value)")
+	for _, f := range findings {
+		assert.Equal(t, "CS021", f.RuleId)
+		assert.Equal(t, codelint.FindingSeverityError, f.Severity)
+		assert.Contains(t, f.Path, "bad.go")
+	}
+}
+
+func TestCS021_PassesExecutorsAndDirective(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs021/good")
+	require.NoError(t, err)
+
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS021())
+
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		t.Fatalf("unexpected finding: %+v", f)
+	}
+}

@@ -29,6 +29,7 @@ import (
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
+	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/logging"
@@ -264,6 +265,19 @@ func eachDoc(file string, limit uint64, fn func(raw []byte, doc map[string]any) 
 	return
 }
 
+// insertArrow sends records to table through the record-store executor over
+// cli rather than through the client itself, so that an insert transform a
+// deployment registered for table applies here as it does to every other
+// writer (ADR-0402 §SD2).
+func insertArrow(ctx context.Context, cli *chclient.Client, table string, records []arrow.RecordBatch) (err error) {
+	exec, err := storeexec.New(cli, nil)
+	if err != nil {
+		return
+	}
+	err = exec.InsertArrow(ctx, table, records)
+	return
+}
+
 type ingester struct {
 	cli         *chclient.Client
 	table       string
@@ -464,7 +478,7 @@ func (inst *ingester) flush(ctx context.Context) (err error) {
 			r.Release()
 		}
 	}()
-	err = inst.cli.InsertArrow(ctx, inst.table, records)
+	err = insertArrow(ctx, inst.cli, inst.table, records)
 	if err != nil {
 		err = eh.Errorf("insert arrow: %w", err)
 		return

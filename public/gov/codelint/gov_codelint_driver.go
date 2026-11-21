@@ -94,6 +94,7 @@ func NewLinterFor(scope Scope) (inst *Linter) {
 	cs020 := NewRuleCS020ForPrefixes(scope.ContextPrefixes...)
 	cs020.baseline = parseCS020Baseline(scope.ContextBaseline)
 	inst.Register(cs020)
+	inst.Register(NewRuleCS021())
 	return
 }
 

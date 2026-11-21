@@ -338,7 +338,7 @@ func (inst *jsonmapIngester) flush(ctx context.Context) (err error) {
 			r.Release()
 		}
 	}()
-	err = inst.cli.InsertArrow(ctx, inst.table, records)
+	err = insertArrow(ctx, inst.cli, inst.table, records)
 	if err != nil {
 		err = eh.Errorf("insert arrow: %w", err)
 		return
