@@ -299,5 +299,5 @@ reconciled.
   its own DDL.
 - **ADR-0183** — the component-authoring surface these DTOs are
   written against.
-- **ADR-0402** (proposed) — facts stored in a deployment's own table: the
+- **ADR-0402** — facts stored in a deployment's own table: the
   insert transform and the read table.

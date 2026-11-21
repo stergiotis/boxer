@@ -95,11 +95,13 @@ is not exercised by it.
    without the transform would write into it, unseen.
 6. **Leave `boxer.idlease` where it is.** The row ids the facts store mints
    are leased through it (ADR-0397 §SD2), and it is the only place the
-   next unleased id of a stream is kept. Dropped and created again it
-   starts over and hands out ids that rows already carry. The `boxer`
-   database is not disposable for that reason, even when everything else
-   in it is a view. A deployment with an id authority of its own
-   configures it instead (`chstore.RowIds`, `hostboot.Options.FactsRowIds`).
+   next unleased id of a stream is kept. The `boxer` database is not
+   disposable for that reason, even when everything else in it is a view.
+   Setup recovers a lost lease row by reading the largest id through your
+   view, which is a safety net: it reads the whole id column, and it does
+   not notice a lease table restored from an older backup than the facts.
+   A deployment with an id authority of its own configures it instead
+   (`chstore.RowIds`, `hostboot.Options.FactsRowIds`).
 7. **Start the deployment's binaries.** Setup creates no facts table and
    still creates the `boxer` database, the lease table and the SQL read
    surface. The schema check judges the view by its columns; a column it

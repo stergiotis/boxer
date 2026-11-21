@@ -350,13 +350,14 @@ The code owner confirmed on 2026-11-21 that one ClickHouse server per
 deployment is the assumption to build on. Replication is not designed for
 and is not carried as an open risk of this decision.
 
-A server test added that day pins a property §SD3 implies and nothing
-stated: the lease row is the only place a stream's next unleased body is
-kept, so a lease table dropped and provisioned again starts every stream
-over. It is backed up, restored and moved together with the tables whose
-ids it leased. No guard exists
-([ADR-0397](./0397-the-facts-tables-partition-key-row-id-and-engine-clause.md),
-*Negative*).
+A property §SD3 implies and nothing stated: the lease row is the only
+place a stream's next unleased body is kept, so a lease table dropped and
+provisioned again starts every stream over. It is backed up, restored and
+moved together with the tables whose ids it leased. The owner of such a
+table can recover a lost row from the ids its rows carry (`rowalloc.Seed`);
+the facts store does so at setup
+([ADR-0397](./0397-the-facts-tables-partition-key-row-id-and-engine-clause.md)
+§SD2), and no other stream's owner does.
 
 ## References
 

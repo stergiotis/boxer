@@ -23,6 +23,8 @@ status: draft
 > and read tables (§2 lists readers that name the fixed table; one setting
 > reaches them all,
 > [ADR-0402](../adr/0402-facts-stored-in-a-deployments-own-table-a-write-transform-at-the-insert-seam-and-one-read-table-setting.md)).
+> The decision this page was background to was taken that day: Option A,
+> the switch, is not taken (ADR-0296, update of 2026-11-21).
 >
 > **Provenance.** Every statement about this repository was read in the
 > working tree on 2026-10-30, paths linked. Statements about ClickHouse

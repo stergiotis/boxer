@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-20
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-21
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0397: The facts table's partition key, row id and engine clause
 
@@ -114,6 +112,15 @@ uniqueness of an id is then that authority's promise — blocks for the tag
 that overlap no other writer's — and setup leaves the lease table alone.
 The process-local fallback is the same under either source.
 
+The lease row is the only place a stream's next unleased id is kept, so
+setup guards the one way it is lost while the rows are not: when the lease
+table holds no row for the store's stream and the facts hold ids of that
+stream, the row is created continuing after the largest of them
+(`rowalloc.Seed`). The ids of a stream are one range of the id column, so
+that is one aggregate over the column, read at setup and never on a write.
+A lease table that holds a row older than the facts — restored from an
+earlier backup — is not detected.
+
 **SD3 — The engine clause is a setting with one source.**
 `BOXER_FACTS_ENGINE` selects the clause a newly created table gets; its
 default is `factsschema.DefaultEngineClause`. The record-store generator
@@ -156,6 +163,10 @@ lacks.
 - **Fail the write when no block can be leased.** Rejected: a log line or a
   heartbeat lost because the lease table is unavailable costs more than an
   id whose tag says it is process-local.
+- **A strict mode that fails the write when a configured allocator fails.**
+  Rejected by the code owner on 2026-11-21: a consumer that wants it has
+  what it needs at the application level — the id a write returns carries
+  its stream's tag.
 - **Partition by `(kind, month)`.** Rejected: the kind is a membership in an
   array column, not a column a key can name, and per-kind retention is not
   decided.
@@ -186,10 +197,11 @@ lacks.
   store's write timeout.
 - Rows written while no lease could be had carry ids that repeat across
   processes, as every row did before.
-- The lease table is state and nothing guards it: the next unleased id of
-  a stream is kept nowhere else, so a lease table dropped and provisioned
-  again starts over and hands out ids that rows already carry. It is
-  backed up, restored and moved with the facts.
+- The lease table is state: it is backed up, restored and moved with the
+  facts. Setup recovers a lost one from the rows; it does not notice one
+  that is older than the rows, and a store built without setup beside a
+  lost lease table starts the stream over.
+- Recovering a lost lease row reads the whole id column once.
 
 ### Neutral
 
@@ -226,7 +238,8 @@ lacks.
   stores in one process and other processes leasing small blocks at once
   with no id repeated; a lease table out of reach and back; a re-sent
   batch folded by the window, and landing twice in a table without it; a
-  table in a third layout.
+  table in a third layout; a lease table dropped and set up again
+  continuing after the largest id.
 - **What would fail.** A golden whose engine clause differs from the
   applied one; a facts store minting an id under no stream; a differing
   layout reported as anything but a note.
@@ -234,7 +247,9 @@ lacks.
   normalisation is checked against the spellings of that release. No
   table of a deployment's size, and no restore from a backup.
 
-## Choices for review
+## Choices accepted with the decision
+
+Reviewed by the code owner on 2026-11-21 and accepted as listed.
 
 - Month, not day or expiry day, as the partition key (the QOC above).
 - The sorting key stays `ts`. Leading with `id`, the generator's default,
@@ -259,13 +274,14 @@ lacks.
 - The env var's name `BOXER_FACTS_ENGINE` and its category `database`.
 - The recipe stops every writer for the copy instead of copying behind live
   writes.
-- A lost lease table is documented, not guarded. A guard would seed a
-  stream's first lease from the largest id of that stream the table
-  holds.
+- A lost lease table is recovered at setup, from the largest id of the
+  stream the read relation returns; a failed read there fails setup rather
+  than seeding by guess.
+- No strict mode for a configured allocator.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-11-21.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

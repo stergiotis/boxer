@@ -107,8 +107,8 @@ Start the processes again. A host's query-run service recreates its
 refreshable view over the table at start.
 
 Leave `boxer.idlease` as it is throughout. It keeps the next unleased row
-id of each stream and nothing else does: dropped and created again, it
-hands out ids that rows already carry.
+id of each stream and nothing else does. Setup recovers a lost one from
+the largest id in the table, at the cost of reading the id column.
 
 ## Checking the result
 

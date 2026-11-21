@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-21
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-21
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration. SD1–SD6 are built (2026-11-21) as the sections below describe; what is left out is under *Deferred*. The tests have run on clickhouse-local and on one ClickHouse server release (26.9), against a reference carrier; no deployment has adopted it.
 
 # ADR-0402: Facts stored in a deployment's own table — a write transform at the insert seam, and one read-table setting
 
@@ -249,9 +247,6 @@ change to the facts columns.
 - A copy of existing rows through the Go transform. Adoption on a server
   that holds facts copies them with SQL the deployment writes, which the
   round trip does not check.
-- A guard for the id lease table (see *Negative*).
-- Whether boxer takes the storage switch of ADR-0296 §SD9 for itself. SD3
-  serves either outcome; nothing here decides it.
 - The IPC capture executor writes the store's own shape to its stream,
   whatever is registered: a stream has one schema, fixed when it is
   opened. Loading such a capture into a deployment's storage needs a
@@ -282,6 +277,12 @@ change to the facts columns.
 
 - **O1, O2, O3, O5** — see the assessment. O3 stays open to a deployment
   on its own: SD3 is all it needs from boxer.
+- **Redirect the write path inside the database for boxer's own storage
+  too — the switch of ADR-0296 §SD9.** Not taken, by the code owner on
+  2026-11-21: §SD9 is an in-database answer to redirecting writes, and the
+  redirection is now done in the record store, at the insert seam. Storage
+  tables of boxer's own, should they come, would be a registered transform
+  and a read table like a deployment's.
 - **Pass the transform to one host instead of registering it for the
   process.** Rejected: the daemons and command-line ingestors write facts
   without a host, and a writer that misses it writes the wrong shape.
@@ -317,9 +318,9 @@ change to the facts columns.
   at setup, and where the name is unused or a table of that name was left
   behind they land in a table nothing reads.
 - The `boxer` database still holds state under a transform: the id lease
-  table. It looks disposable — a view, the trail views — and is not: a
-  lease table dropped and created again starts its streams over and hands
-  out ids rows already carry (ADR-0397).
+  table. It looks disposable — a view, the trail views — and is not. Setup
+  recovers a lost lease row from the ids the read relation returns
+  (ADR-0397 §SD2), which is a safety net, not a reason to drop it.
 - An `INSERT` composed as SQL text and sent as a statement — an
   `INSERT … SELECT` among them — passes no insert seam. Neither the
   registry nor `CS021` sees it; it reaches whatever the name is on the
@@ -391,7 +392,9 @@ change to the facts columns.
   copy of existing rows and the operator's removal of kept text have no
   test.
 
-## Choices for review
+## Choices accepted with the decision
+
+Reviewed by the code owner on 2026-11-21 and accepted as listed.
 
 - The transform is registered per process, not per host.
 - Registering a transform is what tells boxer the storage is the
@@ -454,11 +457,14 @@ change to the facts columns.
   the runtime vocabulary, the ones the hand-written store does not write
   as synthetic rows.
 - Callers that only write lading policy rows are not given the read table.
-- This is drafted apart from the decision on boxer's own storage switch.
+- Boxer does not take ADR-0296 §SD9's in-database switch for its own
+  storage.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-11-21. SD1–SD6 are built; what is left out is under
+*Deferred*. The tests have run on clickhouse-local and on one ClickHouse
+server release, against a reference carrier; no deployment has adopted it.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

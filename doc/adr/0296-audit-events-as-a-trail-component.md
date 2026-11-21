@@ -603,14 +603,19 @@ expire only where an operator adds a TTL in their own engine clause.
 relation every read of facts goes to — the hand-written readers, the
 recorder, the generated stores over the facts table and the trail views —
 and a relation that is not the table written to is judged by its columns
-only. It serves a `Merge` over storage tables as it serves a deployment's
-view. Whether boxer takes the storage switch for itself stays undecided
-there as here.
+only.
+
+The storage switch of §SD9 — `boxer.facts` as a table that keeps nothing,
+routing rows through materialized views — is not taken. The code owner's
+reading on 2026-11-21: §SD9 answers the redirection of the write path
+inside the database, and ADR-0402 answers it in the record store, where one
+insert stays one insert. §SD9 (a)–(c) and (e) therefore bind nothing
+further; (d) stands as completed.
 
 The facts store's row ids no longer come from a counter each process
 starts at one: they are leased from a tagged stream
 ([ADR-0397](./0397-the-facts-tables-partition-key-row-id-and-engine-clause.md)
-§SD2). Both ADRs are proposed.
+§SD2).
 
 ## References
 
