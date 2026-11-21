@@ -26,7 +26,7 @@ itself; ADR-0389 states its tier.
 | [Experimental](#experimental) | 282 |
 | [Internal](#internal) | 16 |
 | [Test support](#test-support) | 15 |
-| [Tools](#tools) | 90 |
+| [Tools](#tools) | 91 |
 | [Demos and examples](#demos-and-examples) | 40 |
 | [Unclassified](#unclassified) | 208 |
 
@@ -619,6 +619,7 @@ Command and governance packages of this repository's tooling. Their Go API is ou
 - `public/code/analysis/golang/vendortidy` — Package vendortidy computes, without a network or module cache, the go.mod requirements `go mod tidy` would give a member of a vendored Go workspace, and writes them with a go.sum merged from the checksums the workspace carries (ADR-0384).
 - `public/code/analysis/golang/wasmsurvey` — Package wasmsurvey surveys which of the module's Go packages are amenable to TinyGo/WebAssembly compilation, and explains why the others are not (ADR-0078).
 - `public/code/analysis/sccapplet` — Package sccapplet writes a repository's code volume and cyclomatic complexity, as scc counts them, into a SQL applet document (ADR-0132) whose buffer carries its rows as literals: `SELECT … FROM values(…)`.
+- `public/code/rewrite/importmove` — Package importmove rewrites Go import paths after packages move: each import under a moved prefix is pointed at the new path, and what the rewrite cannot change safely is reported rather than guessed at.
 - `public/code/synthesis/golang`
 - `public/code/synthesis/golang/align`
 

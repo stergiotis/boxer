@@ -43,8 +43,24 @@ are. The facts table's layout names (`factsschema.DefaultEngineClause`,
 `TsColumn`, `MigrationRecipe`) move with the package. Every path is under
 `github.com/stergiotis/boxer/`.
 
-A `gofmt -r` rule per package rename does the qualifier: for example
-`gofmt -r 'env.Extract -> grammarenv.Extract'` after the import line changes.
+`boxer code importmove` applies the table: one `--map old=new` per row (full
+paths), and a `--keep` for each of the two paths that stay, which sit under a
+moved prefix:
+
+```sh
+boxer code importmove --root . \
+  --map github.com/stergiotis/boxer/public/keelson/runtime/factsschema=github.com/stergiotis/boxer/public/semistructured/leeway/factsschema \
+  --keep github.com/stergiotis/boxer/public/keelson/runtime/factsschema/factsread \
+  --keep github.com/stergiotis/boxer/public/keelson/runtime/factsschema/storegen \
+  --dryRun
+```
+
+It matches at path-segment boundaries, gives an import whose last segment
+changes its old name as an alias so the file still compiles, and reports
+string literals, `//go:generate` lines and template files naming a moved path
+without changing them. A `gofmt -r` rule per package rename then does the
+qualifier, if the alias is to go: for example
+`gofmt -r 'env.Extract -> grammarenv.Extract'` once the alias is removed.
 
 ## Calls
 
