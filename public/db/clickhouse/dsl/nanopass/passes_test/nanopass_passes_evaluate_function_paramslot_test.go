@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stretchr/testify/assert"
@@ -20,8 +20,8 @@ func TestEvalFunctionsParamSlot_ApplyDirectUseAnyFalse(t *testing.T) {
 	eval := newTestEvaluator()
 	pass := eval.Pass()
 
-	e := env.NewEnvironment()
-	e.Params["p1"] = env.Param{Name: "p1", Type: "Int64", Raw: "2", Value: int64(2)}
+	e := grammarenv.NewEnvironment()
+	e.Params["p1"] = grammarenv.Param{Name: "p1", Type: "Int64", Raw: "2", Value: int64(2)}
 
 	got, err := pass.Apply(e, "SELECT myAdd({p1: Int64}, 3)")
 	require.NoError(t, err)
@@ -34,8 +34,8 @@ func TestEvalFunctionsParamSlot_ApplyDirectUseAnyTrueLazyHydrate(t *testing.T) {
 	eval := newTestEvaluator()
 	pass := eval.Pass()
 
-	e := env.NewEnvironment()
-	e.Params["p1"] = env.Param{Name: "p1", Type: "Int64", Raw: "4"} // Value left nil on purpose
+	e := grammarenv.NewEnvironment()
+	e.Params["p1"] = grammarenv.Param{Name: "p1", Type: "Int64", Raw: "4"} // Value left nil on purpose
 
 	got, err := pass.Apply(e, "SELECT myMul({p1: Int64}, 3)")
 	require.NoError(t, err)
@@ -56,7 +56,7 @@ func TestEvalFunctionsParamSlot_Unresolved(t *testing.T) {
 	eval := newTestEvaluator()
 	pass := eval.Pass()
 
-	e := env.NewEnvironment() // no Params entry for "p1"
+	e := grammarenv.NewEnvironment() // no Params entry for "p1"
 
 	got, err := pass.Apply(e, "SELECT myAdd({p1: Int64}, 3)")
 	require.NoError(t, err)

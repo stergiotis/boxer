@@ -17,7 +17,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
@@ -353,7 +353,7 @@ func expandAuthored(t *testing.T, sql string, table string) string {
 		constructsql.ExtractExpandPassWithIds(resolver, providers.MembershipLookup{}, database),
 	} {
 		var err error
-		sql, err = pass.Apply(env.NewEnvironment(), sql)
+		sql, err = pass.Apply(grammarenv.NewEnvironment(), sql)
 		require.NoError(t, err, "pass %s", pass.Name)
 	}
 	require.False(t, constructsql.HasExtractMarker(sql))

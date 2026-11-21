@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
@@ -174,8 +174,8 @@ func TestRegressionMarkerInStringLiteralIgnored(t *testing.T) {
 func TestRegressionDiscardEnvSymmetry(t *testing.T) {
 	analytical := nanopass.Pass{
 		Name: "analytical",
-		Apply: func(e *env.Environment, body string) (string, error) {
-			e.SessionSettings["max_threads"] = env.Setting{Name: "max_threads", Raw: "8"}
+		Apply: func(e *grammarenv.Environment, body string) (string, error) {
+			e.SessionSettings["max_threads"] = grammarenv.Setting{Name: "max_threads", Raw: "8"}
 			return body + " " + nanopass.PassDiscardOutputMarker, nil
 		},
 	}
@@ -230,7 +230,7 @@ func TestRegressionValidatingNoDoubleFixpoint(t *testing.T) {
 	applies := 0
 	p := nanopass.Pass{
 		Name: "growOnce",
-		Apply: func(e *env.Environment, body string) (string, error) {
+		Apply: func(e *grammarenv.Environment, body string) (string, error) {
 			applies++
 			if body == "SELECT 1" {
 				return "SELECT 1, 2", nil
@@ -253,7 +253,7 @@ func TestRegressionValidatingNoDoubleFixpoint(t *testing.T) {
 func TestRegressionFixedPointProperties(t *testing.T) {
 	p := nanopass.Pass{
 		Name:       "p",
-		Apply:      func(_ *env.Environment, b string) (string, error) { return b, nil },
+		Apply:      func(_ *grammarenv.Environment, b string) (string, error) { return b, nil },
 		Properties: nanopass.PassProperties{NeedsFixedPoint: true, Reads: nanopass.RegionBody},
 	}
 	fp := nanopass.FixedPoint(p, 4)

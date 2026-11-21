@@ -14,7 +14,7 @@ package sqleditor
 import (
 	"strings"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/highlight"
 )
@@ -43,7 +43,7 @@ type StatementRange struct {
 // Segments with no significant content — a stray `;`, a trailing comment — are
 // dropped rather than returned as empty ranges.
 func BodyStatementRanges(sql string) (ranges []StatementRange, bodyOffset int) {
-	bodyOffset = env.BodyOffset(sql)
+	bodyOffset = grammarenv.BodyOffset(sql)
 	if bodyOffset >= len(sql) {
 		return nil, bodyOffset
 	}

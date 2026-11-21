@@ -297,7 +297,7 @@ func syncExprDirectives(sql string, values map[string]string) (out string, chang
 // past the `SET` prelude, so the declaration lands in the residual where §SD3
 // puts it.
 //
-// The prelude it steps over is the one `dsl/env` defines — a leading run of
+// The prelude it steps over is the one `dsl/grammarenv` defines — a leading run of
 // blank, comment and `SET` lines, ending at the last line that carries a `SET`
 // (ADR-0006, 2026-08-15 Update). Anchoring on the last SET rather than
 // breaking at the first non-SET line is what keeps a declaration below a

@@ -43,8 +43,8 @@ import (
 
 	"github.com/antlr4-go/antlr/v4"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/identity/identifier"
@@ -227,7 +227,7 @@ func ExpandPass(cfg Config) nanopass.Pass {
 		// Env-aware rather than a lifted body pass: a macro argument may be a
 		// `{name:Type}` slot the prelude binds (ADR-0200 §SD6), and the
 		// bound value lives in the environment, not the body.
-		Apply: func(e *env.Environment, body string) (string, error) {
+		Apply: func(e *grammarenv.Environment, body string) (string, error) {
 			return expand(cfg, e, body)
 		},
 		Properties: nanopass.PassProperties{
@@ -281,7 +281,7 @@ func (inst Reference) String() string {
 func References(sql string) (refs []Reference) {
 	// The prelude may bind a slot the call names (§SD6); Extract is
 	// best-effort and yields the body alone when there is no prelude.
-	e, body, err := env.Extract(sql)
+	e, body, err := grammarenv.Extract(sql)
 	if err != nil {
 		e, body = nil, sql
 	}
@@ -328,7 +328,7 @@ type call struct {
 }
 
 // expand replaces every macro call in sql.
-func expand(cfg Config, e *env.Environment, sql string) (result string, err error) {
+func expand(cfg Config, e *grammarenv.Environment, sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		err = eh.Errorf("parse: %w", err)
@@ -507,7 +507,7 @@ type snapshotArg struct {
 // conversions, which is not a stylistic choice: `toDateTime64(n, 9)` reads a
 // plain number as *seconds* whatever the scale says, so nanoseconds handed to
 // it saturate to the year 2262 and the predicate silently matches nothing.
-func callArgs(e *env.Environment, fn *grammar1.TableFunctionExprContext) (mount mountArg, snap snapshotArg, err error) {
+func callArgs(e *grammarenv.Environment, fn *grammar1.TableFunctionExprContext) (mount mountArg, snap snapshotArg, err error) {
 	al := fn.TableArgList()
 	if al == nil {
 		err = eb.Build().Str("call", callName(fn)).Errorf("the call needs a mount id")
@@ -608,7 +608,7 @@ var ErrUnboundSlot = errors.New("lading: parameter slot is not bound in the prel
 // written, or the prelude-bound value of a `{name:Type}` slot (ADR-0200
 // §SD6). ok is false for anything else — an expression, a nested call — and
 // err carries [ErrUnboundSlot] for a slot with no binding.
-func argValue(e *env.Environment, arg grammar1.ITableArgExprContext) (raw string, isString bool, ok bool, err error) {
+func argValue(e *grammarenv.Environment, arg grammar1.ITableArgExprContext) (raw string, isString bool, ok bool, err error) {
 	if raw, isString, ok = literalOf(arg); ok {
 		return
 	}
@@ -616,14 +616,14 @@ func argValue(e *env.Environment, arg grammar1.ITableArgExprContext) (raw string
 	if !isSlot {
 		return "", false, false, nil
 	}
-	// env.Extract files a `SET param_m = …` line under its full key and the
+	// grammarenv.Extract files a `SET param_m = …` line under its full key and the
 	// body's `{m:Type}` slot under the bare name; the binding is wherever Raw
 	// is, so both are consulted.
-	var bound env.Param
+	var bound grammarenv.Param
 	if e != nil {
 		bound = e.Params[name]
 		if bound.Raw == "" {
-			bound = e.Params[env.ParamPrefix+name]
+			bound = e.Params[grammarenv.ParamPrefix+name]
 		}
 	}
 	if bound.Raw == "" {

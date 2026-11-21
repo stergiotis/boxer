@@ -7,7 +7,7 @@ import (
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/hashicorp/golang-lru/v2/simplelru"
 	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 )
 
 // Parsing and environment extraction memoised by text (ADR-0306).
@@ -128,10 +128,10 @@ func (inst *textMemo[V]) stat() MemoStat {
 	return MemoStat{Hits: inst.hits, Misses: inst.misses, Entries: inst.lru.Len(), Bytes: inst.bytes}
 }
 
-// extracted is a memoised [env.Extract]: the environment is a template that
+// extracted is a memoised [grammarenv.Extract]: the environment is a template that
 // is never handed out, only cloned, because passes write to the one they get.
 type extracted struct {
-	e    *env.Environment
+	e    *grammarenv.Environment
 	body string
 }
 
@@ -141,13 +141,13 @@ var (
 	extractMemo = newTextMemo[extracted](extractCharge)
 )
 
-// extractEnv is [env.Extract] answered from the memo when sql was extracted
+// extractEnv is [grammarenv.Extract] answered from the memo when sql was extracted
 // before. The environment returned is the caller's own.
-func extractEnv(sql string) (e *env.Environment, body string, err error) {
+func extractEnv(sql string) (e *grammarenv.Environment, body string, err error) {
 	if v, ok := extractMemo.get(sql); ok {
 		return v.e.Clone(), v.body, nil
 	}
-	e, body, err = env.Extract(sql)
+	e, body, err = grammarenv.Extract(sql)
 	if err != nil {
 		return
 	}

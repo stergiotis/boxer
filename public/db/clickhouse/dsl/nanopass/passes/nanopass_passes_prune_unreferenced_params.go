@@ -4,20 +4,20 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// PruneUnreferencedParams returns a Pass that drops env.Params entries whose
+// PruneUnreferencedParams returns a Pass that drops grammarenv.Params entries whose
 // extracted-param name no longer appears anywhere in the body — either as a
 // `{name: Type}` slot or as a bare identifier (CTE-injected reference).
 //
 // Meant to follow passes that fold or remove parameter placeholders. Composes
 // in either order with InjectParamsAsCTE thanks to the bare-identifier scan.
 //
-// Only env.Params entries whose name parses against the extraction prefix are
+// Only grammarenv.Params entries whose name parses against the extraction prefix are
 // candidates — session-level settings and any param whose name does not match
 // the prefix-plus-metadata format are preserved verbatim.
 //
@@ -28,7 +28,7 @@ func PruneUnreferencedParams(prefix string) nanopass.Pass {
 	}
 	return nanopass.Pass{
 		Name: "PruneUnreferencedParams",
-		Apply: func(e *env.Environment, body string) (string, error) {
+		Apply: func(e *grammarenv.Environment, body string) (string, error) {
 			referenced, err := collectReferencedParamNames(body, prefix)
 			if err != nil {
 				return "", eh.Errorf("PruneUnreferencedParams: %w", err)

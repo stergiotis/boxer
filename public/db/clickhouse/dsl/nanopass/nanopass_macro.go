@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -89,7 +89,7 @@ func (inst *MacroExpander) Pass() Pass {
 }
 
 // apply is the body-only macro expansion implementation.
-func (inst *MacroExpander) apply(_ *env.Environment, body string) (result string, err error) {
+func (inst *MacroExpander) apply(_ *grammarenv.Environment, body string) (result string, err error) {
 	pr, err := Parse(body)
 	if err != nil {
 		err = eh.Errorf("MacroExpander: %w", err)

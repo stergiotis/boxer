@@ -45,7 +45,7 @@ non-canonical forms are rejected at compile time (the types don't exist).
 
 The `nanopass` package provides the infrastructure for small, composable SQL
 transformations. Each **pass** is a `Pass` value ([ADR-0006](../../../../doc/adr/0006-nanopass-environment-and-first-class-pass.md)):
-a name, an `Apply` function over an `env.Environment` and the SQL body that
+a name, an `Apply` function over an `grammarenv.Environment` and the SQL body that
 reads the body, parses it into a CST, performs a focused rewrite using ANTLR's
 `TokenStreamRewriter`, and emits modified SQL — plus declared `PassProperties`
 that `AssertProperties` checks over a corpus.

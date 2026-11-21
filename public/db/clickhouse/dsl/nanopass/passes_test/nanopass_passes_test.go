@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stretchr/testify/require"
 )
@@ -273,7 +273,7 @@ func TestDebugTryEvalDirect(t *testing.T) {
 	require.NotNil(t, outerFunc)
 	t.Logf("outer func text: %q", outerFunc.GetText())
 
-	val, evaluated, evalErr := eval.TryEval(env.NewEnvironment(), pr, outerFunc)
+	val, evaluated, evalErr := eval.TryEval(grammarenv.NewEnvironment(), pr, outerFunc)
 	t.Logf("val=%v (type %T) evaluated=%v err=%v", val, val, evaluated, evalErr)
 }
 func TestDebugOperatorContext(t *testing.T) {

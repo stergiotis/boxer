@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar2"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 )
 
@@ -102,12 +102,12 @@ func TestParseMemoIsSafeToShareAcrossGoroutines(t *testing.T) {
 // given; the next run of the same text must not see that write.
 func TestExtractMemoHandsEachRunItsOwnEnvironment(t *testing.T) {
 	const sql = "SET max_threads = 4;\nSELECT {p: UInt8} -- memo: env"
-	var seen []map[string]env.Setting
+	var seen []map[string]grammarenv.Setting
 	pass := nanopass.Pass{
 		Name: "writesEnv",
-		Apply: func(e *env.Environment, body string) (string, error) {
+		Apply: func(e *grammarenv.Environment, body string) (string, error) {
 			seen = append(seen, maps.Clone(e.SessionSettings))
-			e.SessionSettings["leak"] = env.Setting{Name: "leak", Raw: "1"}
+			e.SessionSettings["leak"] = grammarenv.Setting{Name: "leak", Raw: "1"}
 			return body, nil
 		},
 	}
@@ -127,14 +127,14 @@ func TestExtractMemoHandsEachRunItsOwnEnvironment(t *testing.T) {
 
 func TestExtractMemoMatchesExtract(t *testing.T) {
 	const sql = "-- header\nSET param_p = 3;\nSET max_threads = 4;\nSELECT {p: UInt8} SETTINGS a = 1 -- memo: extract"
-	wantEnv, wantBody, err := env.Extract(sql)
+	wantEnv, wantBody, err := grammarenv.Extract(sql)
 	require.NoError(t, err)
 	for range 2 {
-		var gotEnv *env.Environment
+		var gotEnv *grammarenv.Environment
 		var gotBody string
 		pass := nanopass.Pass{
 			Name: "observesEnv",
-			Apply: func(e *env.Environment, body string) (string, error) {
+			Apply: func(e *grammarenv.Environment, body string) (string, error) {
 				gotEnv, gotBody = e, body
 				return body, nil
 			},

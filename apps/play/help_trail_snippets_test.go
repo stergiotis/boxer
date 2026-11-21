@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
@@ -48,7 +48,7 @@ func TestHelpTrailSnippetsResolve(t *testing.T) {
 			var diags []passes.ColumnDiagnostic
 			out, resErr := passes.ResolveColumnNames(resolver, factsschema.DatabaseName, func(d passes.ColumnDiagnostic) {
 				diags = append(diags, d)
-			}).Apply(env.NewEnvironment(), residual)
+			}).Apply(grammarenv.NewEnvironment(), residual)
 			require.NoErrorf(t, resErr, "%s:%d", path, blk.line)
 			require.Emptyf(t, diags, "%s:%d: a handle names no column of the view\n%s", path, blk.line, blk.sql)
 			for line := range strings.SplitSeq(out, "\n") {

@@ -9,7 +9,7 @@ realised_by:
   - adr:0002
   - adr:0006
   - pkg:public/db/clickhouse/dsl/nanopass
-  - pkg:public/db/clickhouse/dsl/env
+  - pkg:public/db/clickhouse/dsl/grammarenv
   - skill:nanopass-sql
 assessment:
   - dimension: readiness

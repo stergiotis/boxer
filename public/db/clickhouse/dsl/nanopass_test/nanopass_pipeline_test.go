@@ -3,7 +3,7 @@ package nanopass_test
 import (
 	"testing"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stretchr/testify/assert"
@@ -72,7 +72,7 @@ func TestFixedPointDoesNotConverge(t *testing.T) {
 	counter := 0
 	neverSettles := nanopass.Pass{
 		Name: "neverSettles",
-		Apply: func(_ *env.Environment, body string) (string, error) {
+		Apply: func(_ *grammarenv.Environment, body string) (string, error) {
 			counter++
 			return body + " ", nil
 		},
@@ -103,7 +103,7 @@ func TestCombinatorsRecordChildren(t *testing.T) {
 	require.Len(t, val.Children, 1)
 	assert.Equal(t, "CanonicalizeKeywordCase", val.Children[0].Name)
 
-	cond := nanopass.Conditional("c", func(*env.Environment) bool { return true }, passes.CanonicalizeKeywordCase)
+	cond := nanopass.Conditional("c", func(*grammarenv.Environment) bool { return true }, passes.CanonicalizeKeywordCase)
 	require.Len(t, cond.Children, 1)
 	assert.Equal(t, "CanonicalizeKeywordCase", cond.Children[0].Name)
 }

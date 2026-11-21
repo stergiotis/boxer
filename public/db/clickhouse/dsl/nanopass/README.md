@@ -8,7 +8,7 @@ status: draft
 
 # nanopass — ClickHouse SQL Transformations
 
-A Go library for composable SQL→SQL transformations of ClickHouse SELECT statements. Each transformation is a self-contained **pass**: a struct value carrying an `Apply` function plus declared `PassProperties`. Passes compose via combinators that take and return passes; the runner threads a shared [`env.Environment`](../env) through the chain so settings, params, and FORMAT are first-class Go values.
+A Go library for composable SQL→SQL transformations of ClickHouse SELECT statements. Each transformation is a self-contained **pass**: a struct value carrying an `Apply` function plus declared `PassProperties`. Passes compose via combinators that take and return passes; the runner threads a shared [`grammarenv.Environment`](../grammarenv) through the chain so settings, params, and FORMAT are first-class Go values.
 
 The current Pass / Environment design is recorded in [ADR-0006](../../../../../doc/adr/0006-nanopass-environment-and-first-class-pass.md). The substrate (stateless passes on CST + scopes) was decided in [ADR-0002](../../../../../doc/adr/0002-nanopass-discipline.md).
 
@@ -16,13 +16,13 @@ The current Pass / Environment design is recorded in [ADR-0006](../../../../../d
 
 ```
 SQL string
-  → env.Extract           (split SET prelude → Environment, body)
+  → grammarenv.Extract           (split SET prelude → Environment, body)
   → Pass.Apply(env, body) (parse, walk CST, rewrite tokens, emit body)
-  → env.Integrate(body)   (re-emit SET prelude + body)
+  → grammarenv.Integrate(body)   (re-emit SET prelude + body)
   → next pass repeats
 ```
 
-`Pass.Run(sql)` does the full round-trip. `Sequence` shares the env across child passes — they all observe each other's mutations to settings and params. Re-parsing each Apply preserves composability; since passes are frequently handed text an earlier pass returned unchanged, `Parse`, `ParseCanonical` and `Pass.Run`'s `env.Extract` are memoised by input text ([ADR-0306](../../../../../doc/adr/0306-memoise-parsing-and-extraction-by-text.md)), so a repeat costs a lookup. A memoised `ParseResult` is shared between callers and must be treated as read-only. Whitespace and comments are preserved on the hidden channel (`channel(HIDDEN)`), enabling lossless round-trip fidelity.
+`Pass.Run(sql)` does the full round-trip. `Sequence` shares the env across child passes — they all observe each other's mutations to settings and params. Re-parsing each Apply preserves composability; since passes are frequently handed text an earlier pass returned unchanged, `Parse`, `ParseCanonical` and `Pass.Run`'s `grammarenv.Extract` are memoised by input text ([ADR-0306](../../../../../doc/adr/0306-memoise-parsing-and-extraction-by-text.md)), so a repeat costs a lookup. A memoised `ParseResult` is shared between callers and must be treated as read-only. Whitespace and comments are preserved on the hidden channel (`channel(HIDDEN)`), enabling lossless round-trip fidelity.
 
 `Parse` collects both lexer and parser diagnostics (with `line:column` positions): input that fails to lex is rejected instead of having the offending characters silently dropped from the token stream. Panics inside a pass (e.g. conflicting token edits — the ANTLR rewriter panics at `GetText` for partially overlapping replaces) are recovered at the Pass boundary and returned as errors.
 
@@ -35,7 +35,7 @@ Analytical passes signal "discard my body rewrite" via a comment-shaped marker (
 ```go
 type Pass struct {
     Name       string
-    Apply      func(*env.Environment, string) (string, error)
+    Apply      func(*grammarenv.Environment, string) (string, error)
     Properties PassProperties
 }
 
@@ -56,7 +56,7 @@ type PassProperties struct {
 func Sequence(name string, ps ...Pass) Pass
 func FixedPoint(p Pass, maxIter int) Pass
 func Validating(g Grammar, p Pass) Pass
-func Conditional(name string, pred func(*env.Environment) bool, p Pass) Pass
+func Conditional(name string, pred func(*grammarenv.Environment) bool, p Pass) Pass
 func LiftBodyPass(name string, fn func(string)(string,error), props PassProperties) Pass
 ```
 
@@ -66,7 +66,7 @@ Property propagation: `Validating` and `Conditional` delegate to the wrapped pas
 
 ## Environment
 
-[`dsl/env`](../env) models the execution context surrounding a SELECT.
+[`dsl/env`](../grammarenv) models the execution context surrounding a SELECT.
 
 ```go
 type Environment struct {
@@ -77,7 +77,7 @@ type Environment struct {
 }
 ```
 
-`env.Extract` parses the SET prelude exhaustively: keys with the `param_` prefix or that match a body slot become `Params`; everything else becomes `SessionSettings`. The inline SETTINGS clause and FORMAT clause are populated as **read-only views** — they live in body, and passes that mutate them rewrite the body's CST (which then refreshes the env on the next Extract). `env.Integrate` re-emits SET-prelude lines only.
+`grammarenv.Extract` parses the SET prelude exhaustively: keys with the `param_` prefix or that match a body slot become `Params`; everything else becomes `SessionSettings`. The inline SETTINGS clause and FORMAT clause are populated as **read-only views** — they live in body, and passes that mutate them rewrite the body's CST (which then refreshes the env on the next Extract). `grammarenv.Integrate` re-emits SET-prelude lines only.
 
 ## Components
 
@@ -350,7 +350,7 @@ Additional robustness tests: pipeline ordering permutations, scope structure pre
 
 - `github.com/antlr4-go/antlr/v4` — ANTLR4 Go runtime
 - `github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1`, `grammar2` — Generated ClickHouse lexer/parser
-- `github.com/stergiotis/boxer/public/db/clickhouse/dsl/env` — Environment package
+- `github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv` — Environment package
 - `github.com/stergiotis/boxer/public/observability/eh` — Error handling
 - `github.com/stretchr/testify` — Test assertions
 

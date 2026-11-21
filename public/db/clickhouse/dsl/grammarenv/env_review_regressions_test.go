@@ -1,4 +1,4 @@
-package env
+package grammarenv
 
 // Regression tests for the 2026-06-12 hostile review of the env package.
 

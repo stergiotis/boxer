@@ -6,8 +6,8 @@ import (
 	"slices"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -261,7 +261,7 @@ func getSettingFunctionName(ctx antlr.ParserRuleContext) string {
 func WriteSettings(settings map[string]any) nanopass.Pass {
 	return nanopass.Pass{
 		Name: "WriteSettings",
-		Apply: func(e *env.Environment, body string) (string, error) {
+		Apply: func(e *grammarenv.Environment, body string) (string, error) {
 			out, err := writeSettingsBody(settings, body)
 			if err != nil {
 				return "", err
@@ -275,7 +275,7 @@ func WriteSettings(settings map[string]any) nanopass.Pass {
 					if mErr != nil {
 						continue
 					}
-					e.StatementSettings[name] = env.Setting{Name: name, Raw: raw, Value: val}
+					e.StatementSettings[name] = grammarenv.Setting{Name: name, Raw: raw, Value: val}
 				}
 			}
 			return out, nil
@@ -346,7 +346,7 @@ func writeSettingsBody(settings map[string]any, sql string) (result string, err 
 func ModifySettings(modifier func(settings map[string]any) error) nanopass.Pass {
 	return nanopass.Pass{
 		Name: "ModifySettings",
-		Apply: func(e *env.Environment, body string) (string, error) {
+		Apply: func(e *grammarenv.Environment, body string) (string, error) {
 			settings, err := ReadSettings(body)
 			if err != nil {
 				return "", err
@@ -368,7 +368,7 @@ func ModifySettings(modifier func(settings map[string]any) error) nanopass.Pass 
 					if mErr != nil {
 						continue
 					}
-					e.StatementSettings[name] = env.Setting{Name: name, Raw: raw, Value: val}
+					e.StatementSettings[name] = grammarenv.Setting{Name: name, Raw: raw, Value: val}
 				}
 			}
 			return out, nil

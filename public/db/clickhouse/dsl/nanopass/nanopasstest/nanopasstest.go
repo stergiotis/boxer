@@ -6,7 +6,7 @@ package nanopasstest
 import (
 	"testing"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 )
 
@@ -37,13 +37,13 @@ func AssertProperties(t testing.TB, p nanopass.Pass, corpus []string) {
 	if p.Properties.Idempotent {
 		successes := 0
 		for _, body := range corpus {
-			e1 := env.NewEnvironment()
+			e1 := grammarenv.NewEnvironment()
 			out1, err := p.Apply(e1, body)
 			if err != nil {
 				continue
 			}
 			successes++
-			e2 := env.NewEnvironment()
+			e2 := grammarenv.NewEnvironment()
 			out2, err := p.Apply(e2, out1)
 			if err != nil {
 				t.Errorf("pass %q: second Apply failed for body %q: %v", p.Name, body, err)
@@ -62,12 +62,12 @@ func AssertProperties(t testing.TB, p nanopass.Pass, corpus []string) {
 		successes := 0
 		anyDiffers := false
 		for _, body := range corpus {
-			e1 := env.NewEnvironment()
+			e1 := grammarenv.NewEnvironment()
 			out1, err := p.Apply(e1, body)
 			if err != nil {
 				continue
 			}
-			e2 := env.NewEnvironment()
+			e2 := grammarenv.NewEnvironment()
 			out2, err := p.Apply(e2, out1)
 			if err != nil {
 				continue

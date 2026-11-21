@@ -23,7 +23,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/agentrunstore"
@@ -308,7 +308,7 @@ func prepare(sql string, table string, physical []string) (out string, err error
 		constructsql.ExtractExpandPassWithIds(resolver, membershipIds{}, database),
 		constructsql.ExpandPass,
 	} {
-		out, err = pass.Apply(env.NewEnvironment(), out)
+		out, err = pass.Apply(grammarenv.NewEnvironment(), out)
 		if err != nil {
 			return "", eb.Build().Str("pass", pass.Name).Errorf("journalviews: pass failed: %w", err)
 		}

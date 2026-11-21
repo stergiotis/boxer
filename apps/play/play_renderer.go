@@ -21,7 +21,7 @@ import (
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
 	tallylaunch "github.com/stergiotis/boxer/apps/tally/launchcfg"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
@@ -3088,13 +3088,13 @@ func (inst *PlayApp) updatePreview() {
 		passes.RemoveRedundantParens,
 	).Run(raw)
 	// Lift the observations from body space into buffer space. Pass.Run hands
-	// each pass the body env.Extract split off — SET prelude removed, leading
+	// each pass the body grammarenv.Extract split off — SET prelude removed, leading
 	// whitespace trimmed — so a recorded range is relative to that suffix,
 	// while every consumer (renderAffordances, extractCallArgs, and the
 	// ADR-0130 L3 span producers) slices inst.sql. Runs on the error path too:
 	// the analytical pass is first in the sequence, so it has already observed
 	// by the time a later canonicaliser fails.
-	shiftObservationsToBuffer(inst.observations, raw, env.BodyOffset(raw))
+	shiftObservationsToBuffer(inst.observations, raw, grammarenv.BodyOffset(raw))
 	if err != nil {
 		inst.formatted = ""
 		inst.formattedErr = err

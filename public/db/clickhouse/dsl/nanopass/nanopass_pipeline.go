@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -126,7 +126,7 @@ const DefaultFixedPointMaxIter = 128
 // ApplyFunc is the body of a Pass — it transforms (env, body) into a new body,
 // optionally mutating env. The same env value is observed by subsequent passes
 // in a Sequence.
-type ApplyFunc func(e *env.Environment, body string) (newBody string, err error)
+type ApplyFunc func(e *grammarenv.Environment, body string) (newBody string, err error)
 
 // Pass is the first-class unit of nanopass transformation. Apply does the work;
 // Properties declares behavioural metadata that the runner and nanopasstest.AssertProperties
@@ -235,7 +235,7 @@ func (p Pass) Run(sql string) (result string, err error) {
 // callApply invokes fn, converting panics (from the ANTLR rewriter's
 // conflicting-edit checks, nil bound tokens, or buggy pass code) into
 // errors so one faulty pass fails its Run instead of crashing the process.
-func callApply(name string, fn ApplyFunc, e *env.Environment, body string) (newBody string, err error) {
+func callApply(name string, fn ApplyFunc, e *grammarenv.Environment, body string) (newBody string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = eb.Build().
@@ -256,7 +256,7 @@ func callApply(name string, fn ApplyFunc, e *env.Environment, body string) (newB
 // Sequence calls it per child, Validating and Conditional call it on their
 // body. An unprofiled run finds no recorder and takes the same path it always
 // did.
-func (p Pass) applyWithProps(e *env.Environment, body string) (newBody string, err error) {
+func (p Pass) applyWithProps(e *grammarenv.Environment, body string) (newBody string, err error) {
 	rec := recorderFor(e)
 	if rec == nil {
 		return p.applyUnrecorded(e, body)
@@ -269,7 +269,7 @@ func (p Pass) applyWithProps(e *env.Environment, body string) (newBody string, e
 
 // applyUnrecorded is applyWithProps' actual work, split out so the recording
 // wrapper adds no branch to the body it measures.
-func (p Pass) applyUnrecorded(e *env.Environment, body string) (newBody string, err error) {
+func (p Pass) applyUnrecorded(e *grammarenv.Environment, body string) (newBody string, err error) {
 	if p.Apply == nil {
 		err = eb.Build().Str("pass", p.Name).Errorf("pass has nil Apply")
 		return
@@ -296,7 +296,7 @@ func (p Pass) applyUnrecorded(e *env.Environment, body string) (newBody string, 
 // applyWithProps opened for the looping pass — the loop calls fn directly
 // rather than recursing through applyWithProps, so iterations are a count on
 // that node, not children of it.
-func runFixedPoint(name string, fn ApplyFunc, e *env.Environment, body string, maxIter int) (result string, err error) {
+func runFixedPoint(name string, fn ApplyFunc, e *grammarenv.Environment, body string, maxIter int) (result string, err error) {
 	result = body
 	rec := recorderFor(e)
 	for i := range maxIter {
@@ -337,7 +337,7 @@ func Sequence(name string, ps ...Pass) Pass {
 	return Pass{
 		Name:     name,
 		Children: ps,
-		Apply: func(e *env.Environment, body string) (string, error) {
+		Apply: func(e *grammarenv.Environment, body string) (string, error) {
 			cur := body
 			for _, child := range ps {
 				next, err := child.applyWithProps(e, cur)
@@ -367,7 +367,7 @@ func FixedPoint(p Pass, maxIter int) Pass {
 		Name:       "FixedPoint(" + p.Name + ")",
 		Properties: props,
 		Children:   []Pass{p},
-		Apply: func(e *env.Environment, body string) (string, error) {
+		Apply: func(e *grammarenv.Environment, body string) (string, error) {
 			return runFixedPoint(p.Name, p.Apply, e, body, maxIter)
 		},
 	}
@@ -385,7 +385,7 @@ func Validating(g Grammar, p Pass) Pass {
 		Name:       "Validating(" + p.Name + ")",
 		Properties: p.Properties.withoutExecutionStrategy(),
 		Children:   []Pass{p},
-		Apply: func(e *env.Environment, body string) (string, error) {
+		Apply: func(e *grammarenv.Environment, body string) (string, error) {
 			out, err := p.applyWithProps(e, body)
 			if err != nil {
 				return "", err
@@ -405,12 +405,12 @@ func Validating(g Grammar, p Pass) Pass {
 //
 // Like Validating, the wrapper delegates to p.applyWithProps and therefore
 // clears NeedsFixedPoint on the returned pass.
-func Conditional(name string, pred func(*env.Environment) bool, p Pass) Pass {
+func Conditional(name string, pred func(*grammarenv.Environment) bool, p Pass) Pass {
 	return Pass{
 		Name:       name,
 		Properties: p.Properties.withoutExecutionStrategy(),
 		Children:   []Pass{p},
-		Apply: func(e *env.Environment, body string) (string, error) {
+		Apply: func(e *grammarenv.Environment, body string) (string, error) {
 			if !pred(e) {
 				return body, nil
 			}
@@ -425,7 +425,7 @@ func Conditional(name string, pred func(*env.Environment) bool, p Pass) Pass {
 func LiftBodyPass(name string, fn func(sql string) (string, error), props PassProperties) Pass {
 	return Pass{
 		Name: name,
-		Apply: func(_ *env.Environment, body string) (string, error) {
+		Apply: func(_ *grammarenv.Environment, body string) (string, error) {
 			return fn(body)
 		},
 		Properties: props,
@@ -438,7 +438,7 @@ func LiftBodyPass(name string, fn func(sql string) (string, error), props PassPr
 // Grammar1 SQL.
 var ValidateGrammar1 = Pass{
 	Name: "ValidateGrammar1",
-	Apply: func(_ *env.Environment, body string) (string, error) {
+	Apply: func(_ *grammarenv.Environment, body string) (string, error) {
 		_, err := Parse(body)
 		if err != nil {
 			return "", eh.Errorf("ValidateGrammar1: %w", err)
@@ -457,7 +457,7 @@ var ValidateGrammar1 = Pass{
 // Grammar2's canonical form.
 var ValidateGrammar2 = Pass{
 	Name: "ValidateGrammar2",
-	Apply: func(_ *env.Environment, body string) (string, error) {
+	Apply: func(_ *grammarenv.Environment, body string) (string, error) {
 		_, err := ParseCanonical(body)
 		if err != nil {
 			return "", eh.Errorf("ValidateGrammar2: %w", err)
@@ -480,7 +480,7 @@ func validatorFor(g Grammar) ApplyFunc {
 	case GrammarG2:
 		return ValidateGrammar2.Apply
 	default:
-		return func(_ *env.Environment, _ string) (string, error) {
+		return func(_ *grammarenv.Environment, _ string) (string, error) {
 			return "", eb.Build().Int("grammar", int(g)).Errorf("unknown grammar selector")
 		}
 	}

@@ -491,9 +491,9 @@ Implementation details that Go's import rules happen to expose. Not for use outs
 
 ### db
 
-- `public/db/clickhouse/dsl/env` — Package env models the Chez-Scheme-style environment that surrounds a ClickHouse SELECT statement.
 - `public/db/clickhouse/dsl/genbuildertest`
 - `public/db/clickhouse/dsl/grammar0`
+- `public/db/clickhouse/dsl/grammarenv` — Package grammarenv models the Chez-Scheme-style environment that surrounds a ClickHouse SELECT statement.
 
 ### keelson
 

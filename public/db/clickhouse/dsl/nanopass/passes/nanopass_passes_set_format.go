@@ -2,8 +2,8 @@ package passes
 
 import (
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -14,7 +14,7 @@ import (
 func SetFormat(format string) nanopass.Pass {
 	return nanopass.Pass{
 		Name: "SetFormat",
-		Apply: func(e *env.Environment, body string) (string, error) {
+		Apply: func(e *grammarenv.Environment, body string) (string, error) {
 			out, err := setFormatBody(format, body)
 			if err != nil {
 				return "", err
@@ -104,7 +104,7 @@ func setFormatBody(format string, sql string) (result string, err error) {
 
 // GetFormat returns the current FORMAT value of a query, or empty string if
 // none. Body-only helper for callers that operate on raw SQL without going
-// through env.Extract.
+// through grammarenv.Extract.
 func GetFormat(sql string) (format string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {

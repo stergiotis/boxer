@@ -1,4 +1,4 @@
-package env
+package grammarenv
 
 import (
 	"strings"
@@ -22,7 +22,7 @@ const ParamPrefix = "param_"
 //   - `{name: Type}` slot occurrences in the body (populating Param.Type).
 //   - Read-only views of the inline `... SETTINGS k=v` clause
 //     (env.StatementSettings) and trailing `FORMAT FormatName` clause
-//     (env.Format). These remain in the body — env.Integrate does not
+//     (env.Format). These remain in the body — grammarenv.Integrate does not
 //     re-emit them, and passes that mutate them rewrite the body's CST.
 //
 // Round-trip: Integrate(Extract(sql)) is normalising over the prelude only;
@@ -30,7 +30,7 @@ const ParamPrefix = "param_"
 //
 // SET-line classification:
 //   - A SET whose key starts with [ParamPrefix] OR whose key matches the
-//     name of a `{name: Type}` slot found in the body becomes an env.Params
+//     name of a `{name: Type}` slot found in the body becomes an grammarenv.Params
 //     entry.
 //   - Everything else becomes an env.SessionSettings entry.
 //
@@ -359,7 +359,7 @@ func indexOutsideQuotes(s string, c byte) int {
 	return -1
 }
 
-// scanBody parses body and populates env.Params Type from slot occurrences,
+// scanBody parses body and populates grammarenv.Params Type from slot occurrences,
 // env.StatementSettings from the inline SETTINGS clause, and env.Format
 // from the FORMAT clause. The body is not rewritten — these are read-only
 // observations that consumers may use to inform their behaviour.

@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -37,7 +37,7 @@ type EvalFuncI func(args []any) (any, error)
 // first.
 //
 // Param-slot resolution: when a `{name: Type}` slot appears as an argument
-// the evaluator consults env.Params[name]. A resolved param contributes its
+// the evaluator consults grammarenv.Params[name]. A resolved param contributes its
 // Go-typed Value as if it were a literal; an unresolved param makes the
 // outer call non-evaluable (the inner descent still folds independent
 // literal-only sibling calls).
@@ -175,7 +175,7 @@ func (inst *FunctionEvaluator) Pass() nanopass.Pass {
 	}
 }
 
-func (inst *FunctionEvaluator) apply(e *env.Environment, body string) (result string, err error) {
+func (inst *FunctionEvaluator) apply(e *grammarenv.Environment, body string) (result string, err error) {
 	pr, err := nanopass.Parse(body)
 	if err != nil {
 		err = eh.Errorf("FunctionEvaluator: %w", err)
@@ -212,7 +212,7 @@ type evalOutcome struct {
 //
 // Evaluation and serialisation failures abort the walk with an error: a
 // registered call left in the output is never valid ClickHouse SQL.
-func (inst *FunctionEvaluator) walkAndEval(e *env.Environment, pr *nanopass.ParseResult, rw nanopass.RewriterI, node antlr.Tree) (err error) {
+func (inst *FunctionEvaluator) walkAndEval(e *grammarenv.Environment, pr *nanopass.ParseResult, rw nanopass.RewriterI, node antlr.Tree) (err error) {
 	ctx, ok := node.(antlr.ParserRuleContext)
 	if !ok {
 		return
@@ -272,12 +272,12 @@ func (inst *FunctionEvaluator) walkAndEval(e *env.Environment, pr *nanopass.Pars
 // environment. Returns (value, true, nil) on success; (nil, false, nil) if
 // not all arguments are evaluable; (nil, false, error) on evaluation
 // failure.
-func (inst *FunctionEvaluator) TryEval(e *env.Environment, pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext) (val any, evaluated bool, err error) {
+func (inst *FunctionEvaluator) TryEval(e *grammarenv.Environment, pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext) (val any, evaluated bool, err error) {
 	outcome := inst.tryEval(e, pr, funcExpr)
 	return outcome.val, outcome.evaluated, outcome.err
 }
 
-func (inst *FunctionEvaluator) tryEval(e *env.Environment, pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext) (outcome evalOutcome) {
+func (inst *FunctionEvaluator) tryEval(e *grammarenv.Environment, pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext) (outcome evalOutcome) {
 	ident := funcExpr.Identifier()
 	if ident == nil {
 		return
@@ -313,7 +313,7 @@ func (inst *FunctionEvaluator) tryEval(e *env.Environment, pr *nanopass.ParseRes
 // nil) when an argument is benignly non-evaluable (column ref, unresolved
 // param, verbatim SQL), and (nil, false, err) when a nested registered
 // evaluator failed.
-func (inst *FunctionEvaluator) extractEvalArgs(e *env.Environment, pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext, useAny bool) (args []any, ok bool, err error) {
+func (inst *FunctionEvaluator) extractEvalArgs(e *grammarenv.Environment, pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext, useAny bool) (args []any, ok bool, err error) {
 	argList := funcExpr.ColumnArgList()
 	if argList == nil {
 		args = make([]any, 0)
@@ -382,7 +382,7 @@ func (inst *FunctionEvaluator) extractEvalArgs(e *env.Environment, pr *nanopass.
 }
 
 // evalArgExpr evaluates a single argument expression.
-func (inst *FunctionEvaluator) evalArgExpr(e *env.Environment, pr *nanopass.ParseResult, argExpr *grammar1.ColumnArgExprContext) (val any, ok bool, err error) {
+func (inst *FunctionEvaluator) evalArgExpr(e *grammarenv.Environment, pr *nanopass.ParseResult, argExpr *grammar1.ColumnArgExprContext) (val any, ok bool, err error) {
 	if argExpr.GetChildCount() == 0 {
 		return
 	}
@@ -393,7 +393,7 @@ func (inst *FunctionEvaluator) evalArgExpr(e *env.Environment, pr *nanopass.Pars
 // evalColumnExpr evaluates a column expression recursively. ok=false with
 // err=nil means benignly non-evaluable; err != nil means a registered
 // evaluator ran and failed.
-func (inst *FunctionEvaluator) evalColumnExpr(e *env.Environment, pr *nanopass.ParseResult, node antlr.Tree) (val any, ok bool, err error) {
+func (inst *FunctionEvaluator) evalColumnExpr(e *grammarenv.Environment, pr *nanopass.ParseResult, node antlr.Tree) (val any, ok bool, err error) {
 	ctx, isCtx := node.(antlr.ParserRuleContext)
 	if !isCtx {
 		return
@@ -453,7 +453,7 @@ func (inst *FunctionEvaluator) evalColumnExpr(e *env.Environment, pr *nanopass.P
 	}
 }
 
-// resolveParamSlot looks the slot up in env.Params. Returns ResolvedParamSlot
+// resolveParamSlot looks the slot up in grammarenv.Params. Returns ResolvedParamSlot
 // when both type and value are known; UnresolvedParamSlot when only the type
 // is known. A slot the env has no record of is treated as unresolved-with-
 // blank-type rather than non-evaluable, so the caller's opaque-arg rule
@@ -461,14 +461,14 @@ func (inst *FunctionEvaluator) evalColumnExpr(e *env.Environment, pr *nanopass.P
 //
 // Lazy hydration: when the env entry has Raw and Type populated but Value
 // is nil (the typical post-Extract state), the Raw text is deserialised on
-// demand and cached back into the env. This avoids forcing env.Extract to
+// demand and cached back into the env. This avoids forcing grammarenv.Extract to
 // import marshalling (which would create a cycle through nanopass).
-func resolveParamSlot(e *env.Environment, ctx *grammar1.ColumnExprParamSlotContext) (val any, ok bool) {
+func resolveParamSlot(e *grammarenv.Environment, ctx *grammar1.ColumnExprParamSlotContext) (val any, ok bool) {
 	name, typ := splitParamSlotText(ctx.GetText())
 	if name == "" {
 		return nil, false
 	}
-	var entry env.Param
+	var entry grammarenv.Param
 	if e != nil {
 		entry = e.Params[name]
 	}

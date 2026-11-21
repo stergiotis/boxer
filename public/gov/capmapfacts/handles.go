@@ -3,7 +3,7 @@ package capmapfacts
 import (
 	"strings"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
@@ -82,7 +82,7 @@ func prepare(sql string, table string) (out string, err error) {
 		passes.ResolveColumnNames(resolver, database, nil),
 		constructsql.ExtractExpandPass(resolver, database),
 	} {
-		out, err = pass.Apply(env.NewEnvironment(), out)
+		out, err = pass.Apply(grammarenv.NewEnvironment(), out)
 		if err != nil {
 			return "", eb.Build().Str("pass", pass.Name).Errorf("capmapfacts: pass failed: %w", err)
 		}

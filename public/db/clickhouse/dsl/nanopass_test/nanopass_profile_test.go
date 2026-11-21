@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,7 +22,7 @@ import (
 func sleepPass(name string, d time.Duration, rewrite bool) nanopass.Pass {
 	return nanopass.Pass{
 		Name: name,
-		Apply: func(_ *env.Environment, body string) (string, error) {
+		Apply: func(_ *grammarenv.Environment, body string) (string, error) {
 			time.Sleep(d)
 			if rewrite {
 				return body + " " + name, nil
@@ -86,7 +86,7 @@ func TestRunProfiledCountsFixedPointIterations(t *testing.T) {
 	grow := nanopass.Pass{
 		Name:       "grow",
 		Properties: nanopass.PassProperties{NeedsFixedPoint: true},
-		Apply: func(_ *env.Environment, body string) (string, error) {
+		Apply: func(_ *grammarenv.Environment, body string) (string, error) {
 			calls++
 			if strings.Count(body, "x") < 3 {
 				return body + "x", nil
@@ -124,7 +124,7 @@ func TestRunProfiledRecordsChangedPerInvocation(t *testing.T) {
 // listed at zero, so a reader cannot mistake "did not run" for "was free".
 func TestRunProfiledOmitsAConditionalThatDidNotRun(t *testing.T) {
 	never := nanopass.Conditional("gate",
-		func(*env.Environment) bool { return false },
+		func(*grammarenv.Environment) bool { return false },
 		sleepPass("body", 0, true))
 	_, cost, err := nanopass.Sequence("seq", never).RunProfiled("SELECT 1")
 	require.NoError(t, err)
@@ -136,7 +136,7 @@ func TestRunProfiledOmitsAConditionalThatDidNotRun(t *testing.T) {
 func TestRunProfiledKeepsThePartialTreeOnFailure(t *testing.T) {
 	boom := nanopass.Pass{
 		Name:  "boom",
-		Apply: func(*env.Environment, string) (string, error) { return "", assert.AnError },
+		Apply: func(*grammarenv.Environment, string) (string, error) { return "", assert.AnError },
 	}
 	p := nanopass.Sequence("seq", sleepPass("ok", 0, false), boom, sleepPass("never", 0, false))
 	_, cost, err := p.RunProfiled("SELECT 1")

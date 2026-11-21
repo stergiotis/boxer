@@ -1,4 +1,4 @@
-package env
+package grammarenv
 
 import "github.com/stergiotis/boxer/public/packageprops"
 
@@ -13,5 +13,5 @@ var PackageProps = packageprops.Props{
 }
 
 func init() {
-	packageprops.Register("github.com/stergiotis/boxer/public/db/clickhouse/dsl/env", PackageProps)
+	packageprops.Register("github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv", PackageProps)
 }

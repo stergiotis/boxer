@@ -55,7 +55,7 @@ func TestAdrBookCorpus(t *testing.T) {
 	//
 	// A `--` comment above the two SET lines cost the applet every run: it
 	// failed with `keelsonsql: parse: syntax error: 1:0`, verified live in both
-	// directions on 2026-08-06. The mechanism was in `dsl/env`, whose prelude
+	// directions on 2026-08-06. The mechanism was in `dsl/grammarenv`, whose prelude
 	// harvest took only a LEADING run of SET lines, so a comment above them
 	// ended the prelude before it started and the bindings never reached the
 	// wire. ADR-0006's 2026-08-15 Update made the harvest comment-tolerant.

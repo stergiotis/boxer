@@ -16,7 +16,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -52,7 +52,7 @@ type ChannelClaim any
 // SignalEnvI is the read-only view of the graph's signal (unbound-param) values
 // at a single consistent revision (ADR-0097 SD4). Panels read it in AcceptForChannel.
 type SignalEnvI interface {
-	Get(id SignalID) (param env.Param, ok bool)
+	Get(id SignalID) (param grammarenv.Param, ok bool)
 	Revision() uint64
 }
 
@@ -334,12 +334,12 @@ func isHumanSignalWriter(writer string) bool {
 // view (glitch-free reads, ADR-0097 SD4). meta travels with params under the
 // same copy-on-write.
 type signalEnv struct {
-	params   map[SignalID]env.Param
+	params   map[SignalID]grammarenv.Param
 	meta     map[SignalID]signalMeta
 	revision uint64
 }
 
-func (inst *signalEnv) Get(id SignalID) (param env.Param, ok bool) {
+func (inst *signalEnv) Get(id SignalID) (param grammarenv.Param, ok bool) {
 	param, ok = inst.params[id]
 	return
 }
@@ -379,7 +379,7 @@ func newQueryGraph(exec nodeExecutorI, alloc memory.Allocator) (inst *queryGraph
 		results:  make(map[NodeID]*nodeResult, 4),
 		demanded: make(map[NodeID]bool, 4),
 		sig: &signalEnv{
-			params: make(map[SignalID]env.Param, 4),
+			params: make(map[SignalID]grammarenv.Param, 4),
 			meta:   make(map[SignalID]signalMeta, 4),
 		},
 	}
@@ -413,7 +413,7 @@ func (inst *queryGraph) setSignalRaw(name SignalID, raw string) {
 // setSignalRawFrom is setSignalRaw with an explicit writer identity for the
 // Signals chrome's provenance column (slice 5e).
 func (inst *queryGraph) setSignalRawFrom(name SignalID, raw string, writer string) {
-	inst.setSignalFrom(name, env.Param{Name: name, Raw: raw}, writer)
+	inst.setSignalFrom(name, grammarenv.Param{Name: name, Raw: raw}, writer)
 }
 
 // encodeSignalValue renders a panel-emitted Go value as the raw string a
@@ -634,14 +634,14 @@ func resolveSignalNamesWithDefaults(names []string, bound map[string]bool, sig S
 // setSignal sets a param's value, bumping the revision only when the value
 // actually changes (ADR-0097 SD4: minimality starts at the input). Unchanged
 // re-sets are no-ops, so a node is not re-run for a signal that did not move.
-func (inst *queryGraph) setSignal(id SignalID, p env.Param) {
+func (inst *queryGraph) setSignal(id SignalID, p grammarenv.Param) {
 	inst.setSignalFrom(id, p, signalWriterApp)
 }
 
 // setSignalFrom is the single store-write path: setSignal plus the writer
 // identity recorded in the signal's meta (slice 5e). A deduplicated re-set
 // changes neither value nor meta.
-func (inst *queryGraph) setSignalFrom(id SignalID, p env.Param, writer string) {
+func (inst *queryGraph) setSignalFrom(id SignalID, p grammarenv.Param, writer string) {
 	if writer == "" {
 		writer = signalWriterApp
 	}
@@ -652,7 +652,7 @@ func (inst *queryGraph) setSignalFrom(id SignalID, p env.Param, writer string) {
 		return
 	}
 	rev := inst.sig.revision + 1
-	next := make(map[SignalID]env.Param, len(inst.sig.params)+1)
+	next := make(map[SignalID]grammarenv.Param, len(inst.sig.params)+1)
 	maps.Copy(next, inst.sig.params)
 	nextMeta := make(map[SignalID]signalMeta, len(inst.sig.meta)+1)
 	maps.Copy(nextMeta, inst.sig.meta)
@@ -671,7 +671,7 @@ func (inst *queryGraph) deleteSignal(id SignalID) {
 	if _, ok := inst.sig.params[id]; !ok {
 		return
 	}
-	next := make(map[SignalID]env.Param, len(inst.sig.params)-1)
+	next := make(map[SignalID]grammarenv.Param, len(inst.sig.params)-1)
 	for k, v := range inst.sig.params {
 		if k != id {
 			next[k] = v

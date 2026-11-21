@@ -18,7 +18,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chhttp"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/fairlead"
@@ -840,11 +840,11 @@ func (inst *Client) buildResidualWith(sql string, observe func(passreg.ApplyObse
 // paramPrelude is sql's `SET param_…` lines as a pass finds them, or "" when
 // sql binds no parameter or its prelude does not read.
 func paramPrelude(sql string) (prelude string) {
-	e, _, err := env.Extract(sql)
+	e, _, err := grammarenv.Extract(sql)
 	if err != nil {
 		return ""
 	}
-	bound := env.NewEnvironment()
+	bound := grammarenv.NewEnvironment()
 	for k, p := range e.Params {
 		if p.Raw != "" {
 			bound.Params[k] = p

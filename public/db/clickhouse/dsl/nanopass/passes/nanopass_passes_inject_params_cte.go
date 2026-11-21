@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -44,7 +44,7 @@ func InjectParamsAsCTE(
 	ctParser := canonicaltypes.NewParser()
 	return nanopass.Pass{
 		Name: "InjectParamsAsCTE",
-		Apply: func(e *env.Environment, body string) (result string, err error) {
+		Apply: func(e *grammarenv.Environment, body string) (result string, err error) {
 			if e == nil || len(e.Params) == 0 {
 				result = body
 				return

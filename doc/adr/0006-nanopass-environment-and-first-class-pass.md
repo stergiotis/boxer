@@ -112,6 +112,7 @@ Round-tripping `Integrate(Extract(sql))` is **normalising**, not byte-identical.
 
 ### 2. `Pass` is a struct value with declared properties
 
+<!-- boxer:lint disable=DL013 reason="the environment package is grammarenv since 2026-11-20; see Updates" -->
 ```go
 package nanopass
 
@@ -166,6 +167,7 @@ const DefaultFixedPointMaxIter = 128
 
 Everything that takes a `Pass` returns a `Pass`. Composition stays first-class.
 
+<!-- boxer:lint disable=DL013 reason="the environment package is grammarenv since 2026-11-20; see Updates" -->
 ```go
 func Sequence(name string, ps ...Pass) Pass
 func FixedPoint(p Pass, maxIter int) Pass
@@ -255,7 +257,7 @@ Out of scope of this ADR (deferred):
 
 ## Status
 
-Accepted — 2026-05-01 (reviewed by p@stergiotis). The Pass / Environment design described here is implemented in [`public/db/clickhouse/dsl/nanopass`](../../public/db/clickhouse/dsl/nanopass) and [`public/db/clickhouse/dsl/env`](../../public/db/clickhouse/dsl/env): the `Pass` struct and `PassProperties`, the combinators, `Pass.Run`, `AssertProperties`, and the `env` package. The items under "Out of scope of this ADR" remain deferred.
+Accepted — 2026-05-01 (reviewed by p@stergiotis). The Pass / Environment design described here is implemented in [`public/db/clickhouse/dsl/nanopass`](../../public/db/clickhouse/dsl/nanopass) and [`public/db/clickhouse/dsl/grammarenv`](../../public/db/clickhouse/dsl/grammarenv): the `Pass` struct and `PassProperties`, the combinators, `Pass.Run`, `AssertProperties`, and the `env` package. The items under "Out of scope of this ADR" remain deferred.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 
@@ -352,6 +354,17 @@ though not at the runner layer: parses and `Pass.Run`'s
 handle on the run they belong to. The environment contract here is unchanged:
 each `Pass.Run` still receives an environment of its own, cloned from the
 memoised extraction, and changed text is re-extracted.
+
+### 2026-11-20 — the environment package is `dsl/grammarenv`
+
+`public/db/clickhouse/dsl/env` is renamed `public/db/clickhouse/dsl/grammarenv`
+(package `grammarenv`): its name collided with the environment-variable
+registry `public/config/env`, and a file using both had to alias one. The
+`Environment`, `Extract` and `Integrate` contract is unchanged; `env.` in the
+sketches above reads `grammarenv.`. `AssertProperties` is
+`nanopasstest.AssertProperties`, apart from `nanopass` so that running a pass
+does not link `testing`
+([ADR-0394](./0394-library-packages-do-not-import-the-app-platform.md)).
 
 ## References
 

@@ -1,4 +1,4 @@
-// Package env models the Chez-Scheme-style environment that surrounds a
+// Package grammarenv models the Chez-Scheme-style environment that surrounds a
 // ClickHouse SELECT statement. An Environment holds settings, parameters, and
 // the FORMAT clause as Go values — anything a pass might want to manipulate
 // without round-tripping through SQL text.
@@ -14,7 +14,7 @@
 // rewrite the body's CST. SessionSettings and Params round-trip cleanly;
 // StatementSettings and Format are populated only when a pass explicitly sets
 // them (and [Environment.Integrate] will emit them on output).
-package env
+package grammarenv
 
 import "maps"
 

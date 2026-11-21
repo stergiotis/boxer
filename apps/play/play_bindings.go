@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 )
 
 // play_bindings.go is ADR-0097 slice 6c: per-panel node binding. A panel tab
@@ -351,13 +351,13 @@ type nodeScopedSelection struct {
 	node NodeID
 }
 
-func (inst nodeScopedSelection) Get(id SignalID) (p env.Param, ok bool) {
+func (inst nodeScopedSelection) Get(id SignalID) (p grammarenv.Param, ok bool) {
 	p, ok = inst.SignalEnvI.Get(id)
 	if !ok || id != signalSelection {
 		return
 	}
 	if src, has := inst.SignalEnvI.Get(signalSelectionNode); has && src.Raw != "" && src.Raw != string(inst.node) {
-		p = env.Param{}
+		p = grammarenv.Param{}
 		ok = false
 	}
 	return

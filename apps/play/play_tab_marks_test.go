@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,9 +18,9 @@ func markSchema(fields ...arrow.Field) *arrow.Schema { return arrow.NewSchema(fi
 
 // markSig is a signal env holding the named signals (value "1").
 func markSig(names ...string) SignalEnvI {
-	params := make(map[SignalID]env.Param, len(names))
+	params := make(map[SignalID]grammarenv.Param, len(names))
 	for _, n := range names {
-		params[n] = env.Param{Name: n, Raw: "1"}
+		params[n] = grammarenv.Param{Name: n, Raw: "1"}
 	}
 	return &signalEnv{params: params, revision: 1}
 }

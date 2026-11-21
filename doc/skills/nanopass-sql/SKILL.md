@@ -9,7 +9,7 @@ A Go library for composable SQL→SQL transformations of ClickHouse SELECT
 statements. Each transformation is a self-contained **pass**: a `nanopass.Pass`
 struct value carrying an `Apply` function plus declared `PassProperties`. Passes
 compose through combinators that take and return `Pass`; the runner threads a
-shared `env.Environment` through the chain so settings, params, and FORMAT are
+shared `grammarenv.Environment` through the chain so settings, params, and FORMAT are
 first-class Go values.
 
 Authoritative design records — read these before changing the substrate:
@@ -28,7 +28,7 @@ is kept current and is the next stop after this skill.
 ## Critical Rules — Read Before Writing Any Code
 
 1. **A pass is a `nanopass.Pass` struct, not a function.** `Pass{Name, Apply,
-   Properties}` where `Apply` is `func(e *env.Environment, body string) (string,
+   Properties}` where `Apply` is `func(e *grammarenv.Environment, body string) (string,
    error)`. There is no `func(sql) (sql, error)` pass type and no `Pipeline()` —
    compose with `Sequence`, run with `.Run(sql)`. (Pre-ADR-0006 `Pipeline`,
    `FixedPointPipeline`, and the function alias were removed.)
@@ -41,7 +41,7 @@ is kept current and is the next stop after this skill.
    only) and doubles as a *completeness proof* that normalisation finished.
    Normalisation passes parse with `Parse`.
 4. **`Apply` sees `body`, not the whole statement.** `Pass.Run` calls
-   `env.Extract` first, so the leading `SET …;` prelude is already split off into
+   `grammarenv.Extract` first, so the leading `SET …;` prelude is already split off into
    the `Environment`. Parse and rewrite `body`; read/write settings and params
    through `e`.
 5. **Declare behaviour in `Properties`.** `Idempotent` and `NeedsFixedPoint` are
@@ -71,9 +71,9 @@ is kept current and is the next stop after this skill.
 
 ```
 SQL string
-  → env.Extract            split leading `SET …;` prelude → (Environment, body)
+  → grammarenv.Extract            split leading `SET …;` prelude → (Environment, body)
   → Pass.Apply(env, body)  parse body → walk CST → rewrite tokens → emit body
-  → env.Integrate(body)    re-emit SET prelude + body
+  → grammarenv.Integrate(body)    re-emit SET prelude + body
   → next pass repeats (shares the same Environment inside a Sequence)
 ```
 
@@ -119,7 +119,7 @@ import (
     "github.com/antlr4-go/antlr/v4"
     "github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"      // Grammar1 CST types
     "github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar2"      // Grammar2 CST types (rarely needed)
-    "github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"           // Environment
+    "github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"    // Environment
     "github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
     "github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
     "github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"   // TypedLiteral, VerbatimSql, ControlFlow
@@ -153,7 +153,7 @@ House style — full rules in
 ```go
 type Pass struct {
     Name       string
-    Apply      ApplyFunc       // func(e *env.Environment, body string) (newBody string, err error)
+    Apply      ApplyFunc       // func(e *grammarenv.Environment, body string) (newBody string, err error)
     Properties PassProperties
 }
 
@@ -183,7 +183,7 @@ Everything that takes a `Pass` returns a `Pass`; composition stays first-class.
 func Sequence(name string, ps ...Pass) Pass                          // left-to-right, shared env
 func FixedPoint(p Pass, maxIter int) Pass                            // iterate to convergence; sets Idempotent, clears NeedsFixedPoint
 func Validating(g Grammar, p Pass) Pass                              // run p, then parse-validate its body against g
-func Conditional(name string, pred func(*env.Environment) bool, p Pass) Pass  // run p only when pred(env)
+func Conditional(name string, pred func(*grammarenv.Environment) bool, p Pass) Pass  // run p only when pred(env)
 func LiftBodyPass(name string, fn func(string)(string,error), props PassProperties) Pass  // wrap a body-only func
 
 // Grammar selectors for Validating:
@@ -336,7 +336,7 @@ it can consult `e`.
 ```go
 var MyEnvPass = nanopass.Pass{
     Name: "MyEnvPass",
-    Apply: func(e *env.Environment, body string) (result string, err error) {
+    Apply: func(e *grammarenv.Environment, body string) (result string, err error) {
         pr, err := nanopass.Parse(body)
         if err != nil {
             err = eh.Errorf("MyEnvPass: %w", err)
@@ -846,7 +846,7 @@ checked every `DFACheckInterval` (256) parses. `nanopass.DFACacheStats()` return
 per-grammar `DFACacheStat{States, Resets}` — a rising `Resets` count means the
 workload's structural diversity exceeds the cap and the cache is sawtoothing.
 The holder now lives in the `grammar1`/`grammar2` packages as `SharedDFA`, so
-every seam that parses (including `env.Extract`'s body scan and play's
+every seam that parses (including `grammarenv.Extract`'s body scan and play's
 syntax-error probe) shares one cache per grammar (ADR-0196 §SD3).
 
 Prediction is **two-stage** (ADR-0196): `Parse`/`ParseCanonical` try SLL first

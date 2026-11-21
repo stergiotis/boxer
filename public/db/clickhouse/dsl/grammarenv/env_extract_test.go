@@ -1,16 +1,16 @@
-package env_test
+package grammarenv_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestExtractEmptyPrelude(t *testing.T) {
-	e, body, err := env.Extract("SELECT 1")
+	e, body, err := grammarenv.Extract("SELECT 1")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 1", body)
 	assert.Empty(t, e.SessionSettings)
@@ -18,16 +18,16 @@ func TestExtractEmptyPrelude(t *testing.T) {
 }
 
 func TestExtractSessionSetting(t *testing.T) {
-	e, body, err := env.Extract("SET max_threads = 4;\nSELECT 1")
+	e, body, err := grammarenv.Extract("SET max_threads = 4;\nSELECT 1")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 1", body)
-	assert.Equal(t, env.Setting{Name: "max_threads", Raw: "4"}, e.SessionSettings["max_threads"])
+	assert.Equal(t, grammarenv.Setting{Name: "max_threads", Raw: "4"}, e.SessionSettings["max_threads"])
 	assert.Empty(t, e.Params)
 }
 
 func TestExtractMultipleSessionSettings(t *testing.T) {
 	in := "SET max_threads = 4;\nSET send_logs_level = 'trace';\nSELECT 1"
-	e, body, err := env.Extract(in)
+	e, body, err := grammarenv.Extract(in)
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 1", body)
 	assert.Len(t, e.SessionSettings, 2)
@@ -37,7 +37,7 @@ func TestExtractMultipleSessionSettings(t *testing.T) {
 
 func TestExtractParamSet(t *testing.T) {
 	in := "SET param_a = 5;\nSELECT {a: UInt64}"
-	e, body, err := env.Extract(in)
+	e, body, err := grammarenv.Extract(in)
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT {a: UInt64}", body)
 	a := e.Params["param_a"]
@@ -46,7 +46,7 @@ func TestExtractParamSet(t *testing.T) {
 }
 
 func TestExtractParamSlotPopulatesType(t *testing.T) {
-	e, _, err := env.Extract("SELECT {a: UInt64}")
+	e, _, err := grammarenv.Extract("SELECT {a: UInt64}")
 	require.NoError(t, err)
 	a, ok := e.Params["a"]
 	require.True(t, ok, "expected param 'a' in env")
@@ -57,7 +57,7 @@ func TestExtractParamSlotPopulatesType(t *testing.T) {
 
 func TestExtractParamSlotMergesWithSet(t *testing.T) {
 	in := "SET param_a = 5;\nSELECT {param_a: UInt64}"
-	e, _, err := env.Extract(in)
+	e, _, err := grammarenv.Extract(in)
 	require.NoError(t, err)
 	a, ok := e.Params["param_a"]
 	require.True(t, ok)
@@ -68,7 +68,7 @@ func TestExtractParamSlotMergesWithSet(t *testing.T) {
 
 func TestExtractMixedPrelude(t *testing.T) {
 	in := "SET max_threads = 4;\nSET param_a = 5;\nSET param_b = 'foo';\nSELECT {a: UInt64} + {b: String}"
-	e, body, err := env.Extract(in)
+	e, body, err := grammarenv.Extract(in)
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(body, "SELECT"))
 	assert.Len(t, e.SessionSettings, 1)
@@ -83,7 +83,7 @@ func TestExtractMixedPrelude(t *testing.T) {
 func TestExtractStopsAtFirstNonSetLine(t *testing.T) {
 	// A non-SET line ends the prelude; further SET lines stay in body.
 	in := "SET max_threads = 4;\nSELECT 1;\nSET ignored = 99;"
-	e, body, err := env.Extract(in)
+	e, body, err := grammarenv.Extract(in)
 	require.NoError(t, err)
 	assert.Len(t, e.SessionSettings, 1)
 	assert.Contains(t, body, "SET ignored")
@@ -91,32 +91,32 @@ func TestExtractStopsAtFirstNonSetLine(t *testing.T) {
 
 func TestExtractTolerantToSemicolonAndWhitespace(t *testing.T) {
 	in := "  SET  max_threads = 4 ;\n\nSELECT 1"
-	e, body, err := env.Extract(in)
+	e, body, err := grammarenv.Extract(in)
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 1", body)
 	assert.Equal(t, "4", e.SessionSettings["max_threads"].Raw)
 }
 
 func TestIntegrateEmpty(t *testing.T) {
-	e := env.NewEnvironment()
+	e := grammarenv.NewEnvironment()
 	sql, err := e.Integrate("SELECT 1")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 1", sql)
 }
 
 func TestIntegrateSettingsAndParams(t *testing.T) {
-	e := env.NewEnvironment()
-	e.SessionSettings["max_threads"] = env.Setting{Name: "max_threads", Raw: "4"}
-	e.Params["param_a"] = env.Param{Name: "param_a", Raw: "5"}
+	e := grammarenv.NewEnvironment()
+	e.SessionSettings["max_threads"] = grammarenv.Setting{Name: "max_threads", Raw: "4"}
+	e.Params["param_a"] = grammarenv.Param{Name: "param_a", Raw: "5"}
 	sql, err := e.Integrate("SELECT 1")
 	require.NoError(t, err)
 	assert.Equal(t, "SET max_threads = 4;\nSET param_a = 5;\nSELECT 1", sql)
 }
 
 func TestIntegrateOmitsParamWithoutRaw(t *testing.T) {
-	e := env.NewEnvironment()
+	e := grammarenv.NewEnvironment()
 	// Type-only entry (e.g. populated by slot scan) should not be emitted as SET.
-	e.Params["a"] = env.Param{Name: "a", Type: "UInt64"}
+	e.Params["a"] = grammarenv.Param{Name: "a", Type: "UInt64"}
 	sql, err := e.Integrate("SELECT 1")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 1", sql)
@@ -124,7 +124,7 @@ func TestIntegrateOmitsParamWithoutRaw(t *testing.T) {
 
 func TestRoundTripPreservesResolvedParams(t *testing.T) {
 	in := "SET param_a = 5;\nSELECT {param_a: UInt64}"
-	e, body, err := env.Extract(in)
+	e, body, err := grammarenv.Extract(in)
 	require.NoError(t, err)
 	out, err := e.Integrate(body)
 	require.NoError(t, err)
@@ -133,7 +133,7 @@ func TestRoundTripPreservesResolvedParams(t *testing.T) {
 
 func TestExtractSettingsClause(t *testing.T) {
 	// SETTINGS clause stays in body; env.StatementSettings is a read-only view.
-	e, body, err := env.Extract("SELECT 1 SETTINGS max_threads = 4, send_logs_level = 'trace'")
+	e, body, err := grammarenv.Extract("SELECT 1 SETTINGS max_threads = 4, send_logs_level = 'trace'")
 	require.NoError(t, err)
 	assert.Contains(t, body, "SETTINGS")
 	assert.Len(t, e.StatementSettings, 2)
@@ -143,14 +143,14 @@ func TestExtractSettingsClause(t *testing.T) {
 
 func TestExtractFormatClause(t *testing.T) {
 	// FORMAT stays in body; env.Format is a read-only view.
-	e, body, err := env.Extract("SELECT 1 FORMAT TabSeparated")
+	e, body, err := grammarenv.Extract("SELECT 1 FORMAT TabSeparated")
 	require.NoError(t, err)
 	assert.Contains(t, body, "FORMAT")
 	assert.Equal(t, "TabSeparated", e.Format)
 }
 
 func TestExtractSettingsAndFormat(t *testing.T) {
-	e, body, err := env.Extract("SELECT 1 SETTINGS max_threads = 4 FORMAT JSON")
+	e, body, err := grammarenv.Extract("SELECT 1 SETTINGS max_threads = 4 FORMAT JSON")
 	require.NoError(t, err)
 	assert.Contains(t, body, "SETTINGS")
 	assert.Contains(t, body, "FORMAT")
@@ -160,7 +160,7 @@ func TestExtractSettingsAndFormat(t *testing.T) {
 
 func TestExtractFullEnvironment(t *testing.T) {
 	in := "SET max_threads = 8;\nSET param_a = 5;\nSELECT {param_a: UInt64} SETTINGS k = 'v' FORMAT CSV"
-	e, body, err := env.Extract(in)
+	e, body, err := grammarenv.Extract(in)
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(body, "SELECT"))
 	assert.Equal(t, "8", e.SessionSettings["max_threads"].Raw)
@@ -173,8 +173,8 @@ func TestExtractFullEnvironment(t *testing.T) {
 func TestIntegrateDoesNotEmitInlineSettingsOrFormat(t *testing.T) {
 	// StatementSettings and Format are read-only views; mutations go via
 	// body-CST passes. Integrate must NOT re-emit them or we double-write.
-	e := env.NewEnvironment()
-	e.StatementSettings["k"] = env.Setting{Name: "k", Raw: "1"}
+	e := grammarenv.NewEnvironment()
+	e.StatementSettings["k"] = grammarenv.Setting{Name: "k", Raw: "1"}
 	e.Format = "JSON"
 	sql, err := e.Integrate("SELECT 1")
 	require.NoError(t, err)
@@ -183,7 +183,7 @@ func TestIntegrateDoesNotEmitInlineSettingsOrFormat(t *testing.T) {
 
 func TestRoundTripFullEnvironment(t *testing.T) {
 	in := "SET max_threads = 8;\nSET param_a = 5;\nSELECT {param_a: UInt64} SETTINGS k = 'v' FORMAT CSV"
-	e, body, err := env.Extract(in)
+	e, body, err := grammarenv.Extract(in)
 	require.NoError(t, err)
 	out, err := e.Integrate(body)
 	require.NoError(t, err)
@@ -194,9 +194,9 @@ func TestRoundTripDeterministicOrder(t *testing.T) {
 	// Two valid orderings of the same prelude should integrate to the same canonical form.
 	a := "SET param_b = 2;\nSET param_a = 1;\nSELECT {param_a: UInt64} + {param_b: UInt64}"
 	b := "SET param_a = 1;\nSET param_b = 2;\nSELECT {param_a: UInt64} + {param_b: UInt64}"
-	ea, bodya, err := env.Extract(a)
+	ea, bodya, err := grammarenv.Extract(a)
 	require.NoError(t, err)
-	eb, bodyb, err := env.Extract(b)
+	eb, bodyb, err := grammarenv.Extract(b)
 	require.NoError(t, err)
 	outa, _ := ea.Integrate(bodya)
 	outb, _ := eb.Integrate(bodyb)
@@ -237,9 +237,9 @@ func TestBodyOffsetLocatesExtractBody(t *testing.T) {
 		"SET a = 1;\n\u00a0SELECT 1",
 	}
 	for _, in := range inputs {
-		_, body, err := env.Extract(in)
+		_, body, err := grammarenv.Extract(in)
 		require.NoError(t, err, "input %q", in)
-		off := env.BodyOffset(in)
+		off := grammarenv.BodyOffset(in)
 		require.GreaterOrEqual(t, off, 0, "input %q", in)
 		require.LessOrEqual(t, off, len(in), "input %q", in)
 		assert.Equal(t, body, in[off:],
@@ -264,7 +264,7 @@ func TestPreludeSpansComments(t *testing.T) {
 		"comment between SETs":     "SET a = 1;\n-- mid\n" + body2Set + body,
 	} {
 		t.Run(name, func(t *testing.T) {
-			e, gotBody, err := env.Extract(in)
+			e, gotBody, err := grammarenv.Extract(in)
 			require.NoError(t, err)
 			assert.Equal(t, body, gotBody, "the prelude is consumed whole")
 			assert.Equal(t, "'1'", e.Params["param_x"].Raw, "the binding survives the comment")
@@ -285,9 +285,9 @@ func TestCommentWithoutSetIsNotAPrelude(t *testing.T) {
 		"/* a comment */\nSELECT 1",
 		"-- a comment\nSELECT 1;\nSET x = 1;",
 	} {
-		e, body, err := env.Extract(in)
+		e, body, err := grammarenv.Extract(in)
 		require.NoError(t, err)
-		assert.Equal(t, 0, env.BodyOffset(in), "input %q", in)
+		assert.Equal(t, 0, grammarenv.BodyOffset(in), "input %q", in)
 		assert.Equal(t, in, body, "input %q", in)
 		assert.Empty(t, e.PreludeComments, "input %q", in)
 	}
@@ -308,7 +308,7 @@ func TestRoundTripKeepsPreludeComments(t *testing.T) {
 		"SET param_a = 1;\n-- c\nSELECT {param_a: UInt64}",
 	}
 	for _, in := range identical {
-		e, body, err := env.Extract(in)
+		e, body, err := grammarenv.Extract(in)
 		require.NoError(t, err)
 		out, err := e.Integrate(body)
 		require.NoError(t, err)
@@ -320,7 +320,7 @@ func TestRoundTripKeepsPreludeComments(t *testing.T) {
 		"SET a = 1;\n-- mid\nSET param_b = 2;\nSELECT 1": "-- mid\nSET a = 1;\nSET param_b = 2;\nSELECT 1",
 	}
 	for in, want := range normalised {
-		e, body, err := env.Extract(in)
+		e, body, err := grammarenv.Extract(in)
 		require.NoError(t, err)
 		out, err := e.Integrate(body)
 		require.NoError(t, err)
@@ -333,7 +333,7 @@ func TestRoundTripKeepsPreludeComments(t *testing.T) {
 // harvested at all — by checking for them separately.
 func TestPreludeCommentScannerEdges(t *testing.T) {
 	t.Run("a comment marker inside a string value is not a comment", func(t *testing.T) {
-		e, body, err := env.Extract("SET param_s = 'a--b';\nSELECT 1")
+		e, body, err := grammarenv.Extract("SET param_s = 'a--b';\nSELECT 1")
 		require.NoError(t, err)
 		assert.Equal(t, "'a--b'", e.Params["param_s"].Raw)
 		assert.Equal(t, "SELECT 1", body)
@@ -341,7 +341,7 @@ func TestPreludeCommentScannerEdges(t *testing.T) {
 	})
 
 	t.Run("a quote inside a comment does not open a string", func(t *testing.T) {
-		e, body, err := env.Extract("-- don't\nSET param_a = 1;\nSELECT 1")
+		e, body, err := grammarenv.Extract("-- don't\nSET param_a = 1;\nSELECT 1")
 		require.NoError(t, err)
 		assert.Equal(t, "1", e.Params["param_a"].Raw)
 		assert.Equal(t, "SELECT 1", body)
@@ -351,7 +351,7 @@ func TestPreludeCommentScannerEdges(t *testing.T) {
 		// Unchanged: it cannot be split line-wise, so it stays in the body
 		// where the grammar parses it correctly.
 		in := "SET param_a = 'x\ny';\nSELECT 1"
-		e, body, err := env.Extract(in)
+		e, body, err := grammarenv.Extract(in)
 		require.NoError(t, err)
 		assert.Equal(t, in, body)
 		assert.Empty(t, e.Params)
@@ -360,7 +360,7 @@ func TestPreludeCommentScannerEdges(t *testing.T) {
 	t.Run("a block comment mid-statement leaves a separator behind", func(t *testing.T) {
 		// Dropping it outright would splice `1/*c*/2` into the value `12`.
 		// A space makes ClickHouse reject it instead.
-		e, _, err := env.Extract("SET param_a = 1/*c*/2;\nSELECT 1")
+		e, _, err := grammarenv.Extract("SET param_a = 1/*c*/2;\nSELECT 1")
 		require.NoError(t, err)
 		assert.Equal(t, "1 2", e.Params["param_a"].Raw)
 	})
@@ -370,7 +370,7 @@ func TestPreludeCommentScannerEdges(t *testing.T) {
 		// every downstream consumer uses — does not, and env growing a second
 		// comment vocabulary would be a worse defect than the one being fixed.
 		in := "# c\nSET param_a = 1;\nSELECT 1"
-		_, body, err := env.Extract(in)
+		_, body, err := grammarenv.Extract(in)
 		require.NoError(t, err)
 		assert.Equal(t, in, body, "the line ends the prelude, as any unparseable one does")
 	})

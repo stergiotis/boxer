@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -136,7 +136,7 @@ type compositeCandidate struct {
 
 // ExtractLiterals returns a Pass that walks the body, replaces qualifying
 // literals with `{name: Type}` slots, and stores the extracted values into
-// env.Params. The accompanying Type info is preserved on each Param entry.
+// grammarenv.Params. The accompanying Type info is preserved on each Param entry.
 func ExtractLiterals(config *ExtractLiteralsConfig) nanopass.Pass {
 	return nanopass.Pass{
 		Name:  "ExtractLiterals",
@@ -149,7 +149,7 @@ func ExtractLiterals(config *ExtractLiteralsConfig) nanopass.Pass {
 }
 
 func extractLiteralsApply(config *ExtractLiteralsConfig) nanopass.ApplyFunc {
-	return func(e *env.Environment, sql string) (result string, err error) {
+	return func(e *grammarenv.Environment, sql string) (result string, err error) {
 		pr, err := nanopass.Parse(sql)
 		if err != nil {
 			err = eh.Errorf("ExtractLiterals: %w", err)
@@ -918,7 +918,7 @@ func literalHash(literalText string) uint64 {
 // sequence counter behind sequential names. Scalar and composite parameters
 // draw from the same space: with separate ones a scalar inside array(1, 2)
 // (context "array", arg 0) and a composite array(3, 4, 5) got the same
-// sequential name, and one value overwrote the other in env.Params.
+// sequential name, and one value overwrote the other in grammarenv.Params.
 type paramNameSpace struct {
 	used map[string]bool
 	seq  uint32

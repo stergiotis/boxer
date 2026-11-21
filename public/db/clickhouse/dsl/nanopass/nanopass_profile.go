@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -177,31 +177,31 @@ func (inst *costRecorder) countIteration() {
 // The environment is the handle because it is the only value every combinator
 // already passes down: ApplyFunc's signature is fixed and shared by every pass
 // in the repository, so an observer cannot travel as an argument, and the
-// alternative — a field on env.Environment — would oblige a package that models
+// alternative — a field on grammarenv.Environment — would oblige a package that models
 // SQL regions to define what a pass invocation is (ADR-0192, option O2).
 //
-// Keyed by pointer identity. env.Extract mints a fresh Environment per Run, so
+// Keyed by pointer identity. grammarenv.Extract mints a fresh Environment per Run, so
 // two concurrent profiled runs never collide.
-var recorders sync.Map // map[*env.Environment]*costRecorder
+var recorders sync.Map // map[*grammarenv.Environment]*costRecorder
 
 // liveRecorders is the fast-path guard: zero means no run anywhere in the
 // process is being profiled, so applyWithProps skips the map entirely and the
 // execute path pays one relaxed atomic load per pass invocation.
 var liveRecorders atomic.Int64
 
-func attachRecorder(e *env.Environment, rec *costRecorder) {
+func attachRecorder(e *grammarenv.Environment, rec *costRecorder) {
 	recorders.Store(e, rec)
 	liveRecorders.Add(1)
 }
 
-func detachRecorder(e *env.Environment) {
+func detachRecorder(e *grammarenv.Environment) {
 	recorders.Delete(e)
 	liveRecorders.Add(-1)
 }
 
 // recorderFor returns the recorder collecting this environment's run, or nil
 // when the run is not profiled.
-func recorderFor(e *env.Environment) (rec *costRecorder) {
+func recorderFor(e *grammarenv.Environment) (rec *costRecorder) {
 	if liveRecorders.Load() == 0 || e == nil {
 		return
 	}

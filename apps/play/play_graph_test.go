@@ -8,7 +8,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,7 +77,7 @@ func TestGraphMinimalityMemoizesUnchangedInputs(t *testing.T) {
 	g := newQueryGraph(exec, memory.NewGoAllocator())
 	defer g.close()
 	g.addNode(&Node{ID: "main", Compile: selectParamX})
-	g.setSignal("x", env.Param{Name: "x", Raw: "1"})
+	g.setSignal("x", grammarenv.Param{Name: "x", Raw: "1"})
 
 	r1, err := g.demand(context.Background(), "main")
 	require.NoError(t, err)
@@ -89,7 +89,7 @@ func TestGraphMinimalityMemoizesUnchangedInputs(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, exec.callCount(), "unchanged inputs must not re-execute")
 
-	g.setSignal("x", env.Param{Name: "x", Raw: "2"})
+	g.setSignal("x", grammarenv.Param{Name: "x", Raw: "2"})
 	_, err = g.demand(context.Background(), "main")
 	require.NoError(t, err)
 	require.Equal(t, 2, exec.callCount(), "a changed signal must re-execute")
@@ -122,12 +122,12 @@ func TestGraphEarlyCutoffStableFingerprintOnIdenticalResult(t *testing.T) {
 	defer g.close()
 	g.addNode(&Node{ID: "main", Compile: selectParamX})
 
-	g.setSignal("x", env.Param{Name: "x", Raw: "1"})
+	g.setSignal("x", grammarenv.Param{Name: "x", Raw: "1"})
 	r1, err := g.demand(context.Background(), "main")
 	require.NoError(t, err)
 	fp1 := r1.fingerprint
 
-	g.setSignal("x", env.Param{Name: "x", Raw: "2"})
+	g.setSignal("x", grammarenv.Param{Name: "x", Raw: "2"})
 	r2, err := g.demand(context.Background(), "main")
 	require.NoError(t, err)
 
@@ -148,11 +148,11 @@ func TestGraphSignalRevisionAdvancesOnlyOnChange(t *testing.T) {
 	defer g.close()
 
 	require.Equal(t, uint64(0), g.signals().Revision())
-	g.setSignal("x", env.Param{Name: "x", Raw: "1"})
+	g.setSignal("x", grammarenv.Param{Name: "x", Raw: "1"})
 	require.Equal(t, uint64(1), g.signals().Revision())
-	g.setSignal("x", env.Param{Name: "x", Raw: "1"})
+	g.setSignal("x", grammarenv.Param{Name: "x", Raw: "1"})
 	require.Equal(t, uint64(1), g.signals().Revision(), "an unchanged signal must not advance the revision")
-	g.setSignal("x", env.Param{Name: "x", Raw: "2"})
+	g.setSignal("x", grammarenv.Param{Name: "x", Raw: "2"})
 	require.Equal(t, uint64(2), g.signals().Revision())
 }
 

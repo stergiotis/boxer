@@ -3,7 +3,7 @@ package play
 import (
 	"github.com/apache/arrow-go/v18/arrow"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/notebookview"
@@ -59,8 +59,8 @@ func init() {
 // selected and nothing changes.
 type noSignals struct{}
 
-func (noSignals) Get(SignalID) (p env.Param, ok bool) { return }
-func (noSignals) Revision() uint64                    { return 0 }
+func (noSignals) Get(SignalID) (p grammarenv.Param, ok bool) { return }
+func (noSignals) Revision() uint64                           { return 0 }
 
 // dropSignals is where a sealed cell's panel writes: nowhere. A click that
 // would select a row in play selects nothing here.

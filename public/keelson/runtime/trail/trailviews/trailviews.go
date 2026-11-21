@@ -96,7 +96,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
@@ -976,7 +976,7 @@ func prepare(sql string, table string) (out string, err error) {
 func applyPasses(sql string, ps ...nanopass.Pass) (out string, err error) {
 	out = sql
 	for _, pass := range ps {
-		out, err = pass.Apply(env.NewEnvironment(), out)
+		out, err = pass.Apply(grammarenv.NewEnvironment(), out)
 		if err != nil {
 			return "", eb.Build().Str("pass", pass.Name).Errorf("trailviews: pass failed: %w", err)
 		}

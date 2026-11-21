@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
@@ -41,7 +41,7 @@ func TestTrailSqlResolvesOverTheTimeline(t *testing.T) {
 	var diags []passes.ColumnDiagnostic
 	out, err := passes.ResolveColumnNames(resolver, factsschema.DatabaseName, func(d passes.ColumnDiagnostic) {
 		diags = append(diags, d)
-	}).Apply(env.NewEnvironment(), sql)
+	}).Apply(grammarenv.NewEnvironment(), sql)
 	require.NoError(t, err)
 	assert.Empty(t, diags)
 	for line := range strings.SplitSeq(out, "\n") {
