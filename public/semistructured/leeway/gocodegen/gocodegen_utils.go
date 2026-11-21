@@ -29,9 +29,13 @@ func PrettyCaller(skip int, rootFolder string, defaultFuncName string) (funcName
 	}
 	return
 }
+// EmitGeneratingCodeLocation writes a comment naming the generator function
+// and file that emitted the code that follows. It leaves out the line number:
+// a line number moves with every edit to the generator's source, so emitted
+// files would change after an edit that does not change what they contain.
 func EmitGeneratingCodeLocation(w io.Writer) {
-	funcName, filePath, lineNumber := PrettyCaller(2, "/public/", "")
+	funcName, filePath, _ := PrettyCaller(2, "/public/", "")
 	if filePath != "" {
-		_, _ = fmt.Fprintf(w, "\n///////////////////////////////////////////////////////////////////\n// code generator\n// %s\n// %s:%d\n\n", funcName, filePath, lineNumber)
+		_, _ = fmt.Fprintf(w, "\n///////////////////////////////////////////////////////////////////\n// code generator\n// %s\n// %s\n\n", funcName, filePath)
 	}
 }

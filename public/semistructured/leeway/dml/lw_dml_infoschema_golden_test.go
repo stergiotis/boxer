@@ -23,10 +23,10 @@ import (
 var updateInfoSchemaGolden = flag.Bool("update", false, "rewrite the information_schema DML goldens under testdata/ with the current generator output")
 
 // generatorLocation matches the "// code generator" comment block the
-// generator stamps before each section: the function and the file:line that
-// emitted it. Those move whenever the generator's source does, so the
-// comparison ignores them; the golden still records them as written.
-var generatorLocation = regexp.MustCompile(`(?m)^// code generator\n// .*\n// .*:\d+\n`)
+// generator stamps before each section: the function and the file that
+// emitted it. Those move whenever the generator's source is reorganised, so
+// the comparison ignores them; the golden still records them as written.
+var generatorLocation = regexp.MustCompile(`(?m)^// code generator\n// .*\n// .*\n`)
 
 func normaliseGeneratorLocations(code []byte) (out []byte) {
 	return generatorLocation.ReplaceAll(code, []byte("// code generator\n"))
