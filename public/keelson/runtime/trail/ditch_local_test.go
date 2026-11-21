@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -13,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
+	"github.com/stergiotis/boxer/public/storage/recordstore/recordstoretest"
 )
 
 // The ditch row is within the audit event's bounds, ok or failed, with the
@@ -44,6 +46,37 @@ func TestDitchNeedsADurableTrail(t *testing.T) {
 	rec := trail.NewRecorder(nil, "run-1", zerolog.Nop())
 	defer rec.Close()
 	require.Error(t, rec.DitchBodies(context.Background(), ""))
+}
+
+// Under an insert transform for the facts table the mutation is not sent:
+// it would name a relation that holds none of the rows. The ditch is
+// recorded as failed (ADR-0402 §SD5).
+func TestDitchIsRefusedUnderATransform(t *testing.T) {
+	var execd []string
+	inserts := 0
+	exec := &recordstoretest.HookExecutor{
+		OnExec: func(_ context.Context, sql string) error { execd = append(execd, sql); return nil },
+		OnInsertArrowWith: func(context.Context, string, []arrow.RecordBatch, recordstore.InsertSettings) (bool, error) {
+			inserts++
+			return true, nil
+		},
+	}
+	rec := trail.NewRecorder(exec, "run-t", zerolog.Nop())
+	defer rec.Close()
+	unregister := recordstore.RegisterInsertTransform(trail.TrailTableName, recordstore.InsertTransformFunc(
+		func(_ string, records []arrow.RecordBatch) (string, []arrow.RecordBatch, error) {
+			for _, r := range records {
+				r.Retain()
+			}
+			return "carrier.rows", records, nil
+		}))
+	defer unregister()
+	err := rec.DitchBodies(context.Background(), "")
+	require.ErrorIs(t, err, recordstore.ErrTransformedTable)
+	for _, s := range execd {
+		assert.NotContains(t, s, "ALTER TABLE")
+	}
+	assert.Positive(t, inserts, "the failed ditch is recorded")
 }
 
 // refuseAlter is a server that refuses mutations.

@@ -8,6 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // The symbol section's membership and value columns: a symbol is one value
@@ -78,12 +79,22 @@ func quoteString(s string) (q string) {
 // the call returns. err is the statement's error, or, when the statement
 // ran, the error writing its event. A recorder that is not durable — no
 // store, or closed — ditches nothing and says why, so this path never
-// ditches without its row.
+// ditches without its row. Under an insert transform for the facts table
+// the statement is not run and the ditch is recorded as failed with
+// [recordstore.ErrTransformedTable] (ADR-0402 §SD5).
 func (inst *Recorder) DitchBodies(ctx context.Context, app string) (err error) {
 	if !inst.Durable() || inst.st == nil {
 		return eb.Build().Str("why", inst.NotDurable()).Errorf("trail: the trail is not durable, so nothing is ditched")
 	}
-	xerr := inst.st.exec.Exec(ctx, DitchBodiesSQL("", app))
+	var xerr error
+	if _, transformed := recordstore.RegisteredInsertTransform(TrailTableName); transformed {
+		// The rows are stored in a deployment's own table, which the
+		// mutation by the facts table's name would not reach (ADR-0402
+		// §SD5). The refusal is recorded as a failed ditch.
+		xerr = eb.Build().Str("table", TrailTableName).Errorf("trail: %w", recordstore.ErrTransformedTable)
+	} else {
+		xerr = inst.st.exec.Exec(ctx, DitchBodiesSQL("", app))
+	}
 	row := DitchEvent(app, xerr)
 	if werr := inst.Event(ctx, time.Now().UTC(), Context{Origin: inst.OriginOf("", 0)}, row); werr == nil {
 		werr = inst.Flush(ctx)
