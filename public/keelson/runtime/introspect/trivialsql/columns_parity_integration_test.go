@@ -92,3 +92,13 @@ func TestReadTables_AnswerAsClickHouseDoes(t *testing.T) {
 		assert.Equal(t, c.want, parityClass(ch, chFailed, body, err), "%s\nclickhouse: %q\nevaluator:  %q %v", c.sql, ch, body, err)
 	}
 }
+
+// boundAsWith is sql with the bound table t written before it as a WITH
+// query: the statement ReadTables claims to answer as ClickHouse would.
+func boundAsWith(sql string) string {
+	const t = "t AS (SELECT * FROM " + t3 + ")"
+	if len(sql) > 5 && sql[:5] == "WITH " {
+		return "WITH " + t + ", " + sql[5:]
+	}
+	return "WITH " + t + " " + sql
+}
