@@ -836,6 +836,30 @@ when recorded. The vocabulary appends five memberships after
 corpus's shape — vault authoritative, two grains, prose verbatim, relations
 as rows — is unchanged.
 
+### 2026-11-22 — a row's id is resolved from its natural key (ADR-0405, proposed)
+
+The rows' ids were the low eight bytes of the natural key's digest, so a
+relation could compute its endpoints' ids and a load restated the same
+rows. [ADR-0405](./0405-every-id-in-the-facts-table-is-minted-and-a-natural-key-resolves-to-one-id-on-the-server.md)
+ends computed ids in the facts table: the encoder is handed the table's
+keyed id generator, which resolves a natural key to one id on the server,
+and a relation's endpoints resolve through it. What SD3 and §SD11 rely on
+holds — a competence keeps its id across loads and processes — and the
+encoder no longer runs without a generator, which a test supplies from
+memory.
+
+Three things changed with it. The read-back takes the newest row per
+natural key, not per id, because a competence's rows from before carry
+another id; and it accepts the older id for a relation's endpoints, so a
+table holding both reads whole. `keelson('competence')` and
+`keelson('competencerelation')` are read from the vault with no server and
+cannot know a resolved id, so `fact_id`, `source_fact_id` and
+`target_fact_id` are replaced by `natural_key`, `source_natural_key` and
+`target_natural_key`, spelled as `hex()` spells them: the join to the
+stored rows is on `hex(naturalKey)`. And `boxer capmap load` needs the id
+lease table and the id directory in its database, which `--setup-table`
+and a host's boot create.
+
 ## References
 
 - [Background survey](../adr-background-work/capmap-port.md) — measurements and the reasoning behind each fork.

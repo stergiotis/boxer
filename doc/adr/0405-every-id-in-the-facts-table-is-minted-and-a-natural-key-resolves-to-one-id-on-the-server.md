@@ -6,7 +6,7 @@ date: 2026-11-22
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
 ---
 
-> **Status: proposed — pre-human-review.** The direction — every writer mints, a natural key resolves to one id through the server, stored rows stay — was chosen by the code owner on 2026-11-22. The choices under it, listed at the end, are not reviewed. Built on that day for the facts store, the trail, system metrics, the watchbill presence, markdown documents and dead letters; the capability map and query runs still derive their ids (see *Deferred*).
+> **Status: proposed — pre-human-review.** The direction — every writer mints, a natural key resolves to one id through the server, stored rows stay — was chosen by the code owner on 2026-11-22. The choices under it, listed at the end, are not reviewed. Built on that day for the facts store, the trail, system metrics, the watchbill presence, markdown documents, dead letters and the capability map; query runs still derive their ids (see *Deferred*).
 
 # ADR-0405: Every id in the facts table is minted, and a natural key resolves to one id on the server
 
@@ -52,7 +52,8 @@ writer computes an id from anything.
 **SD2 — An id names an entity where the writer has one, and a row where
 it has none.** A writer whose rows belong to something that recurs — the
 samples of a metric series, the phases of a worker's run, a failed message
-and its redelivery — resolves the id from the natural key, so those rows
+and its redelivery, a competence across loads of its corpus — resolves the
+id from the natural key, so those rows
 share it and a reader finds them by it. A writer whose every row is its
 own thing — an audit event, the rows of one ingest of a document, the
 facts store's own events — draws the next id of the stream. Which of the
@@ -101,13 +102,6 @@ restored and moved with the facts table, as the lease table is.
 
 ### Deferred
 
-- **The capability map.** Its rows' ids are the leading bytes of the
-  natural key's digest, and a relation holds its endpoints' ids computed
-  the same way. Keyed minting fits it — a competence is an entity, and a
-  relation's endpoints resolve through the same generator — but a corpus
-  is encoded and its dump composed with no server running, which a
-  directory on the server ends. That is a decision about the corpus tool,
-  not about ids.
 - **Query runs.** A run event's id is a digest that the capture
   deduplicates by. Every event is its own entity, so resolving its id
   through the directory would write a directory row per event. The lighter
@@ -137,9 +131,10 @@ restored and moved with the facts table, as the lease table is.
 | record-store generator | facts-bound generation sets `KeyStream`; `MintKeyFor` beside `MintKey` | the stores over the facts table, regenerated |
 | facts store | `chstore.RowIdGenerator` and, from it, the keyed generator per scope and the reader's lookup | host boot and every builder of a store over the facts table |
 | system metrics, presence, dead letters | an id per series, per run, per message position, resolved from the natural key | the metrics replay, which looks the id up and reads by it and by the older hash |
+| capability map | an id per competence and per relation, resolved from the natural key; a relation's endpoints resolve the same way | the encoder takes a generator; the read-back takes the newest row per natural key and accepts the older id for an endpoint; the vault's tables show the natural key where they showed an id (ADR-0168, update of 2026-11-22) |
 | the trail, markdown documents | an id per row, drawn from the stream | — |
 | audit recorder | takes an id generator; without one it derives ids as before | a store elsewhere that uses the recorder is unaffected until it passes one |
-| capability map, query runs | not yet | their readers; the capture's view |
+| query runs | not yet | the capture's view |
 | lease seed | counts every kind | — |
 
 ## Alternatives
@@ -222,7 +217,9 @@ restored and moved with the facts table, as the lease table is.
   carry distinct ids and its seals hold over them. The `integration` lane,
   on a server: sixteen generators resolving the same fresh keys at once
   agree on every key; a run's presence rows share the run's id, and
-  another process resolves the run to it; the replay reads a series over
+  another process resolves the run to it; two loads of a corpus through
+  two generators restate the same ids, and a table holding a corpus from
+  before and a load since reads each competence once; the replay reads a series over
   rows written before and after; the lease seed over rows of every kind.
 - **What would fail.** Two processes holding different ids for one key; a
   writer that derives an id; a reader that gives a key an id.
@@ -247,8 +244,10 @@ restored and moved with the facts table, as the lease table is.
 - The audit recorder keeps deriving ids when it is given no generator, so
   a store elsewhere that uses it changes only when its owner says so.
 - The lease seed counts every kind and accepts the lost id space.
-- The capability map and query runs are left as they are, for the reasons
-  under *Deferred*.
+- The capability map's encoder no longer runs without a generator, and its
+  vault tables show the natural key where they showed an id (the code
+  owner chose on 2026-11-22 to move it).
+- Query runs are left as they are, for the reason under *Deferred*.
 
 ## Status
 

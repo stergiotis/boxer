@@ -307,7 +307,7 @@ Checked against the tree on 2026-11-22.
 | the watchbill presence | an id per run, resolved from the run id | a hash of the run id |
 | dead letters | an id per message position, resolved from the position's digest | a digest of the position |
 | the trail, markdown documents | an id per row, the next of the stream | a hash of the row's key, or of content and ingest time |
-| the capability map | the leading bytes of a digest of the natural key | the same |
+| the capability map | an id per competence and per relation, resolved from the natural key | the leading bytes of the natural key's digest |
 | query runs | a digest with the top bit set (`queryrunfacts.IdBand`) | the same |
 | the lading mount policy | the mount's tagged id, minted elsewhere under a tag the app declares; one per mount, a row per version | the same |
 
