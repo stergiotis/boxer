@@ -315,6 +315,21 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		// What an agent may read and do in a window under a task grant
 		// (ADR-0269, ADR-0270).
 		Operations: playOps.Catalog(),
+		// What an agent's model reads beside Summary: when to use play.
+		WhenToUse: "Use for questions about data in ClickHouse: query runs a statement and answers with its first rows, and publish_result hands a whole result to another app.",
+		// A window opened for a task runs against the environment's
+		// endpoint, so the request that opens it asks for that endpoint too.
+		LaunchDestinations: defaultEndpointDestinations,
+	}
+	return
+}
+
+// defaultEndpointDestinations is the grant destination of the endpoint a
+// plain open runs against: CLICKHOUSE_ENDPOINT, then CLICKHOUSE_URL, then
+// localhost.
+func defaultEndpointDestinations() (dests []string) {
+	if u := chclient.ConfigFromEnv().URL; u != "" {
+		dests = []string{DestinationClickHouse(endpointHost(u))}
 	}
 	return
 }

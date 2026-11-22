@@ -51,7 +51,7 @@ func addQueryOp(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 	appops.Command(playOps, app.OperationSpec{Name: opQuery, Version: 1,
 		Summary: "replace the buffer with SQL, run it under the agent limits and answer with the result's first rows: set_sql, run and sample_rows in one call",
 		Effect:  app.OperationEffectRun, Reads: []string{opsResParams, opsResSignals}, Writes: []string{opsResSql, opsResResult},
-		Agents: true, Untrusted: true, Async: true,
+		Agents: true, Direct: true, Untrusted: true, Async: true,
 		Rebuild: app.OperationRebuildVolatile, Fork: app.OperationForkPerInstance,
 		Follows: []string{"the buffer holds the SQL afterwards, and the result replaces the main result, as set_sql and run leave them",
 			"a run the checks refuse is refused at the call and leaves the buffer as it was",
