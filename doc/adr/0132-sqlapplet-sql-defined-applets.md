@@ -840,6 +840,29 @@ The honesty clause gains one more sentence: the class is of the text as
 boxer's lexer reads it. Other token-level differences between the two lexers
 are not ruled out; this one is closed.
 
+### 2026-11-23 — the aggregate filter parses, as the -If call the server makes of it
+
+`f(args) FILTER (WHERE c)` did not parse, so the §SD5 class could not be
+established and an agent's statement using it was refused for the grammar.
+Grammar1 now parses it after a call, parametric or not, and before `OVER`,
+which is where a ClickHouse 26.9 server accepts it; `filter` stays a name,
+and a bare alias may still be `filter`. The server's parser rewrites the
+clause to the -If combinator, `fIf(args, c)`: If after whatever combinators
+the name carries, DISTINCT as the Distinct combinator ahead of it, and the
+asterisk arguments of a call named `count` dropped. `CanonicalizeSugar`
+writes the same call, so the canonical form is the text the server parses,
+and grammar2, the AST and every pass downstream of canonicalisation see a
+call they already read. `formatQuery` and `EXPLAIN SYNTAX` print the two
+alike, and the server-truth test compares them through `clickhouse format`.
+
+The condition is an expression of the statement like any other, and is
+classified with it: a table function in a subquery of the condition, a
+scalar that reaches out or changes state, and a nested block comment
+witness what they witness anywhere else, before and after canonicalisation;
+a table read only in the condition is a table the statement reads. A filter
+on a call the vocabulary names is witnessed by that name, read fail-closed
+as written; the server reads `fileIf` and the like, which do not exist.
+
 ## References
 
 Internal:

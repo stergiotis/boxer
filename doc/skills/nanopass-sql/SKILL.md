@@ -450,7 +450,7 @@ normalises case and identifier quoting last:
 ```
 CanonicalizeWhitespaceSingleLine     // idempotent
 CanonicalizeEquals                   // ==  →  =
-CanonicalizeSugar                    // DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM → function calls   (fixpoint)
+CanonicalizeSugar                    // DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM, f(x) FILTER (WHERE c) → function calls   (fixpoint)
 FixedPoint(CanonicalizeConstructors(ConstructorFormFunction), maxIter)  // [..]/(..) → array()/tuple()
 FixedPoint(CanonicalizeCaseConditionals, maxIter)                       // CASE → if()/multiIf()/caseWithExpression()
 CanonicalizeMultiIf                  // 3-arg multiIf(c,r,d) → if(c,r,d)
@@ -660,7 +660,7 @@ the connection default; there is no ambient inheritance from sibling tables.
 | `CanonicalizeWhitespace` / `CanonicalizeWhitespaceSingleLine` | collapse whitespace (preserve / drop newlines) | Idempotent |
 | `CanonicalizeEquals` | `==` → `=` | Idempotent |
 | `CanonicalizeIdentifiers` | double-quote identifiers (param slots & type exprs stay bare; setting names, SET prelude included, only when a keyword) | Idempotent |
-| `CanonicalizeSugar` | DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM → function calls | NeedsFixedPoint |
+| `CanonicalizeSugar` | DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM → function calls; the aggregate filter `f(args) FILTER (WHERE c)` → `fIf(args, c)` (`fDistinctIf` under DISTINCT), the call ClickHouse's parser makes of it | NeedsFixedPoint |
 | `CanonicalizeConstructors(form)` | tuple/array between literal and function form | NeedsFixedPoint |
 | `CanonicalizeCaseConditionals` | CASE → `if`/`multiIf`/`caseWithExpression` | NeedsFixedPoint |
 | `CanonicalizeMultiIf` | 3-arg `multiIf` → `if` | Idempotent |
@@ -776,6 +776,10 @@ The token stream includes **EOF** as the last token (`antlr.TokenEOF`, type `-1`
 *grammar1.ColumnExprExtractContext       // EXTRACT(unit FROM expr)
 *grammar1.ColumnExprSubstringContext     // SUBSTRING(s FROM a FOR b)
 *grammar1.ColumnExprTrimContext          // TRIM(… FROM s)
+// The aggregate filter is a FilterClauseContext child of a ColumnExprFunction,
+// ColumnExprWinFunction or ColumnExprWinFunctionTarget (`f(x) FILTER (WHERE c)`,
+// before OVER); CanonicalizeSugar rewrites it to the -If call. A pass that
+// reads a call by its name leaves a call with FilterClause() != nil alone.
 ```
 
 ### `tableExpr` / `joinExpr` alternatives
@@ -920,6 +924,10 @@ detail in the package README and
   (semantics, not sugar) and carried by `ast.Query.Recursive` /
   `ast.Select.Recursive`. In scopes, a recursive def is visible inside its own
   body (`CTEDef.Recursive`; the self-entry has nil `Scopes` — no self-descent).
+- **Aggregate filter** — `FILTER` token + a `filterClause` rule after the
+  argument list of a call and before `OVER`, in grammar1 only; `filter` stays
+  a name, and a bare alias may be `filter`. Canonicalisation rewrites it to the
+  -If combinator call, so grammar2 and the AST never see it.
 
 ## Known Grammar Limitations
 

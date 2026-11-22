@@ -71,7 +71,8 @@ because all other passes emit bare identifiers.
 
 The passes eliminate syntactic sugar (CASE → multiIf/if/caseWithExpression,
 DATE/TIMESTAMP → toDate/toDateTime, ternary → if, EXTRACT/SUBSTRING/TRIM →
-function calls), canonicalize operators (== → =), normalize JOIN keyword order
+function calls, the aggregate filter `f(x) FILTER (WHERE c)` → the -If
+combinator call `fIf(x, c)` the server's parser makes of it), canonicalize operators (== → =), normalize JOIN keyword order
 (strictness before direction), remove redundant keywords (OUTER), enforce
 structural conventions (USING with parentheses, comma joins → CROSS JOIN),
 and quote all identifiers consistently (double-quoted).

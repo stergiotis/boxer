@@ -159,7 +159,7 @@ state, structural reordering, or a node-conditional token rename
 | Pass | Description | Properties |
 |------|-------------|-----------|
 | `CanonicalizeJoin` | Strictness-before-direction, a bare strictness gets INNER, removes OUTER, comma→CROSS, parenthesises USING | Idempotent |
-| `CanonicalizeSugar` | DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM → function-call form; sugar nests, outermost first | NeedsFixedPoint |
+| `CanonicalizeSugar` | DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM → function-call form, and `f(args) FILTER (WHERE c)` → `fIf(args, c)` as the server's parser rewrites it; sugar nests, outermost first | NeedsFixedPoint |
 | `CanonicalizeCasts` | `expr::Type` and `CAST(expr AS Type)` → `CAST(expr, 'Type')` | NeedsFixedPoint |
 | `CanonicalizeCaseConditionals` | CASE → `if`/`multiIf`/`caseWithExpression`; leaf-level | NeedsFixedPoint |
 | `CanonicalizeMultiIf` | `multiIf(c, r, d)` (3-arg) → `if(c, r, d)` | Idempotent |
