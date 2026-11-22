@@ -540,6 +540,11 @@ func (inst *Client) ProbeStatement(ctx context.Context, sql string, params map[s
 		Settings:    settings,
 		Sensitivity: dec.sensitivity,
 	}
+	// The probe wraps the statement a run of it would ship, so it carries
+	// the same task (ADR-0403).
+	if agent, _ := inst.runAgent(opts); agent != nil {
+		req.Task = agent.Task
+	}
 	if opts != nil && opts.QueryID != "" {
 		req.RunID = opts.QueryID
 		if opts.ReplaceRunningQuery {
@@ -557,6 +562,25 @@ func (inst *Client) ProbeStatement(ctx context.Context, sql string, params map[s
 	if level, retry := inst.learnReadonlyLevel(ctx, eng, target, sentLevel, err); retry {
 		degradeForReadonly(&req, level)
 		err = deliverVerdict(ctx, eng, req)
+	}
+	return
+}
+
+// runAgent is the task whose work a run with opts is (ADR-0270 §SD2): the
+// lane's explicit Agent, else the window's mark — unless the lane's
+// statement is play's own, which own reports. A nil agent is the person's
+// run.
+func (inst *Client) runAgent(opts *ExecOptions) (agent *app.OnBehalfOf, own bool) {
+	agent = inst.agentMark.Load()
+	own = agent != nil && opts != nil && opts.OwnStatement
+	if own {
+		// Nothing the task wrote reaches this statement as SQL (ADR-0270,
+		// update of 2026-10-04), so the grant does not bound it; it still
+		// cannot write.
+		agent = nil
+	}
+	if opts != nil && opts.Agent != nil {
+		agent = opts.Agent
 	}
 	return
 }
@@ -1267,17 +1291,7 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	// An agent's run gets the rewrite its grant allows (ADR-0270 §SD2): one
 	// the agent limits below check as it ships, with no catalog probe sent to
 	// an endpoint the grant does not list.
-	agent := inst.agentMark.Load()
-	ownStatement := agent != nil && opts != nil && opts.OwnStatement
-	if ownStatement {
-		// Nothing the task wrote reaches this statement as SQL (ADR-0270,
-		// update of 2026-10-04), so the grant does not bound it; it still
-		// cannot write.
-		agent = nil
-	}
-	if opts != nil && opts.Agent != nil {
-		agent = opts.Agent
-	}
+	agent, ownStatement := inst.runAgent(opts)
 	var skipped failedRewrites
 	residual, params, _ := inst.rewriteFor(agent, sql, skipped.observe)
 	var q string
@@ -1338,6 +1352,9 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 			return
 		}
 		req.Settings["readonly"] = "2"
+		// The task wrote this text, so the host's pass judges it again at
+		// the engine's exit (ADR-0403), behind the check above.
+		req.Task = agent.Task
 	}
 	if opts != nil {
 		if opts.QueryID != "" {

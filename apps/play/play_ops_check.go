@@ -280,6 +280,10 @@ func runCheck(ctx context.Context, client *Client, cs checkSnap, obo *app.OnBeha
 		Settings:    map[string]string{"readonly": "2", "max_result_rows": strconv.Itoa(checkMaxRows + 1), "result_overflow_mode": "break", "max_execution_time": strconv.Itoa(int(checkTimeout / time.Second))},
 		Sensitivity: dec.sensitivity,
 	}
+	if obo != nil {
+		// The assertion is the task's text inside play's wrapper (ADR-0403).
+		req.Task = obo.Task
+	}
 	target, _ := dec.target()
 	sentLevel := client.knownReadonlyLevel(target)
 	degradeForReadonly(&req, sentLevel)
