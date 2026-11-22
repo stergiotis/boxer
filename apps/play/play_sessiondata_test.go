@@ -261,6 +261,16 @@ func TestSessionStandInClassifiesTheMacroAsATable(t *testing.T) {
 	assert.Equal(t, "SELECT 1", sessionStandIn("SELECT 1"))
 }
 
+func TestStaleDependantsAreTheTransitiveReadersLeftStale(t *testing.T) {
+	infos := []sessiondata.DatasetInfo{
+		{Name: "a", State: sessiondata.DatasetStateLive},
+		{Name: "b", Dependencies: []string{"a"}, State: sessiondata.DatasetStateStale},
+		{Name: "c", Dependencies: []string{"b"}, State: sessiondata.DatasetStateStale},
+		{Name: "d", State: sessiondata.DatasetStateStale},
+	}
+	assert.Equal(t, []string{"b", "c"}, staleDependants(infos, "a"))
+}
+
 func TestAGrantErrorBecomesAnAgentLimit(t *testing.T) {
 	err := sessionError("x", &sessiondata.GrantError{Destination: "clickhouse-session:h", Reason: "no"})
 	var limit *AgentLimitError

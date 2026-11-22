@@ -313,6 +313,8 @@ type opsSnap struct {
 	bundle string
 	// lastPublish is the window's last publish_result.
 	lastPublish LastPublish
+	// keeping is set while query's keep_as makes a data set.
+	keeping bool
 }
 
 var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
@@ -507,6 +509,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 	addSchemaPaneOps(s)
 	addRewriteOps(s)
 	addDatasetOps(s)
+	addSessionDatasetOps(s)
 	addBundleOps(s)
 	addPublishResultOps(s)
 	addProjectionOps(s)
@@ -705,6 +708,7 @@ func snapshotPlay(inst *PlayLauncher) (sn opsSnap) {
 	sn.detail = detailOpsView{embedded: p.detailContent != nil}
 	sn.completion = p.completionView()
 	sn.queryGraph = p.queryGraphView()
+	sn.keeping = p.keeping()
 	if inst.follower != nil {
 		sn.waiting = inst.follower.Waiting()
 	}

@@ -82,6 +82,35 @@ func (inst *liveRig) liveClient(appId app.AppIdT, instance uint64) (c *Client) {
 	return
 }
 
+func TestLiveKeepThroughTheOperationAndReadItAgain(t *testing.T) {
+	r := newLiveRig(t, sessiondata.Limits{})
+	server, session := DestinationClickHouse(r.host), sessiondata.DestinationSession(r.host)
+	r.grant("t1", server, session)
+	obo := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: []string{server, session}}
+	l, h := opsLauncher(t)
+	l.inner.client = r.liveClient("github.com/x/play", 1)
+
+	call := app.OperationCall{Writer: "task:t1", OnBehalfOf: obo, Key: "k1"}
+	args := mustEncode(t, QueryArgs{Sql: "SELECT * FROM " + r.table + " LIMIT 1000", KeepAs: "sample_rows_kept", Limit: 5})
+	_, err := h.ApplyCommand(call, opQuery, args)
+	require.NoError(t, err)
+	settleUntil(t, h, call, opQuery, args, func(bool) bool { return l.inner.queryRuns[call.Key].kept != nil })
+	kept := l.inner.queryRuns[call.Key].kept
+	assert.Equal(t, uint64(1000), kept.Rows)
+	assert.NotEmpty(t, kept.Columns)
+	assert.Equal(t, "SELECT * FROM session('sample_rows_kept') LIMIT 5", l.inner.sql)
+
+	// A second statement reads it, and another app of the task does too.
+	other := r.liveClient("github.com/x/kernel", 9)
+	obo2 := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c2", Destinations: []string{server}}
+	rows, _, err := runAll(t, t.Context(), other, "SELECT count() AS n FROM session('sample_rows_kept') WHERE 1", &ExecOptions{Agent: obo2})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), rows)
+	rows, _, err = runAll(t, t.Context(), l.inner.client, "SELECT * FROM session('sample_rows_kept') LIMIT 7", &ExecOptions{Agent: obo2})
+	require.NoError(t, err)
+	assert.Equal(t, int64(7), rows)
+}
+
 func TestLiveAnAdhocDatasetJoinsAServerTable(t *testing.T) {
 	r := newLiveRig(t, sessiondata.Limits{})
 	_, err := r.adhoc.Publish(adhocdata.PublishInput{Alias: "items", ArrowIPCStream: liveItems(t)})

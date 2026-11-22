@@ -153,18 +153,18 @@ func TestListDatasetsEndToEnd(t *testing.T) {
 	c.bindDataset(fixtureSeriesAlias, pub.Handle)
 
 	bare := &app.OnBehalfOf{Task: "t", Epoch: 1}
-	all, err := listDatasets(c, bare, "", nil)
+	all, err := listDatasets(t.Context(), c, bare, "", nil)
 	require.NoError(t, err)
 	require.Len(t, all.Datasets, 1)
 	d := all.Datasets[0]
-	assert.Equal(t, fixtureSeriesAlias, d.Alias)
+	assert.Equal(t, fixtureSeriesAlias, d.Name)
 	assert.Equal(t, "keelson:"+fixtureSeriesAlias, d.Destination)
 	assert.False(t, d.Granted)
 	assert.Empty(t, d.Columns)
 	assert.False(t, all.ResultConfined())
 
 	granted := &app.OnBehalfOf{Task: "t", Epoch: 1, Destinations: []string{d.Destination}}
-	one, err := listDatasets(c, granted, fixtureSeriesAlias, nil)
+	one, err := listDatasets(t.Context(), c, granted, fixtureSeriesAlias, nil)
 	require.NoError(t, err)
 	require.Len(t, one.Datasets, 1)
 	got := one.Datasets[0]
@@ -181,7 +181,9 @@ func TestListDatasetsEndToEnd(t *testing.T) {
 	assert.True(t, d.Confined)
 	assert.Empty(t, d.Columns, "the listing never carries a sealed dataset's columns")
 
-	_, err = listDatasets(c, granted, "nope", nil)
-	var refusal *app.OperationRefusal
-	require.ErrorAs(t, err, &refusal)
+	// A name the window binds nothing under may be a session data set's;
+	// the operation refuses it once neither home lists it.
+	none, err := listDatasets(t.Context(), c, granted, "nope", nil)
+	require.NoError(t, err)
+	assert.Empty(t, none.Datasets)
 }

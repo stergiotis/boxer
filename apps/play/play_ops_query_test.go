@@ -23,7 +23,15 @@ func TestQueryIsAnUntrustedAsynchronousRun(t *testing.T) {
 	assert.True(t, spec.Untrusted, "it answers with cells")
 	assert.True(t, spec.Async)
 	assert.Equal(t, app.OperationEffectRun, spec.Effect)
-	assert.Equal(t, []string{opsResSql, opsResResult}, spec.Writes)
+	assert.Equal(t, []string{opsResSql, opsResResult}, spec.Writes, "the data-set catalog holds no query back: keep_as changes it without a read")
+
+	drop, ok := m.Operations.Lookup(opDropDataset)
+	require.True(t, ok)
+	assert.Equal(t, []string{opsResSessionDatasets}, drop.Writes)
+	assert.True(t, drop.AnyRevision, "a drop names its data set and needs no read of the catalog")
+	list, ok := m.Operations.Lookup(opListDatasets)
+	require.True(t, ok)
+	assert.Equal(t, []string{opsResSessionDatasets}, list.Reads, "listing is what reading the catalog is")
 }
 
 func TestQueryRefusesBeforeTheBufferChanges(t *testing.T) {

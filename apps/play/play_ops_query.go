@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
 )
 
 // play_ops_query.go: query, which does what set_sql, run and sample_rows do
@@ -27,6 +28,11 @@ type QueryArgs struct {
 	Statement int32    `json:",omitzero" desc:"for SQL of several statements, the one to run, from 1, shipped with the SET prelude; required when there are several"`
 	Limit     uint32   `json:",omitzero" desc:"how many of the result's first rows to answer with, at most 50; 50 when left out"`
 	Fields    []string `json:",omitzero" desc:"the columns to answer with, by name, by gloss label or, for a leeway result, by handle (section:column); every column when left out"`
+	// KeepAs keeps the statement's result in the task's data session
+	// instead of running it as the main result.
+	KeepAs string `json:",omitzero" desc:"keep the result as a session data set under this name (an identifier) instead of returning it: later statements read it as session('<name>') and join it with server tables and keelson('<alias>') datasets; the answer describes it and samples its first rows; the same name again redefines it"`
+	// OrderBy is the kept table's sort key.
+	OrderBy []string `json:",omitzero" desc:"with keep_as: columns of the result to sort the kept table by, which speeds later filters and joins on them"`
 }
 
 // QueryResult is query's result.
@@ -38,6 +44,8 @@ type QueryResult struct {
 	Sample   *SampleRows `json:",omitzero" desc:"the result's first rows, as sample_rows reads them; absent when the run produced no rows"`
 	// SampleNote says why rows are absent from a result that has some.
 	SampleNote string `json:",omitzero" desc:"why no rows came with a result that has some: a column of fields the result does not have, say"`
+	// Kept is the data set keep_as defined.
+	Kept *KeptDataset `json:",omitzero" desc:"with keep_as: the data set kept — its name, revision, rows, bytes and columns, and the data sets its redefinition left to rebuild; Result and Sample are then its first rows, SELECT * FROM session('<name>') LIMIT n"`
 }
 
 // queryRun is a query call in flight: the main result before it, which the
@@ -50,6 +58,13 @@ type queryRun struct {
 	binding []string
 	bindBy  time.Time
 	obo     *app.OnBehalfOf
+	// keep is keep_as's definition in flight, and kept what it made once
+	// the window samples it.
+	keep *sessionCall[keepResult]
+	kept *KeptDataset
+	// refresh is the listing of the data session the keep asked for, which
+	// the call waits for before it settles.
+	refresh uint64
 }
 
 // queryBindWait is how long query waits for the aliases it binds to resolve
@@ -62,13 +77,17 @@ const queryRunsMax = 8
 
 // addQueryOp declares query; playOps' initializer calls it.
 func addQueryOp(playOps *appops.Set[*PlayLauncher, opsSnap]) {
-	appops.Command(playOps, app.OperationSpec{Name: opQuery, Version: 1,
-		Summary: "replace the buffer with SQL, run it under the agent limits and answer with the result's first rows: set_sql, run and sample_rows in one call",
+	appops.Command(playOps, app.OperationSpec{Name: opQuery, Version: 2,
+		Summary: "replace the buffer with SQL, run it under the agent limits and answer with the result's first rows: set_sql, run and sample_rows in one call; with keep_as, keep the result as a named session data set",
 		Effect:  app.OperationEffectRun, Reads: []string{opsResParams, opsResSignals}, Writes: []string{opsResSql, opsResResult},
 		Agents: true, Direct: true, Untrusted: true, Async: true,
 		Rebuild: app.OperationRebuildVolatile, Fork: app.OperationForkPerInstance,
 		Follows: []string{"the buffer holds the SQL afterwards, and the result replaces the main result, as set_sql and run leave them",
 			"a run the checks refuse is refused at the call and leaves the buffer as it was",
+			"about to reuse a derivation (a CTE, a filtered or tokenised table) in later statements? keep it once with keep_as: '<name>' and read session('<name>') afterwards, instead of repeating its SQL in every statement",
+			"a session data set lives in your task's data session on the server for the task's life; other apps of the task read it too; keep_as with the same name redefines it, and data sets reading it rebuild when next read; list_datasets lists them, drop_dataset drops one",
+			"session('<name>') joins server tables and keelson('<alias>') ad-hoc datasets in one statement; keeping a data set needs clickhouse-session:<host:port> in the grant beside clickhouse:<host:port>, the same host and port",
+			"with keep_as the answer is the data set and its first rows, SELECT * FROM session('<name>') LIMIT n, which becomes the buffer and the main result",
 			"keelson('<alias>') of an ad-hoc dataset not bound in the window binds it first, as bind_dataset does, and runs once it is bound; the task that published it needs no grant entry to read it",
 			"check and cite take result_id; sample_rows reads rows past the first 50, with result_id to make sure they are this result's"}},
 		func(inst *PlayLauncher, call app.OperationCall, in QueryArgs) (out QueryResult, err error) {
@@ -81,6 +100,9 @@ func addQueryOp(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 			}
 			if strings.TrimSpace(in.Sql) == "" {
 				return out, app.RefuseOperation("the SQL is empty")
+			}
+			if in.KeepAs != "" || len(in.OrderBy) > 0 {
+				return out, inst.startKeepQuery(call, in)
 			}
 			unbound := p.unboundDatasets(in.Sql)
 			if err = p.refuseQuery(call.OnBehalfOf, in, len(unbound) == 0); err != nil {
@@ -111,6 +133,25 @@ func addQueryOp(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 			return out, true, app.RefuseOperation("the window has not mounted")
 		}
 		q := p.queryRuns[call.Key]
+		if q.keep != nil && q.kept == nil {
+			res, kErr, done := q.keep.result()
+			if !done {
+				return out, false, nil
+			}
+			q.refresh = p.refreshSessionsFor(q.obo)
+			if kErr != nil {
+				delete(p.queryRuns, call.Key)
+				return out, true, sessionRefusal(kErr)
+			}
+			// Kept: the window samples it as its main run, so the answer
+			// has a result_id check and cite rest on.
+			q.kept = keptOf(res.res, res.stale)
+			q.args.Sql, q.args.Statement = sampleStatement(q.args.KeepAs, q.args.Limit), 0
+			q.before = ResultID(snapshotState(p).Result.Id)
+			p.startQuery(q)
+			p.queryRuns[call.Key] = q
+			return out, false, nil
+		}
 		if len(q.binding) > 0 {
 			if waiting := p.stillUnbound(q.binding); len(waiting) > 0 {
 				if time.Now().Before(q.bindBy) {
@@ -141,15 +182,87 @@ func addQueryOp(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 		if !p.runLanded() {
 			return out, false, nil
 		}
+		if q.kept != nil && q.refresh != 0 && !p.sessionsShown(q.refresh) {
+			// A keep settles once the window's listing shows it, so the
+			// revisions it reports are the ones the window holds.
+			return out, false, nil
+		}
 		delete(p.queryRuns, call.Key)
-		return p.settleQuery(q), true, nil
+		out = p.settleQuery(q)
+		out.Kept = q.kept
+		return out, true, nil
 	})
 	playOps.Available(opQuery, func(sn opsSnap) (bool, string) {
 		if sn.mounted && sn.state.Result.Phase == "running" {
 			return false, "a run is in flight"
 		}
+		if sn.keeping {
+			return false, "a data set is being kept"
+		}
 		return true, ""
 	})
+}
+
+// startKeepQuery is query with keep_as: the checks at the call, then the
+// definition off the frame; the call settles once the data set is made and
+// sampled.
+func (inst *PlayLauncher) startKeepQuery(call app.OperationCall, in QueryArgs) (err error) {
+	p := inst.inner
+	switch {
+	case in.KeepAs == "":
+		return app.RefuseOperation("order_by sorts a kept data set; name it with keep_as")
+	case !sessiondata.ValidName(in.KeepAs):
+		return app.RefuseOperation("keep_as is an identifier of at most 64 bytes: letters, digits and _, not starting with a digit")
+	case p.client == nil || p.client.sessionBus() == nil:
+		return app.RefuseOperation("the window is not wired to the session data service, so it keeps no data set")
+	}
+	for _, col := range in.OrderBy {
+		if !sessiondata.ValidName(col) {
+			return app.RefuseOperation("order_by names columns of the result by identifier")
+		}
+	}
+	if err = p.refuseQuery(call.OnBehalfOf, in, false); err != nil {
+		return
+	}
+	if err = keepGrant(p.client, call.OnBehalfOf); err != nil {
+		return
+	}
+	def, err := p.keepStatement(in)
+	if err != nil {
+		return
+	}
+	if p.queryRuns == nil || len(p.queryRuns) >= queryRunsMax {
+		p.queryRuns = make(map[string]queryRun, 1)
+	}
+	p.queryRuns[call.Key] = queryRun{args: in, obo: call.OnBehalfOf, keep: p.startKeep(call.OnBehalfOf, in.KeepAs, def, in.OrderBy)}
+	return
+}
+
+// keepStatement is the statement keep_as defines a data set by: the one
+// statement of the SQL, or the one Statement picks.
+func (inst *PlayApp) keepStatement(in QueryArgs) (def string, err error) {
+	if in.Statement == 0 {
+		return strings.TrimSpace(in.Sql), nil
+	}
+	held := inst.sql
+	inst.sql = in.Sql
+	defer func() { inst.sql = held }()
+	if def, err = inst.statementBuffer(int(in.Statement)); err != nil {
+		return "", app.RefuseOperation(err.Error())
+	}
+	return
+}
+
+// keeping reports whether a keep_as definition is in flight.
+func (inst *PlayApp) keeping() (yes bool) {
+	for _, q := range inst.queryRuns {
+		if q.keep != nil && q.kept == nil {
+			if _, _, done := q.keep.result(); !done {
+				return true
+			}
+		}
+	}
+	return
 }
 
 // startQuery puts the query's SQL in the buffer and asks for the run.

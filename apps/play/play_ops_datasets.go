@@ -63,24 +63,47 @@ const datasetMaxListed = 20
 
 // DatasetArgs is list_datasets' argument.
 type DatasetArgs struct {
-	Alias string `json:",omitzero" desc:"one dataset to describe with its columns, sealed or not; every dataset when left out, with columns only for those not sealed"`
+	Name string `json:",omitzero" desc:"one dataset or data set to describe, by its alias or name: with its columns, sealed or not, and a session data set's definition; every one when left out, with columns only for those not sealed"`
 }
 
-// DatasetInfo is one bound dataset.
+// The homes a listed dataset lives in.
+const (
+	datasetHomeWindow  = "window"
+	datasetHomeSession = "session"
+)
+
+// DatasetInfo is one dataset bound in the window, or one data set of the
+// data session the window's runs read.
 type DatasetInfo struct {
-	Alias       string       `desc:"the alias: read the dataset with keelson('<alias>')"`
+	Name        string       `desc:"the alias of an ad-hoc dataset, or the name of a session data set"`
+	Home        string       `desc:"where it lives: window — an ad-hoc dataset this host holds in its own process, bound in this window; session — a data set kept in the task's data session on the ClickHouse server, which every window and app of the task reads"`
+	ReadWith    string       `desc:"the table expression that reads it: keelson('<alias>') or session('<name>'); the two join with each other and with server tables in one statement"`
 	Destination string       `desc:"the destination a run reading it needs, as request_access names it"`
-	Granted     bool         `desc:"true when the grant lists the destination"`
-	Confined    bool         `json:",omitzero" desc:"true for a sealed dataset: reading it makes the window confined; its columns are listed when it is asked for by alias"`
-	Columns     []ColumnInfo `json:",omitzero" desc:"its columns, when the grant lists it"`
+	Granted     bool         `desc:"true when this task may read it: the grant lists the destination, or the task published it"`
+	Published   bool         `json:",omitzero" desc:"true for an ad-hoc dataset this task published: the task reads it without a grant entry"`
+	Bundle      string       `json:",omitzero" desc:"the bundle an ad-hoc dataset was published in"`
+	Confined    bool         `json:",omitzero" desc:"true for sealed data, or a data set derived from it: reading it makes the result confined; its columns are listed when it is asked for by name"`
+	Columns     []ColumnInfo `json:",omitzero" desc:"its columns, when the task may read it; a sealed dataset's only when it is asked for by name"`
 	Error       string       `json:",omitzero" desc:"why its columns could not be read"`
 	Waiting     string       `json:",omitzero" desc:"set while the alias is followed but not bound: why it waits; a run naming it fails until it binds"`
+	// Its size and revision: a session data set's as the service last saw
+	// its table, an ad-hoc dataset's as the dataset service holds it.
+	Rows       uint64   `json:",omitzero" desc:"its rows"`
+	Bytes      uint64   `json:",omitzero" desc:"what it takes: a session data set's table on the server, an ad-hoc dataset's Arrow stream on this host"`
+	Revision   uint64   `json:",omitzero" desc:"its revision: a session data set's, one more for each redefinition; an ad-hoc dataset's, one more for each publish under its alias"`
+	State      string   `json:",omitzero" desc:"a session data set's state: live; expired or stale (made again from its definition by the next statement that reads it); failed (its last build failed, Reason says why)"`
+	Reason     string   `json:",omitzero" desc:"why a session data set is stale or failed"`
+	Endpoint   string   `json:",omitzero" desc:"the server a session data set lives on, as a grant names it"`
+	Reads      []string `json:",omitzero" desc:"the session data sets and ad-hoc datasets a session data set's definition reads"`
+	Definition string   `json:",omitzero" desc:"a session data set's defining statement, when it is asked for by name"`
 }
 
 // DatasetList is list_datasets' result.
 type DatasetList struct {
-	Datasets  []DatasetInfo `desc:"the datasets bound in this window, by alias"`
+	Datasets  []DatasetInfo `desc:"the ad-hoc datasets bound in this window, by alias, then the session data sets of the task's data session, by name"`
 	Truncated bool          `desc:"true when more are bound than are listed"`
+	// SessionError says why the session data sets could not be listed.
+	SessionError string `json:",omitzero" desc:"why the session data sets could not be listed; the ad-hoc datasets are listed all the same"`
 	// sealedShown is set when a sealed dataset's columns are in the result.
 	sealedShown bool
 }
@@ -111,10 +134,12 @@ func addDatasetOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		func(inst *PlayLauncher, call app.OperationCall, in BindDatasetArgs) (out BindDatasetResult, err error) {
 			return inst.bindDatasetAlias(in.Alias, in.As)
 		})
-	appops.ExternalRead(s, app.OperationSpec{Name: opListDatasets, Version: 1,
-		Summary: "list the ad-hoc datasets bound in this window: the alias to read with keelson('<alias>'), the destination a run needs, and their columns",
-		Agents:  true, Untrusted: true,
-		Follows: []string{"request_access with a dataset's destination lets a run read it"}},
+	appops.ExternalRead(s, app.OperationSpec{Name: opListDatasets, Version: 2,
+		Summary: "list the ad-hoc datasets bound in this window and the session data sets of the task's data session: what to read each with, the destination a run needs, and their columns",
+		Reads:   []string{opsResSessionDatasets}, Agents: true, Untrusted: true,
+		Follows: []string{"request_access with a dataset's destination lets a run read it",
+			"a session data set comes with its rows, bytes, revision and state; asked for by name, with its defining statement",
+			"query with keep_as defines a session data set, drop_dataset drops one"}},
 		func(sn opsSnap, call app.OperationCall, in DatasetArgs) (DatasetList, error) {
 			switch {
 			case !sn.mounted:
@@ -122,11 +147,30 @@ func addDatasetOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			case sn.client == nil:
 				return DatasetList{}, app.RefuseOperation("the window has no endpoint")
 			}
-			return listDatasets(sn.client, call.OnBehalfOf, in.Alias, sn.waiting)
+			ctx, cancel := context.WithTimeout(call.Context(), schemaOpTimeout)
+			defer cancel()
+			out, err := listDatasets(ctx, sn.client, call.OnBehalfOf, in.Name, sn.waiting)
+			if err != nil {
+				return out, err
+			}
+			obo := call.OnBehalfOf
+			if obo == nil {
+				obo = sn.client.agentMark.Load()
+			}
+			sessions, sealed, sErr := sessionDatasetInfos(ctx, sn.client, obo, in.Name)
+			if sErr != nil {
+				out.SessionError = sErr.Error()
+			}
+			out.Datasets = append(out.Datasets, sessions...)
+			out.sealedShown = out.sealedShown || sealed
+			if in.Name != "" && len(out.Datasets) == 0 {
+				return out, app.RefuseOperation("no dataset or session data set " + in.Name + " is here; list_datasets without a name lists them, bind_dataset binds an ad-hoc dataset, query with keep_as keeps a data set")
+			}
+			return out, nil
 		})
 }
 
-func listDatasets(client *Client, obo *app.OnBehalfOf, only string, waiting map[string]string) (out DatasetList, err error) {
+func listDatasets(ctx context.Context, client *Client, obo *app.OnBehalfOf, only string, waiting map[string]string) (out DatasetList, err error) {
 	aliases := client.DatasetAliases()
 	if only != "" {
 		if why, ok := waiting[only]; ok {
@@ -134,7 +178,8 @@ func listDatasets(client *Client, obo *app.OnBehalfOf, only string, waiting map[
 			return
 		}
 		if !slices.Contains(aliases, only) {
-			return out, app.RefuseOperation("no dataset " + only + " is bound in this window; list_datasets without an alias lists them, bind_dataset binds one")
+			// It may name a session data set, which the caller lists.
+			return out, nil
 		}
 		aliases = []string{only}
 	} else {
@@ -148,11 +193,18 @@ func listDatasets(client *Client, obo *app.OnBehalfOf, only string, waiting map[
 	for _, alias := range aliases {
 		n := client.datasetNameOf(alias)
 		dests := n.destinations()
-		d := DatasetInfo{Alias: alias, Destination: dests[0]}
-		d.Granted = obo == nil
-		for _, dest := range dests {
-			d.Granted = d.Granted || slices.Contains(obo.Destinations, dest)
+		d := DatasetInfo{Name: alias, Home: datasetHomeWindow, ReadWith: "keelson('" + alias + "')", Destination: dests[0], Bundle: n.bundle}
+		if res, ok := client.boundDatasetState(ctx, alias, n.alias); ok {
+			d.Rows, d.Bytes, d.Revision = res.Rows, res.Bytes, res.Revision
+			if d.Bundle == "" {
+				d.Bundle = res.Origin.Bundle
+			}
+			if n.publisherTask == "" {
+				n.publisherTask = res.Origin.PublisherTask
+			}
 		}
+		d.Published = obo != nil && n.publisherTask != "" && n.publisherTask == obo.Task
+		d.Granted = obo == nil || n.coveredFor(obo, alias)
 		stmt := "SELECT * FROM keelson('" + alias + "') LIMIT 0"
 		residual, _ := client.buildResidualOffline(stmt, nil)
 		dec := client.dispatchResidual(residual, "")
@@ -166,10 +218,26 @@ func listDatasets(client *Client, obo *app.OnBehalfOf, only string, waiting map[
 	return
 }
 
+// boundDatasetState is what the dataset service holds of the dataset
+// bound under local: the newest live one under alias, when it is still the
+// one bound. ok is false when it is not, when the client has no bus, or
+// when the service does not answer.
+func (inst *Client) boundDatasetState(ctx context.Context, local string, alias string) (res adhocdata.ResolveResult, ok bool) {
+	bus := inst.sessionBus()
+	inst.mu.RLock()
+	handle := inst.datasetBindings[local]
+	inst.mu.RUnlock()
+	if bus == nil || handle == "" || adhocdata.IsHandle(alias) {
+		return
+	}
+	res, err := adhocdata.ResolveRequest(ctx, bus, alias)
+	return res, err == nil && res.Handle == handle
+}
+
 // waitingDataset is a followed alias not bound yet.
 func waitingDataset(alias string, why string, obo *app.OnBehalfOf) (d DatasetInfo) {
 	dests := adhocdata.ReadDestinations(alias)
-	d = DatasetInfo{Alias: alias, Destination: dests[0], Waiting: why}
+	d = DatasetInfo{Name: alias, Home: datasetHomeWindow, ReadWith: "keelson('" + alias + "')", Destination: dests[0], Waiting: why}
 	d.Granted = obo == nil
 	for _, dest := range dests {
 		d.Granted = d.Granted || slices.Contains(obo.Destinations, dest)

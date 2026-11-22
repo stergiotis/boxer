@@ -876,6 +876,14 @@ type PlayApp struct {
 	runAgent          *app.OnBehalfOf
 	// queryRuns are the query calls in flight, by call key (play_ops_query.go).
 	queryRuns map[string]queryRun
+	// sessions is the window's last reading of its data session's data
+	// sets, and dropCalls the drop_dataset calls in flight, by call key
+	// (play_ops_sessiondata.go).
+	sessions sessionView
+	// sessionsSeen is sessions' digest as the last frame latched it: the
+	// session_datasets resource, which moves only inside a frame.
+	sessionsSeen string
+	dropCalls    map[string]*dropCall
 	// runDoneFrames counts the frames a finished run has waited for the
 	// frame to draw its result (runLanded).
 	runDoneFrames int

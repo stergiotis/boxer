@@ -86,23 +86,9 @@ func checkAgentLimits(residual string, dec dispatchDecision, obo *app.OnBehalfOf
 		// grant names it by its global alias, or its bundle, never by the
 		// local name the buffer wrote — that names another dataset in
 		// another window — and a refusal asks for the bundle first.
-		n, bound := aliasOf[t]
-		if !bound {
-			// A dataset not bound here is still named by its bundle.
-			n = datasetName{local: t, alias: t}
-			if bundle, _, ok := strings.Cut(t, adhocdata.BundleAliasSeparator); ok {
-				n.bundle = bundle
-			}
-		}
-		dests := n.destinations()
-		// A task runs on what it published without a grant entry (ADR-0288
-		// §SD4): the dataset service attested the publish to that task.
-		covered := slices.Contains(obo.Destinations, DestinationKeelson(t)) ||
-			(n.publisherTask != "" && n.publisherTask == obo.Task)
-		for _, d := range dests {
-			covered = covered || slices.Contains(obo.Destinations, d)
-		}
-		if !covered {
+		n := datasetNameIn(aliasOf, t)
+		if !n.coveredFor(obo, t) {
+			dests := n.destinations()
 			return &AgentLimitError{Reason: "the grant does not list " + dests[0], Destination: dests[0]}
 		}
 	}
@@ -117,6 +103,33 @@ func checkAgentLimits(residual string, dec dispatchDecision, obo *app.OnBehalfOf
 	}
 	if !slices.Contains(obo.Destinations, DestinationClickHouse(host)) {
 		return &AgentLimitError{Reason: "the grant does not list " + DestinationClickHouse(host), Destination: DestinationClickHouse(host)}
+	}
+	return
+}
+
+// datasetNameIn is the grant's view of the keelson('…') name t a residual
+// reads: its entry in aliasOf when t is a bound handle, else the name
+// itself, still named by its bundle.
+func datasetNameIn(aliasOf map[string]datasetName, t string) (n datasetName) {
+	n, bound := aliasOf[t]
+	if !bound {
+		n = datasetName{local: t, alias: t}
+		if bundle, _, ok := strings.Cut(t, adhocdata.BundleAliasSeparator); ok {
+			n.bundle = bundle
+		}
+	}
+	return
+}
+
+// coveredFor reports whether obo's grant lets a run read the dataset the
+// residual names as t: the grant lists it, its alias or its bundle, or the
+// task published it — a task runs on what it published without a grant
+// entry (ADR-0288 §SD4), the dataset service having attested the publish.
+func (inst datasetName) coveredFor(obo *app.OnBehalfOf, t string) (covered bool) {
+	covered = slices.Contains(obo.Destinations, DestinationKeelson(t)) ||
+		(inst.publisherTask != "" && inst.publisherTask == obo.Task)
+	for _, d := range inst.destinations() {
+		covered = covered || slices.Contains(obo.Destinations, d)
 	}
 	return
 }

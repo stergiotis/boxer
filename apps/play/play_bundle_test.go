@@ -292,7 +292,7 @@ func TestABundleRunNeedsTheBundleInTheGrant(t *testing.T) {
 	assert.Error(t, refuseAgentStatement(l.inner.client, &app.OnBehalfOf{Task: "other"}, stmt))
 	l.inner.client.setBundleOrigin("orders", "sales__orders", "sales", "")
 
-	list, err := listDatasets(l.inner.client, &app.OnBehalfOf{Task: "t", Destinations: []string{"keelson-bundle:sales"}}, "", nil)
+	list, err := listDatasets(t.Context(), l.inner.client, &app.OnBehalfOf{Task: "t", Destinations: []string{"keelson-bundle:sales"}}, "", nil)
 	require.NoError(t, err)
 	require.Len(t, list.Datasets, 1)
 	assert.Equal(t, "keelson-bundle:sales", list.Datasets[0].Destination)
@@ -360,4 +360,47 @@ func TestListBundlesShowsValuesOnlyWhereTheTaskMayRead(t *testing.T) {
 	withColumnValues(t.Context(), l.bus, &granted, got)
 	assert.Equal(t, "0", got[0].Columns[0].Max, "with the grant it does")
 	assert.Equal(t, "[0]", got[0].Columns[0].Sample)
+}
+
+// TestListDatasetsDescribesADatasetTheTaskPublished: a bundle the task
+// published, bound in the window, lists as readable by that task without a
+// grant entry, with its bundle, rows, size and revision as the dataset
+// service holds them.
+func TestListDatasetsDescribesADatasetTheTaskPublished(t *testing.T) {
+	withQueryEndpoint(t, "http://127.0.0.1:1/query")
+	l, _, publisher := bundleLauncher(t)
+	in := adhocdata.BundlePublishInput{Alias: "kernel_top", Document: []byte("SELECT 1"), OnBehalfOf: &agentCall,
+		Datasets: []adhocdata.BundleDatasetInput{{LocalName: "result", ArrowIPCStream: intStream(t, 7)}}}
+	pub, err := adhocdata.PublishBundleRequest(t.Context(), publisher, in)
+	require.NoError(t, err)
+	c := l.inner.client
+	c.SetSessionBus(l.bus)
+	res, err := adhocdata.ResolveRequest(t.Context(), l.bus, "kernel_top__result")
+	require.NoError(t, err)
+	require.Equal(t, agentCall.Task, res.Origin.PublisherTask, "the dataset service attested the publish to the task")
+	// Bound as the follower binds it, with the window holding no record of
+	// who published it.
+	c.bindDataset("kernel_top__result", res.Handle)
+	c.setBundleOrigin("kernel_top__result", "kernel_top__result", "kernel_top", "")
+
+	obo := agentCall
+	list, err := listDatasets(t.Context(), c, &obo, "", nil)
+	require.NoError(t, err)
+	require.Len(t, list.Datasets, 1)
+	d := list.Datasets[0]
+	assert.True(t, d.Granted, "a task reads what it published")
+	assert.True(t, d.Published)
+	assert.Equal(t, "kernel_top", d.Bundle)
+	assert.Equal(t, res.Rows, d.Rows)
+	assert.NotZero(t, d.Rows)
+	assert.NotZero(t, d.Bytes)
+	assert.Equal(t, pub.Revision, d.Revision)
+	assert.Equal(t, datasetHomeWindow, d.Home)
+
+	other := app.OnBehalfOf{Task: "other"}
+	list, err = listDatasets(t.Context(), c, &other, "", nil)
+	require.NoError(t, err)
+	assert.False(t, list.Datasets[0].Granted, "another task needs the grant")
+	assert.False(t, list.Datasets[0].Published)
+	assert.Equal(t, "keelson-bundle:kernel_top", list.Datasets[0].Destination)
 }

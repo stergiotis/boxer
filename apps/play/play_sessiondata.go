@@ -3,6 +3,7 @@ package play
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -294,6 +295,26 @@ func sessionStandIn(sql string) (out string) {
 		nanopass.ReplaceNode(rw, n, "`__sd_"+strings.ReplaceAll(name, "`", "")+"`")
 	}
 	return nanopass.GetText(rw)
+}
+
+// sessionDefineLimits is play's agent limits on a definition for obo: a
+// plain read, the ad-hoc datasets it reads and the endpoint, judged as a
+// statement placed in the data session, and the right to keep session
+// tables there.
+func (inst *Client) sessionDefineLimits(ctx context.Context, obo *app.OnBehalfOf, sql string) (err error) {
+	target, err := inst.sessionTarget()
+	if err != nil {
+		return
+	}
+	text := inst.sessionText(strings.TrimSpace(sql))
+	dec := inst.confine(text, dispatchDecision{targetURL: target, class: dispatchClassSession, reason: "a definition in the data session"})
+	if err = checkAgentLimits(text, dec, obo, nil); err != nil {
+		return
+	}
+	if d := sessiondata.DestinationSession(endpointHost(target)); !slices.Contains(obo.Destinations, d) {
+		return &AgentLimitError{Reason: "the grant does not list " + d, Destination: d}
+	}
+	return
 }
 
 // defineSession defines, or redefines, the data set name from sql in the

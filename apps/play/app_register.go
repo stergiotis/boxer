@@ -323,20 +323,22 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		// (ADR-0269, ADR-0270).
 		Operations: playOps.Catalog(),
 		// What an agent's model reads beside Summary: when to use play.
-		WhenToUse: "Use for questions about data in ClickHouse: query runs a statement and answers with its first rows, and publish_result hands a whole result to another app.",
+		WhenToUse: "Use for questions about data in ClickHouse: query runs a statement and answers with its first rows, its keep_as keeps a result to reuse as session('<name>') rather than repeat its SQL, and publish_result hands a whole result to another app.",
 		// A window opened for a task runs against the environment's
-		// endpoint, so the request that opens it asks for that endpoint too.
+		// endpoint, so the request that opens it asks for that endpoint
+		// too, and for the right to keep session data sets on it.
 		LaunchDestinations: defaultEndpointDestinations,
 	}
 	return
 }
 
-// defaultEndpointDestinations is the grant destination of the endpoint a
-// plain open runs against: CLICKHOUSE_ENDPOINT, then CLICKHOUSE_URL, then
-// localhost.
+// defaultEndpointDestinations are the grant destinations of the endpoint
+// a plain open runs against — CLICKHOUSE_ENDPOINT, then CLICKHOUSE_URL,
+// then localhost — and of keeping session data sets on it (ADR-0406).
 func defaultEndpointDestinations() (dests []string) {
 	if u := chclient.ConfigFromEnv().URL; u != "" {
-		dests = []string{DestinationClickHouse(endpointHost(u))}
+		host := endpointHost(u)
+		dests = []string{DestinationClickHouse(host), sessiondata.DestinationSession(host)}
 	}
 	return
 }
@@ -596,6 +598,7 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 	// The agent mark (ADR-0270 §SD3) is judged after the write-back and
 	// settled once the frame's own changes are in.
 	inst.inner.checkAgentMark()
+	inst.inner.latchSessions()
 	inst.inner.gestureCtx = ctx
 	err = inst.inner.Frame(ctx)
 	inst.inner.gestureCtx = nil

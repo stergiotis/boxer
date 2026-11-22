@@ -85,7 +85,7 @@ window's first frame.
 | Operation | Kind | What it does | Unavailable or refused when |
 | --- | --- | --- | --- |
 | `run` | command, run, async | runs the buffer, or one statement of it, under the agent limits; the call stays running until the result lands and answers with the result's state | unavailable while *a run is in flight*; refused when the buffer is empty, when parameters need a value first, when both `subquery` and `statement` are given, when the window's class ceiling would block the substituted body, and when the agent limits refuse (below) |
-| `query` | command, run, async | `set_sql`, `run` and `sample_rows` in one call: replaces the buffer, runs it under the agent limits and answers with the first rows | as `run`; a run the checks refuse leaves the buffer as it was |
+| `query` | command, run, async | `set_sql`, `run` and `sample_rows` in one call: replaces the buffer, runs it under the agent limits and answers with the first rows. With `keep_as`, keeps the result as a session data set instead (below) and answers with the data set and its first rows | as `run`; a run the checks refuse leaves the buffer as it was; with `keep_as`, unavailable while *a data set is being kept*, refused for a name that is not an identifier, a window not wired to the session data service or pinned to the introspection plane, and a grant without `clickhouse:<host>` and `clickhouse-session:<host>` |
 | `cancel_run` | command, run | stops the run this task started while it is in flight; a run asked for in this frame and not started is withdrawn | no run is in flight; the run is the person's or another task's (*only the person cancels it*) |
 | `observe_node` | command, document | makes every panel without a binding draw one node's result, or the sink's again; the node's statement is checked at the call as `run` checks the buffer | the node is not in the buffer's split; the class ceiling or the agent limits refuse the node's statement |
 | `check` | external read | runs one assertion over the tables the main result's statement read, under the agent limits, and returns its one row and two digests | the window holds no result; the assertion does not parse, carries a format clause, names a table the statement did not read, or returns no row or more than one |
@@ -210,7 +210,8 @@ cannot be bound, and the refusal names the CTEs to write with `set_sql`.
 | Operation | Kind | What it does | Unavailable or refused when |
 | --- | --- | --- | --- |
 | `bind_dataset` | command, document | binds an ad-hoc dataset alias in this window, so the buffer reads it with `keelson('<alias>')`; the window waits for a dataset not yet live and follows republishes | an alias that is not a bare identifier; a dataset handle in place of its alias; the window has no bus |
-| `list_datasets` | external read | the datasets bound here: the alias to read, the destination a run needs, the columns, and why a waiting alias waits | the window has no bus |
+| `list_datasets` | external read | the ad-hoc datasets bound here (home *window*) and the session data sets of the data session the window's runs read (home *session*): what reads each, the destination a run needs and whether the task may read it — a dataset the task published counts, without a grant entry — the columns, why a waiting alias waits, the rows, bytes and revision of each (an ad-hoc dataset's as the dataset service holds it, with its bundle), and a data set's state and what it reads; asked for by name, a data set's defining statement. It reads `session_datasets` | the window has no bus; a name neither home holds |
+| `drop_dataset` | command, document, async | drops a session data set: its definition and its table on the server; `cascade` drops those that read it too. It needs no read of `session_datasets` first | the window is not wired to the session data service; no data set by that name; others read it and `cascade` is not set |
 | `list_bundles` | external read | the live ad-hoc bundles with publisher, local names and each column summarised, and this window's last publish | the window has no bus; the catalog could not be read |
 | `open_bundle` | command, document | opens a bundle: its document replaces the buffer, its datasets are bound under the names the document reads, the window follows its republishes and runs | the host links no applet document parser; the host serves no introspection endpoint; an alias that is not a bare identifier |
 | `publish_result` | command, consequential | publishes the main result as a bundle: the rows as one dataset, `<bundle>__result`, and an applet document reading them; answers once the bundle is live, with its revision; the person confirms unless the grant lists `publish:<prefix>` | the result is loading, failed or a prefix cut by the row cap; a publish from this window is in flight; the bundle alias or local name is not a bare identifier; the window has no bus |
@@ -220,6 +221,40 @@ cannot be bound, and the refusal names the CTEs to write with `set_sql`.
 | `get_archetypes` | query | per cluster what its rows typically hold, the extremes and the rows that break the pattern | no projection to read; a cluster outside the range |
 | `cancel_projection` | command, view | stops the projection run this task started | no projection is running; the projection is the person's or another task's |
 | `publish_projection` | command, consequential | publishes the finished projection as `keelson('<name>')` and `keelson('<name>_rules')` and binds both here; the person confirms unless the grant lists `publish:<prefix>` | no projection to publish; the result it was computed over is gone or moved; the layout has not been drawn (*show_pane projection, then publish*); a publish is in flight; the name is not a bare identifier within 32 bytes |
+
+### Session data sets
+
+A session data set is a named result the task keeps on the ClickHouse
+server (ADR-0406): `query` with `keep_as: "msgs"` makes it from the
+statement, and later statements read it as `session('msgs')` instead of
+repeating the statement. It lives in the task's data session for the
+task's life, and every window and app working for the task reads the
+same data sets. The resource `session_datasets` names them as
+`name@revision:state`. `list_datasets` reads it; no write waits on it:
+`query` does not write it, `keep_as` changes it without a read, since
+keeping a name does not depend on the list, and `drop_dataset` names its
+data set. A `keep_as` or a drop answers once the window's listing shows
+it.
+
+- **What a definition answers.** The data set (`kept`): name, revision,
+  rows, bytes, columns, the server it lives on, whether it is confined,
+  the data sets made again first and those its redefinition left stale.
+  The window then runs `SELECT * FROM session('<name>') LIMIT n` as its
+  main run, so the answer's `result_id` is a result `check` and a
+  citation rest on. An assertion resting on it reads `session('<name>')`,
+  the table that statement read — not the tables of the definition — as
+  the answer's `cite` says.
+- **Joins.** `session('…')` joins server tables and `keelson('<alias>')`
+  ad-hoc datasets in one statement; an ad-hoc dataset named with a server
+  table goes to the server as external data, which the endpoint must have
+  shown it may see (sealed data, ADR-0145).
+- **Redefinition.** The same name again makes a new revision; data sets
+  reading it are *stale* and rebuilt from their definitions when next read.
+  When the server has lost the session, the next statement makes the data
+  sets it reads again, and a run that met a lost session is sent once more.
+- **`describe_result` and `sample_rows`** describe results, not data sets:
+  `list_datasets` with the name describes a data set, and a `query` over
+  `session('<name>')` reads its rows.
 
 ## The two machines
 

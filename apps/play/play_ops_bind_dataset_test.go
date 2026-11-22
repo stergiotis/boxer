@@ -119,11 +119,11 @@ func TestBindDatasetWaitsForAPublish(t *testing.T) {
 	assert.Equal(t, "|later", h.ResourceValue(opsResDatasets))
 
 	// list_datasets names the waiting alias and why, rather than nothing.
-	list, err := listDatasets(l.inner.client, nil, "", l.follower.Waiting())
+	list, err := listDatasets(t.Context(), l.inner.client, nil, "", l.follower.Waiting())
 	require.NoError(t, err)
 	require.Len(t, list.Datasets, 1)
-	assert.Equal(t, DatasetInfo{Alias: "later", Destination: "keelson:later", Granted: true, Waiting: adhocdata.WaitNoLive}, list.Datasets[0])
-	list, err = listDatasets(l.inner.client, nil, "later", l.follower.Waiting())
+	assert.Equal(t, DatasetInfo{Name: "later", Home: datasetHomeWindow, ReadWith: "keelson('later')", Destination: "keelson:later", Granted: true, Waiting: adhocdata.WaitNoLive}, list.Datasets[0])
+	list, err = listDatasets(t.Context(), l.inner.client, nil, "later", l.follower.Waiting())
 	require.NoError(t, err)
 	assert.Equal(t, adhocdata.WaitNoLive, list.Datasets[0].Waiting)
 
