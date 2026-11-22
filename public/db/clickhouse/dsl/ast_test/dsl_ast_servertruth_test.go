@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/ast"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -207,6 +208,73 @@ func TestServerTruthSemanticEquivalence(t *testing.T) {
 			require.NoError(t, err, "ToSQL output rejected by server:\n  rendered: %s", rendered)
 			assert.Equal(t, want, got,
 				"server evaluates original and ToSQL output differently:\n  original: %s\n  rendered: %s", sql, rendered)
+		})
+	}
+}
+
+// chFormat returns `clickhouse format -n` of sql: the server's parse of it,
+// printed.
+func chFormat(sql string) (formatted string, err error) {
+	cmd := exec.Command("clickhouse", "format", "-n")
+	cmd.Stdin = strings.NewReader(sql)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		err = &serverParseError{sql: sql, output: string(out)}
+		return
+	}
+	formatted = string(out)
+	return
+}
+
+// TestServerTruthAggregateFilter: the server's parser reads an aggregate
+// filter as the If call CanonicalizeSugar writes for it — both format to the
+// same text — and the original, its canonical form and the canonical AST's
+// rendering evaluate alike.
+func TestServerTruthAggregateFilter(t *testing.T) {
+	requireClickhouse(t)
+
+	queries := []string{
+		"SELECT quantile(0.05)(number) FILTER (WHERE number BETWEEN 3 AND 15) AS p05 FROM numbers(20)",
+		"SELECT sum(number) FILTER (WHERE number > 5), avg(number) filter (where number % 2 = 0) FROM numbers(20)",
+		"SELECT count() FILTER (WHERE number > 4), count(*) FILTER (WHERE number > 4), count(number, *) FILTER (WHERE number > 4) FROM numbers(20)",
+		"SELECT count(DISTINCT number % 3) FILTER (WHERE number % 4), uniq(DISTINCT number % 3, number % 5) FILTER (WHERE number > 2) FROM numbers(20)",
+		"SELECT quantile(0.5)(DISTINCT number % 7) FILTER (WHERE number > 2) FROM numbers(20)",
+		"SELECT sumArray([number, 1]) FILTER (WHERE number > 5), sumOrNull(number) FILTER (WHERE number > 100), finalizeAggregation(sumState(number) FILTER (WHERE number > 5)) FROM numbers(20)",
+		"SELECT argMax(number, number % 7) FILTER (WHERE number < 15), topK(2)(number % 4) FILTER (WHERE number > 1) FROM numbers(20)",
+		"SELECT number, sum(number) FILTER (WHERE number > 5) OVER (ORDER BY number) AS rs FROM numbers(20) ORDER BY number",
+		"SELECT number, count(*) FILTER (WHERE number % 2 = 1) OVER w AS c FROM numbers(20) WINDOW w AS (ORDER BY number) ORDER BY number",
+		"SELECT sum(sum(number) FILTER (WHERE number > 5)) OVER () FROM numbers(20)",
+		"SELECT sum(number) FILTER (WHERE number IN (SELECT number * 2 FROM numbers(10))) FROM numbers(20)",
+		"SELECT number % 3 AS k, sum(number) FILTER (WHERE number > 5) AS s FROM numbers(20) GROUP BY k HAVING sum(number) FILTER (WHERE number > 10) > 0 ORDER BY k",
+		"SELECT `sum`(number) FILTER (WHERE number > 5 AS c), any(number) FILTER (WHERE number > 7) FROM numbers(20)",
+	}
+
+	for _, sql := range queries {
+		t.Run(sql, func(t *testing.T) {
+			sugar, err := nanopass.FixedPoint(passes.CanonicalizeSugar, 16).Run(sql)
+			require.NoError(t, err)
+			wantFormat, err := chFormat(sql)
+			require.NoError(t, err)
+			gotFormat, err := chFormat(sugar)
+			require.NoError(t, err)
+			assert.Equal(t, wantFormat, gotFormat, "the server parses the filter and its If call differently:\n  sugar: %s", sugar)
+
+			want, err := chLocal(t, sql)
+			require.NoError(t, err)
+			canonical, err := fullPipeline(sql)
+			require.NoError(t, err)
+			got, err := chLocal(t, canonical)
+			require.NoError(t, err)
+			assert.Equal(t, want, got, "canonical: %s", canonical)
+
+			pr, err := nanopass.ParseCanonical(canonical)
+			require.NoError(t, err)
+			query, err := ast.ConvertCSTToAST(pr)
+			require.NoError(t, err)
+			rendered := query.ToSQL()
+			got, err = chLocal(t, rendered)
+			require.NoError(t, err)
+			assert.Equal(t, want, got, "rendered: %s", rendered)
 		})
 	}
 }

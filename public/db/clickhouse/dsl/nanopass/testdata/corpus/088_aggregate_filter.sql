@@ -1,0 +1,1 @@
+SELECT a, quantile(0.05)(x) FILTER (WHERE x BETWEEN 1 AND 10) AS p05, count() FILTER (WHERE b IN (SELECT b FROM u)) AS n, sum(x) FILTER (WHERE c > 0) OVER (PARTITION BY a) AS s FROM t GROUP BY a, x, c

@@ -1,0 +1,2 @@
+go test fuzz v1
+string("SELECT quantile(0.5)(x) FILTER (WHERE x > 1) OVER (), sum(x) filter FROM t")
