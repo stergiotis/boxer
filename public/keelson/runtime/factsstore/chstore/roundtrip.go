@@ -48,6 +48,11 @@ type RoundTripMismatch struct {
 type RoundTripReport struct {
 	// Kinds are the kinds a row was written for.
 	Kinds []string
+	// Stores are the stores over the facts table that contributed rows of
+	// their own components (recordstore.RegisterSampleRows): the ones the
+	// binary links. StoreRows is how many rows they wrote.
+	Stores    []string
+	StoreRows uint64
 	// Written is how many rows were written; Read how many the read
 	// relation returned.
 	Written uint64
@@ -85,9 +90,12 @@ func (inst RoundTripReport) Ok() bool {
 // every optional field set. Every other kind gets a synthetic row: the
 // kind's membership on the symbol section and one attribute in each section
 // of the facts table, with a low-cardinality, a mixed and a high-cardinality
-// membership where the section has them. A transform that routes by a
-// membership the synthetic rows do not carry is exercised only by the first
-// set.
+// membership where the section has them. Beside those, every generated
+// store over the facts table that the binary links writes one entity per
+// component of its own, under its own memberships
+// (recordstore.RegisterSampleRows), so a transform that treats rows
+// differently by a membership a store writes meets that membership here.
+// Those rows hold sample values, not ones their writers would produce.
 func RoundTrip(ctx context.Context, exec recordstore.ExecutorI, opts RoundTripOptions) (report RoundTripReport, err error) {
 	t := opts.Transform
 	if t == nil {
@@ -133,6 +141,21 @@ func RoundTrip(ctx context.Context, exec recordstore.ExecutorI, opts RoundTripOp
 		return
 	}
 	report.Kinds = kinds
+	// The rows the generated stores over the facts table write, under the
+	// memberships their own readers select by.
+	for _, w := range recordstore.SampleRowWriters(factsschema.QualifiedTableName) {
+		sink := &sampleSink{}
+		werr := w.Write(ctx, sink)
+		records = append(records, sink.records...)
+		if werr != nil {
+			err = eb.Build().Str("store", w.Name).Errorf("chstore: round trip: the store's sample rows: %w", werr)
+			return
+		}
+		report.Stores = append(report.Stores, w.Name)
+		for _, r := range sink.records {
+			report.StoreRows += uint64(r.NumRows())
+		}
+	}
 	for _, r := range records {
 		report.Written += uint64(r.NumRows())
 	}
@@ -261,6 +284,33 @@ func (inst *captureSink) InsertArrow(_ context.Context, _ string, records []arro
 	}
 	inst.records = append(inst.records, records...)
 	return nil
+}
+
+// sampleSink is the executor a store writes its sample rows into: it keeps
+// the batches, takes any statement as done and answers any query with no
+// rows, as a table nothing was written to would.
+type sampleSink struct {
+	records []arrow.RecordBatch
+}
+
+var _ recordstore.InsertSettingsI = (*sampleSink)(nil)
+
+func (inst *sampleSink) Exec(context.Context, string) error { return nil }
+
+func (inst *sampleSink) QueryArrow(context.Context, string) iter.Seq2[arrow.RecordBatch, error] {
+	return func(func(arrow.RecordBatch, error) bool) {}
+}
+
+func (inst *sampleSink) InsertArrow(_ context.Context, _ string, records []arrow.RecordBatch) error {
+	for _, r := range records {
+		r.Retain()
+	}
+	inst.records = append(inst.records, records...)
+	return nil
+}
+
+func (inst *sampleSink) InsertArrowWith(ctx context.Context, table string, records []arrow.RecordBatch, _ recordstore.InsertSettings) (bool, error) {
+	return true, inst.InsertArrow(ctx, table, records)
 }
 
 // roundTripTs is the time every round-trip row carries.

@@ -88,7 +88,7 @@ func TestRoundTrip_TransformAndViewAgree_Local(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, report.Ok(), "%+v", report)
 	assert.Equal(t, "carrier.rows", report.Target)
-	assert.Equal(t, uint64(len(report.Kinds)), report.Written)
+	assert.Equal(t, uint64(len(report.Kinds))+report.StoreRows, report.Written)
 	assert.Equal(t, report.Written, report.Read)
 	assert.Empty(t, report.Mismatches)
 	assert.Equal(t, recordstore.SchemaVerdictOk, report.Columns.Verdict, report.Columns.Summary())

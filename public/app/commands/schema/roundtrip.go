@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/urfave/cli/v3"
 
@@ -74,6 +75,9 @@ func runRoundTrip(ctx context.Context, cmd *cli.Command) (err error) {
 // PrintRoundTrip writes a round trip's report for an operator.
 func PrintRoundTrip(w io.Writer, r chstore.RoundTripReport) {
 	_, _ = fmt.Fprintf(w, "kinds: %d; rows written: %d, read back: %d\n", len(r.Kinds), r.Written, r.Read)
+	if len(r.Stores) > 0 {
+		_, _ = fmt.Fprintf(w, "of those, %d rows from the generated stores this binary links: %s\n", r.StoreRows, strings.Join(r.Stores, ", "))
+	}
 	_, _ = fmt.Fprintf(w, "written to: %s; read through: %s\n", r.Target, r.ReadTable)
 	_, _ = fmt.Fprintf(w, "columns: %s\n", r.Columns.Summary())
 	for _, m := range r.Columns.Missing {
