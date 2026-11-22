@@ -291,43 +291,41 @@ reconciled.
 
 ## What the `id` column holds
 
-The facts table has one `id` column and no one authority for it. Each
-writer puts its own key there, and the conventions differ. Read this before
-you choose a key for a new store, and before you treat an `id` as the name
-of a row. Checked against the tree on 2026-11-22.
+Every row of the facts table is meant to carry an id minted from the
+table's stream, with its natural key naming what the row is about
+([ADR-0405](../adr/0405-every-row-of-the-facts-table-carries-a-minted-id-and-an-entity-is-named-by-its-natural-key.md),
+proposed). That is built for most writers and not yet for all, and rows
+written before it keep what they had. Read this before you choose a key
+for a new store, and before you treat an `id` as the name of a row.
+Checked against the tree on 2026-11-22.
 
-| Writer | What it puts in `id` | One row per id? |
+| Writer | What it puts in `id` now | Before ADR-0405 |
 | --- | --- | --- |
-| the hand-written facts store (`chstore`) | an id leased from the tagged stream `factsRow`, or from `factsRowLocal` while no block can be leased (ADR-0397 §SD2) | yes for leased ids, across every process on the server; a process-local id only within its process |
-| the trail | a 64-bit hash of the row's natural-key string | usually; a key that recurs restates its id |
-| system metrics | a hash of host and domain: one id per *series* | no — every tick of a series carries it, ordered by `ts` |
-| the watchbill presence | a hash of the run id under a prefix of its own | no — a run's rows share it |
-| the lading mount policy | the mount's tagged id, minted at random under a tag the app declares | no — one id per mount, a row per version |
-| markdown documents, dead letters, the capability map | the leading bytes of a digest of the content or the message's position | no — the same content or message restates its id, by design |
-| query runs | a digest with the top bit set (`queryrunfacts.IdBand`) | per event |
+| the hand-written facts store (`chstore`) | a minted id: leased from `factsRow`, or from `factsRowLocal` while no block can be leased (ADR-0397 §SD2) | the same |
+| the trail, system metrics, the watchbill presence, markdown documents, dead letters | a minted id, from the same generator, handed to the store as its `Keys` | a hash of the natural key, or of a series' or a run's name, shared by its rows |
+| the capability map | the leading bytes of a digest of the natural key | the same |
+| query runs | a digest with the top bit set (`queryrunfacts.IdBand`) | the same |
+| the lading mount policy | the mount's tagged id, minted elsewhere under a tag the app declares; one per mount, a row per version | the same |
 
 What follows from it:
 
-- **`id` is a store's key, not the table's row id.** Within one writer it
-  means what that writer says. Across writers nothing makes two ids
-  differ but the width of a hash: 64 bits, of which a stream's range is
-  one part in sixteen million.
-- **A generated store's point reads select by `id` alone.** `Latest`,
-  `Replay` and the cache's batch read name no kind, so a store relies on
-  no other writer holding its key. That has held by the odds, not by
-  construction.
-- **Only the leased ids are unique by construction**, and only they tell
-  where they came from: a tag in the high bits. A hash parses as *some*
-  tag too, so the tag of an id means something only for a row whose
-  writer minted it under one. Tell rows apart by kind first.
-- **A store that wants server-unique keys can lease them** as `chstore`
-  does: the generator's `KeyStream` option mints the key from a claimed
-  stream (ADR-0319 §SD2). No store over the facts table uses it yet.
-- **`naturalKey` is the writer's too**: the string or digest the id was
-  derived from, for most; a digest of the row's fields for `chstore`.
-
-Whether these conventions should converge — every store over the facts
-table on a stream of its own — is not decided.
+- **A minted id names one row.** What ties rows together — a metric
+  series, a run, a document across ingests — is the natural key, and a
+  read of an entity goes by it and names the kind.
+- **A store over the facts table mints its key.** Regenerated, it has
+  `Keys` in its configuration and `MintKey`; whoever builds it hands it
+  the facts table's generator (`chstore.RowIdsOf`, or
+  `chstore.NewRowIdGenerator` for a process without a facts store). A
+  store built without one refuses to mint.
+- **A generated store's point reads select by `id` alone.** `Latest` and
+  `Replay` by a minted id reach one row; an entity's history is a scan by
+  natural key (`ScanOpts.ExtraPredicate`), as the metrics replay does.
+- **Rows from before are still there.** Their ids are hashes that
+  several rows may share and that can, by the odds of 64 bits, equal
+  another id. Their natural keys are what new rows' are, so a read by
+  natural key spans both.
+- **The tag of an id means something only for a minted one.** A hash
+  parses as *some* tag too. Tell rows apart by kind first.
 
 ## Where the decisions live
 

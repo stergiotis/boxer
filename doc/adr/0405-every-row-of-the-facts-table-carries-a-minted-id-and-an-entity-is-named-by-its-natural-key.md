@@ -6,7 +6,7 @@ date: 2026-11-22
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
 ---
 
-> **Status: proposed — pre-human-review.** The direction — every writer mints, entities are named by the natural key, stored rows stay — was chosen by the code owner on 2026-11-22. The choices under it, listed at the end, are not reviewed.
+> **Status: proposed — pre-human-review.** The direction — every writer mints, entities are named by the natural key, stored rows stay — was chosen by the code owner on 2026-11-22. The choices under it, listed at the end, are not reviewed. Built on that day for the facts store, the trail, system metrics, the watchbill presence, markdown documents and dead letters; the capability map and query runs still derive their ids (see *Deferred*).
 
 # ADR-0405: Every row of the facts table carries a minted id, and an entity is named by its natural key
 
@@ -83,6 +83,19 @@ above it, which wastes part of the id space and repeats nothing.
 
 ### Deferred
 
+- **The capability map.** Its rows' ids are the leading bytes of the
+  natural key's digest, a relation holds its endpoints' ids computed the
+  same way, its reads take the newest row per id, and an introspection
+  table shows the id a competence's row would have. Minting means: ids
+  drawn while a corpus is encoded, a relation pointing at the competence
+  rows of its own ingest (SD4), the newest row per natural key, and that
+  table showing the natural key instead.
+- **Query runs.** A run event's id is a digest that the capture
+  deduplicates by. Minting means the capture deduplicates by natural key
+  and time, which its extract already filters by, in the view's anti-join
+  and in the service's own under an insert transform
+  ([ADR-0402](./0402-facts-stored-in-a-deployments-own-table-a-write-transform-at-the-insert-seam-and-one-read-table-setting.md),
+  update of 2026-11-22).
 - The lading mount policy. Its id is the mount's own tagged id, minted
   elsewhere and shared by a mount's versions; it is an entity id in the
   `id` column, and not a hash. Moving it means deciding where a mount's id
@@ -104,7 +117,7 @@ above it, which wastes part of the id space and repeats nothing.
 | audit recorder | takes an id generator; without one it derives ids as before | the trail; a store elsewhere that uses the recorder is unaffected until it passes one |
 | system metrics | rows carry minted ids; the replay reads a series by natural key | `sysmreplay` |
 | presence, dead letters, markdown documents | minted ids; references within an ingest are to the minted rows | their writers |
-| capability map, query runs | minted ids; the newest row of an entity and the capture's deduplication go by natural key | their readers; the capture's view |
+| capability map, query runs | not yet: minted ids; the newest row of an entity and the capture's deduplication go by natural key | their readers; the capture's view |
 | lease seed | counts every kind | — |
 
 ## Alternatives
@@ -168,16 +181,19 @@ above it, which wastes part of the id space and repeats nothing.
 
 ## Verification plan — Tier 1
 
-- **Lane.** Default `go test`: each writer's rows carry ids of the stream
-  and distinct ones; a store without a generator refuses to mint; the
-  replay finds a series by natural key over rows of both eras. The
-  `integration` lane, on a server: writers of several stores and the facts
-  store minting at once with no id repeated; the lease seed over rows of
+- **Lane.** Default `go test`: the trail's, the dead letters' and the
+  documents' rows carry ids of the stream and distinct ones, and the
+  trail's seals hold over them; a store without a generator refuses to
+  mint. The `integration` lane, on a server: the presence row and the
+  metric samples under minted ids; the replay finding a series by natural
+  key over rows written before and after; the lease seed over rows of
   every kind.
 - **What would fail.** A writer that derives an id; a read that finds an
   entity by a recomputed id; a reference that holds something other than
   a row id.
-- **Gap.** No measurement of reads by natural key against reads by id.
+- **Gap.** No measurement of reads by natural key against reads by id; no
+  test of several stores and the facts store minting at once against one
+  server.
 
 ## Choices for review
 
