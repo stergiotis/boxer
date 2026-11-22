@@ -163,7 +163,7 @@ type Store struct {
 	allocator memory.Allocator
 	// ids mints the row ids (ADR-0397 §SD2): leased from the id stream of
 	// boxer.facts rows, or process-local while no block can be leased.
-	ids rowIds
+	ids RowIdGenerator
 }
 
 var _ factsstore.FactsStoreI = (*Store)(nil)

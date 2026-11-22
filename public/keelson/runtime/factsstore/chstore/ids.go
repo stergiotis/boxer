@@ -3,7 +3,6 @@ package chstore
 import (
 	"context"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -51,19 +50,26 @@ type RowIds struct {
 	BlockSize uint64
 }
 
-// rowIds are the two streams a store mints row ids from (ADR-0397 §SD2).
+// RowIdGenerator is the facts table's id generator (ADR-0397 §SD2, ADR-0405
+// §SD3): the one source every writer of the table mints its row ids from —
+// the hand-written store, and every generated store over the table, which is
+// handed it as its configuration's Keys.
 //
-// leased draws blocks of the configured stream from the configured
-// allocator — by default vocab.IdStreamFactsRow through the lease table
-// beside the facts table (ADR-0319 §SD3) — so an id is unique across every
-// process writing to the server and across runs. Building it reserves
-// nothing: the first write reserves the first block.
+// It mints from two streams. leased draws blocks of the configured stream
+// from the configured allocator — by default vocab.IdStreamFactsRow through
+// the lease table beside the facts table (ADR-0319 §SD3) — so an id is
+// unique across every process writing to the server and across runs.
+// Building it reserves nothing: the first id reserves the first block.
 //
-// local counts under vocab.IdStreamFactsRowLocal in process. A write takes
-// it while no block can be had — the lease table is missing, the server or
-// the authority refused — so the row still lands; its id is unique only
-// within the process, and its tag says so.
-type rowIds struct {
+// local counts under vocab.IdStreamFactsRowLocal in process. An id is taken
+// from it while no block can be had — the lease table is missing, the
+// server or the authority refused — so the row still lands; its id is
+// unique only within the process, and its tag says so. A failed lease is
+// logged and not tried again for a minute.
+//
+// It is safe for concurrent use. Take a store's with [Store.RowIds], or
+// build one for a process that has no such store with [NewRowIdGenerator].
+type RowIdGenerator struct {
 	leased *leased.Sequence
 	local  *leased.Sequence
 	// source names where the leased blocks come from, for the log.
@@ -71,6 +77,80 @@ type rowIds struct {
 	// retryAt is the time, in Unix nanoseconds, before which no lease is
 	// attempted after one failed.
 	retryAt atomic.Int64
+}
+
+var _ identifier.IdGeneratorI = (*RowIdGenerator)(nil)
+
+// NewRowIdGenerator is the facts table's id generator for cfg, over exec:
+// for a process that writes facts through a generated store and holds no
+// [Store]. cfg names the facts database, whose lease table the blocks come
+// from, and RowIds as [New] takes it.
+func NewRowIdGenerator(exec recordstore.ExecutorI, cfg Config) (inst *RowIdGenerator, err error) {
+	if exec == nil {
+		return nil, eh.Errorf("chstore: row id generator: nil executor")
+	}
+	if cfg.Database == "" {
+		return nil, eh.Errorf("chstore: row id generator: cfg requires Database")
+	}
+	inst = &RowIdGenerator{}
+	if err = inst.init(exec, rowalloc.Layout{Database: cfg.Database}, cfg.RowIds); err != nil {
+		return nil, eh.Errorf("chstore: %w", err)
+	}
+	return
+}
+
+// RowIds is the generator this store mints its row ids from, for the
+// generated stores over the same table to mint from too.
+func (inst *Store) RowIds() *RowIdGenerator { return &inst.ids }
+
+// GetId mints the next row id; naturalKey is ignored, as by every
+// sequential generator, and fresh is always true.
+func (inst *RowIdGenerator) GetId(ctx context.Context, _ []byte) (id identifier.TaggedId, fresh bool, err error) {
+	v, err := inst.mint(ctx)
+	return identifier.TaggedId(v), err == nil, err
+}
+
+// GetUntaggedId is GetId without its tag. The tag is what tells a leased id
+// from a process-local one, so prefer GetId.
+func (inst *RowIdGenerator) GetUntaggedId(ctx context.Context, naturalKey []byte) (untagged identifier.UntaggedId, fresh bool, err error) {
+	id, fresh, err := inst.GetId(ctx, naturalKey)
+	return id.RemoveTag(), fresh, err
+}
+
+// Release does nothing: a block in hand is used up or burnt with the
+// process, as ADR-0319 §SD4 accepts.
+func (inst *RowIdGenerator) Release() (err error) { return nil }
+
+// GetTag is the tag of the leased stream. An id minted while no block could
+// be leased carries the process-local stream's tag instead.
+func (inst *RowIdGenerator) GetTag() identifier.IdTag { return inst.leased.GetTag() }
+
+// mint draws the next row id: leased when a block is in hand or can be
+// leased, process-local otherwise. A failed lease is logged and not
+// retried for leaseRetryInterval; the id it was wanted for is a local one.
+// The lease's round trip runs under ctx, bounded by WriteTimeout when ctx
+// carries no deadline of its own.
+func (inst *RowIdGenerator) mint(ctx context.Context) (id uint64, err error) {
+	now := time.Now().UnixNano()
+	if now >= inst.retryAt.Load() {
+		lctx, cancel := boundWrite(ctx)
+		t, _, lerr := inst.leased.GetId(lctx, nil)
+		cancel()
+		if lerr == nil {
+			id = t.Value()
+			return
+		}
+		inst.retryAt.Store(now + int64(leaseRetryInterval))
+		log.Warn().Err(lerr).Str("source", inst.source).Dur("retryIn", leaseRetryInterval).
+			Msg("chstore: no block of row ids could be leased; rows get process-local ids until a lease succeeds")
+	}
+	t, _, err := inst.local.GetId(ctx, nil)
+	if err != nil {
+		err = eh.Errorf("chstore: mint a process-local row id: %w", err)
+		return
+	}
+	id = t.Value()
+	return
 }
 
 // stream is the claimed tag the leased ids carry.
@@ -82,7 +162,7 @@ func (inst RowIds) stream() (stream tagmint.ClaimedTagValue) {
 	return
 }
 
-func (inst *rowIds) init(exec recordstore.ExecutorI, layout rowalloc.Layout, cfg RowIds) (err error) {
+func (inst *RowIdGenerator) init(exec recordstore.ExecutorI, layout rowalloc.Layout, cfg RowIds) (err error) {
 	stream := cfg.stream()
 	if stream.Value() == vocab.IdStreamFactsRowLocal.Value() {
 		return eb.Build().Str("stream", stream.Name()).Errorf("row id stream: the process-local stream cannot be the leased one; leased ids need a tag of their own")
@@ -116,46 +196,22 @@ func (inst *rowIds) init(exec recordstore.ExecutorI, layout rowalloc.Layout, cfg
 // idColumn is the physical name of the facts envelope's row id.
 const idColumn = "id:id:u64:47::0:"
 
-// symbolLrColumn is the physical name of the symbol section's
-// low-cardinality membership column, where a row's kind sits.
-const symbolLrColumn = "tv:symbol:lr:lr:u64:1247:::0::data"
-
-// ownKinds are the kinds this store writes, and no other writer does. They
-// are what tells its rows apart in a column other writers share.
-func ownKinds() []uint64 {
-	return []uint64{
-		vocab.MembKindGrant.GetId().Value(),
-		vocab.MembKindLog.GetId().Value(),
-		vocab.MembKindRuntimeRun.GetId().Value(),
-		vocab.MembKindRuntimeHeartbeat.GetId().Value(),
-		vocab.MembKindAppLifecycle.GetId().Value(),
-		vocab.MembKindLaunch.GetId().Value(),
-	}
-}
-
 // seedLease gives the stream tagValue a lease row in layout when it has
-// none, continuing after the largest id of the stream that this store's
-// rows in relation carry (ADR-0397 §SD2, rowalloc.Seed). The ids of one
-// stream are one range of the id column — the tag sits above the body — so
-// the largest is one aggregate over that range; it reads the id column and
-// the kinds, which is why it runs at setup, once per lost lease row, and
-// never on a write.
+// none, continuing after the largest id of the stream that relation holds
+// (ADR-0397 §SD2, rowalloc.Seed). The ids of one stream are one range of
+// the id column — the tag sits above the body — so the largest is one
+// aggregate over that range; it reads the whole id column, which is why it
+// runs at setup, once per lost lease row, and never on a write.
 //
-// Only rows of the kinds this store writes count. The id column is shared:
-// the generated stores over the facts table write ids of their own there,
-// most of them a hash of a key, and a hash falls into a stream's range now
-// and then. Taking such a value for the stream's largest would start the
-// stream at a body drawn at random from its whole space.
+// Every row counts, whatever its kind: every writer of the table mints from
+// this stream (ADR-0405 §SD1, §SD6). A row from before that decision whose
+// id was a hash can fall into the range and be counted; the stream then
+// continues above it, which wastes ids and repeats none.
 func seedLease(ctx context.Context, exec recordstore.ExecutorI, layout rowalloc.Layout, relation string, tagValue identifier.TagValue) (seededAt uint64, err error) {
 	tag := tagValue.GetTag()
 	lo, hi := tag.ComposeId(1), tag.ComposeId(tag.GetMaxPossibleIdIncl())
-	kinds := make([]string, 0, 6)
-	for _, k := range ownKinds() {
-		kinds = append(kinds, strconv.FormatUint(k, 10))
-	}
 	sql := "SELECT max(`" + idColumn + "`) AS m FROM " + relation +
-		" WHERE `" + idColumn + "` >= " + strconv.FormatUint(lo.Value(), 10) + " AND `" + idColumn + "` <= " + strconv.FormatUint(hi.Value(), 10) +
-		" AND hasAny(`" + symbolLrColumn + "`, [" + strings.Join(kinds, ", ") + "])"
+		" WHERE `" + idColumn + "` >= " + strconv.FormatUint(lo.Value(), 10) + " AND `" + idColumn + "` <= " + strconv.FormatUint(hi.Value(), 10)
 	return rowalloc.Seed(ctx, exec, layout, tagValue, func(ctx context.Context) (maxBody uint64, err error) {
 		for rec, qerr := range exec.QueryArrow(ctx, sql) {
 			if qerr != nil {
@@ -180,30 +236,7 @@ func (inst *Store) leaseLayout() rowalloc.Layout {
 	return rowalloc.Layout{Database: inst.cfg.Database}
 }
 
-// mintId draws the next row id: leased when a block is in hand or can be
-// leased, process-local otherwise. A failed lease is logged and not
-// retried for leaseRetryInterval; the write it happened in goes on with a
-// local id. The lease's round trip runs under the write's ctx, bounded by
-// WriteTimeout when ctx carries no deadline of its own.
+// mintId draws the next row id from the store's generator.
 func (inst *Store) mintId(ctx context.Context) (id uint64, err error) {
-	now := time.Now().UnixNano()
-	if now >= inst.ids.retryAt.Load() {
-		lctx, cancel := boundWrite(ctx)
-		t, _, lerr := inst.ids.leased.GetId(lctx, nil)
-		cancel()
-		if lerr == nil {
-			id = t.Value()
-			return
-		}
-		inst.ids.retryAt.Store(now + int64(leaseRetryInterval))
-		log.Warn().Err(lerr).Str("source", inst.ids.source).Dur("retryIn", leaseRetryInterval).
-			Msg("chstore: no block of row ids could be leased; rows get process-local ids until a lease succeeds")
-	}
-	t, _, err := inst.ids.local.GetId(ctx, nil)
-	if err != nil {
-		err = eh.Errorf("chstore: mint a process-local row id: %w", err)
-		return
-	}
-	id = t.Value()
-	return
+	return inst.ids.mint(ctx)
 }

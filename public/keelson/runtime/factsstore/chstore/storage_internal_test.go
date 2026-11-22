@@ -132,7 +132,7 @@ var storeMethodsThatDoNotRead = map[string]bool{
 	"Ping": true, "SetupTable": true, "EnsureReadSurface": true,
 	"WriteGrant": true, "WriteLog": true, "WriteLogs": true, "WriteRuntimeStart": true,
 	"WriteRuntimeHeartbeat": true, "WriteAppLifecycle": true, "WriteLaunch": true,
-	"Truncate": true, "DropTable": true,
+	"Truncate": true, "DropTable": true, "RowIds": true,
 }
 
 // With a read table set, every reader of the store composes against it and

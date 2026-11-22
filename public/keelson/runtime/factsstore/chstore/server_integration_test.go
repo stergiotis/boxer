@@ -386,23 +386,22 @@ func TestServer_ALostLeaseTableContinuesAfterTheLargestId(t *testing.T) {
 	// Counter ids of an older build, and ids of the process-local stream,
 	// are other ranges of the column and do not move the seed.
 	require.NoError(t, s.exec.Exec(ctx, "INSERT INTO "+cfg.Database+".facts (`"+idColumn+"`, `"+factsschema.TsColumn+"`) VALUES (18446744073709551615, now64(9)), (7, now64(9))"))
-	// Neither does another writer's row whose id — a hash of its key —
-	// happens to fall into the stream's range, far above every leased id:
-	// it carries none of the kinds this store writes.
+	// A row of another kind with an id of the stream counts too: every
+	// writer of the table mints from it (ADR-0405 §SD6).
 	tagOfStream := vocab.IdStreamFactsRow.Value().GetTag()
-	stray := tagOfStream.ComposeId(tagOfStream.GetMaxPossibleIdIncl() - 5).Value()
-	require.NoError(t, s.exec.Exec(ctx, "INSERT INTO "+cfg.Database+".facts (`"+idColumn+"`, `"+factsschema.TsColumn+"`, `"+symbolLrColumn+"`) VALUES ("+strconv.FormatUint(stray, 10)+", now64(9), [424242])"))
+	other := tagOfStream.ComposeId(identifier.TaggedId(before[2]).RemoveTag() + 500).Value()
+	require.NoError(t, s.exec.Exec(ctx, "INSERT INTO "+cfg.Database+".facts (`"+idColumn+"`, `"+factsschema.TsColumn+"`, `tv:symbol:lr:lr:u64:1247:::0::data`) VALUES ("+strconv.FormatUint(other, 10)+", now64(9), [424242])"))
 
 	require.NoError(t, s.exec.Exec(ctx, "DROP TABLE "+lease+" SYNC"))
 	require.NoError(t, s.SetupTable(ctx, ""))
-	largest := identifier.TaggedId(before[2]).RemoveTag().Value()
+	largest := identifier.TaggedId(other).RemoveTag().Value()
 	assert.Equal(t, strconv.FormatUint(largest+1, 10), scalar(t, s, "SELECT next FROM "+lease+" WHERE tag = "+tag), "the stream continues after the largest id the facts hold")
 
 	fresh := serverStore(t, cfg)
 	after, err := fresh.WriteLog(ctx, factsstore.LogRow{AppId: "a", Message: "after"})
 	require.NoError(t, err)
 	assert.Equal(t, vocab.IdStreamFactsRow.Value(), tagOf(after))
-	assert.Greater(t, after, before[2], "no id is handed out twice")
+	assert.Greater(t, after, other, "no id is handed out twice")
 
 	// A second setup finds the row and reads nothing.
 	require.NoError(t, s.SetupTable(ctx, ""))
