@@ -78,17 +78,23 @@ func (inst *errorListener) SyntaxError(recognizer antlr.Recognizer, offendingSym
 // returned error; the total count is always included.
 const maxReportedErrors = 5
 
-func (inst *errorListener) buildError(kind string) error {
+// buildError renders the collected diagnostics, followed by hints, which
+// say how to write a shape the grammar refused.
+func (inst *errorListener) buildError(kind string, hints ...string) error {
 	n := len(inst.errors)
 	shown := inst.errors
 	if n > maxReportedErrors {
 		shown = shown[:maxReportedErrors]
 	}
+	diagnostics := shown
+	if len(hints) > 0 {
+		diagnostics = append(append(make([]string, 0, len(shown)+len(hints)), shown...), hints...)
+	}
 	return &syntaxError{
-		diagnostics: shown,
+		diagnostics: diagnostics,
 		err: eb.Build().
 			Int("errorCount", n).
-			Str("kind", kind).Strs("errors", shown).Errorf("the parser reported errors"),
+			Str("kind", kind).Strs("errors", shown).Strs("hints", hints).Errorf("the parser reported errors"),
 	}
 }
 
@@ -105,7 +111,9 @@ func (inst *syntaxError) Unwrap() error { return inst.err }
 
 // SyntaxErrorDiagnostics returns the parser's line:column diagnostics when
 // err is, or wraps, a rejection by [Parse] or [ParseCanonical]; nil otherwise.
-// At most the first few diagnostics are kept.
+// At most the first few diagnostics are kept. A rejection by [Parse] of a
+// shape known to be written by mistake ends with a "hint: " entry saying how
+// to write it.
 func SyntaxErrorDiagnostics(err error) (diagnostics []string) {
 	var se *syntaxError
 	if errors.As(err, &se) {
@@ -232,7 +240,7 @@ func Parse(sql string) (pr *ParseResult, err error) {
 	})
 	recordTwoStage(&g1Hits, &g1Fallbacks, fellBack)
 	if !ok {
-		err = a.listener.buildError("syntax error")
+		err = a.listener.buildError("syntax error", syntaxHints(sql)...)
 		return
 	}
 	if err = refuseNumberGluedToWord(a.pr, grammar1NumberTokens, "syntax error"); err != nil {

@@ -114,3 +114,14 @@ func TestTheDocsLookupIsNotBoundByTheMark(t *testing.T) {
 	_, _, _, err = pane.execute(context.Background(), compiledNode{SQL: "SELECT 1"}, memory.NewGoAllocator())
 	require.ErrorAs(t, err, &limit, "a pane lane is still bound by the mark")
 }
+
+// A refusal for the grammar carries the parser's hint: a scalar written the
+// way a subquery is named is told how a scalar is written.
+func TestAGrammarRefusalSaysHowToWriteAScalarWithItem(t *testing.T) {
+	remote := dispatchDecision{targetURL: "http://db.example:8123/", class: dispatchClassManual}
+	grant := &app.OnBehalfOf{Task: "t", Destinations: []string{DestinationClickHouse("db.example:8123")}}
+	err := checkAgentLimits("WITH bounds AS ([177, 1502]) SELECT count() FROM t WHERE L BETWEEN bounds[1] AND bounds[2]", remote, grant, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "boxer's grammar does not parse the statement")
+	assert.Contains(t, err.Error(), "hint: WITH name AS (…) names a subquery; a scalar or an array is written WITH <expression> AS name")
+}
