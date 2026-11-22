@@ -204,7 +204,27 @@ func (inst *Sink) freezeUnderflowLocked() {
 		return
 	}
 	inst.underflowFrozen = true
-	inst.underflowValue = inst.stream.Underflow()
+	inst.underflowValue = inst.streamUnderflowLocked()
+}
+
+// streamUnderflowLocked reads the stream's underflow report; the engine's
+// lock held. The library guards the report with nothing, and its Start
+// clears it after handing the stream its first buffer request, so the pull
+// callback — and a Pause or an Underflow on another goroutine — can run
+// while Start writes it. It is therefore read only once Start has returned:
+// startDone is closed after that, which orders the write before the read.
+// Until then the server has not reported the stream started, and the
+// report is false.
+func (inst *Sink) streamUnderflowLocked() (yes bool) {
+	if inst.stream == nil || inst.startDone == nil {
+		return false
+	}
+	select {
+	case <-inst.startDone:
+		return inst.stream.Underflow()
+	default:
+		return false
+	}
 }
 
 // State implements [sink.SinkI].
@@ -246,10 +266,7 @@ func (inst *Sink) Underflow() (yes bool) {
 	if inst.underflowFrozen {
 		return inst.underflowValue
 	}
-	if inst.stream == nil {
-		return false
-	}
-	return inst.stream.Underflow()
+	return inst.streamUnderflowLocked()
 }
 
 // Close implements [sink.SinkI]: closes the stream and the connection.

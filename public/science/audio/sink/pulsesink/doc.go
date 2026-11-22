@@ -60,6 +60,11 @@
 // source: Play at the end plays from frame 0 again, as the Null sink does,
 // on the same stream.
 //
+// The library keeps the underflow report in a field nothing guards, and its
+// Start clears it after the first buffer request has gone to the callback,
+// so the sink reads it only once Start has returned and reports no underflow
+// before that.
+//
 // # Channels
 //
 // Mono and stereo sources are played as they are; more channels are refused
