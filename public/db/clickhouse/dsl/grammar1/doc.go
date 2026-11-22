@@ -1,7 +1,8 @@
 // Package grammar1 is the ANTLR-generated lexer and parser for ClickHouse
 // SQL that nanopass.Parse uses: the permissive grammar, which accepts the
 // spellings people write. The *.out.go files are generated from the .g4
-// grammars beside them and are not edited by hand; the stricter grammar the
+// grammars beside them by grammar0/generate.sh and are not edited by hand,
+// together with the .interp and .tokens files; the stricter grammar the
 // canonical form satisfies is the grammar2 package.
 //
 // Code outside the dsl tree reaches this package through the nanopass
