@@ -41,7 +41,7 @@ node (2026-11-22/23):
   `url(…, headers('X-Secret-Token' = '…'))` the server's `query_log` row and
   `SHOW CREATE` print the value as `[HIDDEN]`; a token in the URL's path or
   query string is printed as written. (Measured with `clickhouse local` 26.9
-  writing its own `query_log`; the benchmark server's user may not read
+  writing its own `query_log`; the measured server's user may not read
   `system.query_log`, so the server's own log was not read.)
 
 What the host already does with sealed plaintext:
