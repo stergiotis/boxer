@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 )
 
@@ -47,8 +48,12 @@ type PublishResultOutcome struct {
 	Dataset   string `desc:"the dataset's global alias, <bundle>__<local name>"`
 	Rows      int64  `desc:"the rows published: the whole main result"`
 	Columns   int32  `desc:"its columns"`
-	Following string `desc:"how to learn the outcome: list_bundles names this window's last publish"`
+	Revision  uint64 `json:",omitzero" desc:"the bundle's revision once it is live"`
+	Following string `desc:"what the call's answer means: it comes once the bundle is live, and another app then reads the dataset whole by its alias"`
 }
+
+// publishFollowing is publish_result's Following once the bundle is live.
+const publishFollowing = "live: another app reads the dataset whole by its alias (runtime.adhoc.read), and a play window's query reads it as keelson('<dataset>')"
 
 // publishState is the window's last publish, shared between the render
 // goroutine and the publishing goroutine.
@@ -56,6 +61,20 @@ type publishState struct {
 	mu   sync.Mutex
 	busy bool
 	last LastPublish
+	// started counts the publishes begun and finished those that ended; an
+	// asynchronous call settles once finished reaches its own number.
+	started  uint64
+	finished uint64
+	// calls is the publish number of each running publish_result call, by
+	// the call's key; render goroutine only.
+	calls map[string]publishCall
+}
+
+// publishCall is a publish_result call in flight: its publish's number and
+// what the call answered at once.
+type publishCall struct {
+	seq uint64
+	out PublishResultOutcome
 }
 
 // LastPublish is the outcome of the window's last publish_result.
@@ -73,16 +92,44 @@ func addPublishResultOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		Summary: "publish the main result as an ad-hoc bundle — the rows as one dataset and an applet document reading them — for another window or app to take in; the person confirms each publish unless the grant lists publish:<bundle prefix>",
 		// It reads the result and changes nothing of the window's: what it
 		// writes is outside, which is what makes it consequential.
-		Effect: app.OperationEffectConsequential, Reads: []string{opsResResult}, Agents: true,
+		Effect: app.OperationEffectConsequential, Reads: []string{opsResResult}, Agents: true, Async: true,
 		Consent: app.OperationConsent{Class: app.ConsentClassPublish, Arg: "bundle"},
 		Gesture: "Publish in the top bar",
 		Follows: []string{"only a whole main result is published: one the row cap cut short is refused, as is one still loading or failed",
-			"the publish runs off the frame; list_bundles reports this window's last publish and the bundle once it is live",
+			"the call answers once the bundle is live, with its revision; list_bundles reports this window's last publish too",
 			"the bundle lives as long as this window, and publishing again under its alias replaces it",
-			"another window opens it with open_bundle; another app reads the dataset whole with runtime.adhoc.read"}},
+			"another window opens it with open_bundle; another app reads the dataset <bundle>__result whole by that alias, and the task that published it needs no grant entry to read it"}},
 		func(inst *PlayLauncher, call app.OperationCall, in PublishResultArgs) (out PublishResultOutcome, err error) {
 			return inst.publishResult(call, in)
 		})
+	appops.Settles(s, opPublishResult, func(inst *PlayLauncher, call app.OperationCall) (out PublishResultOutcome, settled bool, err error) {
+		return inst.settlePublish(call)
+	})
+}
+
+// settlePublish settles a publish_result call once its publish ended: with
+// the revision it made, or as a refusal saying why it failed.
+func (inst *PlayLauncher) settlePublish(call app.OperationCall) (out PublishResultOutcome, settled bool, err error) {
+	inst.publish.mu.Lock()
+	defer inst.publish.mu.Unlock()
+	pc, ok := inst.publish.calls[call.Key]
+	if !ok {
+		return out, true, app.RefuseOperation("this window no longer knows the publish the call started; list_bundles reports its last publish")
+	}
+	if inst.publish.finished < pc.seq {
+		return out, false, nil
+	}
+	delete(inst.publish.calls, call.Key)
+	out = pc.out
+	last := inst.publish.last
+	if inst.publish.finished == pc.seq && last.Error != "" {
+		return out, true, app.RefuseOperation("the publish failed: " + last.Error)
+	}
+	if inst.publish.finished == pc.seq {
+		out.Revision = last.Revision
+	}
+	out.Following = publishFollowing
+	return out, true, nil
 }
 
 // publishResult checks the main result and the arguments on the render
@@ -115,7 +162,7 @@ func (inst *PlayLauncher) publishResult(call app.OperationCall, in PublishResult
 	case rec == nil:
 		refusal = "the window holds no result; run the buffer first"
 	case trunc != "":
-		refusal = "the main result is a prefix (" + trunc + "); a dataset made of it would miss rows — aggregate in SQL or raise the row limit with set_run_options, run, and publish then"
+		refusal = "the main result is a prefix (" + trunc + "); a dataset made of it would miss rows — the statement's own SETTINGS max_result_rows with result_overflow_mode='break' cut it: aggregate in SQL, or raise or drop that setting in the statement, run it, and publish then"
 	}
 	if refusal != "" {
 		if rec != nil {
@@ -139,10 +186,18 @@ func (inst *PlayLauncher) publishResult(call app.OperationCall, in PublishResult
 	}
 	inst.publish.busy = true
 	inst.publish.last = LastPublish{Bundle: in.Bundle, Pending: true}
-	inst.publish.mu.Unlock()
-
+	inst.publish.started++
+	seq := inst.publish.started
 	out = PublishResultOutcome{Bundle: in.Bundle, Dataset: adhocdata.DatasetAlias(in.Bundle, local), Rows: rec.NumRows(),
 		Columns: int32(rec.NumCols()), Following: "list_bundles"}
+	if call.Writer != opwire.WriterPerson {
+		if inst.publish.calls == nil {
+			inst.publish.calls = make(map[string]publishCall, 1)
+		}
+		inst.publish.calls[call.Key] = publishCall{seq: seq, out: out}
+	}
+	inst.publish.mu.Unlock()
+
 	var api task.TaskApiI
 	if inst.inner != nil {
 		api = inst.inner.client.Tasks()
@@ -176,6 +231,7 @@ func (inst *PlayLauncher) publishBundleOff(rec arrow.RecordBatch, bundle string,
 	inst.publish.mu.Lock()
 	inst.publish.busy = false
 	inst.publish.last = last
+	inst.publish.finished++
 	inst.publish.mu.Unlock()
 	return
 }

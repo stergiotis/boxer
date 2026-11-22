@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
@@ -65,4 +66,28 @@ func TestQueryRefusesAnAliasThatStaysUnbound(t *testing.T) {
 	require.True(t, settled)
 	require.ErrorContains(t, err, "no live dataset under nothing_here")
 	assert.False(t, l.inner.requestRun, "nothing ran")
+}
+
+// publish_result answers once the bundle is live, with its revision.
+func TestPublishResultSettlesWithTheRevision(t *testing.T) {
+	fakeAppletDocs(t)
+	l, h, _ := bundleLauncher(t)
+	mainIntResult(t, l, runstream.Terminal{}, 0, 1, 2)
+	obo := agentCall
+	call := app.OperationCall{Writer: "task:t", Key: "p", OnBehalfOf: &obo}
+	_, err := h.ApplyCommand(call, opPublishResult, mustEncode(t, PublishResultArgs{Bundle: "counts"}))
+	require.NoError(t, err)
+	var out PublishResultOutcome
+	require.Eventually(t, func() bool {
+		settled, raw, sErr := h.(app.OperationsAsyncI).SettleAsync(call, opPublishResult, nil)
+		require.NoError(t, sErr)
+		if settled {
+			out, sErr = buscodec.Decode[PublishResultOutcome](raw)
+			require.NoError(t, sErr)
+		}
+		return settled
+	}, 5*time.Second, 5*time.Millisecond)
+	assert.Equal(t, "counts__result", out.Dataset)
+	assert.Equal(t, uint64(1), out.Revision)
+	assert.Equal(t, publishFollowing, out.Following)
 }
