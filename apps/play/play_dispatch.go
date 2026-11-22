@@ -104,6 +104,12 @@ type dispatchDecision struct {
 	// audit of the run records it (R12). Derived above the resolver, not by
 	// it — see confine.
 	sensitivity queryengine.SensitivityE
+	// pending is the placement a refusal withheld only because its endpoint
+	// has not demonstrated it may see sealed data while a demonstration is
+	// under way; nil otherwise. A run waits for that demonstration
+	// (dispatchAwaitingReach), and a check made at a call for a run lets the
+	// run decide.
+	pending *dispatchDecision
 }
 
 // killTarget names what a cancellation for this run must be addressed to:
@@ -305,9 +311,14 @@ func (inst *Client) confine(residual string, in dispatchDecision) (out dispatchD
 	if inst.reach.isProven(in.targetURL) {
 		return
 	}
-	// Refused, and a demonstration is started for the NEXT attempt. The run
-	// is not happening either way, so nothing waits on the probe.
-	inst.proveReachInBackground(in.targetURL)
+	// Refused, and a demonstration is started. Dispatch performs no I/O, so
+	// nothing waits here; a run waits for it off the frame
+	// (dispatchAwaitingReach).
+	_, canProve := introspect.LocalProbe()
+	canProve = canProve && in.targetURL != ""
+	if canProve {
+		inst.proveReachInBackground(in.targetURL)
+	}
 	out = dispatchDecision{
 		class:       dispatchClassRefused,
 		sensitivity: queryengine.SensitivityConfined,
@@ -321,10 +332,28 @@ func (inst *Client) confine(residual string, in dispatchDecision) (out dispatchD
 		out.reason = "attaches ad-hoc datasets (" + nameList(sealed) + "), which are sealed data, to a statement on " +
 			describeTarget(in.targetURL) + ", which has not demonstrated it may see sealed data (it has not reached this process's introspection plane)"
 	}
-	if in.targetURL != "" {
-		out.reason += "; the demonstration has started, and the same statement runs once it succeeds"
+	if !canProve {
+		out.reason += "; no demonstration can be made, since " + noProofReason(in.targetURL)
+		return
 	}
+	held := in
+	held.sensitivity = queryengine.SensitivityConfined
+	out.pending = &held
+	out.reason += reachStartedNote
 	return
+}
+
+// reachStartedNote ends the reason of a statement refused while a
+// demonstration is under way, as a check made without a run reads it.
+const reachStartedNote = "; a demonstration has started: a run of the statement waits for it up to " + reachRunWaitText +
+	", and the statement is accepted once it succeeds"
+
+// noProofReason says why no demonstration can be made for targetURL.
+func noProofReason(targetURL string) (why string) {
+	if targetURL == "" {
+		return "the statement names no endpoint"
+	}
+	return "this process serves no introspection plane to demonstrate reaching"
 }
 
 // describeTarget names an endpoint for a refusal reason, or says there was

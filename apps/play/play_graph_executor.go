@@ -73,7 +73,7 @@ func (inst clientExecutor) executeLabelled(ctx context.Context, c compiledNode, 
 	}
 	// One resolution per run (play_dispatch.go), taken here rather than on
 	// the lane so a decision never outlives the request it was made for.
-	dec := inst.client.Dispatch(c.SQL, "")
+	dec := inst.client.dispatchAwaitingReach(ctx, func() dispatchDecision { return inst.client.Dispatch(c.SQL, "") })
 	confined = dec.sensitivity == queryengine.SensitivityConfined
 	rdr, rs, summary, xErr := inst.client.ExecuteArrowStream(ctx, c.SQL, alloc, opts, c.Params, dec)
 	if xErr != nil {

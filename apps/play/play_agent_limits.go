@@ -193,7 +193,16 @@ func (inst *PlayApp) refuseAgentRun(obo *app.OnBehalfOf) (err error) {
 // refuseAgentRunOf is refuseAgentRun for a given text: a subquery run is
 // checked on the narrowed text it ships.
 func (inst *PlayApp) refuseAgentRunOf(obo *app.OnBehalfOf, sql string) (err error) {
-	return refuseAgentStatement(inst.client, obo, sql)
+	return refuseAgentRun(inst.client, obo, sql)
+}
+
+// refuseAgentRun is refuseAgentStatement for a call that starts a run: a
+// statement refused only because its endpoint has not yet demonstrated it
+// may see sealed data, while a demonstration is under way, is judged as
+// the placement it waits for, since the run waits for the demonstration
+// off the frame and decides again (dispatchAwaitingReach).
+func refuseAgentRun(client *Client, obo *app.OnBehalfOf, sql string) (err error) {
+	return refuseAgentStatementAs(client, obo, sql, true)
 }
 
 // refuseAgentStatement is the agent limits' refusal of sql as the client
@@ -201,11 +210,22 @@ func (inst *PlayApp) refuseAgentRunOf(obo *app.OnBehalfOf, sql string) (err erro
 // run makes at the call, and explain_sql's for the statement it explains.
 // A nil client refuses nothing.
 func refuseAgentStatement(client *Client, obo *app.OnBehalfOf, sql string) (err error) {
+	return refuseAgentStatementAs(client, obo, sql, false)
+}
+
+// refuseAgentStatementAs is refuseAgentStatement; run says a run follows
+// the check, which then judges a placement waiting on a reach
+// demonstration as that placement.
+func refuseAgentStatementAs(client *Client, obo *app.OnBehalfOf, sql string, run bool) (err error) {
 	if client == nil {
 		return
 	}
 	residual, _, _ := client.rewriteFor(obo, sql, nil)
-	lerr := checkAgentLimits(residual, client.dispatchResidual(residual, ""), obo, client.datasetAliasOf())
+	dec := client.dispatchResidual(residual, "")
+	if run && dec.pending != nil {
+		dec = *dec.pending
+	}
+	lerr := checkAgentLimits(residual, dec, obo, client.datasetAliasOf())
 	if limit, ok := lerr.(*AgentLimitError); ok {
 		if limit.Destination != "" {
 			return app.RefuseForDestinations(lerr.Error(), limit.Destination)

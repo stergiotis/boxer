@@ -2,6 +2,7 @@ package play
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,6 +55,11 @@ const (
 	// goroutine, so the ceiling exists to retire a stuck attempt rather than
 	// to keep anything waiting.
 	reachProbeTimeout = 10 * time.Second
+	// reachRunWait bounds how long a run waits, off the frame, for a
+	// demonstration already under way before its dispatch is decided again.
+	reachRunWait = 5 * time.Second
+	// reachRunWaitText is reachRunWait in a refusal's words.
+	reachRunWaitText = "5s"
 )
 
 // reachProver remembers which endpoints have demonstrated they can fetch
@@ -64,6 +70,12 @@ type reachProver struct {
 	mu       sync.Mutex
 	proven   map[string]time.Time // endpoint -> proof expiry
 	inFlight map[string]struct{}  // endpoints being probed right now
+	// changed is closed and replaced whenever a proof is recorded or a
+	// demonstration ends, waking every await.
+	changed chan struct{}
+	// runWait is how long a run waits for a demonstration under way;
+	// reachRunWait unless a test shortens it.
+	runWait time.Duration
 	// now is the clock, injectable so a test can expire a proof without
 	// waiting out the TTL.
 	now func() time.Time
@@ -73,6 +85,8 @@ func newReachProver() (inst *reachProver) {
 	inst = &reachProver{
 		proven:   make(map[string]time.Time, 2),
 		inFlight: make(map[string]struct{}, 2),
+		changed:  make(chan struct{}),
+		runWait:  reachRunWait,
 		now:      time.Now,
 	}
 	return
@@ -110,7 +124,47 @@ func (inst *reachProver) record(endpoint string) {
 	}
 	inst.mu.Lock()
 	inst.proven[endpoint] = inst.now().Add(reachProofTTL)
+	inst.signalLocked()
 	inst.mu.Unlock()
+}
+
+// signalLocked wakes every await. The caller holds mu.
+func (inst *reachProver) signalLocked() {
+	if inst.changed != nil {
+		close(inst.changed)
+	}
+	inst.changed = make(chan struct{})
+}
+
+// await waits until endpoint is proven, the demonstration under way for it
+// ends, ctx is done or bound passes, whichever comes first, and reports
+// whether endpoint is proven then. With no demonstration under way it
+// answers at once.
+func (inst *reachProver) await(ctx context.Context, endpoint string, bound time.Duration) (proven bool) {
+	if inst == nil || endpoint == "" {
+		return
+	}
+	timer := time.NewTimer(bound)
+	defer timer.Stop()
+	for {
+		inst.mu.Lock()
+		_, busy := inst.inFlight[endpoint]
+		if inst.changed == nil {
+			inst.changed = make(chan struct{})
+		}
+		changed := inst.changed
+		inst.mu.Unlock()
+		if proven = inst.isProven(endpoint); proven || !busy {
+			return
+		}
+		select {
+		case <-changed:
+		case <-timer.C:
+			return inst.isProven(endpoint)
+		case <-ctx.Done():
+			return inst.isProven(endpoint)
+		}
+	}
 }
 
 // begin claims the right to probe endpoint, so concurrent lanes hitting the
@@ -130,6 +184,7 @@ func (inst *reachProver) begin(endpoint string) (done func(), ok bool) {
 	done = func() {
 		inst.mu.Lock()
 		delete(inst.inFlight, endpoint)
+		inst.signalLocked()
 		inst.mu.Unlock()
 	}
 	return
@@ -246,6 +301,31 @@ func (inst *Client) runProbeStatement(ctx context.Context, endpoint string, sql 
 	}
 	if term.State == runstream.TerminalFailed {
 		err = term.Err
+	}
+	return
+}
+
+// dispatchAwaitingReach is a run's dispatch, made on the run's own
+// goroutine: decide, and when the statement was refused only because its
+// endpoint has not demonstrated it may see sealed data while a
+// demonstration is under way, wait for that demonstration up to
+// reachRunWait under ctx and decide again. A statement still refused then
+// says the run waited. decide is the dispatch the run would make.
+func (inst *Client) dispatchAwaitingReach(ctx context.Context, decide func() dispatchDecision) (dec dispatchDecision) {
+	dec = decide()
+	if dec.pending == nil {
+		return
+	}
+	bound := reachRunWait
+	if inst.reach != nil && inst.reach.runWait > 0 {
+		bound = inst.reach.runWait
+	}
+	inst.reach.await(ctx, dec.pending.targetURL, bound)
+	dec = decide()
+	if dec.pending != nil {
+		dec.reason = strings.TrimSuffix(dec.reason, reachStartedNote) +
+			"; the run waited up to " + reachRunWaitText + " for the demonstration under way, which did not succeed in that time"
+		dec.pending = nil
 	}
 	return
 }
