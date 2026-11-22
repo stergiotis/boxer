@@ -93,6 +93,9 @@ func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st qu
 		Settings:    req.Settings,
 		Params:      req.Params,
 		InputTables: req.Inputs,
+		// The bus hands the broker no context, so the task crosses on the
+		// request; an empty one takes the mark ctx carries (ADR-0403).
+		Task: req.Task,
 	})
 	if reqErr != nil {
 		// The bus never answered: no worker, no capability, or a timeout.

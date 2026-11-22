@@ -24,6 +24,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/valyala/bytebufferpool"
 
+	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
@@ -407,8 +408,13 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	// Bind any InputTables as TEMPORARY tables ahead of the query
 	// (ADR-0094 §SD5). The files must outlive the worker's read, so
 	// cleanup is deferred to handler return — i.e. after Wait below.
-	sql := req.SQL
 	var preludes []string
+	// Parameter bindings ride a SET-prelude ahead of everything else
+	// (ADR-0133 §SD2) — injected after the cacheability gate above, so a
+	// parameterized SELECT stays cacheable under its params-folded key.
+	if p := paramPrelude(req.Params); p != "" {
+		preludes = append(preludes, p)
+	}
 	if len(req.InputTables) > 0 {
 		prelude, cleanup, mErr := materializeInputTables(inst.poolCfg.BaseTmpDir, req.InputTables)
 		defer cleanup()
@@ -419,15 +425,11 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		}
 		preludes = append(preludes, prelude)
 	}
-	if len(preludes) > 0 {
-		sql = strings.Join(preludes, "") + req.SQL
-	}
-	// Parameter bindings ride a SET-prelude ahead of everything else
-	// (ADR-0133 §SD2) — injected after the cacheability gate above, so a
-	// parameterized SELECT stays cacheable under its params-folded key.
-	sql = paramPrelude(req.Params) + sql
 
-	if err = w.WriteSQL(sql, req.Format); err != nil {
+	// The prelude is the broker's own text and the request's statement is
+	// the caller's, so the worker leads them apart and the statement under
+	// the task the request names (ADR-0403).
+	if err = w.WriteStatement(fairlead.WithTask(ctx, req.Task), strings.Join(preludes, ""), req.SQL, req.Format); err != nil {
 		aud.errMsg = "write sql: " + err.Error()
 		aud.stderrTail = string(w.StderrTail())
 		inst.sendError(msg.Reply, aud.errMsg, aud.stderrTail, 0)

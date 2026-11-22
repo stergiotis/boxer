@@ -32,6 +32,10 @@ type wireRequest struct {
 	// configured DefaultRequestTimeout. The MsgHandlerFunc signature
 	// has no ctx parameter, so deadlines must travel on the wire.
 	DeadlineUnixNanos int64 `json:"deadline_ns,omitempty"`
+	// Task is the agent task whose call supplied SQL (ADR-0403), carried so
+	// the worker's exit point sees it; the bus hands the broker no context
+	// to carry it in. Optional under the same wire version, like Params.
+	Task string `json:"task,omitempty"`
 }
 
 // wireReply is the envelope of a successful or failed run, wire-encoded

@@ -7,6 +7,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -56,6 +57,13 @@ type ExecRequest struct {
 	// a cached entry never outlives a changed input under unchanged
 	// SQL — callers may set Cacheable even for volatile inputs.
 	InputTables map[string][]byte
+	// Task is the agent task whose call supplied SQL, empty for the
+	// person's statement and for one the caller composed (ADR-0403). Empty
+	// takes the mark the caller's context carries
+	// ([github.com/stergiotis/boxer/public/db/fairlead.TaskOf]). The broker
+	// leads SQL under it at the worker and leads its own prelude without
+	// it. It is not part of the result-cache key: a hit sends nothing.
+	Task string
 }
 
 // ExecReply wraps a broker response. The embedded ReadCloser exposes
@@ -118,6 +126,10 @@ func ExecOnPool(ctx context.Context, bus app.BusI, poolName string, req ExecRequ
 		Settings:    req.Settings,
 		Params:      req.Params,
 		InputTables: req.InputTables,
+		Task:        req.Task,
+	}
+	if wireReq.Task == "" {
+		wireReq.Task = fairlead.TaskOf(ctx)
 	}
 	if deadline, ok := ctx.Deadline(); ok {
 		wireReq.DeadlineUnixNanos = deadline.UnixNano()

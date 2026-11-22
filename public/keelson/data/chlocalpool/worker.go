@@ -136,19 +136,41 @@ func newWorker(ctx context.Context, cfg Config, release procpool.ReleaseFunc) (w
 // may be empty if the SQL already contains a FORMAT clause.
 // Idempotent: subsequent calls return the first error.
 func (inst *Worker) WriteSQL(sql string, format string) (err error) {
+	// The pool's exit point (ADR-0367 §SD1). This form takes its text
+	// without a context, so the passes run under the background one.
+	err = inst.WriteStatement(context.Background(), "", sql, format)
+	return
+}
+
+// WriteStatement is [Worker.WriteSQL] for a statement that follows a prelude
+// the caller composed — the SET and temporary-table statements a broker puts
+// ahead of a request — and runs the fairlead's passes under ctx.
+//
+// The two are led separately (ADR-0403): the prelude as the process's own
+// text, under ctx with any task mark cleared, and sql under ctx as it comes,
+// so a pass that judges a task's statement judges the statement the task
+// wrote rather than a script it cannot read. The worker receives prelude
+// followed by sql, as WriteSQL would have sent their concatenation.
+func (inst *Worker) WriteStatement(ctx context.Context, prelude string, sql string, format string) (err error) {
 	inst.submitOnce.Do(func() {
-		// The pool's exit point (ADR-0367 §SD1). A worker takes its statement
-		// without a context, so the passes run under the background one.
-		sql, leadErr := fairlead.Lead(context.Background(), fairlead.ExitLocal, "chlocalpool.worker", sql)
+		if prelude != "" {
+			var leadErr error
+			prelude, leadErr = fairlead.Lead(fairlead.WithTask(ctx, ""), fairlead.ExitLocal, "chlocalpool.prelude", prelude)
+			if leadErr != nil {
+				inst.submitErr = leadErr
+				return
+			}
+		}
+		sql, leadErr := fairlead.Lead(ctx, fairlead.ExitLocal, "chlocalpool.worker", sql)
 		if leadErr != nil {
 			inst.submitErr = leadErr
 			return
 		}
 		var payload string
 		if format == "" {
-			payload = sql + ";\n"
+			payload = prelude + sql + ";\n"
 		} else {
-			payload = sql + " FORMAT " + format + ";\n"
+			payload = prelude + sql + " FORMAT " + format + ";\n"
 		}
 		_, writeErr := io.WriteString(inst.stdin, payload)
 		if writeErr != nil {
