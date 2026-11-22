@@ -327,3 +327,46 @@ func TestWriteObserverPanicDoesNotRepeat(t *testing.T) {
 	require.Len(t, log.durable[0].keys, 1)
 	assert.Equal(t, uint64(2), log.durable[0].keys[0].Key)
 }
+
+// At its bound of unacknowledged inserts a store stops setting new rows
+// aside (ADR-0387 §SD6): while the oldest still fails, Flush returns
+// ErrPendingFull and queues nothing more; the rows wait in the builder, and
+// once the server accepts again every row lands once, the oldest insert
+// first and under its first batch id.
+func TestFlushStopsQueueingAtTheBound(t *testing.T) {
+	exec := &insertRecorder{failFirst: 5}
+	log := &writeLog{}
+	st := NewDeviceStore(exec, nil, DeviceStoreConfig{WriteObserver: log, MaxPendingBatches: 2})
+	defer st.Close()
+	t1 := recordstore.SeqTs(1)
+	for i := range 4 {
+		key := uint64(10 + i)
+		require.NoError(t, st.Begin(t.Context(), key, t1).AddBattery(Battery{ID: key, Charge: 1}).Commit())
+		_, err := st.Flush(t.Context())
+		require.Error(t, err)
+		if i < 2 {
+			assert.NotErrorIs(t, err, recordstore.ErrPendingFull, "below the bound a failure is the insert's own")
+		} else {
+			assert.ErrorIs(t, err, recordstore.ErrPendingFull)
+		}
+		assert.LessOrEqual(t, len(st.pending), 2, "nothing is queued past the bound")
+	}
+	assert.Equal(t, 4, st.Buffered(), "the rows are retained, not dropped")
+	// Attempts so far: the first two Flushes tried their own insert (two of
+	// them, retrying the first ahead of the second), the next two only the
+	// oldest. One more failure, then the server accepts.
+	_, err := st.Flush(t.Context())
+	require.ErrorIs(t, err, recordstore.ErrPendingFull)
+	n, err := st.Flush(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, 4, n)
+	assert.Zero(t, st.Buffered())
+	var keys []uint64
+	for _, d := range log.durable {
+		for _, k := range d.keys {
+			keys = append(keys, k.Key)
+		}
+	}
+	assert.ElementsMatch(t, []uint64{10, 11, 12, 13}, keys, "every row reaches the observer once")
+	assert.Equal(t, exec.batchIds[0], log.durable[0].batch, "the oldest insert lands first, under its first batch id")
+}

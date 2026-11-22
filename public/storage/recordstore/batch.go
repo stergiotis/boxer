@@ -2,6 +2,7 @@ package recordstore
 
 import (
 	"context"
+	"errors"
 
 	"github.com/apache/arrow-go/v18/arrow"
 
@@ -60,6 +61,17 @@ type PendingBatch struct {
 	Rows    int
 	Written int
 }
+
+// DefaultMaxPendingBatches is how many unacknowledged inserts a generated
+// store keeps before its Flush stops setting new rows aside and returns
+// [ErrPendingFull] while the oldest still fails (ADR-0387 §SD6).
+const DefaultMaxPendingBatches = 16
+
+// ErrPendingFull is what a generated store's Flush returns, wrapping the
+// failed insert's error, when it holds its bound of unacknowledged inserts
+// and the oldest still fails. The rows stay retained; DiscardPending drops
+// them. Match with errors.Is.
+var ErrPendingFull = errors.New("the store holds its bound of unacknowledged inserts and the oldest still fails")
 
 // Release releases the batch's records.
 func (inst PendingBatch) Release() {

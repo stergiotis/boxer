@@ -184,6 +184,14 @@ type FleetStoreConfig struct {
 	// Nothing flushes behind the caller's back: Commit takes no context and
 	// never inserts, so the due check runs where the caller asks for it.
 	FlushEvery int
+	// MaxPendingBatches bounds the inserts the server has not acknowledged
+	// (ADR-0387 §SD6). At the bound Flush leaves the rows buffered since in
+	// the builder and retries the oldest insert; while it still fails, Flush
+	// returns recordstore.ErrPendingFull wrapping that insert's error, so a
+	// failure no retry passes cannot queue one more insert per Flush
+	// without end. DiscardPending drops them. Zero is
+	// recordstore.DefaultMaxPendingBatches.
+	MaxPendingBatches int
 	// WriteObserver, when set, is told each row a Commit or Delete
 	// buffers, then — after the successful Flush that made them durable —
 	// the batch id of that insert and its keys, or the keys DiscardPending
@@ -595,7 +603,10 @@ func (inst *FleetStore) Buffered() int { return inst.buffered }
 // under the batch id of its first attempt, sent as the insert's
 // deduplication token: on a table keeping a deduplication window, an
 // attempt that landed although it reported failure is not written
-// twice (ADR-0387). n counts the rows that landed, also when err is set;
+// twice (ADR-0387). At cfg.MaxPendingBatches unacknowledged inserts the
+// rows buffered since wait in the builder, and while the oldest insert
+// still fails Flush returns recordstore.ErrPendingFull wrapping its error.
+// n counts the rows that landed, also when err is set;
 // the write observer is told each insert's rows under its batch id.
 // An open (uncommitted) entity frame makes Flush error.
 func (inst *FleetStore) Flush(ctx context.Context) (n int, err error) {
@@ -620,6 +631,18 @@ func (inst *FleetStore) Flush(ctx context.Context) (n int, err error) {
 	if inst.buffered == 0 && len(inst.pending) == 0 {
 		return
 	}
+	if len(inst.pending) >= inst.maxPending() {
+		// At the bound the rows buffered since stay in the builder and the
+		// oldest inserts are retried first: a failure no retry passes would
+		// otherwise queue one more insert per Flush without end.
+		var landed int
+		landed, err = inst.flushPending(ctx)
+		n += landed
+		if err != nil {
+			err = eh.Errorf("%d inserts await acknowledgement: %w: %w", len(inst.pending), recordstore.ErrPendingFull, err)
+			return
+		}
+	}
 	records, err := lowlevel.InEntityFactsTableTransferRecords(inst.dml, nil)
 	if err != nil {
 		err = eh.Errorf("transfer records: %w", err)
@@ -636,6 +659,30 @@ func (inst *FleetStore) Flush(ctx context.Context) (n int, err error) {
 		}
 		inst.pending = append(inst.pending, pb)
 	}
+	landed, err := inst.flushPending(ctx)
+	n += landed
+	if err != nil {
+		return
+	}
+	inst.pending = nil
+	n += inst.buffered
+	inst.buffered = 0
+	for k := range inst.dirty {
+		inst.notifyFlush(k) // durable now — release the views' dirty-window pins
+	}
+	clear(inst.dirty) // flushed — ClickHouse now serves the written state
+	if len(inst.written) > 0 {
+		// Rows that transferred no records still reach the observer once.
+		batch := recordstore.NewBatchId()
+		inst.cfg.WriteObserver.Durable(recordstore.WithBatchId(ctx, batch), batch, inst.takeWritten())
+	}
+	return
+}
+
+// flushPending ships the pending inserts in order, each alone under the
+// batch id of its first attempt, and stops at the first that fails; n
+// counts the rows that landed.
+func (inst *FleetStore) flushPending(ctx context.Context) (n int, err error) {
 	for len(inst.pending) > 0 {
 		pb := inst.pending[0]
 		bctx := recordstore.WithBatchId(ctx, pb.Batch)
@@ -652,19 +699,16 @@ func (inst *FleetStore) Flush(ctx context.Context) (n int, err error) {
 			inst.cfg.WriteObserver.Durable(bctx, pb.Batch, inst.takeWrittenN(pb.Written))
 		}
 	}
-	inst.pending = nil
-	n += inst.buffered
-	inst.buffered = 0
-	for k := range inst.dirty {
-		inst.notifyFlush(k) // durable now — release the views' dirty-window pins
-	}
-	clear(inst.dirty) // flushed — ClickHouse now serves the written state
-	if len(inst.written) > 0 {
-		// Rows that transferred no records still reach the observer once.
-		batch := recordstore.NewBatchId()
-		inst.cfg.WriteObserver.Durable(recordstore.WithBatchId(ctx, batch), batch, inst.takeWritten())
-	}
 	return
+}
+
+// maxPending is cfg.MaxPendingBatches, or recordstore.DefaultMaxPendingBatches
+// when it is not positive.
+func (inst *FleetStore) maxPending() int {
+	if inst.cfg.MaxPendingBatches > 0 {
+		return inst.cfg.MaxPendingBatches
+	}
+	return recordstore.DefaultMaxPendingBatches
 }
 
 // insertRecords inserts records under batch's deduplication token and
