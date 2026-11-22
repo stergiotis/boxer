@@ -222,18 +222,21 @@ commands; preconditions and services are names the runner knows.
 
 ### Layout checks and the matrix
 
-Every capture whose step asks for the `tree` sidecar is checked for four
+Every capture whose step asks for the `tree` sidecar is checked for five
 layout invariants after the scene passes
 ([ADR-0363](../../adr/0363-porting-from-an-end-user-egui-application.md) M1,
-package `scene/layoutcheck`). A finding fails the scene and is printed one per
-line:
+[ADR-0404](../../adr/0404-what-a-person-reads-in-a-window-a-stated-reader-one-way-to-draw-a-decision-and-the-chat-window-as-the-first-case.md)
+SD6, package `scene/layoutcheck`). A finding is printed one per line; it
+fails the scene unless its invariant is advisory, in which case it is
+reported beside the result:
 
-| Invariant | Fails when |
-| --- | --- |
-| `outside` | an interactive node (button, check box, text input, slider, combo box, link, tab, menu item…) reaches past the left or right edge of the viewport, or of the egui window it is in |
-| `overlap` | two enabled interactive siblings (same parent in the sidecar) intersect by more than 1 point in both axes |
-| `hit-size` | an interactive node is narrower or shorter than 14 points, egui's `icon_width` |
-| `clipped` | the host drew a node's text elided with `…` while the node's own text is longer; needs the `svg` sidecar too |
+| Invariant | Found when | Fails the scene |
+| --- | --- | --- |
+| `outside` | an interactive node (button, check box, text input, slider, combo box, link, tab, menu item…) reaches past the left or right edge of the viewport, or of the egui window it is in | yes |
+| `overlap` | two enabled interactive siblings (same parent in the sidecar) intersect by more than 1 point in both axes | no, advisory |
+| `hit-size` | an interactive node is narrower or shorter than 14 points, egui's `icon_width` | yes |
+| `clipped` | the host drew a node's text elided with `…` while the node's own text is longer; needs the `svg` sidecar too | yes |
+| `cut` | a text node (`label`, `heading`, `paragraph`) reaches more than 1 point past the right edge of the egui window it is in, or of the viewport when it is in no window | no, advisory |
 
 What the tree cannot say limits them. Bounds are unclipped, so a scroll area's
 content is in the tree where it would be laid out unscrolled: vertical edges
@@ -241,7 +244,13 @@ are not checked at all, and a capture taken with a list scrolled can report an
 overlap between a scrolled row and a fixed control. A node's text is the text
 the app gave it, so an ellipsis in the tree is the app's own and is not a
 finding; elision is read from the svg. Capture with `"sidecars":["svg","tree"]`
-for all four.
+for all five.
+
+`cut` has two more limits. The sidecar keeps only nodes with a name or a
+value, and a scroll area has neither, so a label inside an area that scrolls
+sideways is reported although the person can scroll to it; an exception with
+the reason says so. And the tree holds no edge inside a window, so text cut
+by a pane, a dock split or a table column is not found.
 
 A finding the scene means to produce is recorded in the scene, never in the
 checker. An exception names the invariant, an anchor in a step's vocabulary

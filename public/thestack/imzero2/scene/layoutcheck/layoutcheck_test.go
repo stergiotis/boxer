@@ -157,17 +157,19 @@ func TestCheckElided(t *testing.T) {
 
 func TestExceptions(t *testing.T) {
 	fs := Check(readFixture(t), Options{ViewportW: 1400})
-	require.Len(t, fs, 3)
+	require.Len(t, fs, 4)
 
 	excs := []Exception{
 		{Invariant: InvariantHitSize, Role: "button", Name: "\ue1ca", Reason: "a glyph button beside a field"},
 		// Either node of an overlap matches.
 		{Invariant: InvariantOverlap, Name: "Load .sql…", Capture: "table", Reason: "drawn over on purpose"},
+		// A label is anchored by its value.
+		{Invariant: InvariantCut, ValueContains: "localhost", Reason: "the endpoint scrolls sideways"},
 	}
 	kept, excused := Apply("table", fs, excs)
 	require.Len(t, kept, 1)
 	assert.Equal(t, InvariantOutside, kept[0].Invariant)
-	assert.Len(t, excused, 2)
+	assert.Len(t, excused, 3)
 
 	// The capture restriction holds.
 	kept, _ = Apply("history", fs, excs)
@@ -175,7 +177,7 @@ func TestExceptions(t *testing.T) {
 
 	// An exception for another invariant does not cover the node.
 	kept, _ = Apply("table", fs, []Exception{{Invariant: InvariantOverlap, Name: "codec: H.264", Reason: "x"}})
-	assert.Len(t, kept, 3)
+	assert.Len(t, kept, 4)
 }
 
 func TestExceptionValidate(t *testing.T) {
@@ -201,8 +203,57 @@ func TestOverlapSkipsOneControlListedTwice(t *testing.T) {
 	}
 }
 
-func TestOnlyOverlapIsAdvisory(t *testing.T) {
+func TestOverlapAndCutAreAdvisory(t *testing.T) {
 	for _, inv := range AllInvariants {
-		assert.Equal(t, inv != InvariantOverlap, inv.Blocking(), string(inv))
+		assert.Equal(t, inv != InvariantOverlap && inv != InvariantCut, inv.Blocking(), string(inv))
 	}
+}
+
+func TestCutIsTextPastTheRightEdge(t *testing.T) {
+	fs := byInvariant(Check(readFixture(t), Options{ViewportW: 1400}), InvariantCut)
+	// The endpoint label runs from 1300 to 1600 in a window that ends at
+	// 1396.
+	require.Len(t, fs, 1)
+	assert.Equal(t, uint64(11), fs[0].Node.ID)
+	assert.Equal(t, `x 1300…1600 past window "SQL Playground" at x 4…1396 by 204`, fs[0].Detail)
+
+	win := Node{ID: 1, Role: "window", Name: " chat", X: 100, Y: 0, W: 400, H: 300}
+	at := func(n Node) []Finding {
+		n.Depth = 1
+		return byInvariant(Check([]Node{win, n}, Options{ViewportW: 1000}), InvariantCut)
+	}
+	label := func(x, w float32) Node {
+		return Node{ID: 2, Role: "label", Value: "Confirming also endorses it for publishing.", X: x, Y: 40, W: w, H: 18}
+	}
+	assert.Empty(t, at(label(110, 380)), "inside the window")
+	assert.Empty(t, at(label(110, 390.5)), "within the tolerance of the edge")
+	assert.Len(t, at(label(110, 420)), 1, "past the right edge")
+	assert.Empty(t, at(label(60, 300)), "past the left edge only: text is cut on the right")
+	heading := label(110, 420)
+	heading.Role = "heading"
+	assert.Len(t, at(heading), 1, "a heading is text")
+	image := label(110, 420)
+	image.Role = "image"
+	assert.Empty(t, at(image), "an image is not text")
+	assert.Empty(t, at(Node{ID: 2, Role: "label", Value: "never laid out"}), "no bounds")
+
+	// A control past the edge is outside's, not cut's.
+	button := Node{ID: 2, Role: "button", Name: "Export", X: 450, Y: 40, W: 80, H: 20, Depth: 1}
+	all := Check([]Node{win, button}, Options{ViewportW: 1000})
+	require.Len(t, all, 1)
+	assert.Equal(t, InvariantOutside, all[0].Invariant)
+
+	// Text in no window is held to the viewport, when there is one.
+	top := []Node{{ID: 1, Role: "label", Value: "status", X: 900, Y: 980, W: 160, H: 18}}
+	fs = byInvariant(Check(top, Options{ViewportW: 1000}), InvariantCut)
+	require.Len(t, fs, 1)
+	assert.Equal(t, "x 900…1060 in a viewport 1000 wide, by 60", fs[0].Detail)
+	assert.Empty(t, Check(top, Options{}), "no viewport, no edge")
+
+	// The tree carries no scroll area, so a row of a table that scrolls
+	// sideways is reported although the person can scroll to it: the reason
+	// the invariant is advisory.
+	wide := label(110, 900)
+	wide.Value = "a cell in the twelfth column of a table that scrolls sideways"
+	assert.Len(t, at(wide), 1)
 }

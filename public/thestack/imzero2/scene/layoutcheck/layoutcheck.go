@@ -2,7 +2,8 @@
 // (`<capture>.tree.jsonl`) and reports where its layout breaks a generic
 // invariant: a control past the side of the viewport or of its window, two
 // controls over each other, a control too small to hit, text the host drew
-// elided (ADR-0363 M1).
+// elided (ADR-0363 M1), text that runs past its window's right edge
+// (ADR-0404 SD6).
 //
 // The checker knows no app. What an app means to do that looks like a
 // violation is an [Exception] recorded in the scene document, never a rule
@@ -118,14 +119,24 @@ const (
 	// InvariantClipped: the host drew a node's text elided with "…" where
 	// the node's own text is longer. Needs the capture's svg sidecar.
 	InvariantClipped InvariantE = "clipped"
+	// InvariantCut: a text node (a label, a heading, a paragraph) reaches
+	// past the right edge of the egui window it is in, or of the viewport
+	// when it is in none (ADR-0404 SD6). Advisory (Blocking is false). The
+	// sidecar keeps only nodes with a name or a value, and a scroll area has
+	// neither, so nothing in the tree says a label sits in a horizontally
+	// scrolling area: its unscrolled bounds run past the window and it is
+	// reported although the person can scroll to it. Nor does the tree hold
+	// a pane's edge inside a window, so text cut by an inner pane, a table
+	// column or a dock split is not seen.
+	InvariantCut InvariantE = "cut"
 )
 
-var AllInvariants = []InvariantE{InvariantOutside, InvariantOverlap, InvariantHitSize, InvariantClipped}
+var AllInvariants = []InvariantE{InvariantOutside, InvariantOverlap, InvariantHitSize, InvariantClipped, InvariantCut}
 
 // Blocking reports whether a finding of this invariant fails a scene. An
 // advisory one is reported beside the result and fails nothing.
 func (inst InvariantE) Blocking() bool {
-	return inst != InvariantOverlap
+	return inst != InvariantOverlap && inst != InvariantCut
 }
 
 const (
@@ -197,9 +208,23 @@ func IsInteractiveRole(role string) bool {
 	return interactiveRoles[role] || carrierclient.IsEditableRole(role)
 }
 
-// Check applies InvariantOutside, InvariantOverlap and InvariantHitSize to
-// one sidecar's nodes. Findings come in the sidecar's order, outside and
-// hit-size before the overlaps a node takes part in.
+// textRoles are the non-interactive AccessKit roles whose node is text a
+// person reads, in the tree's spelling. egui gives a label `label` and hangs
+// a `text_run` under it with the same text, which the sidecar leaves out but
+// a hand-built node list may carry. A link or a button's caption is
+// interactive, and InvariantOutside covers it.
+var textRoles = map[string]bool{
+	"label": true, "text_run": true, "heading": true, "paragraph": true,
+}
+
+// IsTextRole reports whether a role is one InvariantCut applies to.
+func IsTextRole(role string) bool {
+	return textRoles[role]
+}
+
+// Check applies InvariantOutside, InvariantOverlap, InvariantHitSize and
+// InvariantCut to one sidecar's nodes. Findings come in the sidecar's order,
+// outside, hit-size and cut before the overlaps a node takes part in.
 func Check(nodes []Node, opts Options) (findings []Finding) {
 	minHit := opts.MinHit
 	if minHit <= 0 {
@@ -211,6 +236,12 @@ func Check(nodes []Node, opts Options) (findings []Finding) {
 	}
 	parent := parents(nodes)
 	for i, n := range nodes {
+		if IsTextRole(n.Role) && n.hasBounds() {
+			if f, ok := cut(nodes, parent, i, opts.ViewportW, tol); ok {
+				findings = append(findings, f)
+			}
+			continue
+		}
 		if !IsInteractiveRole(n.Role) || !n.hasBounds() {
 			continue
 		}
@@ -242,6 +273,31 @@ func Check(nodes []Node, opts Options) (findings []Finding) {
 			Detail: pt(min(a.X+a.W, b.X+b.W)-max(a.X, b.X)) + "×" + pt(min(a.Y+a.H, b.Y+b.H)-max(a.Y, b.Y))})
 	}
 	return findings
+}
+
+// cut reports InvariantCut for text node i: its right edge past the right
+// edge of its window, or of the viewport for text in no window. Only the
+// right edge, as ADR-0404 SD6 states it: text is laid out from its start,
+// so what does not fit runs out to the right.
+func cut(nodes []Node, parent []int, i int, viewportW float32, tol float32) (f Finding, ok bool) {
+	n := nodes[i]
+	right := n.X + n.W
+	span := "x " + pt(n.X) + "…" + pt(right)
+	if w := enclosingWindow(nodes, parent, i); w >= 0 {
+		win := nodes[w]
+		if over := right - (win.X + win.W); over > tol {
+			return Finding{Invariant: InvariantCut, Node: n,
+				Detail: span + " past window " + strconv.Quote(strings.TrimSpace(win.Name)) + " at x " + pt(win.X) + "…" + pt(win.X+win.W) + " by " + pt(over)}, true
+		}
+		return f, false
+	}
+	if viewportW > 0 {
+		if over := right - viewportW; over > tol {
+			return Finding{Invariant: InvariantCut, Node: n,
+				Detail: span + " in a viewport " + pt(viewportW) + " wide, by " + pt(over)}, true
+		}
+	}
+	return f, false
 }
 
 // parents returns each node's parent index in the sidecar, -1 for a node at
