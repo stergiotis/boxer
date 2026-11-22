@@ -15,6 +15,10 @@
 // policy, and a pass that needs to know what a statement is asks
 // [github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis.Classify].
 // Nothing here parses.
+//
+// A statement whose text a task supplied is led under a context marked with
+// [WithTask], so a pass can tell it from the person's statement and from one
+// the process composed itself ([Statement.Task]).
 package fairlead
 
 import (
@@ -60,6 +64,35 @@ type Statement struct {
 	// refactors of the function that holds it, so a journal taken on one
 	// build can be read against another.
 	Site string
+	// Task is the agent task whose call supplied the statement's text, as
+	// its sender declared it with [WithTask]. It is empty for the person's
+	// statement and for one the process composed itself, a write an app
+	// makes on a task's behalf included. The mark is the sender's word: a
+	// statement a task wrote and its sender did not declare arrives here
+	// unmarked.
+	Task string
+}
+
+// taskKey is the context key of [WithTask].
+type taskKey struct{}
+
+// WithTask returns ctx marked as carrying statements whose text task
+// supplied; [Lead] copies the mark to [Statement.Task]. An empty task returns
+// a context whose mark is cleared, for a statement the process composes
+// itself under a context that may carry one.
+func WithTask(ctx context.Context, task string) (marked context.Context) {
+	if task == "" && TaskOf(ctx) == "" {
+		marked = ctx
+		return
+	}
+	marked = context.WithValue(ctx, taskKey{}, task)
+	return
+}
+
+// TaskOf is the task [WithTask] marked ctx with, empty when none.
+func TaskOf(ctx context.Context) (task string) {
+	task, _ = ctx.Value(taskKey{}).(string)
+	return
 }
 
 // PassI is one step at the fairlead.
@@ -140,7 +173,7 @@ func Lead(ctx context.Context, exit ExitE, site string, sql string) (out string,
 		out = sql
 		return
 	}
-	st := Statement{SQL: sql, Exit: exit, Site: site}
+	st := Statement{SQL: sql, Exit: exit, Site: site, Task: TaskOf(ctx)}
 	for _, p := range *passes {
 		st.SQL, err = p.pass.Lead(ctx, st)
 		if err != nil {

@@ -33,6 +33,9 @@ var JournalDir = env.NewPath(env.Spec{
 const maxJournalStatements = 1 << 16
 
 // JournalEntry is one line of a journal: a statement text seen at a site.
+// It does not say whether a task supplied the text ([Statement.Task]): a
+// line is one per distinct text, and which task sent it is not part of that
+// key (ADR-0403, deferred).
 type JournalEntry struct {
 	Site string `json:"site"`
 	Exit string `json:"exit"`

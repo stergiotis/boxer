@@ -86,6 +86,51 @@ func TestARefusalStopsTheStatement(t *testing.T) {
 	require.False(t, reached)
 }
 
+func TestTheTaskMarkRidesTheContext(t *testing.T) {
+	ctx := context.Background()
+	require.Empty(t, TaskOf(ctx))
+	require.Equal(t, ctx, WithTask(ctx, ""), "clearing an unmarked context returns it")
+
+	marked := WithTask(ctx, "task-1")
+	require.Equal(t, "task-1", TaskOf(marked))
+	require.Equal(t, "task-2", TaskOf(WithTask(marked, "task-2")), "the inner mark wins")
+	cleared := WithTask(marked, "")
+	require.Empty(t, TaskOf(cleared), "an empty task clears the mark")
+	require.Equal(t, "task-1", TaskOf(marked), "the outer context keeps its mark")
+}
+
+func TestLeadPutsTheMarkOnTheStatement(t *testing.T) {
+	isolate(t)
+	var seen []Statement
+	remove := Install(PassFunc(func(_ context.Context, st Statement) (string, error) {
+		seen = append(seen, st)
+		return st.SQL, nil
+	}))
+	defer remove()
+
+	marked := WithTask(context.Background(), "task-1")
+	_, err := Lead(marked, ExitServer, "test.task", "SELECT 1")
+	require.NoError(t, err)
+	_, err = Lead(context.Background(), ExitServer, "test.task", "SELECT 2")
+	require.NoError(t, err)
+	_, err = Lead(WithTask(marked, ""), ExitLocal, "test.task", "SELECT 3")
+	require.NoError(t, err)
+	require.Equal(t, []Statement{
+		{SQL: "SELECT 1", Exit: ExitServer, Site: "test.task", Task: "task-1"},
+		{SQL: "SELECT 2", Exit: ExitServer, Site: "test.task"},
+		{SQL: "SELECT 3", Exit: ExitLocal, Site: "test.task"},
+	}, seen)
+}
+
+func TestLeadOnAMarkedContextWithNothingInstalledAllocatesNothing(t *testing.T) {
+	isolate(t)
+	ctx := WithTask(context.Background(), "task-1")
+	allocs := testing.AllocsPerRun(100, func() {
+		_, _ = Lead(ctx, ExitServer, "test.site", "SELECT 1")
+	})
+	require.Zero(t, allocs)
+}
+
 func TestJournalWritesEachDistinctStatementOnce(t *testing.T) {
 	var buf bytes.Buffer
 	j := NewJournal(&buf)
