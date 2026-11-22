@@ -8,9 +8,11 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 )
 
-// Grammar2Gap reports whether canonical — output of the canonicalisation
-// pipeline that [nanopass.ParseCanonical] refused — is refused only for
-// shapes grammar2 has no production for, which no pass can rewrite into one:
+// Grammar2Gap reports whether canonical, output of the canonicalisation
+// pipeline that [nanopass.ParseCanonical] refused, is refused only for shapes
+// grammar2 has no production for.
+//
+// No pass can rewrite these shapes into one grammar2 takes:
 //
 //   - a table-function argument that is an expression other than a literal,
 //     an identifier, a function call or a query: `numbers(1 + 1)`,
