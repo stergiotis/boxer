@@ -73,15 +73,15 @@ func quoteString(s string) (q string) {
 }
 
 // OpDitchBodies is the [recordstore.InPlaceStatement.Op] of the removal of
-// kept conversation text, and DitchArgApp the name of its one argument: the
-// app whose messages are meant, "" for every app's. A deployment that keeps
-// the facts in a table of its own answers it from its insert transform
+// kept conversation text. A deployment that keeps the facts in a table of
+// its own answers it from its insert transform
 // ([recordstore.InPlaceTransformI]) with the statement that empties the
-// text section of those message rows in that table, and waits for it.
-const (
-	OpDitchBodies = "trail.ditchBodies"
-	DitchArgApp   = "app"
-)
+// text section of the message rows meant in that table, and waits for it.
+const OpDitchBodies = "trail.ditchBodies"
+
+// DitchArgApp is the name of [OpDitchBodies]' one argument: the app whose
+// messages are meant, "" for every app's.
+const DitchArgApp = "app"
 
 // DitchBodies runs [DitchBodiesSQL] over the table the recorder writes to,
 // through the recorder's own executor, and records it as the trail's ditch
