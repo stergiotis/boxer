@@ -659,7 +659,7 @@ the connection default; there is no ambient inheritance from sibling tables.
 | `CanonicalizeKeywordCase` | uppercase keywords; preserve identifier case | Idempotent |
 | `CanonicalizeWhitespace` / `CanonicalizeWhitespaceSingleLine` | collapse whitespace (preserve / drop newlines) | Idempotent |
 | `CanonicalizeEquals` | `==` → `=` | Idempotent |
-| `CanonicalizeIdentifiers` | double-quote identifiers (param slots & type exprs stay bare) | Idempotent |
+| `CanonicalizeIdentifiers` | double-quote identifiers (param slots & type exprs stay bare; setting names, SET prelude included, only when a keyword) | Idempotent |
 | `CanonicalizeSugar` | DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM → function calls | NeedsFixedPoint |
 | `CanonicalizeConstructors(form)` | tuple/array between literal and function form | NeedsFixedPoint |
 | `CanonicalizeCaseConditionals` | CASE → `if`/`multiIf`/`caseWithExpression` | NeedsFixedPoint |

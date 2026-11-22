@@ -142,7 +142,7 @@ state, structural reordering, or a node-conditional token rename
 | `CanonicalizeWhitespace` | Collapses whitespace, preserves single newlines | Yes |
 | `CanonicalizeWhitespaceSingleLine` | Collapses all whitespace to single spaces | Yes |
 | `CanonicalizeEquals` | Replaces `==` with `=` | Yes |
-| `CanonicalizeIdentifiers` | Wraps identifiers in double quotes; param slots (`{name: Type}`) and type expressions stay bare | Yes |
+| `CanonicalizeIdentifiers` | Wraps identifiers in double quotes; param slots (`{name: Type}`) and type expressions stay bare; a setting name — in SETTINGS, in SET, and in the SET prelude, which it reaches through env.SessionSettings — is quoted only when it lexes as a keyword | Yes |
 
 ### Structural (scope-aware)
 

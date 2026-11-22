@@ -3,6 +3,7 @@ package passes
 import (
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -15,15 +16,28 @@ import (
 // as are param slots ({name: Type}) and type expressions — ClickHouse
 // requires both bare. The ALL of GROUP BY ALL and ORDER BY ALL stays bare
 // too: it is the keyword, which quoted would name a column "all".
-var CanonicalizeIdentifiers = nanopass.LiftBodyPass(
-	"CanonicalizeIdentifiers",
-	canonicalizeIdentifiersImpl,
-	nanopass.PassProperties{
-		Idempotent: true,
-		Reads:      nanopass.RegionBody,
-		Writes:     nanopass.RegionBody,
+//
+// A setting name stays bare unless it lexes as a keyword, wherever it is
+// written: in a SETTINGS clause, in a SET statement in the body, and in the
+// `SET …;` prelude, which [grammarenv.Extract] splits off before the body is
+// parsed and which this pass therefore spells through the environment (see
+// spellPreludeSettingNames).
+var CanonicalizeIdentifiers = nanopass.Pass{
+	Name: "CanonicalizeIdentifiers",
+	Apply: func(e *grammarenv.Environment, body string) (newBody string, err error) {
+		newBody, err = canonicalizeIdentifiersImpl(body)
+		if err != nil {
+			return
+		}
+		spellPreludeSettingNames(e)
+		return
 	},
-)
+	Properties: nanopass.PassProperties{
+		Idempotent: true,
+		Reads:      nanopass.RegionBody | nanopass.RegionSessionSettings,
+		Writes:     nanopass.RegionBody | nanopass.RegionSessionSettings,
+	},
+}
 
 func canonicalizeIdentifiersImpl(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
@@ -46,14 +60,16 @@ func canonicalizeIdentifiersImpl(sql string) (result string, err error) {
 			// accepts it bare, Grammar2's IDENTIFIER token does not, and
 			// the server accepts the quoted spelling. The value side only
 			// carries literals and array()/tuple() constructors whose
-			// names are real functions; it is never touched.
-			quoteIfKeyword(rw, c, guard)
+			// names are real functions; it is never touched. A setting
+			// named true or false is a name here, not a boolean, and is
+			// quoted like a keyword.
+			quoteIfKeyword(rw, c, guard, true)
 			return false
 		case *grammar1.IdentifierOrNullContext:
 			// The FORMAT clause name stays bare unless it collides with a
 			// keyword (NULL_SQL is the grammar's own alternative and is
 			// left alone).
-			quoteIfKeyword(rw, c, guard)
+			quoteIfKeyword(rw, c, guard, false)
 			return false
 		case *grammar1.GroupByClauseContext:
 			// GROUP BY ALL: the grammar reads the ALL keyword as a column
@@ -155,8 +171,9 @@ func keepBareAll(ctx antlr.ParserRuleContext, guard *fusionGuard) {
 
 // quoteIfKeyword walks the direct identifier child of ctx and quotes its
 // token only when it is a keyword token — names that already lex as
-// IDENTIFIER stay bare.
-func quoteIfKeyword(rw nanopass.RewriterI, ctx antlr.ParserRuleContext, guard *fusionGuard) {
+// IDENTIFIER stay bare. NULL stays bare, and so do true and false unless
+// quoteBooleans is set.
+func quoteIfKeyword(rw nanopass.RewriterI, ctx antlr.ParserRuleContext, guard *fusionGuard, quoteBooleans bool) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		ident, ok := ctx.GetChild(i).(*grammar1.IdentifierContext)
 		if !ok {
@@ -171,10 +188,10 @@ func quoteIfKeyword(rw nanopass.RewriterI, ctx antlr.ParserRuleContext, guard *f
 			continue
 		}
 		tt := tok.GetTokenType()
+		boolean := tt == grammar1.ClickHouseLexerJSON_TRUE || tt == grammar1.ClickHouseLexerJSON_FALSE
 		if tt == grammar1.ClickHouseLexerIDENTIFIER ||
 			tt == grammar1.ClickHouseLexerNULL_SQL ||
-			tt == grammar1.ClickHouseLexerJSON_TRUE ||
-			tt == grammar1.ClickHouseLexerJSON_FALSE {
+			boolean && !quoteBooleans {
 			continue
 		}
 		guard.processed[idx] = true

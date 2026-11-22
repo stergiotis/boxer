@@ -1,8 +1,11 @@
 package play
 
 import (
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 )
 
 func TestExtractParamsUserExample(t *testing.T) {
@@ -85,6 +88,31 @@ func TestExtractParamsLeavesNonParamSetsIntact(t *testing.T) {
 	}
 	if strings.Contains(residual, "param_a = 1") {
 		t.Errorf("residual still has harvested SET: %q", residual)
+	}
+}
+
+// Canonicalisation quotes a prelude setting named by a keyword and leaves the
+// parameter lines as written, so the parameters harvested from the canonical
+// form are the ones harvested from the buffer.
+func TestExtractParamsAfterCanonicalPrelude(t *testing.T) {
+	sql := "SET param_ids = [1,2];\nSET final = 1;\nSET param_s = 'a''b';\nSELECT a FROM t WHERE has({ids:Array(UInt8)}, a) AND b = {s:String}"
+	_, want, err := ExtractParams(sql)
+	if err != nil {
+		t.Fatalf("ExtractParams: %v", err)
+	}
+	canonical, err := passes.CanonicalizeFull(16).Run(sql)
+	if err != nil {
+		t.Fatalf("CanonicalizeFull: %v", err)
+	}
+	residual, got, err := ExtractParams(canonical)
+	if err != nil {
+		t.Fatalf("ExtractParams(canonical): %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("params from the canonical form = %v, want %v", got, want)
+	}
+	if !strings.Contains(residual, `SET "final" = 1;`) {
+		t.Errorf("residual = %q, want the quoted keyword setting", residual)
 	}
 }
 
