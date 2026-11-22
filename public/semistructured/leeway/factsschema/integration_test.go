@@ -16,7 +16,7 @@ import (
 )
 
 // TestComposeCreateTableSql_AppliesToLiveClickHouse exercises the leeway DDL
-// emitter against the project's localhost ClickHouse (per
+// emitter against the ClickHouse server the CLICKHOUSE_* variables name (per
 // reference_clickhouse_localhost_defaults). Validates that:
 //
 //   - the emitted CREATE TABLE statement parses,
@@ -28,9 +28,9 @@ import (
 // runtime data.
 func TestComposeCreateTableSql_AppliesToLiveClickHouse(t *testing.T) {
 	ctx := context.Background()
-	cli := chclient.New(chclient.Defaults(), nil)
+	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if err := cli.Ping(ctx); err != nil {
-		t.Skipf("ClickHouse not reachable at %s: %v", chclient.Defaults().URL, err)
+		t.Skipf("ClickHouse not reachable at %s: %v", chclient.ConfigFromEnv().URL, err)
 	}
 
 	const dbName = "runtime_factsschema_test"

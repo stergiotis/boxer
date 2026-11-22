@@ -68,9 +68,9 @@ func bootStore(t *testing.T, cli *chclient.Client, table string) (h storeHarness
 // here rather than passing on an assertion with no teeth.
 func TestStoreSurvivesProcessRestart_LiveCH(t *testing.T) {
 	ctx := context.Background()
-	cli := chclient.New(chclient.Defaults(), nil)
+	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if err := cli.Ping(ctx); err != nil {
-		t.Skipf("ClickHouse not reachable at %s: %v", chclient.Defaults().URL, err)
+		t.Skipf("ClickHouse not reachable at %s: %v", chclient.ConfigFromEnv().URL, err)
 	}
 
 	table := durabilityDb + "." + persiststore.TableName
@@ -126,9 +126,9 @@ func TestStoreSurvivesProcessRestart_LiveCH(t *testing.T) {
 // than a hand-written physical column name.
 func TestStoreWritesStateRows_LiveCH(t *testing.T) {
 	ctx := context.Background()
-	cli := chclient.New(chclient.Defaults(), nil)
+	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if err := cli.Ping(ctx); err != nil {
-		t.Skipf("ClickHouse not reachable at %s: %v", chclient.Defaults().URL, err)
+		t.Skipf("ClickHouse not reachable at %s: %v", chclient.ConfigFromEnv().URL, err)
 	}
 
 	const db = durabilityDb + "_rows"
@@ -172,9 +172,9 @@ func TestStoreWritesStateRows_LiveCH(t *testing.T) {
 // scan, over the regenerated store and the migrated table.
 func TestStoreRowsCarryTheWritingWindow_LiveCH(t *testing.T) {
 	ctx := context.Background()
-	cli := chclient.New(chclient.Defaults(), nil)
+	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if err := cli.Ping(ctx); err != nil {
-		t.Skipf("ClickHouse not reachable at %s: %v", chclient.Defaults().URL, err)
+		t.Skipf("ClickHouse not reachable at %s: %v", chclient.ConfigFromEnv().URL, err)
 	}
 
 	const db = durabilityDb + "_window"

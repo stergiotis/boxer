@@ -27,9 +27,9 @@ const liveStateDb = "persist_state_live_test"
 // generated statement that works locally and not in production.
 func TestStoreBackendStateConformance_LiveCH(t *testing.T) {
 	ctx := context.Background()
-	cli := chclient.New(chclient.Defaults(), nil)
+	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if err := cli.Ping(ctx); err != nil {
-		t.Skipf("ClickHouse not reachable at %s: %v", chclient.Defaults().URL, err)
+		t.Skipf("ClickHouse not reachable at %s: %v", chclient.ConfigFromEnv().URL, err)
 	}
 	t.Cleanup(func() { _ = cli.Exec(ctx, "DROP DATABASE IF EXISTS "+liveStateDb) })
 	statestoretest.Run(t, func(t *testing.T) statestore.StoreI {

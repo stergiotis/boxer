@@ -32,9 +32,9 @@ const durabilityDb = "colwidth_durability_test"
 func newLiveStore(t *testing.T) (store colwidth.StoreI, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
-	cli := chclient.New(chclient.Defaults(), nil)
+	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if err := cli.Ping(ctx); err != nil {
-		t.Skipf("ClickHouse not reachable at %s: %v", chclient.Defaults().URL, err)
+		t.Skipf("ClickHouse not reachable at %s: %v", chclient.ConfigFromEnv().URL, err)
 	}
 	require.NoError(t, cli.Exec(ctx, "DROP DATABASE IF EXISTS "+durabilityDb))
 	store = reopen(t)
@@ -48,7 +48,7 @@ func newLiveStore(t *testing.T) (store colwidth.StoreI, cleanup func()) {
 // scratch table; later ones find it.
 func reopen(t *testing.T) colwidth.StoreI {
 	t.Helper()
-	exec, err := storeexec.New(chclient.New(chclient.Defaults(), nil), nil)
+	exec, err := storeexec.New(chclient.New(chclient.ConfigFromEnv(), nil), nil)
 	require.NoError(t, err)
 	b, err := persist.OpenStoreBackendAt(context.Background(), exec, nil, durabilityDb+"."+persiststore.TableName)
 	require.NoError(t, err)

@@ -27,9 +27,9 @@ const liveDb = "persiststore_live_test"
 func openLive(t *testing.T) (st *PersistStore) {
 	t.Helper()
 	ctx := context.Background()
-	cli := chclient.New(chclient.Defaults(), nil)
+	cli := chclient.New(chclient.ConfigFromEnv(), nil)
 	if err := cli.Ping(ctx); err != nil {
-		t.Skipf("ClickHouse not reachable at %s: %v", chclient.Defaults().URL, err)
+		t.Skipf("ClickHouse not reachable at %s: %v", chclient.ConfigFromEnv().URL, err)
 	}
 	require.NoError(t, cli.Exec(ctx, "DROP DATABASE IF EXISTS "+liveDb))
 	t.Cleanup(func() { _ = cli.Exec(ctx, "DROP DATABASE IF EXISTS "+liveDb) })
