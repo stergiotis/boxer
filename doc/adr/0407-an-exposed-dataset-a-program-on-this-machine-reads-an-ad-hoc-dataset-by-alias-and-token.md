@@ -81,7 +81,7 @@ to a request presenting the token, until the exposure lapses.
 - **SD2 — Token and id; the token travels in a header.** ✓ An exposure has an
   id, `exp_` and 64 random bits, which names it in the catalog, a revoke and
   the trail, and a token, `bxe_` and 256 random bits, which only the answer
-  that minted it carries; the service keeps its SHA-256 and compares
+  that minted it carries; the service keeps its BLAKE3 digest and compares
   digests. A reader sends `Authorization: Bearer <token>` to
   `/exposed/<alias>`. The path carries no secret, so the listener, a proxy
   and the reading server may log it; ClickHouse hides a `headers()` value in
@@ -423,7 +423,7 @@ recorded here as decided; the ADR as a whole still awaits review.
   structure or publisher change; a bundle is not a unit.
 - The token in an `Authorization: Bearer` header rather than the URL;
   the path names the alias, which is therefore visible in logs.
-- 256-bit tokens kept as SHA-256 digests; 64-bit ids; the prefixes `exp_`
+- 256-bit tokens kept as BLAKE3 digests; 64-bit ids; the prefixes `exp_`
   and `bxe_`.
 - Lifetime 1 h by default and 24 h at most; 64 exposures; 16 open reads per
   exposure; Go constants rather than environment variables.
