@@ -540,6 +540,10 @@ type Provenance struct {
 	SourceName string
 	// Format is the container the samples were read from, e.g. "png".
 	Format string
+	// Variant is the variant of the format, in the format's own word, where
+	// one reader's name covers several ("bigtiff" of "tiff"); empty
+	// otherwise (ADR-0398 §SD5).
+	Variant string
 	// Decoder names what decoded them.
 	Decoder string
 	// StoredBitDepth is the bits per sample as the file stored them; 0 when
