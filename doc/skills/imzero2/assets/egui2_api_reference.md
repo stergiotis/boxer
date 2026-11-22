@@ -25,7 +25,7 @@ status: draft
 | AnimateValueWithTime | Procedural | No | 3 | 0 | - | - |
 | Announce | Procedural | No | 2 | 0 | - | - |
 | Atoms | BuilderFactory | No | 0 | 0 | 21 | Retained |
-| Button | BuilderFactory | Yes | 0 | 1 | 9 | Immediate, Retained |
+| Button | BuilderFactory | Yes | 0 | 1 | 13 | Immediate, Retained |
 | CaptureReplay | Procedural | No | 3 | 0 | - | - |
 | CaptureUiAvailableRect | Procedural | No | 1 | 0 | - | - |
 | CaptureUiRect | Procedural | No | 1 | 0 | - | - |
@@ -43,7 +43,7 @@ status: draft
 | CopyTextToClipboard | Procedural | No | 1 | 0 | - | - |
 | DatePickerButton | BuilderFactory | Yes | 1 | 0 | 7 | Immediate, Retained |
 | DateTimePickerButton | BuilderFactory | Yes | 1 | 0 | 7 | Immediate, Retained |
-| DockAreaRaw | BuilderFactory | Yes | 5 | 0 | 0 | Immediate |
+| DockAreaRaw | BuilderFactory | Yes | 7 | 0 | 0 | Immediate |
 | DragValueF64 | BuilderFactory | Yes | 1 | 0 | 10 | Immediate, Retained |
 | DragValueI64 | BuilderFactory | Yes | 1 | 0 | 10 | Immediate, Retained |
 | DragValueU64 | BuilderFactory | Yes | 1 | 0 | 10 | Immediate, Retained |
@@ -349,11 +349,15 @@ Atoms
 - **Small**()
 - **Wrap**()
 - **Truncate**()
+- **Extend**()
 - **Selected**(selected: b)
 - **FrameWhenInactive**(val: b)
+- **ReserveFrame**()
+- **Fill**()
 - **RightText**(text: s)
 - **ShortcutText**(text: s)
 - **Kind**(ki: u8)
+- **HoverText**(text: s)
 
 #### Return Type
 
@@ -656,6 +660,8 @@ DateTimePickerButton
 | initialLayout | plain | u8h |
 | noScrollTabIds | plain | u64h |
 | activateTabId | plain | u64 |
+| closableTabIds | plain | u64h |
+| bareTabIds | plain | u64h |
 
 #### Deferred Block Maps
 

@@ -45,13 +45,37 @@ pub(super) fn set_tour_neutral() {
 
 /// Wraps a built [`egui::Button`] with its kind; add it where the button
 /// would be added. [`KIND_SECONDARY`] and unknown kinds add the button as is.
-pub struct IdsButton<'a>(pub Button<'a>, pub u8);
+///
+/// The third field reserves the frame: set it only for a button that draws
+/// no frame at rest ([`rests_unframed`]). egui's button frames a hovered or
+/// pressed state with margins that add up to `button_padding` whatever the
+/// stroke and expansion; at rest without a frame it keeps only the inner
+/// margin, `button_padding + expansion - stroke`, so with the themes' hairline
+/// rest stroke it is a point narrower on every side and hovering it pushes
+/// what follows. Reserving sets the rest state's expansion to its stroke
+/// width for the button's own `ui` call, which brings the unframed margin to
+/// `button_padding`; nothing is drawn with the rest frame, so nothing else
+/// changes.
+pub struct IdsButton<'a>(pub Button<'a>, pub u8, pub bool);
+
+/// Whether a button of `kind` with `frame_when_inactive` draws no frame at
+/// rest: the ghost kinds never do.
+pub fn rests_unframed(kind: u8, frame_when_inactive: bool) -> bool {
+    !frame_when_inactive || matches!(kind, KIND_GHOST | KIND_DANGER_GHOST)
+}
 
 impl Widget for IdsButton<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
-        let IdsButton(button, kind) = self;
+        let IdsButton(button, kind, reserve) = self;
         let Some(states) = states(tokens::theme::active(), kind) else {
-            return ui.add(button);
+            if !reserve {
+                return ui.add(button);
+            }
+            let saved = ui.visuals().widgets.inactive;
+            reserve_rest_frame(&mut ui.visuals_mut().widgets.inactive);
+            let response = ui.add(button);
+            ui.visuals_mut().widgets.inactive = saved;
+            return response;
         };
         let button = if matches!(kind, KIND_GHOST | KIND_DANGER_GHOST) {
             button.frame_when_inactive(false)
@@ -71,6 +95,9 @@ impl Widget for IdsButton<'_> {
         paint(&mut visuals.widgets.inactive, states[0]);
         paint(&mut visuals.widgets.hovered, states[1]);
         paint(&mut visuals.widgets.active, states[2]);
+        if reserve {
+            reserve_rest_frame(&mut visuals.widgets.inactive);
+        }
         if TOUR_NEUTRAL.load(Ordering::Relaxed) {
             let rest = visuals.widgets.inactive.bg_stroke;
             visuals.widgets.hovered.bg_stroke = rest;
@@ -84,6 +111,11 @@ impl Widget for IdsButton<'_> {
         visuals.override_text_color = saved.3;
         response
     }
+}
+
+/// The rest state of a button that reserves its frame ([`IdsButton`]).
+fn reserve_rest_frame(v: &mut WidgetVisuals) {
+    v.expansion = v.bg_stroke.width;
 }
 
 /// One state's colours. `None` leaves that slot as the theme has it.
@@ -327,14 +359,69 @@ mod tests {
         }
     }
 
+    /// A button that rests unframed and reserves its frame allocates the
+    /// size it has when hovered, in both themes; without the reserve it is
+    /// narrower at rest, which is what moved a segmented bar on hover.
+    #[test]
+    fn a_reserved_unframed_button_keeps_its_size_on_hover() {
+        for theme in [Theme::Dark, Theme::Fresh] {
+            let style = || {
+                let mut style = egui::Style::default();
+                tokens::apply_spacing(&mut style.spacing, tokens::density::Density::Standard);
+                match theme {
+                    Theme::Dark => {
+                        tokens::apply_visuals(&mut style.visuals);
+                        tokens::apply_rounding(&mut style.visuals);
+                        tokens::apply_stroke(&mut style.visuals);
+                    }
+                    Theme::Fresh => {
+                        super::super::fresh::apply(&mut style, tokens::density::Density::Standard);
+                    }
+                }
+                style
+            };
+            let classes = egui::widget_style::Classes::default();
+            let unframed = |style: &egui::Style| {
+                // egui's unframed rest layout: the inner margin alone.
+                let f =
+                    style.button_style(&classes, egui::widget_style::WidgetState::Inactive).frame;
+                egui::epaint::MarginF32::from(f.inner_margin)
+            };
+            let hovered = |style: &egui::Style| {
+                style
+                    .button_style(&classes, egui::widget_style::WidgetState::Hovered)
+                    .frame
+                    .total_margin()
+            };
+            let plain = style();
+            assert_ne!(
+                unframed(&plain),
+                hovered(&plain),
+                "{theme:?}: the defect this guards"
+            );
+            let mut reserved = style();
+            reserve_rest_frame(&mut reserved.visuals.widgets.inactive);
+            assert_eq!(unframed(&reserved), hovered(&reserved), "{theme:?}");
+        }
+    }
+
+    #[test]
+    fn unframed_at_rest() {
+        assert!(rests_unframed(KIND_GHOST, true));
+        assert!(rests_unframed(KIND_DANGER_GHOST, true));
+        assert!(rests_unframed(KIND_SECONDARY, false));
+        assert!(!rests_unframed(KIND_TERTIARY, true));
+    }
+
     #[test]
     fn the_override_does_not_outlive_the_button() {
         let ctx = egui::Context::default();
         super::super::apply_style_only(&ctx, tokens::density::Density::Standard);
         ctx.run_ui(egui::RawInput::default(), |ui| {
             let before = ui.visuals().clone();
-            ui.add(IdsButton(Button::new("x"), KIND_PRIMARY));
-            ui.add(IdsButton(Button::new("y"), KIND_DANGER_GHOST));
+            ui.add(IdsButton(Button::new("x"), KIND_PRIMARY, false));
+            ui.add(IdsButton(Button::new("y"), KIND_DANGER_GHOST, true));
+            ui.add(IdsButton(Button::new("z"), KIND_SECONDARY, true));
             assert_eq!(before, *ui.visuals());
         })
         .textures_delta

@@ -469,19 +469,42 @@ if {{EguiUiOptionalOuter}}.is_some() {
 				BeginMethod("small").EndMethod().
 				BeginMethod("wrap").EndMethod().
 				BeginMethod("truncate").EndMethod().
+				// Extend keeps the label on one line: in a wrapping row the
+				// button then moves to the next line when it does not fit,
+				// where Wrap would fold its label into what is left of this
+				// one, down to a letter a line.
+				BeginMethod("extend").CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.wrap_mode(egui::TextWrapMode::Extend);\n")).EndMethod().
 				BeginMethod("selected").Arg("selected", ctabb.B).EndMethod().
-				BeginMethod("frameWhenInactive").Arg("val", ctabb.B).EndMethod().
+				BeginMethod("frameWhenInactive").Arg("val", ctabb.B).
+				CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.frame_when_inactive(val);\nframe_at_rest = val;\n")).EndMethod().
+				// ReserveFrame: a button that draws no frame at rest
+				// (FrameWhenInactive(false), or a ghost kind) takes at rest
+				// the space its frame takes when drawn, so hovering it does
+				// not change its size (style::button::IdsButton). Has no
+				// effect on a button framed at rest.
+				BeginMethod("reserveFrame").
+				CodeClientRust(rustClientCode("reserve_frame = true;\n")).EndMethod().
+				// Fill: the frame's fill in every state, over the kind's and
+				// the selection's. On a button framed only while hovered it
+				// is the hover's fill.
+				BeginMethod("fill").EvaluatedArg("col", structColor32()).AsColor().
+				CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.fill(col);\n")).EndMethod().
 				BeginMethod("rightText").Arg("text", ctabb.S).EndMethod().
 				BeginMethod("shortcut_text").Arg("text", ctabb.S).EndMethod().
 				// The IDS kind (ADR-0273). Unexported: Go wraps it as
 				// Kind(ButtonKindE) in the bindings.
 				BeginMethod("kind").Unexported().Arg("ki", ctabb.U8).
 				CodeClientRust(rustClientCode("ids_kind = ki;\n")).EndMethod().
+				// A tooltip on the button's own response. HoverText wraps
+				// its body in a scope, and a scope in a wrapping row cannot
+				// move to the next line: a button in it runs past the edge.
+				BeginMethod("hoverText").Arg("text", ctabb.S).
+				CodeClientRust(rustClientCode("hover_text = Some(text);\n")).EndMethod().
 				Build()...).
-			WithConstructionCodeClientRust(rustClientCode("egui::Button::new(atoms);\nlet mut ids_kind: u8 = 0;\n")).
+			WithConstructionCodeClientRust(rustClientCode("egui::Button::new(atoms);\nlet mut ids_kind: u8 = 0;\nlet mut hover_text: Option<String> = None;\nlet mut frame_at_rest = true;\nlet mut reserve_frame = false;\n")).
 			// Added through the design system's wrapper, which colours the
 			// button by its kind and adds the secondary kind unchanged.
-			WithApplyCodeClientRust(rustClientCode("self.apply_widget(imzero2_egui::style::button::IdsButton({{Instance}},ids_kind),{{EguiUiOptionalOuter}},{{FuncProcIdOuter}},Some({{Id}}));\n")).
+			WithApplyCodeClientRust(rustClientCode("let reserve = reserve_frame && imzero2_egui::style::button::rests_unframed(ids_kind, frame_at_rest);\nif let Some(r) = self.apply_widget(imzero2_egui::style::button::IdsButton({{Instance}},ids_kind,reserve),{{EguiUiOptionalOuter}},{{FuncProcIdOuter}},Some({{Id}})) && let Some(t) = hover_text { let _ = r.on_hover_text(t); }\n")).
 			WithSettingImmediate(true).
 			WithSettingRetained(true).
 			WithReturnType(structButton()).

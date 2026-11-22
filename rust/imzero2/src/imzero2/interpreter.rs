@@ -4,9 +4,13 @@ use crate::fffi::common::{FffiError, FffiResult};
 use crate::fffi::io::ImZeroFffiIo;
 
 pub mod capture_replay;
+pub mod dock_layout;
 pub mod hit_regions;
 pub mod optree;
 pub mod paint_budget;
+use dock_layout::{
+    dock_tab_close_id, hide_bare_tab_bars, parse_dock_initial_layout, reconcile_dock_tabs,
+};
 use hit_regions::HitShape;
 use paint_budget::{DEFAULT_MAX_BUFFER_SIZE, paint_vertex_budget_for};
 
@@ -395,116 +399,16 @@ pub fn table_cell_aligned(
     };
     ui.with_layout(layout, add);
 }
-/// Parse the Go-side initial-layout descriptor passed via the
-/// `initialLayout` arg on `dockAreaRaw`. The wire format is
-/// little-endian:
-///
-/// ```text
-/// u8  version = 1
-/// u32 num_root_tabs
-/// u64[num_root_tabs] root_tabs
-/// u8  num_splits
-/// for each split:
-///   u8  parent_leaf_id   // refers to root (0) or a prior new_leaf_id
-///   u8  new_leaf_id      // assigned by Go, unique within this layout
-///   u8  direction        // 0=Above 1=Below 2=Left 3=Right
-///   f32 fraction         // 0..=1, fraction the OLD node keeps
-///   u32 num_new_leaf_tabs
-///   u64[num_new_leaf_tabs] new_leaf_tabs
-/// ```
-///
-/// Used only the first time a `dock_state` is constructed. Subsequent
-/// frames preserve the user's drag/drop changes in `dock_states`.
-/// Any parse error or unknown version falls back to the default
-/// `DockState::new(fallback_tabs)` single-leaf layout — the dock
-/// stays functional, the user just loses their split preset.
-pub fn parse_dock_initial_layout(bytes: &[u8], fallback_tabs: &[u64]) -> egui_dock::DockState<u64> {
-    use byteorder::{LittleEndian, ReadBytesExt as _};
-    use std::io::Cursor;
-
-    let fallback = || egui_dock::DockState::new(fallback_tabs.to_vec());
-    if bytes.is_empty() {
-        return fallback();
-    }
-    let mut cur = Cursor::new(bytes);
-    let Ok(version) = cur.read_u8() else {
-        return fallback();
-    };
-    if version != 1 {
-        return fallback();
-    }
-    let Ok(num_root_tabs) = cur.read_u32::<LittleEndian>() else {
-        return fallback();
-    };
-    let mut root_tabs = Vec::with_capacity(num_root_tabs as usize);
-    for _ in 0..num_root_tabs {
-        match cur.read_u64::<LittleEndian>() {
-            Ok(v) => root_tabs.push(v),
-            Err(_) => return fallback(),
-        }
-    }
-    let mut state = egui_dock::DockState::new(root_tabs);
-    let mut leaf_nodes: std::collections::HashMap<u8, egui_dock::NodeIndex> =
-        std::collections::HashMap::new();
-    leaf_nodes.insert(0, egui_dock::NodeIndex::root());
-    let Ok(num_splits) = cur.read_u8() else {
-        return state;
-    };
-    for _ in 0..num_splits {
-        let Ok(parent_id) = cur.read_u8() else {
-            break;
-        };
-        let Ok(new_id) = cur.read_u8() else {
-            break;
-        };
-        let Ok(dir) = cur.read_u8() else {
-            break;
-        };
-        let Ok(fraction) = cur.read_f32::<LittleEndian>() else {
-            break;
-        };
-        let Ok(num_tabs) = cur.read_u32::<LittleEndian>() else {
-            break;
-        };
-        let mut tabs = Vec::with_capacity(num_tabs as usize);
-        let mut ok = true;
-        for _ in 0..num_tabs {
-            if let Ok(v) = cur.read_u64::<LittleEndian>() {
-                tabs.push(v);
-            } else {
-                ok = false;
-                break;
-            }
-        }
-        if !ok {
-            break;
-        }
-        let Some(parent_node) = leaf_nodes.get(&parent_id).copied() else {
-            continue;
-        };
-        let tree = state.main_surface_mut();
-        let [old_idx, new_idx] = match dir {
-            0 => tree.split_above(parent_node, fraction, tabs),
-            1 => tree.split_below(parent_node, fraction, tabs),
-            2 => tree.split_left(parent_node, fraction, tabs),
-            3 => tree.split_right(parent_node, fraction, tabs),
-            _ => continue,
-        };
-        leaf_nodes.insert(parent_id, old_idx);
-        leaf_nodes.insert(new_id, new_idx);
-    }
-    state
-}
-
 /// Delegate that bridges `egui_dock`'s `TabViewer` trait to FFFI2's deferred
 /// opcode block replay. The Go side owns tab identity (u64) and emits each
 /// tab's body as a deferred block; `egui_dock` owns the layout (splits, active
 /// tab, drag-to-reorder) and calls `ui(&mut tab)` for the active tab only.
 ///
-/// `closeable` is forced to false so the library never removes a tab on its
-/// own — the Go side is the sole authority on which tabs exist. This lets
-/// Go reconcile the dock state each frame by just sending an up-to-date tab
-/// id list (see the dockArea apply code).
+/// The library never removes a tab on its own — the Go side is the sole
+/// authority on which tabs exist, and reconciles the dock state each frame by
+/// sending an up-to-date tab id list (see the dockArea apply code). A tab Go
+/// marks closable shows `egui_dock`'s close button; a close is recorded in
+/// `closed` and refused (`on_close`), and the apply code reports it to Go.
 pub struct FffiDockTabViewer<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write> {
     pub interpreter: &'b mut ImZeroFffi<'a, R, W>,
     pub ctx: &'c egui::Context,
@@ -513,6 +417,10 @@ pub struct FffiDockTabViewer<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write>
     /// Tab ids whose body is NOT wrapped in a live `ScrollArea` (see
     /// `scroll_bars`). Populated from the Go-side `noScrollTabIds` arg.
     pub no_scroll: std::collections::HashSet<u64>,
+    /// Tab ids that show the close button. From `closableTabIds`.
+    pub closable: std::collections::HashSet<u64>,
+    /// The tabs the person asked to close this frame, in the order asked.
+    pub closed: Vec<u64>,
 }
 
 impl<R: std::io::BufRead, W: std::io::Write> egui_dock::TabViewer
@@ -535,20 +443,40 @@ impl<R: std::io::BufRead, W: std::io::Write> egui_dock::TabViewer
         }
     }
 
-    fn closeable(&mut self, _tab: &mut u64) -> bool {
-        false
+    fn is_closeable(&self, tab: &u64) -> bool {
+        self.closable.contains(tab)
+    }
+
+    /// A close from the tab's button, its context menu or a middle click:
+    /// recorded for Go and refused, so the tab stays until Go stops
+    /// declaring it (ADR-0404 §SD8).
+    fn on_close(&mut self, tab: &mut u64) -> egui_dock::tab_viewer::OnCloseResponse {
+        if !self.closed.contains(tab) {
+            self.closed.push(*tab);
+        }
+        egui_dock::tab_viewer::OnCloseResponse::Ignore
     }
 
     /// Name the tab button in the accessibility tree. `egui_dock` draws a tab
     /// with a bare `interact`, which registers no AccessKit node, so the
     /// headless driver (ADR-0154) could not click a tab by its title and had
     /// to fall back to coordinates. The title is registered as a button
-    /// label here, on the response `egui_dock` hands back for every tab.
+    /// label here, on the response `egui_dock` hands back for every tab. A
+    /// closable tab's close button, drawn the same way under the tab's id
+    /// with "close-button", is named "Close <title>".
     fn on_tab_button(&mut self, tab: &mut u64, response: &egui::Response) {
         let title = self.titles.get(tab).cloned().unwrap_or_else(|| format!("tab {tab}"));
         response.widget_info(|| {
             egui::WidgetInfo::labeled(egui::WidgetType::Button, true, title.clone())
         });
+        if self.closable.contains(tab)
+            && let Some(close) = self.ctx.read_response(response.id.with("close-button"))
+        {
+            let label = format!("Close {title}");
+            close.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label.clone())
+            });
+        }
     }
 
     /// Key the tab body's ui id on the Go-assigned tab id rather than
@@ -2562,6 +2490,9 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
 
                 let mut w = egui::Button::new(atoms);
                 let mut ids_kind: u8 = 0;
+                let mut hover_text: Option<String> = None;
+                let mut frame_at_rest = true;
+                let mut reserve_frame = false;
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(ButtonBuilderMethodId::from_repr)?;
@@ -2590,6 +2521,12 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                             puffin::profile_scope!("match ButtonBuilderMethodId::Truncate");
                             w = w.truncate();
                         }
+                        ButtonBuilderMethodId::Extend => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match ButtonBuilderMethodId::Extend");
+                            // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                            w = w.wrap_mode(egui::TextWrapMode::Extend);
+                        }
                         ButtonBuilderMethodId::Selected => {
                             #[cfg(feature = "puffin")]
                             puffin::profile_scope!("match ButtonBuilderMethodId::Selected");
@@ -2602,7 +2539,32 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                                 "match ButtonBuilderMethodId::FrameWhenInactive"
                             );
                             let mut val = self.io.read_plain_b()?;
+                            // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
                             w = w.frame_when_inactive(val);
+                            frame_at_rest = val;
+                        }
+                        ButtonBuilderMethodId::ReserveFrame => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match ButtonBuilderMethodId::ReserveFrame");
+                            reserve_frame = true;
+                        }
+                        ButtonBuilderMethodId::Fill => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match ButtonBuilderMethodId::Fill");
+
+                            let col = {
+                                let (f2, _) = self.read_from_repr(FuncProcId::from_repr)?;
+                                let u2: &mut Option<&mut egui::Ui> = &mut None;
+                                if u2.is_some() {
+                                    self.interpret_inner(c, u2, &f2, d + 1)?;
+                                } else {
+                                    self.interpret_inner(c, u, &f2, d + 1)?;
+                                }
+
+                                self.r11_color32
+                            };
+                            // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                            w = w.fill(col);
                         }
                         ButtonBuilderMethodId::RightText => {
                             #[cfg(feature = "puffin")]
@@ -2622,6 +2584,12 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                             let mut ki = self.io.read_plain_u8()?;
                             ids_kind = ki;
                         }
+                        ButtonBuilderMethodId::HoverText => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match ButtonBuilderMethodId::HoverText");
+                            let mut text = self.io.read_plain_s()?;
+                            hover_text = Some(text);
+                        }
                     }
                 }
                 if d == 0 {
@@ -2629,12 +2597,17 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                 }
                 // apply
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                self.apply_widget(
-                    imzero2_egui::style::button::IdsButton(w, ids_kind),
+                let reserve = reserve_frame
+                    && imzero2_egui::style::button::rests_unframed(ids_kind, frame_at_rest);
+                if let Some(r) = self.apply_widget(
+                    imzero2_egui::style::button::IdsButton(w, ids_kind, reserve),
                     u,
                     f,
                     Some(i),
-                );
+                ) && let Some(t) = hover_text
+                {
+                    let _ = r.on_hover_text(t);
+                }
             }
             FuncProcId::CaptureReplay => {
                 #[cfg(feature = "puffin")]
@@ -3627,6 +3600,8 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                 let mut initial_layout = self.io.read_plain_u8h()?;
                 let mut no_scroll_tab_ids = self.io.read_plain_u64h()?;
                 let mut activate_tab_id = self.io.read_plain_u64()?;
+                let mut closable_tab_ids = self.io.read_plain_u64h()?;
+                let mut bare_tab_ids = self.io.read_plain_u64h()?;
                 // construct
                 // apply
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
@@ -3649,6 +3624,8 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                     // per-tab ScrollArea would scroll the panel in the same gesture that
                     // pans/zooms the widget content.
                     let no_scroll: HashSet<u64> = no_scroll_tab_ids.iter().copied().collect();
+                    let closable: HashSet<u64> = closable_tab_ids.iter().copied().collect();
+                    let bare: HashSet<u64> = bare_tab_ids.iter().copied().collect();
 
                     // Take DockState out of the map so the subsequent TabViewer can hold
                     // &mut self.interpreter without aliasing the HashMap entry. When
@@ -3663,16 +3640,10 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                         .remove(&area_id)
                         .unwrap_or_else(|| parse_dock_initial_layout(&initial_layout, &tab_ids));
 
-                    // Reconcile stored layout with Go's authoritative tab list.
-                    let wanted: HashSet<u64> = tab_ids.iter().copied().collect();
-                    dock_state.retain_tabs(|t| wanted.contains(t));
-                    let existing: HashSet<u64> =
-                        dock_state.iter_all_tabs().map(|(_, t)| *t).collect();
-                    for &id in &tab_ids {
-                        if !existing.contains(&id) {
-                            dock_state.push_to_first_leaf(id);
-                        }
-                    }
+                    // Reconcile stored layout with Go's authoritative tab list: a tab
+                    // that appears goes to its declared leaf (interpreter/dock_layout.rs,
+                    // ADR-0404 §SD8).
+                    reconcile_dock_tabs(&mut dock_state, &tab_ids, &initial_layout);
 
                     // Programmatic tab activation (0 = none). Go-side affordances that
                     // deliver content INTO a tab body (the snippet-library Insert splicing
@@ -3683,6 +3654,15 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                         if let Some(loc) = dock_state.find_tab(&activate_tab_id) {
                             let _ = dock_state.set_active_tab(loc);
                         }
+                    }
+
+                    // A bare tab alone in its leaf is drawn without the leaf's tab strip;
+                    // every other leaf shows its strip. Set every frame, so a tab dragged
+                    // in beside a bare one brings the strip back, and dragged out again
+                    // takes it away (interpreter/dock_layout.rs).
+                    let any_bare = !bare.is_empty();
+                    if any_bare {
+                        hide_bare_tab_bars(&mut dock_state, &bare);
                     }
 
                     let ui = u.as_mut().unwrap();
@@ -3712,41 +3692,67 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                     let avail = (bound_corner - cursor).max(egui::Vec2::ZERO);
                     let layout = *ui.layout();
                     let ctx_cloned = ui.ctx().clone();
-                    ui.allocate_ui_with_layout(avail, layout, |child_ui| {
-                        let full = child_ui.max_rect();
-                        let visible = full.intersect(child_ui.clip_rect());
-                        child_ui.expand_to_include_rect(full);
-                        if !visible.is_positive() {
-                            return;
-                        }
-                        let mut dock_ui = child_ui
-                            .new_child(egui::UiBuilder::new().max_rect(visible).layout(layout));
-                        let mut viewer = FffiDockTabViewer {
-                            interpreter: self,
-                            ctx: &ctx_cloned,
-                            bodies,
-                            titles,
-                            no_scroll,
-                        };
-                        // Key the library's own id derivation on the Go-side dock id, not
-                        // egui_dock's default Id::new("egui_dock::DockArea") constant. A tab
-                        // body is built with Ui::new(tab_body_id(dock_area_id, path, tab_id))
-                        // (egui_dock show/leaf.rs), which deliberately does NOT mix in the
-                        // parent ui id — so with the default constant two windows of the same
-                        // app derive the SAME body ui, and the ScrollArea egui_dock wraps
-                        // every body in (auto-id off that ui) shares one offset across them:
-                        // scrolling one window scrolled the other. area_id is already the
-                        // per-instance-salted widget id, so this separates every id below the
-                        // dock as well.
-                        // No tab closes (FffiDockTabViewer::closeable), so the close
-                        // buttons — the tab's and the leaf's close-all — would be marks
-                        // that do nothing, each taking a tab's worth of the strip.
-                        egui_dock::DockArea::new(&mut dock_state)
-                            .id(egui::Id::new(area_id))
-                            .show_close_buttons(false)
-                            .show_leaf_close_all_buttons(false)
-                            .show_inside(&mut dock_ui, &mut viewer);
-                    });
+                    let closed = ui
+                        .allocate_ui_with_layout(avail, layout, |child_ui| {
+                            let full = child_ui.max_rect();
+                            let visible = full.intersect(child_ui.clip_rect());
+                            child_ui.expand_to_include_rect(full);
+                            if !visible.is_positive() {
+                                return Vec::new();
+                            }
+                            let mut dock_ui = child_ui
+                                .new_child(egui::UiBuilder::new().max_rect(visible).layout(layout));
+                            let mut viewer = FffiDockTabViewer {
+                                interpreter: self,
+                                ctx: &ctx_cloned,
+                                bodies,
+                                titles,
+                                no_scroll,
+                                closable,
+                                closed: Vec::new(),
+                            };
+                            // Key the library's own id derivation on the Go-side dock id, not
+                            // egui_dock's default Id::new("egui_dock::DockArea") constant. A tab
+                            // body is built with Ui::new(tab_body_id(dock_area_id, path, tab_id))
+                            // (egui_dock show/leaf.rs), which deliberately does NOT mix in the
+                            // parent ui id — so with the default constant two windows of the same
+                            // app derive the SAME body ui, and the ScrollArea egui_dock wraps
+                            // every body in (auto-id off that ui) shares one offset across them:
+                            // scrolling one window scrolled the other. area_id is already the
+                            // per-instance-salted widget id, so this separates every id below the
+                            // dock as well.
+                            // Only a closable tab shows the close button
+                            // (FffiDockTabViewer::is_closeable). The leaf's close-all stays
+                            // off: it would close tabs the app has not offered to close.
+                            //
+                            // A leaf whose strip is hidden takes no space for it: no "show
+                            // the strip" triangle and no drag handle in the body's top margin,
+                            // since the strip comes back by rule, not by a gesture. The tab
+                            // context menus are off in a dock with bare tabs, because their
+                            // "Hide tab bar" would be undone on the next frame.
+                            let mut area = egui_dock::DockArea::new(&mut dock_state)
+                                .id(egui::Id::new(area_id))
+                                .show_close_buttons(true)
+                                .show_leaf_close_all_buttons(false);
+                            if any_bare {
+                                let mut style = egui_dock::Style::from_egui(dock_ui.style());
+                                style.buttons.show_tab_bar_size = 0.0;
+                                style.tab.tab_body.hidden_tab_bar_drag_height = Some(0.0);
+                                area = area
+                                    .style(style)
+                                    .hidable_tab_bars(true)
+                                    .tab_context_menus(false);
+                            }
+                            area.show_inside(&mut dock_ui, &mut viewer);
+                            viewer.closed
+                        })
+                        .inner;
+
+                    // A close the person asked for, reported to Go under the tab's close
+                    // id; the tab stays until Go stops declaring it.
+                    for tab in closed {
+                        self.r7_push(dock_tab_close_id(area_id, tab), ResponseFlags::SHOULD_CLOSE);
+                    }
 
                     self.dock_states.insert(area_id, dock_state);
                 }

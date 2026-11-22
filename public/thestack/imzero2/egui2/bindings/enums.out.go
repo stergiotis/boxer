@@ -207,7 +207,7 @@ const (
 // IdlFingerprint is the IDL these bindings were generated from, as
 // ir.Fingerprint digests it; the Rust client's generated enums carry the same
 // value from the same generation (ADR-0278 SD6).
-const IdlFingerprint uint64 = 0xd1368138b9ba6f98
+const IdlFingerprint uint64 = 0x58f8e139b61d7ed3
 const (
 	AtomsMethodIdBuild AtomsMethodIdE = 0
 
@@ -241,11 +241,15 @@ const (
 	ButtonMethodIdSmall             ButtonMethodIdE = 2
 	ButtonMethodIdWrap              ButtonMethodIdE = 3
 	ButtonMethodIdTruncate          ButtonMethodIdE = 4
-	ButtonMethodIdSelected          ButtonMethodIdE = 5
-	ButtonMethodIdFrameWhenInactive ButtonMethodIdE = 6
-	ButtonMethodIdRightText         ButtonMethodIdE = 7
-	ButtonMethodIdShortcutText      ButtonMethodIdE = 8
-	ButtonMethodIdKind              ButtonMethodIdE = 9
+	ButtonMethodIdExtend            ButtonMethodIdE = 5
+	ButtonMethodIdSelected          ButtonMethodIdE = 6
+	ButtonMethodIdFrameWhenInactive ButtonMethodIdE = 7
+	ButtonMethodIdReserveFrame      ButtonMethodIdE = 8
+	ButtonMethodIdFill              ButtonMethodIdE = 9
+	ButtonMethodIdRightText         ButtonMethodIdE = 10
+	ButtonMethodIdShortcutText      ButtonMethodIdE = 11
+	ButtonMethodIdKind              ButtonMethodIdE = 12
+	ButtonMethodIdHoverText         ButtonMethodIdE = 13
 )
 
 const (

@@ -340,6 +340,59 @@ for dock := range c.DockArea(ids.PrepareStr("main")) {
 }
 ```
 
+### Declared layout, and a pane that opens and closes
+
+`InitRoot` and `Split` declare the layout; it is sent every frame. The host
+builds the dock from it the first time it sees the dock, and keeps the
+person's drags after that. A tab is shown while `Tab` is called for it. A tab
+that appears later goes where the layout declares it, not to the first leaf
+([ADR-0404](../../adr/0404-what-a-person-reads-in-a-window-a-stated-reader-one-way-to-draw-a-decision-and-the-chat-window-as-the-first-case.md)
+§SD8, `interpreter/dock_layout.rs`): beside another tab of its `InitRoot` or
+`Split` list, in front; or, when none of those is shown, its split is made
+again in the declared direction and fraction. So a pane the person opens and
+closes is declared in the layout always and passed to `Tab` only while open:
+
+```go
+root := dock.InitRoot(transcriptID)
+_ = dock.Split(root, c.DockRight, 0.46, docID, settingsID) // the column, open or not
+for _, id := range openSideViews {                          // declared only while open
+    for range dock.Tab(id, titleOf(id)) { /* body */ }
+}
+```
+
+A tab closes when the app stops declaring it. `dock.Closable(id)` gives a tab
+egui_dock's own close button (and the close in its context menu, and a middle
+click); the host does not remove the tab but reports the request, which
+`dock.CloseRequested(id)` reads on the next frame, so the app closes the view
+the same way its menu would and anything that follows the view being open
+(a *View* menu's check) follows too:
+
+```go
+for _, id := range sideViews {
+    if open[id] && dock.CloseRequested(id) { open[id] = false }
+}
+for _, id := range openSideViews {
+    dock.Closable(id)
+    for range dock.Tab(id, titleOf(id)) { /* body */ }
+}
+```
+
+A tab not marked closable has no close button, and the leaf's close-all is
+off. The close button is named `Close <title>` in the accessibility tree, so
+a scene presses it by name; note that `contains` on a closable tab's title
+then matches both.
+
+`dock.HideTabBarWhenAlone(id)` drops the tab strip of the leaf while that tab
+is the only one in it (egui_dock's per-leaf `tab_bar_hidden`, set by rule each
+frame): a pane that holds one view needs no strip. A tab dragged in beside it
+brings the strip back. Such a leaf has no strip to drag it by, so use it for
+views that stay where they are declared (the chat's transcript and composer).
+In a dock with such a tab the tabs' context menus are off.
+
+A dock inside another dock's tab works (play's Schema tab, the chat's
+document): give the outer tab `TabNoScroll`, so the inner dock gets the leaf's
+height rather than a scroll area's.
+
 ### Why this shape
 
 - `iter.Seq` lifecycle + defer mirrors `IdScope` and `KeepIter` — the existing idiom for "push an id, do work, pop an id".

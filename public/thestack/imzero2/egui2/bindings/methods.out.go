@@ -277,6 +277,13 @@ func (inst ButtonFluid) Truncate() ButtonFluid {
 	return inst
 }
 
+func (inst ButtonFluid) Extend() ButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ButtonMethodIdExtend))
+
+	return inst
+}
+
 func (inst ButtonFluid) Selected(selected bool) ButtonFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(ButtonMethodIdSelected))
@@ -289,6 +296,21 @@ func (inst ButtonFluid) FrameWhenInactive(val bool) ButtonFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(ButtonMethodIdFrameWhenInactive))
 	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst ButtonFluid) ReserveFrame() ButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ButtonMethodIdReserveFrame))
+
+	return inst
+}
+
+func (inst ButtonFluid) Fill(col color.Color) ButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ButtonMethodIdFill))
+	PutColorAsRetainedColor32(r, col)
 
 	return inst
 }
@@ -313,6 +335,14 @@ func (inst ButtonFluid) kind(ki uint8) ButtonFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(ButtonMethodIdKind))
 	r.WriteUint8(ki)
+
+	return inst
+}
+
+func (inst ButtonFluid) HoverText(text string) ButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ButtonMethodIdHoverText))
+	r.WriteString(text)
 
 	return inst
 }

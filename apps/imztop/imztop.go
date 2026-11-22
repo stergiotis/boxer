@@ -384,8 +384,8 @@ func ensureSampler() (s SamplerI, err error) {
 
 // Stable tab identifiers for the dock area. These must not be reused
 // across panels — egui_dock's persistent layout state is keyed off
-// them, and the Rust-side reconciler (retain_tabs + push_to_first_leaf)
-// trusts them as a stable identity.
+// them, and the Rust-side reconciler (interpreter/dock_layout.rs) trusts
+// them as a stable identity.
 const (
 	dockTabCPU      uint64 = 1
 	dockTabMem      uint64 = 2

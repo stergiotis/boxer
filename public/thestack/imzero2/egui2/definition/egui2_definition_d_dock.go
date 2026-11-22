@@ -8,9 +8,15 @@ package definition
 //   - Identity id    — names the dock area; layout state is keyed by this.
 //   - PlainArg tabIds:    []u64   — Go-assigned stable tab identifiers.
 //   - PlainArg tabTitles: []string — one title per tab id (same length).
-//   - PlainArg initialLayout: []u8 — encoded first-frame split preset.
+//   - PlainArg initialLayout: []u8 — the declared layout: the first frame
+//     builds the dock from it, later frames place a tab that appears.
 //   - PlainArg noScrollTabIds: []u64 — tabs whose body ScrollArea is
 //     disabled on both axes (body overflow clips instead of scrolling).
+//   - PlainArg activateTabId: u64 — a tab brought to the front this frame.
+//   - PlainArg closableTabIds: []u64 — tabs that carry egui_dock's close
+//     button; a close is reported, not carried out (below).
+//   - PlainArg bareTabIds: []u64 — tabs drawn without a tab strip while
+//     each is alone in its leaf.
 //   - DeferredBlockMap("tabBody", u64) — one opcode body per tab id.
 //
 // State ownership:
@@ -18,11 +24,17 @@ package definition
 //     tab per group, drag-to-reorder). Stored on ImZeroFffi.dock_states,
 //     keyed by the dock-area id.
 //   - Go is authoritative about which tabs EXIST. Each frame Go sends the
-//     full current tab id list; the apply code reconciles stored state via
-//     retain_tabs (drop stale) + push_to_first_leaf (add new).
-//   - Tabs are `closeable=false` on the TabViewer side so the library never
-//     silently removes a tab — keeping Go as the single source of truth for
-//     existence is what makes the reconciliation correct.
+//     full current tab id list and the declared layout; the apply code
+//     reconciles stored state with reconcile_dock_tabs: a stale tab is
+//     removed, a tab that appears goes to the leaf it was declared in, and
+//     that leaf's split is made again when it is gone (ADR-0404 §SD8).
+//   - The library never removes a tab on its own. A tab in closableTabIds
+//     shows the close button; pressing it (or the tab's context menu Close,
+//     or a middle click) keeps the tab in the layout and raises
+//     SHOULD_CLOSE in r7 under dock_tab_close_id(dock id, tab id), which Go
+//     reads one frame later as DockAreaFluid.CloseRequested. The app then
+//     stops declaring the tab, and the reconciliation removes it. Go stays
+//     the single source of truth for which tabs exist.
 //
 // Composition:
 //   - A tab body is a deferred block. Anything that normally writes opcodes
@@ -52,6 +64,8 @@ func definitionsDock() []*ir.BuilderFactoryNode {
 			PlainArg("initialLayout", ctabb.U8h).
 			PlainArg("noScrollTabIds", ctabb.U64h).
 			PlainArg("activateTabId", ctabb.U64).
+			PlainArg("closableTabIds", ctabb.U64h).
+			PlainArg("bareTabIds", ctabb.U64h).
 			Build()).
 		WithDeferredBlockMap("tabBody", ctabb.U64).
 		WithSettingImmediate(true).
@@ -75,6 +89,8 @@ func definitionsDock() []*ir.BuilderFactoryNode {
 		// per-tab ScrollArea would scroll the panel in the same gesture that
 		// pans/zooms the widget content.
 		let no_scroll: HashSet<u64> = no_scroll_tab_ids.iter().copied().collect();
+		let closable: HashSet<u64> = closable_tab_ids.iter().copied().collect();
+		let bare: HashSet<u64> = bare_tab_ids.iter().copied().collect();
 
 		// Take DockState out of the map so the subsequent TabViewer can hold
 		// &mut self.interpreter without aliasing the HashMap entry. When
@@ -88,15 +104,10 @@ func definitionsDock() []*ir.BuilderFactoryNode {
 			parse_dock_initial_layout(&initial_layout, &tab_ids)
 		});
 
-		// Reconcile stored layout with Go's authoritative tab list.
-		let wanted: HashSet<u64> = tab_ids.iter().copied().collect();
-		dock_state.retain_tabs(|t| wanted.contains(t));
-		let existing: HashSet<u64> = dock_state.iter_all_tabs().map(|(_, t)| *t).collect();
-		for &id in &tab_ids {
-			if !existing.contains(&id) {
-				dock_state.push_to_first_leaf(id);
-			}
-		}
+		// Reconcile stored layout with Go's authoritative tab list: a tab
+		// that appears goes to its declared leaf (interpreter/dock_layout.rs,
+		// ADR-0404 §SD8).
+		reconcile_dock_tabs(&mut dock_state, &tab_ids, &initial_layout);
 
 		// Programmatic tab activation (0 = none). Go-side affordances that
 		// deliver content INTO a tab body (the snippet-library Insert splicing
@@ -107,6 +118,15 @@ func definitionsDock() []*ir.BuilderFactoryNode {
 			if let Some(loc) = dock_state.find_tab(&activate_tab_id) {
 				let _ = dock_state.set_active_tab(loc);
 			}
+		}
+
+		// A bare tab alone in its leaf is drawn without the leaf's tab strip;
+		// every other leaf shows its strip. Set every frame, so a tab dragged
+		// in beside a bare one brings the strip back, and dragged out again
+		// takes it away (interpreter/dock_layout.rs).
+		let any_bare = !bare.is_empty();
+		if any_bare {
+			hide_bare_tab_bars(&mut dock_state, &bare);
 		}
 
 		let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
@@ -136,12 +156,12 @@ func definitionsDock() []*ir.BuilderFactoryNode {
 		let avail = (bound_corner - cursor).max(egui::Vec2::ZERO);
 		let layout = *ui.layout();
 		let ctx_cloned = ui.ctx().clone();
-		ui.allocate_ui_with_layout(avail, layout, |child_ui| {
+		let closed = ui.allocate_ui_with_layout(avail, layout, |child_ui| {
 			let full = child_ui.max_rect();
 			let visible = full.intersect(child_ui.clip_rect());
 			child_ui.expand_to_include_rect(full);
 			if !visible.is_positive() {
-				return;
+				return Vec::new();
 			}
 			let mut dock_ui = child_ui.new_child(egui::UiBuilder::new().max_rect(visible).layout(layout));
 			let mut viewer = FffiDockTabViewer {
@@ -150,6 +170,8 @@ func definitionsDock() []*ir.BuilderFactoryNode {
 				bodies,
 				titles,
 				no_scroll,
+				closable,
+				closed: Vec::new(),
 			};
 			// Key the library's own id derivation on the Go-side dock id, not
 			// egui_dock's default Id::new("egui_dock::DockArea") constant. A tab
@@ -161,15 +183,34 @@ func definitionsDock() []*ir.BuilderFactoryNode {
 			// scrolling one window scrolled the other. area_id is already the
 			// per-instance-salted widget id, so this separates every id below the
 			// dock as well.
-			// No tab closes (FffiDockTabViewer::closeable), so the close
-			// buttons — the tab's and the leaf's close-all — would be marks
-			// that do nothing, each taking a tab's worth of the strip.
-			egui_dock::DockArea::new(&mut dock_state)
+			// Only a closable tab shows the close button
+			// (FffiDockTabViewer::is_closeable). The leaf's close-all stays
+			// off: it would close tabs the app has not offered to close.
+			//
+			// A leaf whose strip is hidden takes no space for it: no "show
+			// the strip" triangle and no drag handle in the body's top margin,
+			// since the strip comes back by rule, not by a gesture. The tab
+			// context menus are off in a dock with bare tabs, because their
+			// "Hide tab bar" would be undone on the next frame.
+			let mut area = egui_dock::DockArea::new(&mut dock_state)
 				.id(egui::Id::new(area_id))
-				.show_close_buttons(false)
-				.show_leaf_close_all_buttons(false)
-				.show_inside(&mut dock_ui, &mut viewer);
-		});
+				.show_close_buttons(true)
+				.show_leaf_close_all_buttons(false);
+			if any_bare {
+				let mut style = egui_dock::Style::from_egui(dock_ui.style());
+				style.buttons.show_tab_bar_size = 0.0;
+				style.tab.tab_body.hidden_tab_bar_drag_height = Some(0.0);
+				area = area.style(style).hidable_tab_bars(true).tab_context_menus(false);
+			}
+			area.show_inside(&mut dock_ui, &mut viewer);
+			viewer.closed
+		}).inner;
+
+		// A close the person asked for, reported to Go under the tab's close
+		// id; the tab stays until Go stops declaring it.
+		for tab in closed {
+			self.r7_push(dock_tab_close_id(area_id, tab), ResponseFlags::SHOULD_CLOSE);
+		}
 
 		self.dock_states.insert(area_id, dock_state);
 	}

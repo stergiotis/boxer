@@ -8,6 +8,7 @@ import (
 	"math"
 
 	"github.com/stergiotis/boxer/public/functional"
+	"github.com/stergiotis/boxer/public/hashing/splitmix64"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
@@ -235,8 +236,7 @@ func (inst ContextMenuFluid) Render(menuBody, targetBody func()) {
 
 // --- egui_dock docking helper (iter-style wrapper over DockAreaRaw) ---
 
-// DockLeafIdT names a leaf in the initial-layout descriptor passed to
-// the Rust side on first DockState construction. Returned by InitRoot
+// DockLeafIdT names a leaf of the declared layout. Returned by InitRoot
 // (always 0) and by every Split call (1, 2, …). Pass back to Split to
 // nest further splits off that leaf.
 type DockLeafIdT uint8
@@ -269,12 +269,16 @@ type dockSplitS struct {
 // iter exits, so tab order matches the source code regardless of HashMap
 // iteration quirks on the Rust side.
 //
-// Initial split layout: InitRoot + Split{Above,Below,Left,Right} record
-// a layout descriptor encoded into the initialLayout byte slice the
-// Rust side consumes on first DockState construction. On subsequent
-// frames the persistent dock_states map wins, so the user's drag-drop
-// changes survive. Calling neither InitRoot nor Split keeps the
-// historical "everything in one leaf" default.
+// Declared layout: InitRoot + Split{Above,Below,Left,Right} record a
+// layout descriptor, sent every frame as the initialLayout byte slice. The
+// host builds the dock from it the first time it sees the dock; after that
+// its stored state wins, so the person's drags survive. The declaration
+// still decides where a tab that appears later goes (Tab). Calling neither
+// InitRoot nor Split keeps the historical "everything in one leaf" default.
+//
+// Per tab: TabNoScroll drops the body's scroll area, Closable gives the tab
+// a close button whose press CloseRequested reports, and HideTabBarWhenAlone
+// drops the leaf's tab strip while the tab is alone in it.
 type DockAreaFluid struct {
 	idGen     WidgetIdCreatorI
 	derivedId uint64
@@ -287,6 +291,8 @@ type DockAreaFluid struct {
 	// bodies aliases it.
 	bodyBufs      []*bytes.Buffer
 	noScrollTabs  []uint64
+	closableTabs  []uint64
+	bareTabs      []uint64
 	rootTabs      []uint64
 	splits        []dockSplitS
 	nextLeafId    DockLeafIdT
@@ -343,9 +349,16 @@ func DockArea(id WidgetIdCreatorI) iter.Seq[*DockAreaFluid] {
 // block map in declaration order.
 //
 // Tab ids must be stable across frames — they name entries in the
-// persistent layout state. The Rust side reconciles via retain_tabs
-// (drop ids no longer present) + push_to_first_leaf (add new ones),
-// preserving splits and drag-order for everything that stayed.
+// persistent layout state. A tab is shown while it is declared: stop
+// calling Tab for an id and the host removes it, its leaf with it when it
+// was the last one there. A tab declared again, or for the first time after
+// the dock was built, goes where the layout declares it (ADR-0404 §SD8): in
+// the leaf holding another tab of its InitRoot or Split list, in front; if
+// none of those is shown, its Split is made again at the node that holds
+// what the split was declared off; a tab the layout does not name goes to
+// the first leaf. Tabs already in the dock stay where the person put them.
+// So a pane that opens and closes is declared in the layout always and
+// passed to Tab only while open.
 func (inst *DockAreaFluid) Tab(tabId uint64, title string) iter.Seq[functional.NilIteratorValueType] {
 	return func(yield func(functional.NilIteratorValueType) bool) {
 		buf := dockTabBodyBuffers.Acquire()
@@ -394,6 +407,52 @@ func (inst *DockAreaFluid) TabNoScroll(tabId uint64, title string) iter.Seq[func
 	return inst.Tab(tabId, title)
 }
 
+// Closable gives the tab egui_dock's close button. Pressing it, choosing
+// Close in the tab's context menu or middle-clicking the tab does not remove
+// the tab: the host keeps it and reports the request, which
+// [DockAreaFluid.CloseRequested] reads on the next frame. The app closes the
+// tab by no longer declaring it, as it would from a menu, so whatever else
+// follows the tab being open (a View menu's check) follows the close too
+// (ADR-0404 §SD8). Call it in the dock's scope, before or after the tab's Tab.
+// A tab not marked has no close button.
+func (inst *DockAreaFluid) Closable(tabId uint64) {
+	inst.closableTabs = append(inst.closableTabs, tabId)
+}
+
+// CloseRequested reports whether the person asked, on the frame before, to
+// close tab tabId from the tab itself (its close button, its context menu,
+// or a middle click). It is true on one frame per request; the tab is still
+// in the dock on that frame, and goes once the app stops declaring it. Only
+// a [DockAreaFluid.Closable] tab can be asked to close.
+func (inst *DockAreaFluid) CloseRequested(tabId uint64) bool {
+	return CurrentApplicationState.StateManager.GetResponseByIdRaw(dockTabCloseId(inst.derivedId, tabId)).HasShouldClose()
+}
+
+// dockCloseSalt keeps a tab's close id apart from the id of a widget the
+// app declares under the dock with the tab's id.
+const dockCloseSalt uint64 = 0x646f_636b_636c_6f73
+
+// dockTabCloseId is the id the host reports a close of tab under; the host
+// derives the same (dock_tab_close_id in interpreter/dock_layout.rs).
+func dockTabCloseId(dockId uint64, tab uint64) (id uint64) {
+	id = splitmix64.Forward(dockId) ^ splitmix64.Forward(tab^dockCloseSalt)
+	if id == 0 {
+		id = dockCloseSalt
+	}
+	return
+}
+
+// HideTabBarWhenAlone draws the tab without its leaf's tab strip while it is
+// the only tab in that leaf: a pane that holds one view needs no strip to
+// switch views. When the person drags another tab into that leaf the strip
+// comes back, and goes again when the leaf holds the tab alone. A leaf
+// without its strip cannot be dragged by it, so use this for views that stay
+// where they are declared (a transcript, a composer). In a dock with such a
+// tab the tabs' context menus are off. Call it in the dock's scope.
+func (inst *DockAreaFluid) HideTabBarWhenAlone(tabId uint64) {
+	inst.bareTabs = append(inst.bareTabs, tabId)
+}
+
 // InitRoot declares the tabs that live in the root leaf of the initial
 // layout. Must be called before any Split. Returns DockLeafIdT(0); pass
 // that handle to Split as the parent for the first horizontal/vertical
@@ -411,12 +470,15 @@ func (inst *DockAreaFluid) InitRoot(tabs ...uint64) (h DockLeafIdT) {
 // Split records a new leaf split off from `parent`. Returns the new
 // leaf's handle so further splits can nest off it. The `frac` is the
 // fraction of the parent the OLD node keeps after the split (egui_dock
-// 0.19 semantics — see Tree::split_{above,below,left,right} in the
-// upstream crate).
+// semantics — see Tree::split_{above,below,left,right} in the upstream
+// crate).
 //
-// Splits run only the first time the dock_state is constructed. Once
-// the user drags a tab the persistent state wins; declared splits are
-// effectively a preset, not a constraint.
+// Splits build the dock the first time the host sees it. Once the user
+// drags a tab the persistent state wins; declared splits are a preset, not
+// a constraint. They are also where a tab that appears later is placed
+// (Tab): a split whose tabs are all hidden is made again, in its declared
+// direction and fraction, when one of them is declared. A split with no
+// tabs is skipped.
 func (inst *DockAreaFluid) Split(parent DockLeafIdT, dir DockSplitDirE, frac float32, tabs ...uint64) (h DockLeafIdT) {
 	if inst.nextLeafId == 0 {
 		inst.nextLeafId = 1
@@ -431,7 +493,7 @@ func (inst *DockAreaFluid) Split(parent DockLeafIdT, dir DockSplitDirE, frac flo
 }
 
 // encodeInitialLayout serialises the rootTabs + splits into the wire
-// format the Rust side parses on first DockState construction. Empty
+// format the Rust side parses (interpreter/dock_layout.rs). Empty
 // rootTabs + zero splits returns an empty (non-nil) slice — Rust falls
 // back to the default "all tabs in one leaf" behaviour. Must not be
 // nil: PutUint8SliceArg writes 0xFFFFFFFF for nil, which read_plain_u8h
@@ -484,7 +546,15 @@ func (inst *DockAreaFluid) send() {
 		// documents for the u8 slice. Always send a real (empty) slice.
 		noScroll = []uint64{}
 	}
-	d := DockAreaRaw(AbsoluteWidgetId(inst.derivedId), inst.ids, inst.titles, inst.encodeInitialLayout(), noScroll, inst.activateTabId)
+	closable := inst.closableTabs
+	if closable == nil {
+		closable = []uint64{}
+	}
+	bare := inst.bareTabs
+	if bare == nil {
+		bare = []uint64{}
+	}
+	d := DockAreaRaw(AbsoluteWidgetId(inst.derivedId), inst.ids, inst.titles, inst.encodeInitialLayout(), noScroll, inst.activateTabId, closable, bare)
 	fffi := typed.GetCurrentFffiCapture()
 	for i, id := range inst.ids {
 		d.BeginTabBody(id)

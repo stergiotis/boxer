@@ -208,7 +208,7 @@ pub enum FuncProcId {
 /// The IDL this client was generated from, as ir.Fingerprint digests it; the
 /// Go server's generated enums carry the same value from the same generation
 /// (ADR-0278 SD6).
-pub const IDL_FINGERPRINT: u64 = 0xd1368138b9ba6f98;
+pub const IDL_FINGERPRINT: u64 = 0x58f8e139b61d7ed3;
 #[derive(strum::FromRepr, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum AccessibleListBuilderMethodId {
@@ -268,11 +268,15 @@ pub enum ButtonBuilderMethodId {
     Small = 2,
     Wrap = 3,
     Truncate = 4,
-    Selected = 5,
-    FrameWhenInactive = 6,
-    RightText = 7,
-    ShortcutText = 8,
-    Kind = 9,
+    Extend = 5,
+    Selected = 6,
+    FrameWhenInactive = 7,
+    ReserveFrame = 8,
+    Fill = 9,
+    RightText = 10,
+    ShortcutText = 11,
+    Kind = 12,
+    HoverText = 13,
 }
 
 #[derive(strum::FromRepr, Debug, PartialEq, Eq)]

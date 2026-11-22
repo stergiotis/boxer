@@ -363,7 +363,7 @@ func DateTimePickerButton(i WidgetIdCreatorI, packedEpochMs uint64) (inst DateTi
 	return
 }
 
-func DockAreaRaw(i WidgetIdCreatorI, tabIds []uint64, tabTitles []string, initialLayout []uint8, noScrollTabIds []uint64, activateTabId uint64) (inst DockAreaRawFluid) {
+func DockAreaRaw(i WidgetIdCreatorI, tabIds []uint64, tabTitles []string, initialLayout []uint8, noScrollTabIds []uint64, activateTabId uint64, closableTabIds []uint64, bareTabIds []uint64) (inst DockAreaRawFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdDockAreaRaw))
 	v := i.Derive()
@@ -373,6 +373,8 @@ func DockAreaRaw(i WidgetIdCreatorI, tabIds []uint64, tabTitles []string, initia
 	runtime.PutUint8SliceArg(r, initialLayout)
 	runtime.PutUint64SliceArg(r, noScrollTabIds)
 	r.WriteUint64(activateTabId)
+	runtime.PutUint64SliceArg(r, closableTabIds)
+	runtime.PutUint64SliceArg(r, bareTabIds)
 
 	inst = DockAreaRawFluid{
 		r: r,
