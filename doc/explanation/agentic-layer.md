@@ -155,6 +155,20 @@ The same chain, vault, marks and anchors are a profile any generated record
 store can opt into
 ([ADR-0327](../adr/0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md)).
 
+With `BOXER_TRAIL_REQUIRED` set, a model call whose rows cannot be written
+first is refused, and so is an egress fetch while the trail is not durable
+([ADR-0277](../adr/0277-one-audit-trail-for-model-calls-and-agent-work.md)
+§SD3). A host whose state table does not open at boot, on a server that
+answered, holds its trail: it keeps the rows, refuses that work with a
+reason that names the store, the time it has been retried since and the
+next attempt, and says no restart is needed; a background retry lands the
+rows and the host admits work again, writing the span it held as a
+`trail.held` row. App state and the run journal stay in memory for that
+run. A host whose facts store did not reach the server at boot is not
+retried, and its reason says a restart is needed
+([ADR-0408](../adr/0408-a-host-whose-store-does-not-open-at-boot-holds-its-trail-and-keeps-retrying.md),
+proposed).
+
 ### 7. Trust is a label, and the boundary is declared
 
 The threat model names the principals and what is promised against each

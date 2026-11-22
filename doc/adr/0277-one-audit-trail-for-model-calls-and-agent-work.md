@@ -674,6 +674,18 @@ does not get a view's settings — a 26.8 server reads the view and leaves
 them out — so such a reader sets the setting in its profile. Other view
 families over the facts table were not examined for the same failure.
 
+### 2026-11-23 — §SD3: a trail held until the host's store opens
+
+A host whose state table did not open at boot built its trail without an
+executor, and under `BOXER_TRAIL_REQUIRED` refused every model call and
+fetch until it was restarted. Where the facts store reached the server, the
+trail is now built over it held: it keeps its rows, is not durable, and
+refuses with a reason that says the store is being retried and that no
+restart is needed, until a background retry lands what it holds
+([ADR-0408](./0408-a-host-whose-store-does-not-open-at-boot-holds-its-trail-and-keeps-retrying.md),
+proposed). §SD3 reads as before: a held trail is one with no durable
+backend for that span, and what it refuses is what this section refuses.
+
 - [ADR-0191](./0191-runtime-instance-attribution.md) — the `(run id, instance key)` decision this extends to the generated kinds.
 - [ADR-0254](./0254-model-inference-as-a-keelson-capability.md) §SD4 — the call record.
 - [ADR-0264](./0264-retained-model-conversations-on-facts.md) — retention, the message kind and the ditch this reshapes.

@@ -54,6 +54,17 @@ relied on the old behaviour.
 - **`hmi.sh` opt-ins.** pprof, the flight recorder and a coverage directory
   are off unless `HMI_PPROF_ADDR`, `HMI_FLIGHT_RECORDER` or `HMI_GOCOVERDIR`
   asks for them (no ADR; `rust/imzero2/hmi.sh` reads them).
+- **A host whose state table does not open keeps retrying.** Where the
+  facts store reached ClickHouse and `boxer.persiststate` did not open at
+  boot, the trail is held and a background retry releases it: with
+  `BOXER_TRAIL_REQUIRED` set, model calls and egress fetches are refused
+  only until the retry succeeds, not for the process's life, and the trail
+  becomes durable although app state stays in memory. The span lands as a
+  `trail.held` audit event. `trail.Recorder.Admit`'s refusal now ends with
+  the reason the trail is not durable; match on the prefix, not the whole
+  text
+  ([ADR-0408](../adr/0408-a-host-whose-store-does-not-open-at-boot-holds-its-trail-and-keeps-retrying.md),
+  proposed).
 - **Tab-link allow-listing.** A tab link decides what a tab shows, not what
   it writes or reaches; the variables a link may set are listed in
   `tabhost.Options.LinkEnv`
