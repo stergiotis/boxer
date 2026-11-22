@@ -40,7 +40,6 @@ func psiRow(host string, snap *sysmsnap.PSISnapshot, ts time.Time) (row sysmfact
 		return
 	}
 	row = sysmfacts.SysPsi{
-		Id:         entityKey(host, domainPsi),
 		NaturalKey: nk,
 		Ts:         ts,
 		Kind:       kindPsi,
@@ -87,7 +86,6 @@ func netRow(host string, snap *sysmsnap.NetSnapshot, ts time.Time) (row sysmfact
 	}
 	n := len(snap.Interfaces)
 	row = sysmfacts.SysNet{
-		Id:         entityKey(host, domainNet),
 		NaturalKey: nk,
 		Ts:         ts,
 		Kind:       kindNet,
@@ -126,7 +124,6 @@ func diskMountRow(host string, snap *sysmsnap.DiskSnapshot, ts time.Time) (row s
 	}
 	n := len(snap.Mounts)
 	row = sysmfacts.SysDiskMount{
-		Id:         entityKey(host, domainDisk+"/mount"),
 		NaturalKey: nk,
 		Ts:         ts,
 		Kind:       kindDiskMount,
@@ -163,7 +160,6 @@ func diskIoRow(host string, snap *sysmsnap.DiskSnapshot, ts time.Time) (row sysm
 	}
 	n := len(snap.BlockDevices)
 	row = sysmfacts.SysDiskIo{
-		Id:         entityKey(host, domainDisk+"/io"),
 		NaturalKey: nk,
 		Ts:         ts,
 		Kind:       kindDiskIo,
@@ -192,7 +188,6 @@ func batteryRow(host string, snap *sysmsnap.BatterySnapshot, ts time.Time) (row 
 	}
 	nb, na := len(snap.Batteries), len(snap.ACAdapters)
 	row = sysmfacts.SysBattery{
-		Id:         entityKey(host, domainBattery),
 		NaturalKey: nk,
 		Ts:         ts,
 		Kind:       kindBattery,
@@ -232,7 +227,6 @@ func gpuRow(host string, snap *sysmsnap.GPUSnapshot, ts time.Time) (row sysmfact
 	}
 	n := len(snap.Devices)
 	row = sysmfacts.SysGpu{
-		Id:         entityKey(host, domainGpu),
 		NaturalKey: nk,
 		Ts:         ts,
 		Kind:       kindGpu,

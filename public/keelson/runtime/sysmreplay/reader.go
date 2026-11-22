@@ -79,11 +79,10 @@ func New(opts Options) (inst *Reader, err error) {
 	return
 }
 
-// Key is the store key this reader reads for one domain — exposed so a caller
-// can check what a replay would look at without running one.
-func (inst *Reader) Key(domain string) (key uint64) {
-	key = EntityKey(inst.host, domain)
-	return
+// NaturalKey is the natural key this reader reads for one domain — exposed
+// so a caller can check what a replay would look at without running one.
+func (inst *Reader) NaturalKey(domain string) (nk []byte) {
+	return EntityNaturalKey(inst.host, domain)
 }
 
 // table is the relation the reader's own SQL reads: the store's read table,
@@ -238,8 +237,9 @@ func (inst *Reader) All(ctx context.Context, w Window) iter.Seq2[*sysmsnap.Bundl
 // neither invents a second read path beside them.
 func (inst *Reader) perTickSeq(ctx context.Context, domain string, w Window) (seq iter.Seq2[*sysmfacts.SysmetricsEntity, error]) {
 	if len(w.Decimate) == 0 {
-		seq = inst.store.Replay(ctx, EntityKey(inst.host, domain), w.From,
-			recordstore.ReplayOpts{To: w.To, Limit: w.Limit})
+		// The series by its natural key, oldest first: a scan of the
+		// domain's kind, which is the store's verb that takes a predicate.
+		seq = inst.scanFor(ctx, domain, recordstore.ScanOpts{ExtraPredicate: inst.rangePredicate(domain, w.From, w.To), Limit: w.Limit})
 		return
 	}
 	opts := recordstore.ScanOpts{ExtraPredicate: inst.decimatedPredicate(domain, w.Decimate)}
@@ -247,7 +247,20 @@ func (inst *Reader) perTickSeq(ctx context.Context, domain string, w Window) (se
 	return
 }
 
-// scanFor dispatches to the generated Scan verb for a per-tick kind.
+// rangePredicate restricts a scan to domain's series within [from, to),
+// either bound left out when zero.
+func (inst *Reader) rangePredicate(domain string, from time.Time, to time.Time) (pred string) {
+	pred = naturalKeyPredicate(inst.host, domain)
+	if !from.IsZero() {
+		pred += " AND " + sysmfacts.SysmetricsColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(from.UnixNano(), 10) + ")"
+	}
+	if !to.IsZero() {
+		pred += " AND " + sysmfacts.SysmetricsColOrder + " < fromUnixTimestamp64Nano(" + strconv.FormatInt(to.UnixNano(), 10) + ")"
+	}
+	return
+}
+
+// scanFor dispatches to the generated Scan verb for a domain's kind.
 func (inst *Reader) scanFor(ctx context.Context, domain string, opts recordstore.ScanOpts) (seq iter.Seq2[*sysmfacts.SysmetricsEntity, error]) {
 	switch domain {
 	case DomainCPU:
@@ -270,8 +283,14 @@ func (inst *Reader) scanFor(ctx context.Context, domain string, opts recordstore
 		return inst.store.ScanSysProc(ctx, opts)
 	case DomainProcCmd:
 		return inst.store.ScanSysProcCmd(ctx, opts)
+	case DomainCPUInfo:
+		return inst.store.ScanSysCpuInfo(ctx, opts)
+	case DomainSockets:
+		return inst.store.ScanSysSocket(ctx, opts)
+	case DomainTopology:
+		return inst.store.ScanSysTopology(ctx, opts)
 	}
-	// Not reachable from perTickDomains; an empty sequence is the honest
+	// Not reachable from the domains this reader names; an empty sequence is the honest
 	// answer for a domain this function does not know.
 	return func(yield func(*sysmfacts.SysmetricsEntity, error) bool) {}
 }
@@ -395,11 +414,10 @@ func (inst *Reader) bundleAt(tick time.Time, cursors []*cursor, cpuInfo, sockets
 // written once when the tee first sees the host and a replay is normally of
 // some later hour.
 func (inst *Reader) fetchCarry(ctx context.Context, domain string, w Window) (c *carry, err error) {
-	key := EntityKey(inst.host, domain)
 	c = &carry{i: -1}
 	if !w.From.IsZero() {
 		var seed *sysmfacts.SysmetricsEntity
-		seed, err = inst.fetchAsOf(ctx, domain, key, w.From)
+		seed, err = inst.fetchAsOf(ctx, domain, w.From)
 		if err != nil {
 			c = nil
 			return
@@ -408,7 +426,7 @@ func (inst *Reader) fetchCarry(ctx context.Context, domain string, w Window) (c 
 			c.rows = append(c.rows, seed)
 		}
 	}
-	for ent, rerr := range inst.store.Replay(ctx, key, w.From, recordstore.ReplayOpts{To: w.To}) {
+	for ent, rerr := range inst.scanFor(ctx, domain, recordstore.ScanOpts{ExtraPredicate: inst.rangePredicate(domain, w.From, w.To)}) {
 		if rerr != nil {
 			c = nil
 			err = eb.Build().Str("domain", domain).Errorf("sysmreplay: reading: %w", rerr)
@@ -419,30 +437,25 @@ func (inst *Reader) fetchCarry(ctx context.Context, domain string, w Window) (c 
 	return
 }
 
-// fetchAsOf returns the newest row for key strictly before bound, or nil.
+// fetchAsOf returns the newest row of domain's series strictly before bound,
+// or nil.
 //
-// The generated verbs cannot express it directly: Replay is ascending, so its
-// Limit takes the earliest rows rather than the latest, and Latest has no upper
-// bound. The predicate below is the one-row equivalent — trusted SQL over the
-// envelope columns, which is what ScanOpts.ExtraPredicate is for; no leeway
-// section is touched, so this is not the hand-written array arithmetic the
-// read-surface page warns against.
-func (inst *Reader) fetchAsOf(ctx context.Context, domain string, key uint64, bound time.Time) (ent *sysmfacts.SysmetricsEntity, err error) {
-	pred := asOfPredicate(inst.table(), key, bound)
-	opts := recordstore.ScanOpts{ExtraPredicate: pred, Limit: 1}
-	var seq iter.Seq2[*sysmfacts.SysmetricsEntity, error]
+// The generated verbs cannot express it directly: a scan's Limit with its
+// order reversed would do, but the carried kinds are sparse and the bound
+// is exclusive, so the predicate below names the one row — trusted SQL over
+// the envelope columns and the kind's own filter, which is what
+// ScanOpts.ExtraPredicate is for; no leeway section is touched by hand, so
+// this is not the hand-written array arithmetic the read-surface page warns
+// against.
+func (inst *Reader) fetchAsOf(ctx context.Context, domain string, bound time.Time) (ent *sysmfacts.SysmetricsEntity, err error) {
 	switch domain {
-	case DomainCPUInfo:
-		seq = inst.store.ScanSysCpuInfo(ctx, opts)
-	case DomainSockets:
-		seq = inst.store.ScanSysSocket(ctx, opts)
-	case DomainTopology:
-		seq = inst.store.ScanSysTopology(ctx, opts)
+	case DomainCPUInfo, DomainSockets, DomainTopology:
 	default:
 		err = eb.Build().Str("domain", domain).Errorf("sysmreplay: domain is not a carried kind")
 		return
 	}
-	for got, serr := range seq {
+	opts := recordstore.ScanOpts{ExtraPredicate: asOfPredicate(inst.table(), inst.host, domain, bound), Limit: 1}
+	for got, serr := range inst.scanFor(ctx, domain, opts) {
 		if serr != nil {
 			ent = nil
 			err = eb.Build().Str("domain", domain).Errorf("sysmreplay: seeding: %w", serr)
@@ -454,14 +467,14 @@ func (inst *Reader) fetchAsOf(ctx context.Context, domain string, key uint64, bo
 	return
 }
 
-// asOfPredicate restricts a scan to the single newest row for key before bound.
-func asOfPredicate(table string, key uint64, bound time.Time) (pred string) {
-	k := strconv.FormatUint(key, 10)
+// asOfPredicate restricts a scan to the single newest row of domain's series
+// on host before bound.
+func asOfPredicate(table string, host string, domain string, bound time.Time) (pred string) {
 	lit := "fromUnixTimestamp64Nano(" + strconv.FormatInt(bound.UnixNano(), 10) + ")"
-	pred = sysmfacts.SysmetricsColKey + " = " + k +
+	pred = naturalKeyPredicate(host, domain) +
 		" AND " + sysmfacts.SysmetricsColOrder + " = (SELECT max(" + sysmfacts.SysmetricsColOrder + ")" +
 		" FROM " + table +
-		" WHERE " + sysmfacts.SysmetricsColKey + " = " + k +
+		" WHERE " + seriesPredicate(host, domain) +
 		" AND " + sysmfacts.SysmetricsColOrder + " < " + lit + ")"
 	return
 }

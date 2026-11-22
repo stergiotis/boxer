@@ -1,12 +1,16 @@
 package sysmreplay
 
 import (
+	"strings"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
-	"github.com/zeebo/xxh3"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/naturalkey"
 )
 
-// One (host, domain) pair is one entity key, so the tokens below are the read
-// side of the tee's storage layout (ADR-0184 §SD3). Ten name a per-tick kind;
+// One (host, domain) pair is one series, named by its natural key, so the
+// tokens below are the read side of the tee's storage layout (ADR-0184 §SD3,
+// ADR-0405 §SD2). Ten name a per-tick kind;
 // DomainCPUInfo, DomainSockets and DomainTopology name the three that are
 // written sparsely and carried forward instead (see the package doc).
 const (
@@ -41,17 +45,65 @@ const (
 	DomainTopology = "topology"
 )
 
-// EntityKey is the store key for one (host, domain) series: xxh3 over the
-// tokens joined by "/", per ADR-0184 §SD3. Host tokens are sanitized to exclude
-// the separator, so no pair can collide with another by concatenation.
+// colNaturalKey is the physical name of the facts envelope's natural key.
+const colNaturalKey = `"id:naturalKey:y:4::0:"`
+
+// kindOf names the component a domain's rows carry, which is how a read of
+// a series names its kind beside its natural key (ADR-0405 §SD2).
+var kindOf = map[string]string{
+	DomainCPU: "SysCpu", DomainCPUInfo: "SysCpuInfo", DomainMem: "SysMem", DomainPSI: "SysPsi",
+	DomainNet: "SysNet", DomainDiskMnt: "SysDiskMount", DomainDiskIO: "SysDiskIo", DomainBattery: "SysBattery",
+	DomainGPU: "SysGpu", DomainProc: "SysProc", DomainProcCmd: "SysProcCmd", DomainSockets: "SysSocket",
+	DomainTopology: "SysTopology",
+}
+
+// EntityNaturalKey is the natural key of one (host, domain) series: the
+// pair, in the vocabulary's JSON form. It is what a series is found by —
+// a row's id names the row (ADR-0405) — and it is the same for rows written
+// before ids were minted, so a read by it spans both.
 //
-// This restates the tee's own unexported derivation rather than importing it: a
-// reader that depends on the writer inverts the dependency for a hash and
-// thirteen string constants. The agreement is pinned by a test in package
-// `sysmtee` comparing these keys against the ids its row builders stamp, so
-// drift fails in the default test lane rather than in production as a replay
-// that silently finds no rows.
-func EntityKey(host, domain string) (key uint64) {
-	key = xxh3.HashString(host + "/" + domain)
+// This restates the tee's own unexported derivation rather than importing
+// it: a reader that depends on the writer inverts the dependency for an
+// encoding and thirteen string constants. The agreement is pinned by a test
+// in package `sysmtee` comparing these keys against the natural keys its row
+// builders stamp, so drift fails in the default test lane rather than in
+// production as a replay that silently finds no rows.
+func EntityNaturalKey(host, domain string) (nk []byte) {
+	enc := naturalkey.NewEncoder()
+	enc.Begin().AddStr(host).AddStr(domain)
+	nk, err := enc.End(naturalkey.SerializationFormatJson)
+	if err != nil {
+		// Two strings always encode; a failure here is a broken encoder.
+		panic("sysmreplay: natural key of (" + host + ", " + domain + "): " + err.Error())
+	}
+	return
+}
+
+// naturalKeyLiteral renders a natural key as a ClickHouse string literal.
+func naturalKeyLiteral(nk []byte) string {
+	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(string(nk)) + "'"
+}
+
+// naturalKeyPredicate restricts a read to the rows whose natural key is
+// domain's series on host. The CPU descriptor's rows written before
+// 2026-11-22 carry the CPU sample series' pair, so its read takes both;
+// the kind, which the caller names, tells the two apart.
+func naturalKeyPredicate(host, domain string) (pred string) {
+	lit := naturalKeyLiteral(EntityNaturalKey(host, domain))
+	if domain == DomainCPUInfo {
+		return colNaturalKey + " IN (" + lit + ", " + naturalKeyLiteral(EntityNaturalKey(host, DomainCPU)) + ")"
+	}
+	return colNaturalKey + " = " + lit
+}
+
+// seriesPredicate is naturalKeyPredicate with the kind named: for SQL the
+// reader composes itself, where no generated scan adds the component's
+// filter. A natural key is unique within a writer's kinds, not across the
+// table.
+func seriesPredicate(host, domain string) (pred string) {
+	pred = naturalKeyPredicate(host, domain)
+	if kind, ok := kindOf[domain]; ok {
+		pred = "(" + sysmfacts.SysmetricsComponentSQL.Kinds[kind].Filter + ") AND " + pred
+	}
 	return
 }

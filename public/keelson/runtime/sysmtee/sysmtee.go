@@ -276,10 +276,10 @@ func (inst *Tee) ingest(ctx context.Context, snap *sysmsnap.BundleSnapshot) {
 	// independently of whether the cpu collector was wired, and gating it on
 	// the descriptor's would drop it whenever cpu was absent.
 	if snap.Topology != nil && !inst.seenTopology {
-		if ingestKind(inst, "topology",
+		if ingestKind(ctx, inst, "topology",
 			func() (sysmfacts.SysTopology, error) { return topologyRow(host, snap.Topology, ts) },
-			func(r sysmfacts.SysTopology) error {
-				return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysTopology(r).Commit()
+			func(r sysmfacts.SysTopology, id uint64) error {
+				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysTopology(r).Commit()
 			}) {
 			inst.seenTopology = true
 		}
@@ -287,71 +287,83 @@ func (inst *Tee) ingest(ctx context.Context, snap *sysmsnap.BundleSnapshot) {
 	if snap.CPU != nil {
 		// Static CPU facts once per host, not per tick.
 		if _, seen := inst.seenHosts[host]; !seen {
-			if ingestKind(inst, "cpuInfo",
+			if ingestKind(ctx, inst, "cpuInfo",
 				func() (sysmfacts.SysCpuInfo, error) { return cpuInfoRow(host, snap.CPU, ts) },
-				func(r sysmfacts.SysCpuInfo) error {
-					return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysCpuInfo(r).Commit()
+				func(r sysmfacts.SysCpuInfo, id uint64) error {
+					return inst.begin(ctx, id, ts, r.NaturalKey).AddSysCpuInfo(r).Commit()
 				}) {
 				inst.seenHosts[host] = struct{}{}
 			}
 		}
-		ingestKind(inst, "cpu",
+		ingestKind(ctx, inst, "cpu",
 			func() (sysmfacts.SysCpu, error) { return cpuRow(host, snap.CPU, ts) },
-			func(r sysmfacts.SysCpu) error { return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysCpu(r).Commit() })
+			func(r sysmfacts.SysCpu, id uint64) error {
+				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysCpu(r).Commit()
+			})
 	}
 	if snap.Mem != nil {
-		ingestKind(inst, "mem",
+		ingestKind(ctx, inst, "mem",
 			func() (sysmfacts.SysMem, error) { return memRow(host, snap.Mem, ts) },
-			func(r sysmfacts.SysMem) error { return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysMem(r).Commit() })
+			func(r sysmfacts.SysMem, id uint64) error {
+				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysMem(r).Commit()
+			})
 	}
 	if snap.PSI != nil {
-		ingestKind(inst, "psi",
+		ingestKind(ctx, inst, "psi",
 			func() (sysmfacts.SysPsi, error) { return psiRow(host, snap.PSI, ts) },
-			func(r sysmfacts.SysPsi) error { return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysPsi(r).Commit() })
+			func(r sysmfacts.SysPsi, id uint64) error {
+				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysPsi(r).Commit()
+			})
 	}
 	if snap.Net != nil {
-		ingestKind(inst, "net",
+		ingestKind(ctx, inst, "net",
 			func() (sysmfacts.SysNet, error) { return netRow(host, snap.Net, ts) },
-			func(r sysmfacts.SysNet) error { return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysNet(r).Commit() })
+			func(r sysmfacts.SysNet, id uint64) error {
+				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysNet(r).Commit()
+			})
 	}
 	if snap.Disk != nil {
 		// Two kinds from one snapshot: the mount table and the device list have
 		// independent lengths, so they cannot share an entity's arrays.
-		ingestKind(inst, "diskMount",
+		ingestKind(ctx, inst, "diskMount",
 			func() (sysmfacts.SysDiskMount, error) { return diskMountRow(host, snap.Disk, ts) },
-			func(r sysmfacts.SysDiskMount) error {
-				return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysDiskMount(r).Commit()
+			func(r sysmfacts.SysDiskMount, id uint64) error {
+				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysDiskMount(r).Commit()
 			})
-		ingestKind(inst, "diskIo",
+		ingestKind(ctx, inst, "diskIo",
 			func() (sysmfacts.SysDiskIo, error) { return diskIoRow(host, snap.Disk, ts) },
-			func(r sysmfacts.SysDiskIo) error {
-				return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysDiskIo(r).Commit()
+			func(r sysmfacts.SysDiskIo, id uint64) error {
+				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysDiskIo(r).Commit()
 			})
 	}
 	if snap.Battery != nil {
-		ingestKind(inst, "battery",
+		ingestKind(ctx, inst, "battery",
 			func() (sysmfacts.SysBattery, error) { return batteryRow(host, snap.Battery, ts) },
-			func(r sysmfacts.SysBattery) error {
-				return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysBattery(r).Commit()
+			func(r sysmfacts.SysBattery, id uint64) error {
+				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysBattery(r).Commit()
 			})
 	}
 	if snap.GPU != nil {
-		ingestKind(inst, "gpu",
+		ingestKind(ctx, inst, "gpu",
 			func() (sysmfacts.SysGpu, error) { return gpuRow(host, snap.GPU, ts) },
-			func(r sysmfacts.SysGpu) error { return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysGpu(r).Commit() })
+			func(r sysmfacts.SysGpu, id uint64) error {
+				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysGpu(r).Commit()
+			})
 	}
 	if len(snap.Procs) > 0 {
-		ingestKind(inst, "proc",
+		ingestKind(ctx, inst, "proc",
 			func() (sysmfacts.SysProc, error) { return procRow(host, snap.Procs, ts) },
-			func(r sysmfacts.SysProc) error { return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysProc(r).Commit() })
+			func(r sysmfacts.SysProc, id uint64) error {
+				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysProc(r).Commit()
+			})
 		// Command lines, user names and ids only when a deployment asked for
 		// them (ADR-0090 §SD8; see SysProcCmd for why this is a kind and not a
 		// tag).
 		if inst.opts.PersistProcCmd {
-			ingestKind(inst, "procCmd",
+			ingestKind(ctx, inst, "procCmd",
 				func() (sysmfacts.SysProcCmd, error) { return procCmdRow(host, snap.Procs, ts) },
-				func(r sysmfacts.SysProcCmd) error {
-					return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysProcCmd(r).Commit()
+				func(r sysmfacts.SysProcCmd, id uint64) error {
+					return inst.begin(ctx, id, ts, r.NaturalKey).AddSysProcCmd(r).Commit()
 				})
 		}
 	}
@@ -360,10 +372,10 @@ func (inst *Tee) ingest(ctx context.Context, snap *sysmsnap.BundleSnapshot) {
 	// the same observation many times over and put a rising Order on rows that
 	// never changed; the stamp is what tells one observation from a re-send.
 	if snap.Sockets != nil && snap.Sockets.CollectedAtUnixMs != inst.lastSocketsStamp {
-		if ingestKind(inst, "sockets",
+		if ingestKind(ctx, inst, "sockets",
 			func() (sysmfacts.SysSocket, error) { return socketRow(host, snap.Sockets) },
-			func(r sysmfacts.SysSocket) error {
-				return inst.begin(ctx, r.Id, ts, r.NaturalKey).AddSysSocket(r).Commit()
+			func(r sysmfacts.SysSocket, id uint64) error {
+				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysSocket(r).Commit()
 			}) {
 			inst.lastSocketsStamp = snap.Sockets.CollectedAtUnixMs
 		}
@@ -382,15 +394,22 @@ func (inst *Tee) begin(ctx context.Context, id uint64, ts time.Time, naturalKey 
 // landed. Generic because the kinds differ only in their row type and their
 // Add verb; write is typed by the row, so pairing one domain's builder with
 // another's verb does not compile.
+//
+// The row's id is minted here, from the store's key stream (ADR-0405 §SD1):
+// it names the row, and the series the row belongs to is its natural key.
 func ingestKind[T any](
+	ctx context.Context,
 	inst *Tee,
 	domain string,
 	build func() (T, error),
-	write func(T) error,
+	write func(T, uint64) error,
 ) (ok bool) {
 	row, err := build()
 	if err == nil {
-		err = write(row)
+		var id uint64
+		if id, err = inst.opts.Store.MintKey(ctx); err == nil {
+			err = write(row, id)
+		}
 	}
 	if err != nil {
 		inst.opts.Log.Warn().Err(err).Str("domain", domain).

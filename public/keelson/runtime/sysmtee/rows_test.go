@@ -11,19 +11,26 @@ import (
 
 var testTs = time.Unix(1_700_000_000, 0).UTC()
 
-func TestEntityKey_IsStablePerSeriesAndDistinctAcross(t *testing.T) {
-	// Stability is the contract: the key is what makes a host's samples one
-	// series, so it must not depend on anything but the pair.
-	assert.Equal(t, entityKey("box1", "cpu"), entityKey("box1", "cpu"))
-	assert.NotEqual(t, entityKey("box1", "cpu"), entityKey("box1", "mem"))
-	assert.NotEqual(t, entityKey("box1", "cpu"), entityKey("box2", "cpu"))
-	// The separator is what stops a pair colliding with another by
-	// concatenation — without it ("box", "1cpu") and ("box1", "cpu") would be
-	// one series.
-	assert.NotEqual(t, entityKey("box", "1cpu"), entityKey("box1", "cpu"))
+// nkOf is the natural key of a series, for the tests.
+func nkOf(t *testing.T, host, domain string) []byte {
+	t.Helper()
+	nk, err := entityNaturalKey(host, domain)
+	require.NoError(t, err)
+	return nk
 }
 
-func TestEntityNaturalKey_RecordsThePairTheKeyDigests(t *testing.T) {
+func TestEntityNaturalKey_IsStablePerSeriesAndDistinctAcross(t *testing.T) {
+	// Stability is the contract: the natural key is what makes a host's
+	// samples one series, so it must not depend on anything but the pair.
+	assert.Equal(t, nkOf(t, "box1", "cpu"), nkOf(t, "box1", "cpu"))
+	assert.NotEqual(t, nkOf(t, "box1", "cpu"), nkOf(t, "box1", "mem"))
+	assert.NotEqual(t, nkOf(t, "box1", "cpu"), nkOf(t, "box2", "cpu"))
+	// The encoding keeps the two tokens apart — ("box", "1cpu") and
+	// ("box1", "cpu") are two series.
+	assert.NotEqual(t, nkOf(t, "box", "1cpu"), nkOf(t, "box1", "cpu"))
+}
+
+func TestEntityNaturalKey_RecordsThePair(t *testing.T) {
 	nk, err := entityNaturalKey("box1", "cpu")
 	require.NoError(t, err)
 	assert.Contains(t, string(nk), "box1")
@@ -45,7 +52,8 @@ func TestCpuRow_CarriesTheSampleThrough(t *testing.T) {
 	row, err := cpuRow("box1", snap, testTs)
 	require.NoError(t, err)
 
-	assert.Equal(t, entityKey("box1", "cpu"), row.Id)
+	assert.Zero(t, row.Id, "the id is minted when the row is written")
+	assert.Equal(t, nkOf(t, "box1", "cpu"), row.NaturalKey)
 	assert.Equal(t, testTs, row.Ts)
 	assert.Equal(t, "box1", row.Host)
 	assert.Equal(t, kindCpu, row.Kind)
@@ -80,12 +88,10 @@ func TestCpuInfoRow_IsADistinctSeriesFromTheSample(t *testing.T) {
 	sample, err := cpuRow("box1", snap, testTs)
 	require.NoError(t, err)
 
-	assert.NotEqual(t, sample.Id, info.Id)
 	assert.NotEqual(t, sample.NaturalKey, info.NaturalKey, "the natural key names the descriptor's series, not the sample's")
 	want, err := entityNaturalKey("box1", "cpu/info")
 	require.NoError(t, err)
 	assert.Equal(t, want, info.NaturalKey)
-	assert.Equal(t, entityKey("box1", "cpu/info"), info.Id, "the id digests the pair the natural key records")
 	assert.Equal(t, "Test CPU", info.ModelName)
 	assert.EqualValues(t, 8, info.LogicalCores)
 	assert.Equal(t, kindCpuInfo, info.Kind)
@@ -101,7 +107,7 @@ func TestMemRow_CarriesTheSampleThrough(t *testing.T) {
 		SwapFreeBytes:  2 << 30,
 	}, testTs)
 	require.NoError(t, err)
-	assert.Equal(t, entityKey("box1", "mem"), row.Id)
+	assert.Equal(t, nkOf(t, "box1", "mem"), row.NaturalKey)
 	assert.Equal(t, kindMem, row.Kind)
 	assert.EqualValues(t, 16<<30, row.TotalBytes)
 	assert.EqualValues(t, 8<<30, row.AvailableBytes)

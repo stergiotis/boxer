@@ -25,62 +25,62 @@ const rtHost = "test-host"
 
 var rtTs = time.UnixMilli(1_700_000_000_123).UTC()
 
-// TestRoundTrip_EntityKeys pins the reader's key derivation against the ids the
-// writers actually stamp. A drift here is the one failure mode of restating the
+// TestRoundTrip_EntityKeys pins the reader's natural-key derivation against the
+// natural keys the writers actually stamp. A drift here is the one failure mode of restating the
 // domain tokens in two packages, and it would otherwise surface as a replay
 // that silently finds no rows.
 func TestRoundTrip_EntityKeys(t *testing.T) {
 	cpu, err := cpuRow(rtHost, &sysmsnap.CPUSnapshot{}, rtTs)
 	require.NoError(t, err)
-	assert.Equal(t, sysmreplay.EntityKey(rtHost, sysmreplay.DomainCPU), cpu.Id, "cpu")
+	assert.Equal(t, sysmreplay.EntityNaturalKey(rtHost, sysmreplay.DomainCPU), cpu.NaturalKey, "cpu")
 
 	info, err := cpuInfoRow(rtHost, &sysmsnap.CPUSnapshot{}, rtTs)
 	require.NoError(t, err)
-	assert.Equal(t, sysmreplay.EntityKey(rtHost, sysmreplay.DomainCPUInfo), info.Id, "cpuInfo")
+	assert.Equal(t, sysmreplay.EntityNaturalKey(rtHost, sysmreplay.DomainCPUInfo), info.NaturalKey, "cpuInfo")
 
 	mem, err := memRow(rtHost, &sysmsnap.MemSnapshot{}, rtTs)
 	require.NoError(t, err)
-	assert.Equal(t, sysmreplay.EntityKey(rtHost, sysmreplay.DomainMem), mem.Id, "mem")
+	assert.Equal(t, sysmreplay.EntityNaturalKey(rtHost, sysmreplay.DomainMem), mem.NaturalKey, "mem")
 
 	psi, err := psiRow(rtHost, &sysmsnap.PSISnapshot{}, rtTs)
 	require.NoError(t, err)
-	assert.Equal(t, sysmreplay.EntityKey(rtHost, sysmreplay.DomainPSI), psi.Id, "psi")
+	assert.Equal(t, sysmreplay.EntityNaturalKey(rtHost, sysmreplay.DomainPSI), psi.NaturalKey, "psi")
 
 	net, err := netRow(rtHost, &sysmsnap.NetSnapshot{}, rtTs)
 	require.NoError(t, err)
-	assert.Equal(t, sysmreplay.EntityKey(rtHost, sysmreplay.DomainNet), net.Id, "net")
+	assert.Equal(t, sysmreplay.EntityNaturalKey(rtHost, sysmreplay.DomainNet), net.NaturalKey, "net")
 
 	mounts, err := diskMountRow(rtHost, &sysmsnap.DiskSnapshot{}, rtTs)
 	require.NoError(t, err)
-	assert.Equal(t, sysmreplay.EntityKey(rtHost, sysmreplay.DomainDiskMnt), mounts.Id, "diskMount")
+	assert.Equal(t, sysmreplay.EntityNaturalKey(rtHost, sysmreplay.DomainDiskMnt), mounts.NaturalKey, "diskMount")
 
 	dio, err := diskIoRow(rtHost, &sysmsnap.DiskSnapshot{}, rtTs)
 	require.NoError(t, err)
-	assert.Equal(t, sysmreplay.EntityKey(rtHost, sysmreplay.DomainDiskIO), dio.Id, "diskIo")
+	assert.Equal(t, sysmreplay.EntityNaturalKey(rtHost, sysmreplay.DomainDiskIO), dio.NaturalKey, "diskIo")
 
 	bat, err := batteryRow(rtHost, &sysmsnap.BatterySnapshot{}, rtTs)
 	require.NoError(t, err)
-	assert.Equal(t, sysmreplay.EntityKey(rtHost, sysmreplay.DomainBattery), bat.Id, "battery")
+	assert.Equal(t, sysmreplay.EntityNaturalKey(rtHost, sysmreplay.DomainBattery), bat.NaturalKey, "battery")
 
 	gpu, err := gpuRow(rtHost, &sysmsnap.GPUSnapshot{}, rtTs)
 	require.NoError(t, err)
-	assert.Equal(t, sysmreplay.EntityKey(rtHost, sysmreplay.DomainGPU), gpu.Id, "gpu")
+	assert.Equal(t, sysmreplay.EntityNaturalKey(rtHost, sysmreplay.DomainGPU), gpu.NaturalKey, "gpu")
 
 	proc, err := procRow(rtHost, nil, rtTs)
 	require.NoError(t, err)
-	assert.Equal(t, sysmreplay.EntityKey(rtHost, sysmreplay.DomainProc), proc.Id, "proc")
+	assert.Equal(t, sysmreplay.EntityNaturalKey(rtHost, sysmreplay.DomainProc), proc.NaturalKey, "proc")
 
 	pcmd, err := procCmdRow(rtHost, nil, rtTs)
 	require.NoError(t, err)
-	assert.Equal(t, sysmreplay.EntityKey(rtHost, sysmreplay.DomainProcCmd), pcmd.Id, "procCmd")
+	assert.Equal(t, sysmreplay.EntityNaturalKey(rtHost, sysmreplay.DomainProcCmd), pcmd.NaturalKey, "procCmd")
 
 	sock, err := socketRow(rtHost, &sysmsnap.SocketsSnapshot{})
 	require.NoError(t, err)
-	assert.Equal(t, sysmreplay.EntityKey(rtHost, sysmreplay.DomainSockets), sock.Id, "sockets")
+	assert.Equal(t, sysmreplay.EntityNaturalKey(rtHost, sysmreplay.DomainSockets), sock.NaturalKey, "sockets")
 
 	topo, err := topologyRow(rtHost, rtTopology(), rtTs)
 	require.NoError(t, err)
-	assert.Equal(t, sysmreplay.EntityKey(rtHost, sysmreplay.DomainTopology), topo.Id, "topology")
+	assert.Equal(t, sysmreplay.EntityNaturalKey(rtHost, sysmreplay.DomainTopology), topo.NaturalKey, "topology")
 }
 
 func TestRoundTrip_CPU(t *testing.T) {

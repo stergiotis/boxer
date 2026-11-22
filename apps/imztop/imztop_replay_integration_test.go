@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmreplay"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmtee"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
+	"github.com/stergiotis/boxer/public/storage/recordstore/recordstoretest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +43,7 @@ func teeBundles(t *testing.T, host string, bundles []*sysmsnap.BundleSnapshot) {
 	}
 	exec, err := storeexec.New(client, nil)
 	require.NoError(t, err)
-	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{})
+	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{Keys: recordstoretest.KeyStream(recordstoretest.FactsRowTag)})
 	defer store.Close()
 	require.NoError(t, store.VerifySchema(context.Background()))
 

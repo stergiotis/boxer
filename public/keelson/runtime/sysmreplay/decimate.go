@@ -146,9 +146,10 @@ func (inst *Reader) PlanDecimation(ctx context.Context, w Window, slots int) (pl
 func (inst *Reader) windowPredicate(w Window, domain string) (pred string) {
 	col := sysmfacts.SysmetricsColOrder
 	var b strings.Builder
-	b.WriteString(sysmfacts.SysmetricsColKey)
-	b.WriteString(" = ")
-	b.WriteString(formatKey(EntityKey(inst.host, domain)))
+	// By natural key alone: these stay envelope-only queries. The kind is
+	// not named — the pair is the tee's — which counts a host's CPU
+	// descriptors written before 2026-11-22 with its CPU samples.
+	b.WriteString(naturalKeyPredicate(inst.host, domain))
 	b.WriteString(" AND ")
 	b.WriteString(col)
 	b.WriteString(" >= fromUnixTimestamp64Nano(")
@@ -172,9 +173,10 @@ func (inst *Reader) windowPredicate(w Window, domain string) (pred string) {
 func (inst *Reader) decimatedPredicate(domain string, timesMS []int64) (pred string) {
 	col := sysmfacts.SysmetricsColOrder
 	var b strings.Builder
-	b.WriteString(sysmfacts.SysmetricsColKey)
-	b.WriteString(" = ")
-	b.WriteString(formatKey(EntityKey(inst.host, domain)))
+	// By natural key alone: these stay envelope-only queries. The kind is
+	// not named — the pair is the tee's — which counts a host's CPU
+	// descriptors written before 2026-11-22 with its CPU samples.
+	b.WriteString(naturalKeyPredicate(inst.host, domain))
 	b.WriteString(" AND ")
 	b.WriteString(col)
 	b.WriteString(" IN (")

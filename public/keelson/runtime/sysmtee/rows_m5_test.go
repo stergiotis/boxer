@@ -69,7 +69,7 @@ func TestProcCmdRow_CarriesTheSensitiveFieldsAndJoinsOnPid(t *testing.T) {
 	cmd, err := procCmdRow("box1", procs, testTs)
 	require.NoError(t, err)
 
-	assert.NotEqual(t, sample.Id, cmd.Id, "the two kinds are separate series")
+	assert.NotEqual(t, sample.NaturalKey, cmd.NaturalKey, "the two kinds are separate series")
 	require.Len(t, cmd.Pid, 3)
 	// Pid repeats on this kind because a reader joins the two on it; the arrays
 	// are aligned within a kind, not across kinds.

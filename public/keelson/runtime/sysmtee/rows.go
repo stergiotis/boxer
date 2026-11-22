@@ -8,7 +8,6 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/naturalkey"
-	"github.com/zeebo/xxh3"
 )
 
 // Kind labels. The value is what a human reads; the membership id is what a
@@ -30,19 +29,11 @@ const (
 	domainMem     = string(sysmsnap.DomainMem)
 )
 
-// entityKey is the store Key for one (host, domain) series: every sample of
-// that series shares it, so Latest is the current state and Replay is the
-// history. xxh3 over the joined tokens, per ADR-0184 §SD3.
-//
-// The separator makes the encoding unambiguous — host tokens are sanitized to
-// exclude it, so no (host, domain) pair can collide with another by
-// concatenation.
-func entityKey(host, domain string) uint64 {
-	return xxh3.HashString(host + "/" + domain)
-}
-
-// entityNaturalKey records the pair the key digests, so a reader need not
-// invert it. JSON is the vocabulary's natural-key format.
+// entityNaturalKey names one (host, domain) series: every sample of the
+// series carries it, so a reader finds the series by it (ADR-0405 §SD2). A
+// row's id is not derived from it; the tee mints one per row. JSON is the
+// vocabulary's natural-key format, and the two tokens stay apart in it, so no
+// pair can be taken for another by concatenation.
 func entityNaturalKey(host, domain string) (nk []byte, err error) {
 	enc := naturalkey.NewEncoder()
 	enc.Begin().AddStr(host).AddStr(domain)
@@ -60,7 +51,6 @@ func cpuRow(host string, snap *sysmsnap.CPUSnapshot, ts time.Time) (row sysmfact
 		return
 	}
 	row = sysmfacts.SysCpu{
-		Id:         entityKey(host, domainCpu),
 		NaturalKey: nk,
 		Ts:         ts,
 		Kind:       kindCpu,
@@ -87,13 +77,12 @@ func cpuRow(host string, snap *sysmsnap.CPUSnapshot, ts time.Time) (row sysmfact
 // restamps them on every tick — so the split is the tee's, not the plane's.
 func cpuInfoRow(host string, snap *sysmsnap.CPUSnapshot, ts time.Time) (row sysmfacts.SysCpuInfo, err error) {
 	// The descriptor is a series of its own, and its natural key names that
-	// series, as every other row's does: the pair its Id digests.
+	// series, as every other row's does.
 	nk, err := entityNaturalKey(host, domainCpuInfo)
 	if err != nil {
 		return
 	}
 	row = sysmfacts.SysCpuInfo{
-		Id:           entityKey(host, domainCpuInfo),
 		NaturalKey:   nk,
 		Ts:           ts,
 		Kind:         kindCpuInfo,
@@ -111,7 +100,6 @@ func memRow(host string, snap *sysmsnap.MemSnapshot, ts time.Time) (row sysmfact
 		return
 	}
 	row = sysmfacts.SysMem{
-		Id:         entityKey(host, domainMem),
 		NaturalKey: nk,
 		Ts:         ts,
 		Kind:       kindMem,

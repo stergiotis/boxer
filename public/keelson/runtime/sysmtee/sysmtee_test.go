@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmtee"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
+	"github.com/stergiotis/boxer/public/storage/recordstore/recordstoretest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -79,7 +80,7 @@ func startTee(t *testing.T, opts sysmtee.Options) (*sysmtee.Tee, *recordingExec,
 	pubCap := []app.SubjectFilter{{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionPub}}
 
 	exec := &recordingExec{}
-	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{})
+	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{Keys: recordstoretest.KeyStream(recordstoretest.FactsRowTag)})
 
 	opts.Bus = bus.NewClient("tee", subCap)
 	opts.Store = store
@@ -352,7 +353,7 @@ func TestTee_StopIsIdempotent(t *testing.T) {
 func TestStart_RequiresBusStoreAndHost(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
 	client := bus.NewClient("tee", []app.SubjectFilter{{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionSub}})
-	store := sysmfacts.NewSysmetricsStore(&recordingExec{}, nil, sysmfacts.SysmetricsStoreConfig{})
+	store := sysmfacts.NewSysmetricsStore(&recordingExec{}, nil, sysmfacts.SysmetricsStoreConfig{Keys: recordstoretest.KeyStream(recordstoretest.FactsRowTag)})
 	t.Cleanup(store.Close)
 
 	_, err := sysmtee.Start(t.Context(), sysmtee.Options{Store: store, Host: "box1"})

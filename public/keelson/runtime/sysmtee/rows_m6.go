@@ -29,7 +29,6 @@ func topologyRow(host string, topo *sysmsnap.Topology, ts time.Time) (row sysmfa
 		return
 	}
 	row = sysmfacts.SysTopology{
-		Id:           entityKey(host, domainTopology),
 		NaturalKey:   nk,
 		Ts:           ts,
 		Kind:         kindTopology,

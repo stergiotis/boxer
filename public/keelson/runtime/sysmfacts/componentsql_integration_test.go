@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
+	"github.com/stergiotis/boxer/public/storage/recordstore/recordstoretest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +31,7 @@ func liveStore(t *testing.T) (*sysmfacts.SysmetricsStore, *chclient.Client) {
 	}
 	exec, err := storeexec.New(client, nil)
 	require.NoError(t, err)
-	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{})
+	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{Keys: recordstoretest.KeyStream(recordstoretest.FactsRowTag)})
 	t.Cleanup(store.Close)
 	return store, client
 }

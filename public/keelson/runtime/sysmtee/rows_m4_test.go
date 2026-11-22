@@ -104,7 +104,7 @@ func TestDiskRows_SplitIntoTwoIndependentlyLengthedKinds(t *testing.T) {
 
 	assert.Len(t, mounts.Device, 3)
 	assert.Len(t, io.Name, 1)
-	assert.NotEqual(t, mounts.Id, io.Id, "the two groups are separate series")
+	assert.NotEqual(t, mounts.NaturalKey, io.NaturalKey, "the two groups are separate series")
 
 	assert.EqualValues(t, 1, mounts.Real[0], "ext4 is a real filesystem")
 	assert.EqualValues(t, 0, mounts.Real[1], "tmpfs is not")

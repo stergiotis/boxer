@@ -27,7 +27,6 @@ func procRow(host string, procs []sysmsnap.ProcInfo, ts time.Time) (row sysmfact
 	}
 	n := len(procs)
 	row = sysmfacts.SysProc{
-		Id:         entityKey(host, domainProc),
 		NaturalKey: nk,
 		Ts:         ts,
 		Kind:       kindProc,
@@ -93,7 +92,6 @@ func procCmdRow(host string, procs []sysmsnap.ProcInfo, ts time.Time) (row sysmf
 	}
 	n := len(procs)
 	row = sysmfacts.SysProcCmd{
-		Id:         entityKey(host, domainProc+"/cmd"),
 		NaturalKey: nk,
 		Ts:         ts,
 		Kind:       kindProcCmd,
@@ -127,7 +125,6 @@ func socketRow(host string, snap *sysmsnap.SocketsSnapshot) (row sysmfacts.SysSo
 	}
 	n := len(snap.Sockets)
 	row = sysmfacts.SysSocket{
-		Id:         entityKey(host, domainSockets),
 		NaturalKey: nk,
 		Ts:         time.UnixMilli(snap.CollectedAtUnixMs).UTC(),
 		Kind:       kindSocket,

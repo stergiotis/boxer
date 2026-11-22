@@ -21,6 +21,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
@@ -91,7 +92,13 @@ func startTee(ctx context.Context, bus app.BusI, host string, flushInterval time
 		err = eh.Errorf("sysmetricsd: %w", err)
 		return
 	}
-	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{ReadTable: readTable})
+	// Every row's id is minted from the facts table's stream (ADR-0405).
+	keys, err := chstore.NewRowIdGenerator(exec, chstore.Config{Database: factsschema.DatabaseName})
+	if err != nil {
+		err = eh.Errorf("sysmetricsd: %w", err)
+		return
+	}
+	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{ReadTable: readTable, Keys: keys})
 	err = store.VerifySchema(ctx)
 	if err != nil {
 		store.Close()

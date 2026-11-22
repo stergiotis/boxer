@@ -126,13 +126,15 @@ func (inst *Reader) coverageSQL(w Window, bucket time.Duration) (sql string) {
 	b.WriteString(" SECOND))) * 1000 AS b, toUInt64(count()) AS c FROM ")
 	b.WriteString(inst.table())
 	b.WriteString(" WHERE ")
-	b.WriteString(sysmfacts.SysmetricsColKey)
+	// Every series of the host, by natural key (ADR-0405 §SD2): the pairs
+	// are the tee's and no other writer's.
+	b.WriteString(colNaturalKey)
 	b.WriteString(" IN (")
 	for i, domain := range allDomains {
 		if i > 0 {
 			b.WriteString(",")
 		}
-		b.WriteString(formatKey(EntityKey(inst.host, domain)))
+		b.WriteString(naturalKeyLiteral(EntityNaturalKey(inst.host, domain)))
 	}
 	b.WriteString(") AND ")
 	b.WriteString(col)
@@ -201,9 +203,4 @@ func MergeCoverage(buckets []CoverageBucket, bucket time.Duration) (runs []Cover
 	}
 	runs = append(runs, cur)
 	return
-}
-
-// formatKey renders an entity key as the SQL literal the filter uses.
-func formatKey(key uint64) string {
-	return strconv.FormatUint(key, 10)
 }

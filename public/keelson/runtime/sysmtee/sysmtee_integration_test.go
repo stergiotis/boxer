@@ -4,12 +4,12 @@ package sysmtee_test
 
 import (
 	"context"
-	"strconv"
 	"testing"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
@@ -18,9 +18,9 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmtee"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
+	"github.com/stergiotis/boxer/public/storage/recordstore/recordstoretest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/zeebo/xxh3"
 )
 
 // liveStore binds the generated store to the CLICKHOUSE_* server, skipping when
@@ -34,7 +34,7 @@ func liveStore(t *testing.T) (*sysmfacts.SysmetricsStore, *chclient.Client) {
 	}
 	exec, err := storeexec.New(client, nil)
 	require.NoError(t, err)
-	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{})
+	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{Keys: recordstoretest.KeyStream(recordstoretest.FactsRowTag)})
 	t.Cleanup(store.Close)
 	return store, client
 }
@@ -106,18 +106,23 @@ func TestTee_RoundTripsThroughTheLiveTable(t *testing.T) {
 	// Read back through the store's own Scan verb, which resolves the baked
 	// membership ids — so this exercises the read direction of the same id
 	// snapshot the write used.
-	// The key is recomputed here rather than exported from the tee, so the
-	// assertion is an independent oracle for the derivation, not a restatement
-	// of it.
-	key := xxh3.HashString(host + "/" + string(sysmsnap.DomainCPU))
+	// The series is found by its natural key, written out here rather than
+	// taken from the tee, so the assertion is an independent oracle for the
+	// encoding, not a restatement of it. Each row's id is its own, minted
+	// from the store's key stream (ADR-0405).
+	naturalKey := `["` + host + `","` + string(sysmsnap.DomainCPU) + `"]`
 	seen := 0
+	ids := map[uint64]struct{}{}
 	for ent, scanErr := range store.ScanSysCpu(ctx, recordstore.ScanOpts{
-		ExtraPredicate: sysmfacts.SysmetricsColKey + " = " + strconv.FormatUint(key, 10),
+		ExtraPredicate: "`id:naturalKey:y:4::0:` = '" + naturalKey + "'",
 		Limit:          32,
 	}) {
 		require.NoError(t, scanErr)
 		require.NotNil(t, ent)
+		assert.Equal(t, recordstoretest.FactsRowTag, identifier.TaggedId(ent.ID).GetTag().GetValue(), "a minted id")
+		ids[ent.ID] = struct{}{}
 		seen++
 	}
+	assert.Len(t, ids, samples, "one id per row, not one per series")
 	assert.Equal(t, samples, seen, "every cpu sample written must read back")
 }

@@ -35,7 +35,7 @@ func TestDecimatedPredicate_RestrictsToRecordedInstants(t *testing.T) {
 	inst := &Reader{host: "some-host"}
 	pred := inst.decimatedPredicate(DomainCPU, []int64{1000, 2000, 3000})
 
-	assert.Contains(t, pred, formatKey(EntityKey("some-host", DomainCPU)))
+	assert.Contains(t, pred, naturalKeyLiteral(EntityNaturalKey("some-host", DomainCPU)))
 	assert.Contains(t, pred, "fromUnixTimestamp64Milli(1000)")
 	assert.Contains(t, pred, "fromUnixTimestamp64Milli(3000)")
 	assert.NotContains(t, pred, "LW_", "decimation must not need the leeway read surface")

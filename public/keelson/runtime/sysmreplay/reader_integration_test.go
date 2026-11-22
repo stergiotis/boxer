@@ -18,8 +18,10 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmtee"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
+	"github.com/stergiotis/boxer/public/storage/recordstore/recordstoretest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zeebo/xxh3"
 )
 
 // liveExec is the executor liveStore built its store on — coverage needs the
@@ -38,7 +40,7 @@ func liveStore(t *testing.T) *sysmfacts.SysmetricsStore {
 	exec, err := storeexec.New(client, nil)
 	require.NoError(t, err)
 	liveExec = exec
-	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{})
+	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{Keys: recordstoretest.KeyStream(recordstoretest.FactsRowTag)})
 	t.Cleanup(store.Close)
 	return store
 }
@@ -548,4 +550,52 @@ func TestPreview_AggregatesThroughTheGeneratedProjection(t *testing.T) {
 	for _, p := range points {
 		assert.InDelta(t, 40.0, p.Value, 0.001, "the mean of a constant is that constant")
 	}
+}
+
+// TestReplay_SpansRowsFromBeforeIdsWereMinted writes a host's history the way
+// a build before ADR-0405 did — every row of a series under one id, the hash
+// of host and domain, and the CPU descriptor under the sample series' natural
+// key — then a tick the way the tee writes it now, and replays across both:
+// the series is found by its natural key, which did not change, and the old
+// descriptor is still the descriptor.
+func TestReplay_SpansRowsFromBeforeIdsWereMinted(t *testing.T) {
+	store := liveStore(t)
+	ctx := context.Background()
+	require.NoError(t, store.VerifySchema(ctx))
+	host := itHost(t)
+	base := time.Now().UTC().Truncate(time.Millisecond)
+
+	cpuKey := sysmreplay.EntityNaturalKey(host, sysmreplay.DomainCPU)
+	oldSeriesId := xxh3.HashString(host + "/" + sysmreplay.DomainCPU)
+	oldInfoId := xxh3.HashString(host + "/" + sysmreplay.DomainCPUInfo)
+	for i := range 2 {
+		ts := base.Add(time.Duration(i) * time.Second)
+		require.NoError(t, store.Begin(ctx, oldSeriesId, ts, sysmfacts.SysmetricsEnvelope{NaturalKey: cpuKey}).
+			AddSysCpu(sysmfacts.SysCpu{Id: oldSeriesId, NaturalKey: cpuKey, Ts: ts, Kind: "sysCpu", Host: host, TotalPercent: uint8(10 + i)}).Commit())
+	}
+	// The descriptor as it was written: its own id, the sample's natural key.
+	require.NoError(t, store.Begin(ctx, oldInfoId, base, sysmfacts.SysmetricsEnvelope{NaturalKey: cpuKey}).
+		AddSysCpuInfo(sysmfacts.SysCpuInfo{Id: oldInfoId, NaturalKey: cpuKey, Ts: base, Kind: "sysCpuInfo", Host: host, ModelName: "Old CPU", LogicalCores: 2}).Commit())
+	_, err := store.Flush(ctx)
+	require.NoError(t, err)
+
+	now := base.Add(2 * time.Second).UnixMilli()
+	publishBundles(t, store, host, []*sysmsnap.BundleSnapshot{{
+		SampledAtUnixMs: now,
+		CPU:             &sysmsnap.CPUSnapshot{SampledAtUnixMs: now, TotalPercent: 12, ModelName: "New CPU", LogicalCores: 2},
+	}}, false)
+
+	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Host: host})
+	require.NoError(t, err)
+	var totals []uint8
+	var models []string
+	for b, rerr := range r.All(ctx, sysmreplay.Window{From: base.Add(-time.Second), To: base.Add(time.Hour)}) {
+		require.NoError(t, rerr)
+		require.NotNil(t, b.CPU)
+		totals = append(totals, b.CPU.TotalPercent)
+		models = append(models, b.CPU.ModelName)
+	}
+	assert.Equal(t, []uint8{10, 11, 12}, totals, "two rows under the hashed series id and one under a minted id are one series")
+	assert.Equal(t, []string{"Old CPU", "Old CPU", "New CPU"}, models,
+		"the descriptor written under the sample's natural key is found, and the one written since carries on from it")
 }

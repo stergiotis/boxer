@@ -124,7 +124,7 @@ func TestCoverageSQL_SpansEveryDomain(t *testing.T) {
 
 	assert.Len(t, allDomains, 13, "every stored series should be covered")
 	for _, d := range allDomains {
-		assert.Contains(t, sql, formatKey(EntityKey("some-host", d)),
+		assert.Contains(t, sql, naturalKeyLiteral(EntityNaturalKey("some-host", d)),
 			"domain %s missing from the key filter", d)
 	}
 }
