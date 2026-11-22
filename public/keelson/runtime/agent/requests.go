@@ -179,6 +179,9 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		c := ceilingOfWire(*req.Ceiling).normal()
 		ceiling = &c
 	}
+	if req.Handle == "" {
+		req.Destinations = inst.withLaunchDestinations(req.Destinations, req.Launches, ceiling)
+	}
 	if why := overCeiling(ceiling, req); why != "" {
 		// Above what the person's settings allow: refused here, so the
 		// person is never asked for it (ADR-0280).
@@ -205,6 +208,7 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		if ceiling != nil {
 			inst.setCeiling(t, *ceiling)
 		}
+		req.Destinations = inst.withLaunchDestinations(req.Destinations, req.Launches, t.ceiling)
 		why := overCeiling(t.ceiling, req)
 		inst.mu.Unlock()
 		if why != "" {
@@ -764,4 +768,25 @@ func overCeiling(ceiling *Ceiling, req wireGrantRequest) (why string) {
 		modes = append(modes, ParseMode(l.Mode))
 	}
 	return ceiling.refuseRequest(modes, len(req.Launches) > 0, ParseMode(req.Desktop), req.Destinations)
+}
+
+// withLaunchDestinations adds to a request's destinations those the apps it
+// opens declare in Manifest.LaunchDestinations, leaving out any the ceiling
+// refuses, so the request is decided as a whole as before and shows what it
+// asks for.
+func (inst *Service) withLaunchDestinations(dests []string, launches []wireLaunchEntry, ceiling *Ceiling) (out []string) {
+	out = dests
+	for _, l := range launches {
+		m, ok := inst.cfg.Registry.LookupManifest(app.AppIdT(l.App))
+		if !ok || m.LaunchDestinations == nil {
+			continue
+		}
+		for _, d := range m.LaunchDestinations() {
+			if d == "" || slices.Contains(out, d) || ceiling.refuseDestination(d) != "" {
+				continue
+			}
+			out = append(slices.Clip(out), d)
+		}
+	}
+	return
 }

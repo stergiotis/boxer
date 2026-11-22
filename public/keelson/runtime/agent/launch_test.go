@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
 
 // A launch names its app the way a model writes it — the id, the alias, or
@@ -45,4 +47,23 @@ func TestLaunchingAnUnknownAppNamesIt(t *testing.T) {
 	var refused *RefusedError
 	require.True(t, errors.As(err, &refused))
 	assert.Contains(t, refused.Reason, `no app named "notepad"`)
+}
+
+// A request that opens an app asks for the destinations the app declares a
+// window of it needs, beside those it names, once each and only within the
+// ceiling; so the request shows them and is decided as a whole.
+func TestARequestThatOpensAnAppAsksForItsLaunchDestinations(t *testing.T) {
+	r := newRig(t, false)
+	const id = app.AppIdT("github.com/x/apps/sql")
+	require.NoError(t, r.svc.cfg.Registry.RegisterFactory(app.Manifest{Id: id, Display: "Sql", Summary: "run sql",
+		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.Topics()[0]},
+		LaunchDestinations: func() []string { return []string{"clickhouse:127.0.0.1:8143"} }},
+		func() (app.AppI, error) { return nil, nil }))
+	launches := []wireLaunchEntry{{App: string(id), Count: 1}}
+	got := r.svc.withLaunchDestinations([]string{"publish:wolfram"}, launches, nil)
+	assert.Equal(t, []string{"publish:wolfram", "clickhouse:127.0.0.1:8143"}, got)
+	assert.Equal(t, []string{"clickhouse:127.0.0.1:8143"}, r.svc.withLaunchDestinations([]string{"clickhouse:127.0.0.1:8143"}, launches, nil), "named once")
+	hostOnly := Ceiling{Mode: ModeAct, Effect: app.OperationEffectRun, Reach: ReachHost}
+	assert.Empty(t, r.svc.withLaunchDestinations(nil, launches, &hostOnly), "a destination the ceiling refuses is not asked for")
+	assert.Empty(t, r.svc.withLaunchDestinations(nil, []wireLaunchEntry{{App: string(docAppId), Count: 1}}, nil), "an app that declares none adds none")
 }

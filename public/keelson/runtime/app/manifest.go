@@ -420,6 +420,15 @@ type Manifest struct {
 	// registration (ADR-0396 §2).
 	Operations *OperationsCatalog
 
+	// LaunchDestinations, when set, names the grant destinations a window of
+	// this app opened for an agent's task needs for its main work, such as
+	// the endpoint its runs go to. A grant request that opens the app asks
+	// for them beside the destinations it names, so whoever decides the
+	// request — the person, or the host deciding unattended within the
+	// ceiling — decides them in that one request; nothing is granted that
+	// the request does not show.
+	LaunchDestinations func() []string
+
 	// Help is the optional inline-help corpus for this app. When non-nil,
 	// the keelson/runtime/help package's DefaultLibrary will lazily index
 	// every `*.md` file under the fs.FS (any depth) on first access and
