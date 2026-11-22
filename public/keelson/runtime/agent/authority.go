@@ -23,8 +23,10 @@ const (
 	// ReachHost: what this host holds — its tables, keelson:<table>, and
 	// its local git repositories, git:<path>.
 	ReachHost ReachE = 0
-	// ReachData: the data endpoints the apps query, clickhouse:<host>, and
-	// the session tables a task keeps on one, clickhouse-session:<host>.
+	// ReachData: the data endpoints the apps query, clickhouse:<host>, the
+	// session tables a task keeps on one, clickhouse-session:<host>, and
+	// ad-hoc datasets made readable by programs on this machine,
+	// expose:<alias prefix>.
 	ReachData ReachE = 1
 	// ReachNetwork: egress destinations and the model service, http:<name>
 	// and llm.
@@ -55,6 +57,11 @@ func ReachOf(destination string) (r ReachE) {
 		// process, as a keelson table is, and publishing one stays in it.
 		return ReachHost
 	case strings.HasPrefix(destination, "clickhouse:"), strings.HasPrefix(destination, "clickhouse-session:"):
+		return ReachData
+	case strings.HasPrefix(destination, "expose:"):
+		// An exposed dataset leaves the process for a reader on this
+		// machine holding its token (ADR-0407): no further than a data
+		// endpoint on loopback, and further than this host's own tables.
 		return ReachData
 	}
 	return ReachNetwork

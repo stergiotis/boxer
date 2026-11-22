@@ -48,5 +48,6 @@ func TestARequestCardSaysWhatIsNew(t *testing.T) {
 	assert.Equal(t, "query the ClickHouse server at localhost:8123", destinationText("clickhouse:localhost:8123"))
 	assert.Equal(t, "read this host's table keelson('apps')", destinationText("keelson:apps"))
 	assert.Contains(t, destinationText("publish:seco_"), "start with seco_")
+	assert.Contains(t, destinationText("expose:result"), "let programs on this machine read the ad-hoc datasets whose names start with result")
 	assert.Equal(t, "weird:thing", destinationText("weird:thing"), "a class it does not know is shown by name")
 }

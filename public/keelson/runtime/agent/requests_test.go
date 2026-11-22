@@ -478,6 +478,15 @@ func TestAPublishPrefixNoNameCanMatchIsRefusedAtRequest(t *testing.T) {
 	assert.Empty(t, unmatchableConsents([]string{"publish:wolfram", "publish:_x", "keelson-bundle:a-b", "clickhouse:127.0.0.1:8123"}))
 }
 
+// An exposure destination is a name prefix as a publish destination is:
+// one no published name starts with is refused at the request.
+func TestAnExposeDestinationNoNameStartsWithIsRefused(t *testing.T) {
+	assert.Contains(t, unmatchableConsents([]string{"expose:2024_runs"}), "expose:2024_runs can never cover an exposure")
+	assert.Contains(t, unmatchableConsents([]string{"expose:res-ult"}), "ask for expose:res instead")
+	assert.Contains(t, unmatchableConsents([]string{"expose:"}), "can never cover an exposure")
+	assert.Empty(t, unmatchableConsents([]string{"expose:result", "expose:bundle__result"}))
+}
+
 // A ClickHouse destination without a host covers no run, so a request for
 // one is refused with the shape to ask for instead.
 func TestADestinationWithoutAHostIsRefusedAtRequest(t *testing.T) {

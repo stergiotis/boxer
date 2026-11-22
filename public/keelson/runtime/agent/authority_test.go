@@ -96,6 +96,7 @@ func TestReachOfDestinations(t *testing.T) {
 	assert.Equal(t, ReachHost, ReachOf("git:/home/p/repo"), "a local repository is this host's")
 	assert.Equal(t, ReachData, ReachOf("clickhouse:localhost:8123"))
 	assert.Equal(t, ReachData, ReachOf("clickhouse-session:localhost:8123"), "session tables live on the endpoint")
+	assert.Equal(t, ReachData, ReachOf("expose:result"), "an exposed dataset is read from this machine's loopback")
 	assert.Equal(t, ReachNetwork, ReachOf("http:basemap"))
 	assert.Equal(t, ReachNetwork, ReachOf("llm"))
 	assert.Equal(t, ReachNetwork, ReachOf("something-new"), "an unknown class is taken as the widest")

@@ -782,8 +782,9 @@ func overCeiling(ceiling *Ceiling, req wireGrantRequest) (why string) {
 // destination names an endpoint by its host and port, so one without a host
 // covers no run. The names a publish consent covers — bundle aliases,
 // dataset names — are at most 64 bytes of letters, digits and underscores
-// that do not start with a digit, so a publish:<prefix> outside that shape
-// matches none. The reason names what to ask for instead.
+// that do not start with a digit, so a publish:<prefix> or an
+// expose:<prefix> outside that shape matches none. The reason names what to
+// ask for instead.
 func unmatchableConsents(destinations []string) (why string) {
 	for _, d := range destinations {
 		for _, class := range []string{"clickhouse:", "clickhouse-session:"} {
@@ -791,7 +792,12 @@ func unmatchableConsents(destinations []string) (why string) {
 				return d + " names no endpoint, so it covers no run: ask for " + class + "<host:port>, as a refusal or the window's state names it"
 			}
 		}
-		prefix, ok := strings.CutPrefix(d, app.ConsentClassPublish+":")
+		class, what := app.ConsentClassPublish, "a publish"
+		prefix, ok := strings.CutPrefix(d, class+":")
+		if !ok {
+			class, what = "expose", "an exposure"
+			prefix, ok = strings.CutPrefix(d, class+":")
+		}
 		if !ok {
 			continue
 		}
@@ -799,9 +805,9 @@ func unmatchableConsents(destinations []string) (why string) {
 		if valid == prefix && prefix != "" {
 			continue
 		}
-		why = d + " can never cover a publish: a published name is at most 64 letters, digits and underscores, not starting with a digit, so no name starts with " + strconv.Quote(prefix)
+		why = d + " can never cover " + what + ": a published name is at most 64 letters, digits and underscores, not starting with a digit, so no name starts with " + strconv.Quote(prefix)
 		if valid != "" {
-			why += "; ask for publish:" + valid + " instead"
+			why += "; ask for " + class + ":" + valid + " instead"
 		}
 		return
 	}

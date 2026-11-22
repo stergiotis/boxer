@@ -750,6 +750,8 @@ func destinationText(d string) string {
 		return "read the shared dataset bundle " + rest
 	case "publish":
 		return "publish bundles whose names start with " + rest + ", without a confirmation each"
+	case "expose":
+		return "let programs on this machine read the ad-hoc datasets whose names start with " + rest + ", over this host's loopback port, by a token that lapses"
 	case "git":
 		return "read the git repository " + rest
 	case "http":
