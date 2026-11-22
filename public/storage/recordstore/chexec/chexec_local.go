@@ -16,6 +16,7 @@ import (
 	"bytes"
 	"context"
 	"iter"
+	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
@@ -83,10 +84,48 @@ func (inst *LocalExecutor) run(ctx context.Context, sql string, outputFormat str
 	cmd.Stderr = &stderr
 	err = cmd.Run()
 	if err != nil {
-		err = eb.Build().Str("stderr", stderr.String()).Errorf("clickhouse local failed: %w", err)
+		b := eb.Build().Str("stderr", stderr.String())
+		if refusal := refusalLine(stderr.String()); refusal != "" {
+			// The server's own words belong in the message, as the HTTP
+			// client has them there: a caller that reports or matches the
+			// refusal reads err.Error().
+			err = b.Errorf("clickhouse local failed: %w", refusedError{refusal: refusal, cause: err})
+			return
+		}
+		err = b.Errorf("clickhouse local failed: %w", err)
 		return
 	}
 	stdout = out.Bytes()
+	return
+}
+
+// refusedError is a failed run whose stderr states an exception: the
+// server's line in front of the process's own failure.
+type refusedError struct {
+	refusal string
+	cause   error
+}
+
+func (inst refusedError) Error() string { return inst.refusal + ": " + inst.cause.Error() }
+func (inst refusedError) Unwrap() error { return inst.cause }
+
+// refusalLineMax bounds the refusal carried in an error message; the whole
+// of stderr stays in the error's stderr field.
+const refusalLineMax = 600
+
+// refusalLine is the first line of stderr in which ClickHouse states an
+// exception ("Code: N. DB::Exception: …"), cut at refusalLineMax bytes; ""
+// when stderr holds none.
+func refusalLine(stderr string) (line string) {
+	for l := range strings.SplitSeq(stderr, "\n") {
+		if i := strings.Index(l, "Code: "); i >= 0 {
+			line = strings.TrimSpace(l[i:])
+			break
+		}
+	}
+	if len(line) > refusalLineMax {
+		line = strings.ToValidUTF8(line[:refusalLineMax], "") + "…"
+	}
 	return
 }
 

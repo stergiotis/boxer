@@ -89,3 +89,36 @@ func TestLocalExecutor_AppliesTheRegisteredTransform(t *testing.T) {
 	assert.EqualValues(t, 2, count("SELECT count() FROM scratch_chexec.carrier WHERE carried = 101"))
 	assert.EqualValues(t, 1, count("SELECT count() FROM scratch_chexec.facts"))
 }
+
+// The catalogue lists a view's columns whether or not a read of it is
+// accepted: a view that casts to a LowCardinality over a number, created in
+// a session that allowed it, is refused at every later read. The judgement
+// reads the relation once and reports that; the same view with the setting
+// closing its SELECT is ok.
+func TestLocalExecutor_AViewWhoseReadIsRefusedIsIncompatible(t *testing.T) {
+	exec, err := NewLocalExecutor(t.TempDir(), nil)
+	if err != nil {
+		t.Skipf("clickhouse unavailable: %v", err)
+	}
+	ctx := context.Background()
+	const view = "CREATE OR REPLACE VIEW v AS SELECT CAST(x AS LowCardinality(UInt64)) AS x FROM t"
+	require.NoError(t, exec.Exec(ctx, "CREATE TABLE t (x UInt64) ENGINE = MergeTree ORDER BY x"))
+	require.NoError(t, exec.Exec(ctx, "SET allow_suspicious_low_cardinality_types = 1; "+view))
+	c := recordstore.TableContract{Kind: "k", Table: "v", ColumnsOnly: true,
+		Columns: []recordstore.ColumnSpec{{Name: "x", Type: "LowCardinality(UInt64)"}}}
+
+	v := recordstore.JudgeTable(ctx, exec, c)
+	require.Equal(t, recordstore.SchemaVerdictIncompatible, v.Verdict, v.Summary())
+	assert.Contains(t, v.ReadError, "SUSPICIOUS_TYPE_FOR_LOW_CARDINALITY")
+	assert.Contains(t, v.Summary(), "allow_suspicious_low_cardinality_types")
+	assert.Empty(t, v.Missing, "the columns themselves are as declared")
+
+	require.NoError(t, exec.Exec(ctx, view+" SETTINGS allow_suspicious_low_cardinality_types = 1"))
+	v = recordstore.JudgeTable(ctx, exec, c)
+	require.Equal(t, recordstore.SchemaVerdictOk, v.Verdict, v.Summary())
+	assert.Empty(t, v.ReadError)
+
+	table := recordstore.JudgeTable(ctx, exec, recordstore.TableContract{Kind: "k", Table: "t", ColumnsOnly: true,
+		Columns: []recordstore.ColumnSpec{{Name: "x", Type: "UInt64"}}})
+	require.Equal(t, recordstore.SchemaVerdictOk, table.Verdict, table.Summary())
+}
