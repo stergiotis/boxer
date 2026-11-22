@@ -159,6 +159,11 @@ func (inst *Service) Define(ctx context.Context, in DefineInput) (res DefineResu
 	}
 
 	s.mu.Lock()
+	// The bounds again, where the data set joins the session: a definition
+	// on another server session of this data session may have joined since
+	// its build measured, and a build measures only the data sets that
+	// have joined.
+	rowsUsed, bytesUsed := usageLocked(s, in.Name)
 	switch {
 	case s.closed:
 		err = eh.Errorf("the data session ended while the data set was made")
@@ -166,6 +171,10 @@ func (inst *Service) Define(ctx context.Context, in DefineInput) (res DefineResu
 		err = eb.Build().Str("name", in.Name).Errorf("the data set was defined or dropped by another request while this one was made; define it again")
 	case old == nil && len(s.datasets) >= inst.limits.MaxDatasets:
 		err = eb.Build().Int("bound", inst.limits.MaxDatasets).Errorf("the data session holds as many data sets as it may")
+	case rowsUsed+cand.rows > inst.limits.MaxRows:
+		err = eb.Build().Uint64("bound", inst.limits.MaxRows).Errorf("the data set has more rows than the data session may still hold")
+	case bytesUsed+cand.bytes > inst.limits.MaxBytes:
+		err = eb.Build().Uint64("bound", inst.limits.MaxBytes).Uint64("bytes", cand.bytes).Errorf("the data set takes more bytes than the data session may still hold")
 	}
 	if err != nil {
 		s.mu.Unlock()
