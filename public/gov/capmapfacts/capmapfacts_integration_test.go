@@ -49,7 +49,12 @@ func newLiveTable(t *testing.T) (cli *chclient.Client, qualified string, cleanup
 	require.NoError(t, store.DropTable(ctx))
 	require.NoError(t, store.SetupTable(ctx, ""))
 	cli = chclient.New(chclient.Config{URL: cfg.URL, User: cfg.User, Password: cfg.Password}, nil)
-	return cli, cfg.Database + "." + cfg.Table, func() { _ = store.DropTable(context.Background()) }
+	return cli, cfg.Database + "." + cfg.Table, func() {
+		// The whole scratch database, lease table included: dropping the
+		// facts table alone left an empty database behind on every server
+		// the test ran on.
+		_ = cli.Exec(context.Background(), "DROP DATABASE IF EXISTS "+integrationDatabase+" SYNC")
+	}
 }
 
 // queryText runs sql and returns its TabSeparated body. The format is appended
