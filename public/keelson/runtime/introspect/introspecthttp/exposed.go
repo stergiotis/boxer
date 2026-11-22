@@ -18,7 +18,7 @@ import (
 
 // ExposedPathPrefix is the path an exposed dataset is served under:
 // ExposedPathPrefix + alias for its Arrow stream, and + "/csv" after it for
-// CSV (ADR-0407). A request presents the exposure's token as
+// CSV (ADR-0407, proposed). A request presents the exposure's token as
 // "Authorization: Bearer <token>"; the path carries no secret, so the
 // listener, a proxy and ClickHouse's query log may record it.
 const ExposedPathPrefix = "/exposed/"

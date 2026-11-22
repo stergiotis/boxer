@@ -60,7 +60,7 @@ func ReachOf(destination string) (r ReachE) {
 		return ReachData
 	case strings.HasPrefix(destination, "expose:"):
 		// An exposed dataset leaves the process for a reader on this
-		// machine holding its token (ADR-0407): no further than a data
+		// machine holding its token (ADR-0407, proposed): no further than a data
 		// endpoint on loopback, and further than this host's own tables.
 		return ReachData
 	}

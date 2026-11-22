@@ -2,7 +2,7 @@ package introspect
 
 import "io"
 
-// An exposed dataset (ADR-0407) is one a person, or a task under its
+// An exposed dataset (ADR-0407, proposed) is one a person, or a task under its
 // grant, made readable by programs on this machine: the loopback listener
 // that serves this registry answers a request naming the dataset's alias
 // and presenting the exposure's token. The registry carries the seam

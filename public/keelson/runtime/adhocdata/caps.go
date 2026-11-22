@@ -50,7 +50,7 @@ func BundleEventsCap(reason string) (c app.SubjectFilter) {
 	return app.SubjectFilter{Pattern: SubjectBundleEventAll, Direction: app.CapDirectionSub, Reason: reason}
 }
 
-// ExposeCap exposes a dataset to readers on this machine (ADR-0407).
+// ExposeCap exposes a dataset to readers on this machine (ADR-0407, proposed).
 func ExposeCap(reason string) (c app.SubjectFilter) {
 	return app.SubjectFilter{Pattern: SubjectExpose, Direction: app.CapDirectionPub, Reason: reason}
 }

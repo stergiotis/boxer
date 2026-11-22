@@ -18,13 +18,13 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// Exposure (ADR-0407): a published dataset made readable by programs on
+// Exposure (ADR-0407, proposed): a published dataset made readable by programs on
 // this machine. An exposure names a dataset's alias and serves its live
 // revision to a request on the host's loopback listener that presents the
 // exposure's token; it lapses with the dataset, with the window that made
 // it, at the end of its lifetime, or when it is revoked.
 
-// Exposure bounds (ADR-0407 §SD3).
+// Exposure bounds (ADR-0407 §SD3, proposed).
 const (
 	// DefaultExposureLifetime is how long an exposure lasts when the
 	// request names no lifetime.
@@ -159,7 +159,7 @@ type exposures struct {
 }
 
 // Expose makes the newest live dataset under in.Alias readable by programs
-// on this machine that present the token the answer carries (ADR-0407).
+// on this machine that present the token the answer carries (ADR-0407, proposed).
 // A person's request needs nothing more; an agent's call is attested, its
 // task's grant must list expose:<prefix> for a prefix of the alias, the
 // task must have published the dataset, and neither that publish nor the

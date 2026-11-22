@@ -118,7 +118,7 @@ type Config struct {
 	// Cell is the deployment's declared boundary (ADR-0307 §SD1): on a host
 	// the organisation manages, an exposure that would hand sealed data to
 	// a program outside boxer above the export clearance is refused
-	// (ADR-0407). Nil is cell.Defaults.
+	// (ADR-0407, proposed). Nil is cell.Defaults.
 	Cell *cell.Declaration
 }
 
@@ -278,7 +278,7 @@ type Service struct {
 	auditHook atomic.Pointer[func(AuditRecord)]
 	// exposureHook is auditHook for exposure records.
 	exposureHook atomic.Pointer[func(ExposureAuditRecord)]
-	// exp holds the live exposures (ADR-0407); its lock is taken after mu.
+	// exp holds the live exposures (ADR-0407, proposed); its lock is taken after mu.
 	exp exposures
 
 	mu      sync.RWMutex
@@ -351,7 +351,7 @@ func NewService(cfg Config) (inst *Service, err error) {
 		}
 	}
 	// The listener serving this registry opens exposed datasets through
-	// the service (ADR-0407).
+	// the service (ADR-0407, proposed).
 	reg.SetExposureSource(inst)
 	return inst, nil
 }

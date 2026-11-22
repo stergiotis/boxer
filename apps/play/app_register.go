@@ -279,7 +279,7 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 			adhocdata.BundleEventsCap("and follows the bundle's republish and retract"),
 			adhocdata.BundlePublishCap("publish_result and the Publish menu publish the main result as an ad-hoc bundle (ADR-0288 §SD4)"),
 			adhocdata.ReadCap("list_bundles reads a bundle's column values as a read of the data, held to the task's grant (ADR-0288 §SD5)"),
-			adhocdata.ExposeCap("expose_dataset and the Data sets tab make an ad-hoc dataset readable by programs on this machine, by a token (ADR-0407)"),
+			adhocdata.ExposeCap("expose_dataset and the Data sets tab make an ad-hoc dataset readable by programs on this machine, by a token (ADR-0407, proposed)"),
 			adhocdata.ExposeRevokeCap("revoke_exposure and the Data sets tab end an exposure"),
 			adhocdata.ExposeListCap("list_datasets and the Data sets tab list the live exposures"),
 			sessiondata.DefineCap("query's keep_as and the Data sets tab keep a statement's result as a session data set (ADR-0406)"),

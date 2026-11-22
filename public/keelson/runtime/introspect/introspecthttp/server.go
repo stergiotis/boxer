@@ -153,7 +153,7 @@ func (s *Server) Start() (err error) {
 	}
 	s.ln = ln
 	// The registry learns where it is served, so a dataset exposed through
-	// it can say where a reader fetches it (ADR-0407).
+	// it can say where a reader fetches it (ADR-0407, proposed).
 	s.reg.SetServedAt(s.BaseURL())
 	go func() {
 		if serveErr := s.srv.Serve(ln); serveErr != nil && serveErr != http.ErrServerClosed {
@@ -232,7 +232,7 @@ func (s *Server) handler() http.Handler {
 	// whether a minted nonce was fetched, which is what makes locality
 	// provable rather than inferred from an address.
 	mux.HandleFunc("GET /probe/{nonce}", s.handleProbe)
-	// Exposed datasets (exposed.go, ADR-0407): by alias and token, never by
+	// Exposed datasets (exposed.go, ADR-0407, proposed): by alias and token, never by
 	// handle; /table and /query never open one.
 	mux.HandleFunc("GET "+ExposedPathPrefix+"{alias}", s.handleExposed)
 	mux.HandleFunc("GET "+ExposedPathPrefix+"{alias}/csv", s.handleExposedCSV)

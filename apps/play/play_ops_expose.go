@@ -1,7 +1,7 @@
 package play
 
 // play_ops_expose.go: exposing an ad-hoc dataset to programs on this
-// machine (ADR-0407). expose_dataset asks the dataset service to serve one
+// machine (ADR-0407, proposed). expose_dataset asks the dataset service to serve one
 // on the host's loopback listener to whoever presents the token its answer
 // carries; revoke_exposure ends one; list_datasets says which are exposed.
 // The Data sets tab does the same for the person. A task needs

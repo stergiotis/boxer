@@ -12,7 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
-// Exposure subjects (ADR-0407 §SD4), request/reply. The window asking is
+// Exposure subjects (ADR-0407 §SD4, proposed), request/reply. The window asking is
 // the envelope's; an agent's call is named by task, epoch and call on the
 // request and attested with the dispatcher. The wire is a versioned CBOR
 // DTO pair.
@@ -190,7 +190,7 @@ func exposeRequest(ctx context.Context, bus app.BusI, subject string, req expose
 }
 
 // ExposeRequest exposes the newest live dataset under in.Alias via
-// runtime.adhoc.expose (ADR-0407). The answer is the only place the token
+// runtime.adhoc.expose (ADR-0407, proposed). The answer is the only place the token
 // is ever given. in.By is ignored: the window asking is the envelope's
 // sender. The caller's bus client needs Pub on runtime.adhoc.expose.
 func ExposeRequest(ctx context.Context, bus app.BusI, in ExposeInput) (res ExposeResult, err error) {

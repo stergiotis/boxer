@@ -11,7 +11,7 @@ import (
 )
 
 // ExposureAuditDomain is the trail domain of exposure events (ADR-0407
-// §SD5).
+// §SD5, proposed).
 const ExposureAuditDomain = "adhoc-expose"
 
 // The audited exposure actions, as a trail row names them.
