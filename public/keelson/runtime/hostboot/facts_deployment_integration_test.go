@@ -192,6 +192,8 @@ func verdictFor(sum deploySummary, table string) (v recordstore.SchemaVerdict, o
 
 // resetDeployment leaves the throwaway server with the deployment's storage
 // and nothing of boxer's: the carrier, and the view named boxer.facts.
+// When the test ends the deployment is dropped and the facts setup of a
+// host's first run is put back.
 func resetDeployment(t *testing.T, cli *chclient.Client) (carrier *chstoretest.Carrier) {
 	t.Helper()
 	ctx := context.Background()
@@ -201,6 +203,20 @@ func resetDeployment(t *testing.T, cli *chclient.Client) (carrier *chstoretest.C
 	t.Cleanup(func() {
 		for _, db := range []string{factsschema.DatabaseName, carrierDatabase} {
 			_ = cli.Exec(context.Background(), "DROP DATABASE IF EXISTS "+db+" SYNC")
+		}
+		// The run's server came with the facts table a host's first run
+		// creates, and the packages that run after this one read and write
+		// it: put it back rather than leave the server without boxer.facts.
+		stmts, serr := chstore.SetupStatements(chstore.Defaults(), "")
+		if serr != nil {
+			t.Errorf("compose the facts setup to restore: %v", serr)
+			return
+		}
+		for _, stmt := range stmts {
+			if rerr := cli.Exec(context.Background(), stmt); rerr != nil {
+				t.Errorf("restore the facts setup: %v", rerr)
+				return
+			}
 		}
 	})
 	carrier = referenceCarrier(t)
