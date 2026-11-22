@@ -88,7 +88,11 @@ func (inst *Service) rejectProposal(p proposalRef) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if p.rec.outcome.Phase == opwire.PhaseProposed {
-		p.rec.outcome = phaseOutcome(opwire.PhaseRejected, "rejected by the person")
+		reason := "rejected by the person"
+		if dest := consentDestination(p.rec.spec.Consent, p.rec.req.Args); dest != "" {
+			reason += "; a grant listing " + dest + ", or a shorter prefix of it, covers this call without asking"
+		}
+		p.rec.outcome = phaseOutcome(opwire.PhaseRejected, reason)
 		inst.grantEventAsked(inst.ctx, trail.GrantEventDeclined, "person", proposalReason(p.rec), p.t, nil, p.rec.asked())
 	}
 }

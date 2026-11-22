@@ -166,6 +166,13 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		rep.Reason = err.Error()
 		return
 	}
+	if why := unmatchableConsents(req.Destinations); why != "" {
+		// A consent no call can ever meet would be granted and then cover
+		// nothing; refused here with the reason, so the request is redone.
+		rep.Reason = why
+		inst.grantEvent(trail.GrantEventRefused, "host", why, nil, asked(msg, req))
+		return
+	}
 	if len(req.Launches) > 0 {
 		var reason string
 		if req.Launches, reason = inst.resolveLaunches(req.Launches); reason != "" {
@@ -768,6 +775,45 @@ func overCeiling(ceiling *Ceiling, req wireGrantRequest) (why string) {
 		modes = append(modes, ParseMode(l.Mode))
 	}
 	return ceiling.refuseRequest(modes, len(req.Launches) > 0, ParseMode(req.Desktop), req.Destinations)
+}
+
+// unmatchableConsents is why a requested publish:<prefix> destination can
+// never cover a call, "" when every one can: the names a publish consent
+// covers — bundle aliases, dataset names — are at most 64 bytes of letters,
+// digits and underscores that do not start with a digit, so a prefix
+// outside that shape matches none. The reason names the prefix to ask for
+// instead when one is left.
+func unmatchableConsents(destinations []string) (why string) {
+	for _, d := range destinations {
+		prefix, ok := strings.CutPrefix(d, app.ConsentClassPublish+":")
+		if !ok {
+			continue
+		}
+		valid := publishablePrefix(prefix)
+		if valid == prefix && prefix != "" {
+			continue
+		}
+		why = d + " can never cover a publish: a published name is at most 64 letters, digits and underscores, not starting with a digit, so no name starts with " + strconv.Quote(prefix)
+		if valid != "" {
+			why += "; ask for publish:" + valid + " instead"
+		}
+		return
+	}
+	return
+}
+
+// publishablePrefix is the longest leading part of prefix that a published
+// name can start with.
+func publishablePrefix(prefix string) (valid string) {
+	for i := 0; i < len(prefix) && i < 64; i++ {
+		c := prefix[i]
+		ok := c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (i > 0 && c >= '0' && c <= '9')
+		if !ok {
+			break
+		}
+		valid = prefix[:i+1]
+	}
+	return
 }
 
 // withLaunchDestinations adds to a request's destinations those the apps it

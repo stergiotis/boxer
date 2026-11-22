@@ -268,10 +268,10 @@ func TestAPublishGrantIsStandingConsent(t *testing.T) {
 	r, g := approvedRig(t, ModeAct)
 	out := r.call(g, "p0", "publish_text", `{"name":"report_q3"}`)
 	require.Equal(t, "proposed", out.Phase, "without the grant, the person confirms")
-	assert.Contains(t, out.Reason, "unless the grant lists publish:<name prefix>", "the refusal says what would cover it")
+	assert.Contains(t, out.Reason, "unless the grant lists publish:report_q3 or a shorter prefix of it", "the proposal names what would cover it")
 	r.decideProposal(false, true)
 
-	r.widen(g, "publish:report_", "publish:")
+	r.widen(g, "publish:report_")
 	out = r.call(g, "p1", "publish_text", `{"name":"report_q3"}`)
 	assert.Contains(t, []string{"accepted", "applied"}, out.Phase, out.Reason)
 	out = r.call(g, "p2", "publish_text", `{"name":"other"}`)
@@ -458,4 +458,57 @@ func TestAPurposeReachesTheDialogApartFromThePlan(t *testing.T) {
 	<-got
 	assert.Equal(t, "the model's words", plan)
 	assert.Equal(t, "the app's words", purpose)
+}
+
+// A publish:<prefix> no published name can start with is refused when it is
+// requested, with the prefix to ask for instead; granted, it would cover
+// nothing.
+func TestAPublishPrefixNoNameCanMatchIsRefusedAtRequest(t *testing.T) {
+	r, g := approvedRig(t, ModeAct)
+	for dest, want := range map[string]string{
+		"publish:wolfram-":  "ask for publish:wolfram instead",
+		"publish:":          "no name starts with \"\"",
+		"publish:2024_runs": "no name starts with \"2024_runs\"",
+	} {
+		_, err := r.cli.Request(context.Background(), GrantRequest{Handle: g.Handle, Plan: "publish", Destinations: []string{"keelson:tables", dest}})
+		require.Error(t, err, dest)
+		assert.Contains(t, err.Error(), dest+" can never cover a publish", dest)
+		assert.Contains(t, err.Error(), want, dest)
+	}
+	assert.Empty(t, unmatchableConsents([]string{"publish:wolfram", "publish:_x", "keelson-bundle:a-b", "clickhouse:127.0.0.1:8123"}))
+}
+
+// Unattended, a consequential call a publish destination could cover is
+// refused with that destination as the remedy rather than left for a person
+// nobody is there to be; without a named value it says what to name.
+func TestUnattendedRefusesAnUnconsentedPublishWithItsDestination(t *testing.T) {
+	r, g := approvedRig(t, ModeAct)
+	r.svc.mu.Lock()
+	for _, cand := range r.svc.tasks {
+		c := Ceiling{Mode: ModeAct, Effect: app.OperationEffectConsequential, Reach: ReachOf("publish:x")}
+		cand.ceiling = &c
+	}
+	r.svc.mu.Unlock()
+	spec := app.OperationSpec{Name: "publish_text", Effect: app.OperationEffectConsequential, Consent: app.OperationConsent{Class: app.ConsentClassPublish, Arg: "name"}}
+	var t0 *task
+	r.svc.mu.Lock()
+	for _, cand := range r.svc.tasks {
+		t0 = cand
+	}
+	r.svc.mu.Unlock()
+	if !Unattended {
+		out := r.svc.unconsented(t0, spec, `{"name":"report_q3"}`)
+		assert.Equal(t, "proposed", out.Phase.String())
+		assert.Contains(t, out.Reason, "publish:report_q3")
+		return
+	}
+	r.svc.cfg.Unattended = true
+	out := r.svc.unconsented(t0, spec, `{"name":"report_q3"}`)
+	assert.Equal(t, "refused", out.Phase.String())
+	require.NotNil(t, out.Remedy)
+	assert.Equal(t, []string{"publish:report_q3"}, out.Remedy.Destinations)
+	out = r.svc.unconsented(t0, spec, `{}`)
+	assert.Equal(t, "refused", out.Phase.String())
+	assert.Contains(t, out.Reason, "name name in the call")
+	_ = g
 }

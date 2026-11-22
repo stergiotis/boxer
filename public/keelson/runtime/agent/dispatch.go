@@ -760,17 +760,64 @@ func (inst *Service) check(t *task, req wireCall) (out opwire.Outcome, spec app.
 		// A test grant has no person to consent, standing or not.
 		out = phaseOutcome(opwire.PhaseInputRequired, "a consequential command needs the person's confirmation")
 	case spec.Effect == app.OperationEffectConsequential && consent == "":
-		reason := "a consequential command: the person confirms it"
-		if p := spec.Consent.Pattern(); p != "" {
-			reason += ", unless the grant lists " + p
-		}
-		out = phaseOutcome(opwire.PhaseProposed, reason)
+		out = inst.unconsented(t, spec, req.Args)
 	case spec.Effect != app.OperationEffectNone && t.modeOf(e) == ModeSuggest:
 		out = phaseOutcome(opwire.PhaseProposed, "suggest mode: the person accepts or rejects it")
 	}
 	if t.test {
 		// Nobody answers a test grant's widening.
 		out.Reason = strings.TrimSuffix(strings.TrimSuffix(out.Reason, "; the person is asked"), ": the person is asked to raise the mode")
+	}
+	return
+}
+
+// unconsented is the outcome of a consequential call no destination of t's
+// grant covers: a proposal the person confirms, whose reason names the
+// destination that would have covered it. When the host runs unattended
+// and the call names what a consent destination could cover, it is refused
+// instead, naming that destination as the remedy: nobody is there to
+// confirm, and the host decides a request for the destination within the
+// ceiling as it decides any other. Without a ceiling, or for a destination
+// the ceiling refuses, the host decides no request, so the call stays the
+// person's.
+func (inst *Service) unconsented(t *task, spec app.OperationSpec, args string) (out opwire.Outcome) {
+	reason := "a consequential command: the person confirms it"
+	pattern := spec.Consent.Pattern()
+	if pattern == "" {
+		return phaseOutcome(opwire.PhaseProposed, reason)
+	}
+	dest := consentDestination(spec.Consent, args)
+	if dest == "" {
+		reason += ", unless the call names its " + spec.Consent.Arg + " and the grant lists " + pattern + " for a prefix of it"
+		if inst.Unattended() && t.ceiling != nil {
+			return phaseOutcome(opwire.PhaseRefused, "the host runs unattended, so nobody confirms a consequential command; name "+
+				spec.Consent.Arg+" in the call and ask request_access for "+pattern+" with a prefix of it")
+		}
+		return phaseOutcome(opwire.PhaseProposed, reason)
+	}
+	reason += ", unless the grant lists " + dest + " or a shorter prefix of it"
+	if inst.Unattended() && t.ceiling != nil && t.ceiling.refuseDestination(dest) == "" {
+		out = phaseOutcome(opwire.PhaseRefused, "the host runs unattended, so nobody confirms a consequential command; a grant listing "+
+			dest+", or a shorter prefix of it, covers this call: ask request_access for it, then call again")
+		out.Remedy = &opwire.Remedy{Destinations: []string{dest}}
+		return
+	}
+	return phaseOutcome(opwire.PhaseProposed, reason)
+}
+
+// consentDestination is the destination that would cover a call under c
+// exactly, "<class>:<value>" for the value of its argument; empty when the
+// call carries none.
+func consentDestination(c app.OperationConsent, args string) (destination string) {
+	if c == (app.OperationConsent{}) {
+		return
+	}
+	var fields map[string]any
+	if json.Unmarshal([]byte(args), &fields) != nil {
+		return
+	}
+	if value, isString := fields[c.Arg].(string); isString && value != "" {
+		destination = c.Destination(value)
 	}
 	return
 }
