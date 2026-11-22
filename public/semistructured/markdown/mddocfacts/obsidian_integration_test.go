@@ -26,6 +26,10 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mddocfacts"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mddocvocab"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
+
+	"github.com/stergiotis/boxer/public/identity/identgen/leased"
+	"github.com/stergiotis/boxer/public/identity/identgen/leased/memalloc"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 )
 
 // This file is the ingestor's benchmark, run for real: the fixture vault goes
@@ -165,7 +169,11 @@ func provision(t *testing.T) (conn *localConn, ingested int) {
 
 	exec, err := chexec.NewLocalExecutor(conn.path, nil)
 	require.NoError(t, err)
-	store := mddocfacts.NewMddocStore(exec, nil, mddocfacts.MddocStoreConfig{})
+	// The store mints its rows' ids (ADR-0405); a process counter under the
+	// facts table's tag stands in for the leased stream.
+	keys, err := leased.NewSequence(memalloc.NewAllocator(), identifier.TagValue(57314), 1024)
+	require.NoError(t, err)
+	store := mddocfacts.NewMddocStore(exec, nil, mddocfacts.MddocStoreConfig{Keys: keys})
 	t.Cleanup(store.Close)
 	require.NoError(t, store.VerifySchema(ctx))
 

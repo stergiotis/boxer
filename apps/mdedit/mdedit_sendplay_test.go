@@ -30,7 +30,7 @@ func TestSendWritesTheIngestorsRows(t *testing.T) {
 	assert.Equal(t, "notes.md", rows.Doc.FileName)
 	assert.Equal(t, src, rows.Doc.Content)
 	assert.Len(t, rows.Doc.NaturalKey, 32, "the natural key is the blake3-256 of the content")
-	assert.NotZero(t, rows.Doc.Id, "the launch filter key")
+	assert.Zero(t, rows.Doc.Id, "the launch filter key is the id the store mints at ingest")
 	assert.Len(t, rows.Headings, 1)
 	assert.Len(t, rows.Links, 1)
 	assert.Len(t, rows.Emphases, 1)

@@ -33,7 +33,7 @@ func TestNewMdDocRow_IdentityRules(t *testing.T) {
 	c := mddocfacts.NewMdDocRow("other text", "", "", 2, t1)
 
 	assert.Equal(t, a.NaturalKey, b.NaturalKey, "identical content is the same entity")
-	assert.NotEqual(t, a.Id, b.Id, "each ingest is its own row")
+	assert.Zero(t, a.Id, "the row's id is minted when it is written")
 	assert.NotEqual(t, a.NaturalKey, c.NaturalKey)
 	assert.Equal(t, a.ContentHash, b.ContentHash)
 	assert.Len(t, a.NaturalKey, 32)
@@ -61,6 +61,8 @@ func TestBuildRows_Shape(t *testing.T) {
 	assert.False(t, rows.Headings[0].Anchor.Has)
 
 	require.Len(t, rows.Links, 7)
+	require.NoError(t, rows.AssignIds(counter(100)))
+	assert.EqualValues(t, 100, rows.Doc.Id, "the document's id is the first drawn")
 	spellings := map[string]int{}
 	for _, l := range rows.Links {
 		spellings[l.Spelling]++
@@ -91,21 +93,30 @@ func TestBuildRows_Shape(t *testing.T) {
 	assert.Equal(t, uint64(1), rows.CodeBlocks[0].Section.Val, "under the second heading")
 }
 
-// TestBuildRows_ItemIdentity pins the item rows' two-level identity, the
-// document's rule applied per item: Ids differ across ingests, natural keys
-// do not, and both are distinct across items of one document.
+// counter draws ids from start upwards, as a store's key stream would.
+func counter(start uint64) func() (uint64, error) {
+	next := start
+	return func() (uint64, error) { next++; return next - 1, nil }
+}
+
+// TestBuildRows_ItemIdentity pins the item rows' two-level identity: natural
+// keys are the same across ingests of one document and distinct across its
+// items; ids are the rows', drawn per ingest and distinct within it.
 func TestBuildRows_ItemIdentity(t *testing.T) {
 	t1 := time.Unix(1_700_000_000, 0).UTC()
 	src := fixture(t, "alpha.md")
 	ex := mdextract.Extract(src)
 	a := mddocfacts.BuildRows(src, "alpha.md", t1, ex)
 	b := mddocfacts.BuildRows(src, "alpha.md", t1.Add(time.Hour), ex)
+	require.NoError(t, a.AssignIds(counter(1)))
+	require.NoError(t, b.AssignIds(counter(1000)))
 
 	require.Equal(t, len(a.Headings), len(b.Headings))
 	seen := map[uint64]struct{}{a.Doc.Id: {}}
 	for i := range a.Headings {
 		assert.NotEqual(t, a.Headings[i].Id, b.Headings[i].Id, "a later ingest is a new row")
 		assert.Equal(t, a.Headings[i].NaturalKey, b.Headings[i].NaturalKey, "of the same item")
+		assert.Equal(t, b.Doc.Id, b.Headings[i].Doc, "pointing at the document row of its own ingest")
 		_, dup := seen[a.Headings[i].Id]
 		assert.False(t, dup, "ids are distinct within one ingest")
 		seen[a.Headings[i].Id] = struct{}{}

@@ -30,22 +30,14 @@ const (
 	KindMdFrontmatter = "mdFrontmatter"
 )
 
-// NewMdDocRow builds the document row for src at ts. Two-level identity: Id
-// hashes (content, ts) so every ingest is its own row, while NaturalKey — and
-// the queryable ContentHash — hash the content alone, so identical text is
-// visibly the same document across ingests. Every item row of the document
-// carries the same content hash under its DocHash.
+// NewMdDocRow builds the document row for src at ts, less its Id, which the
+// store mints when the row is written (ADR-0405): every ingest is its own
+// row. NaturalKey — and the queryable ContentHash — hash the content alone,
+// so identical text is visibly the same document across ingests. Every item
+// row of the document carries the same content hash under its DocHash.
 func NewMdDocRow(src, title, fileName string, words uint64, ts time.Time) (row MdDoc) {
 	contentHash := blake3.Sum256([]byte(src))
-
-	idh := blake3.New(8, nil)
-	_, _ = idh.Write([]byte(src))
-	var tsb [8]byte
-	binary.LittleEndian.PutUint64(tsb[:], uint64(ts.UnixNano()))
-	_, _ = idh.Write(tsb[:])
-
 	row = MdDoc{
-		Id:          binary.LittleEndian.Uint64(idh.Sum(nil)),
 		NaturalKey:  contentHash[:],
 		Ts:          ts,
 		Kind:        KindMdDoc,
@@ -56,20 +48,6 @@ func NewMdDocRow(src, title, fileName string, words uint64, ts time.Time) (row M
 		Words:       words,
 	}
 	return
-}
-
-// itemId is an item row's Id: unique within the ingest, since the document's
-// Id already carries the ingest time.
-func itemId(docId uint64, kind string, ordinal uint64) uint64 {
-	h := blake3.New(8, nil)
-	var b [8]byte
-	binary.LittleEndian.PutUint64(b[:], docId)
-	_, _ = h.Write(b[:])
-	_, _ = h.Write([]byte(kind))
-	_, _ = h.Write([]byte{0})
-	binary.LittleEndian.PutUint64(b[:], ordinal)
-	_, _ = h.Write(b[:])
-	return binary.LittleEndian.Uint64(h.Sum(nil))
 }
 
 // itemNaturalKey is an item row's natural key: the same across ingests of
@@ -115,12 +93,56 @@ func (inst *Rows) Count() (n int) {
 	return
 }
 
-// BuildRows maps an extraction onto the store's kinds. fileName is the
-// document's display name: a basename from an editor, a vault-relative
-// slash-separated path from the ingestor.
+// AssignIds gives every row an id drawn from next — the document's first —
+// and points every item at the document's row. The ids are the rows': a
+// reference from an item to its document is to the row written in this
+// ingest (ADR-0405 §SD4). IngestRows calls it with the store's key stream;
+// a caller that only wants to look at what would be written calls it with
+// a counter.
+func (inst *Rows) AssignIds(next func() (id uint64, err error)) (err error) {
+	if inst.Doc.Id, err = next(); err != nil {
+		return
+	}
+	docId := inst.Doc.Id
+	for i := range inst.Headings {
+		if inst.Headings[i].Id, err = next(); err != nil {
+			return
+		}
+		inst.Headings[i].Doc = docId
+	}
+	for i := range inst.CodeBlocks {
+		if inst.CodeBlocks[i].Id, err = next(); err != nil {
+			return
+		}
+		inst.CodeBlocks[i].Doc = docId
+	}
+	for i := range inst.Links {
+		if inst.Links[i].Id, err = next(); err != nil {
+			return
+		}
+		inst.Links[i].Doc = docId
+	}
+	for i := range inst.Emphases {
+		if inst.Emphases[i].Id, err = next(); err != nil {
+			return
+		}
+		inst.Emphases[i].Doc = docId
+	}
+	for i := range inst.Tags {
+		if inst.Tags[i].Id, err = next(); err != nil {
+			return
+		}
+		inst.Tags[i].Doc = docId
+	}
+	return
+}
+
+// BuildRows maps an extraction onto the store's kinds, every row without
+// its id ([Rows.AssignIds]). fileName is the document's display name: a
+// basename from an editor, a vault-relative slash-separated path from the
+// ingestor.
 func BuildRows(src []byte, fileName string, ts time.Time, ex *mdextract.Document) (rows Rows) {
 	rows.Doc = NewMdDocRow(string(src), ex.Title, fileName, ex.Words, ts)
-	docId := rows.Doc.Id
 	hash := rows.Doc.NaturalKey
 
 	section := func(idx int) option.Option[uint64] {
@@ -133,11 +155,9 @@ func BuildRows(src []byte, fileName string, ts time.Time, ex *mdextract.Document
 	rows.Headings = make([]MdHeading, 0, len(ex.Headings))
 	for _, h := range ex.Headings {
 		row := MdHeading{
-			Id:         itemId(docId, KindMdHeading, h.Ordinal),
 			NaturalKey: itemNaturalKey(hash, KindMdHeading, h.Ordinal),
 			Ts:         ts,
 			Kind:       KindMdHeading,
-			Doc:        docId,
 			DocHash:    hash,
 			Ordinal:    h.Ordinal,
 			Line:       h.Line,
@@ -155,11 +175,9 @@ func BuildRows(src []byte, fileName string, ts time.Time, ex *mdextract.Document
 	rows.CodeBlocks = make([]MdCodeBlock, 0, len(ex.CodeBlocks))
 	for _, c := range ex.CodeBlocks {
 		rows.CodeBlocks = append(rows.CodeBlocks, MdCodeBlock{
-			Id:         itemId(docId, KindMdCodeBlock, c.Ordinal),
 			NaturalKey: itemNaturalKey(hash, KindMdCodeBlock, c.Ordinal),
 			Ts:         ts,
 			Kind:       KindMdCodeBlock,
-			Doc:        docId,
 			DocHash:    hash,
 			Ordinal:    c.Ordinal,
 			Line:       c.Line,
@@ -173,11 +191,9 @@ func BuildRows(src []byte, fileName string, ts time.Time, ex *mdextract.Document
 	rows.Links = make([]MdLink, 0, len(ex.Links))
 	for _, l := range ex.Links {
 		rows.Links = append(rows.Links, MdLink{
-			Id:         itemId(docId, KindMdLink, l.Ordinal),
 			NaturalKey: itemNaturalKey(hash, KindMdLink, l.Ordinal),
 			Ts:         ts,
 			Kind:       KindMdLink,
-			Doc:        docId,
 			DocHash:    hash,
 			Ordinal:    l.Ordinal,
 			Line:       l.Line,
@@ -192,11 +208,9 @@ func BuildRows(src []byte, fileName string, ts time.Time, ex *mdextract.Document
 	rows.Emphases = make([]MdEmphasis, 0, len(ex.Emphases))
 	for _, e := range ex.Emphases {
 		rows.Emphases = append(rows.Emphases, MdEmphasis{
-			Id:         itemId(docId, KindMdEmphasis, e.Ordinal),
 			NaturalKey: itemNaturalKey(hash, KindMdEmphasis, e.Ordinal),
 			Ts:         ts,
 			Kind:       KindMdEmphasis,
-			Doc:        docId,
 			DocHash:    hash,
 			Ordinal:    e.Ordinal,
 			Line:       e.Line,
@@ -208,11 +222,9 @@ func BuildRows(src []byte, fileName string, ts time.Time, ex *mdextract.Document
 	rows.Tags = make([]MdTag, 0, len(ex.Tags))
 	for _, t := range ex.Tags {
 		rows.Tags = append(rows.Tags, MdTag{
-			Id:         itemId(docId, KindMdTag, t.Ordinal),
 			NaturalKey: itemNaturalKey(hash, KindMdTag, t.Ordinal),
 			Ts:         ts,
 			Kind:       KindMdTag,
-			Doc:        docId,
 			DocHash:    hash,
 			Ordinal:    t.Ordinal,
 			Line:       t.Line,
@@ -226,13 +238,13 @@ func BuildRows(src []byte, fileName string, ts time.Time, ex *mdextract.Document
 }
 
 // IngestDocument extracts src and buffers every row for it, each carrying
-// origin. Rows ship on the store's next Flush, like every write. The
-// returned Rows are what was buffered — the document Id is the key a reader
-// filters on.
+// origin and an id minted from the store's key stream. Rows ship on the
+// store's next Flush, like every write. The returned Rows are what was
+// buffered — the document Id is the key a reader filters on.
 func (inst *MddocStore) IngestDocument(ctx context.Context, src []byte, fileName string, ts time.Time, origin Origin) (rows Rows, err error) {
 	rows = BuildRows(src, fileName, ts, mdextract.Extract(src))
 	rows.Origin = origin
-	err = inst.IngestRows(ctx, rows)
+	err = inst.IngestRows(ctx, &rows)
 	return
 }
 
@@ -245,8 +257,12 @@ func (inst *MddocStore) begin(ctx context.Context, id uint64, ts time.Time, natu
 // IngestRows buffers one document's rows: the document, its items, and the
 // frontmatter row. Each row is its own entity; every one carries its natural
 // key in the envelope, which the generated Ingest<Kind> verbs do not set, and
-// rows.Origin.
-func (inst *MddocStore) IngestRows(ctx context.Context, rows Rows) (err error) {
+// rows.Origin. The rows' ids are minted here, from the store's key stream,
+// and written back into rows.
+func (inst *MddocStore) IngestRows(ctx context.Context, rows *Rows) (err error) {
+	if err = rows.AssignIds(func() (uint64, error) { return inst.MintKey(ctx) }); err != nil {
+		return eh.Errorf("ingest document: row ids: %w", err)
+	}
 	ts := rows.Doc.Ts
 	if err = inst.begin(ctx, rows.Doc.Id, ts, rows.Doc.NaturalKey, rows.Origin).AddMdDoc(rows.Doc).Commit(); err != nil {
 		return eh.Errorf("ingest document row: %w", err)
@@ -301,7 +317,10 @@ func (inst *MddocStore) IngestRows(ctx context.Context, rows Rows) (err error) {
 // f64Array, bool, timeArray — and on symbolArray for the value-less markers.
 // Nothing here mixes channels within a section.
 func (inst *MddocStore) ingestFrontmatter(ctx context.Context, doc MdDoc, fm *mdextract.Frontmatter, origin Origin) (err error) {
-	id := itemId(doc.Id, KindMdFrontmatter, 0)
+	id, err := inst.MintKey(ctx)
+	if err != nil {
+		return
+	}
 	b := inst.Begin(ctx, id, doc.Ts, MddocEnvelope{NaturalKey: itemNaturalKey(doc.NaturalKey, KindMdFrontmatter, 0)})
 	raw := b.Raw()
 	origin.Id = id

@@ -9,6 +9,7 @@ import (
 	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/runinfo"
@@ -75,7 +76,12 @@ func runIngest(cliCtx context.Context, cmd *cli.Command) (err error) {
 		if readTable, err = factsschema.ReadTableFor(mddocfacts.MddocTableName); err != nil {
 			return
 		}
-		store = mddocfacts.NewMddocStore(exec, nil, mddocfacts.MddocStoreConfig{ReadTable: readTable})
+		// Every row's id is minted from the facts table's stream (ADR-0405).
+		var keys *chstore.RowIdGenerator
+		if keys, err = chstore.NewRowIdGenerator(exec, chstore.Config{Database: factsschema.DatabaseName}); err != nil {
+			return
+		}
+		store = mddocfacts.NewMddocStore(exec, nil, mddocfacts.MddocStoreConfig{ReadTable: readTable, Keys: keys})
 		defer store.Close()
 		if err = store.VerifySchema(ctx); err != nil {
 			return eh.Errorf("verify facts schema (chstore provisions it; this command never does): %w", err)

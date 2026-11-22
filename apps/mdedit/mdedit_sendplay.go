@@ -26,6 +26,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
@@ -161,7 +162,12 @@ func uploadDoc(ctx context.Context, src, fileName string, origin mddocfacts.Orig
 	if err != nil {
 		return
 	}
-	store := mddocfacts.NewMddocStore(exec, nil, mddocfacts.MddocStoreConfig{ReadTable: readTable})
+	// Every row's id is minted from the facts table's stream (ADR-0405).
+	keys, err := chstore.NewRowIdGenerator(exec, chstore.Config{Database: factsschema.DatabaseName})
+	if err != nil {
+		return
+	}
+	store := mddocfacts.NewMddocStore(exec, nil, mddocfacts.MddocStoreConfig{ReadTable: readTable, Keys: keys})
 	defer store.Close()
 	if err = store.VerifySchema(ctx); err != nil {
 		return
