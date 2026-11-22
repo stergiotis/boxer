@@ -824,7 +824,7 @@ different places for the two: `/* /* */ SELECT 1 AS "x */ CREATE TEMPORARY
 TABLE t (a UInt8) ENGINE = Memory --"` was classified a plain read, and a
 26.9 server under `readonly=2` created the table; `/* /* */ SHOW */ DROP
 TABLE t` led with `SHOW` to the keyword fallback and with `DROP` to the
-server. Found while reviewing ADR-0405.
+server. Found while reviewing ADR-0406.
 
 The rule: a statement in which a block comment, as the lexer produced it,
 contains a further `/*` after its opening is not a read.
