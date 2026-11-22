@@ -23,6 +23,17 @@ var audioFixtureFormat = pcm.Format{SampleRate: 8000, Channels: 2}
 
 const audioFixtureFrames int64 = 24000
 
+// useSealedStore points the sealed files of this test at store until it
+// ends. An Override, not t.Setenv: the registry caches the first read of
+// BOXER_ADHOC_DIR, so a later test's environment never reached it and every
+// test after the first staged into the first test's temporary directory,
+// re-creating it after that test had removed it.
+func useSealedStore(t *testing.T, store string) {
+	t.Helper()
+	sealed.BaseDir.Override(store)
+	t.Cleanup(sealed.BaseDir.ClearOverride)
+}
+
 // writeWavFixture writes a 16-bit PCM WAV into dir and returns its bytes.
 func writeWavFixture(t *testing.T, dir string, name string) (path string, want []float32) {
 	t.Helper()
@@ -58,7 +69,7 @@ func TestIsAudioName(t *testing.T) {
 // the recording's own samples, and closing takes the file with it.
 func TestStagedWavIsSealedAndReadsBack(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(sealed.BaseDir.Spec().Name, filepath.Join(dir, "store"))
+	useSealedStore(t, filepath.Join(dir, "store"))
 	path, want := writeWavFixture(t, dir, "tone.wav")
 	info, err := os.Stat(path)
 	require.NoError(t, err)
@@ -108,7 +119,7 @@ func TestStagedWavIsSealedAndReadsBack(t *testing.T) {
 // discovered part-way through a read.
 func TestStagedRecordingRefusesAnOversizeFile(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(sealed.BaseDir.Spec().Name, filepath.Join(dir, "store"))
+	useSealedStore(t, filepath.Join(dir, "store"))
 	_, err := stageRecording(context.Background(), os.DirFS(dir), "huge.wav", audioMaxBytes+1)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "over the")
@@ -122,7 +133,7 @@ func TestStagedRecordingRefusesAnOversizeFile(t *testing.T) {
 func TestStagedCompressedRecordingIsAnonymous(t *testing.T) {
 	dir := t.TempDir()
 	store := filepath.Join(dir, "store")
-	t.Setenv(sealed.BaseDir.Spec().Name, store)
+	useSealedStore(t, store)
 	// Any non-WAV header routes to the external decoder; opening it as a
 	// track would need ffmpeg, staging it does not.
 	body := append([]byte("fLaC\x00\x00\x00\x22"), bytes.Repeat([]byte{0x5a}, 4096)...)
@@ -162,7 +173,7 @@ func TestStagedCompressedRecordingIsAnonymous(t *testing.T) {
 // the previous one rather than leaking its decoders and its device.
 func TestPreviewLaneClosesTheRecordingItReplaces(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(sealed.BaseDir.Spec().Name, filepath.Join(dir, "store"))
+	useSealedStore(t, filepath.Join(dir, "store"))
 	path, _ := writeWavFixture(t, dir, "tone.wav")
 	info, err := os.Stat(path)
 	require.NoError(t, err)
