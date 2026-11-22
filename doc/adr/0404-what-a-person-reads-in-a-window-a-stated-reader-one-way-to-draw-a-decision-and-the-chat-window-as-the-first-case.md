@@ -299,9 +299,15 @@ without it.
 - **What the desktop says while a window holds the question.** By
   ADR-0379 §SD1 a question drawn in the focused chat window is not a
   card in the host's queue, so the menu bar reads "nothing waits on you"
-  beside a window whose chip reads "your turn". A cold reader named this
-  as the most confusing thing on that capture. Trigger: the review of
-  this ADR.
+  beside a window whose chip reads "your turn". Every cold reader named
+  this as the most confusing thing on that capture. It is left to a
+  review of attention management as a whole, which the person asked for
+  on 2026-11-22, and is not patched here: the same review has the card
+  that opens over the window that asked, the three places a question can
+  appear (the window's form, the queue's card, the agent's modal), and
+  how often the person is asked at all
+  ([ADR-0381](./0381-what-one-approval-covers-endpoints-host-tables-launch-counts-and-standing-permissions.md),
+  proposed).
 - **One vocabulary for what a model may do.** The ladder's levels, the
   window modes and the settings' options overlap. It touches the grant
   model and is its own decision.
