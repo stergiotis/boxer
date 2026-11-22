@@ -903,6 +903,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			Registry: rt.Introspect,
 			Log:      logger,
 			Trail:    rt.Trail,
+			Cell:     rt.Cell,
 		})
 		if adhocErr != nil {
 			logger.Warn().Err(adhocErr).Msg("adhocdata: service start failed; runtime.adhoc.* will be unbound")

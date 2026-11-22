@@ -200,6 +200,9 @@ func (inst *Service) expose(in ExposeInput, cc option.Option[app.CallContext]) (
 	if err != nil {
 		return
 	}
+	if err = inst.checkCell(rec, cc); err != nil {
+		return
+	}
 	if cc.Has {
 		if err = inst.checkExposeGrant(in.OnBehalfOf, in.Alias); err != nil {
 			return
@@ -287,6 +290,35 @@ func checkTaskMayExpose(rec *record, cc app.CallContext) (err error) {
 		return eb.Build().Str("alias", alias).Errorf("%s was published by a call labelled %s; a task exposes only what it published at TLP:CLEAR, and the person exposes the rest", alias, agentrun.TierE(pub.Val.Tier)) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text"
 	case cc.Tier > uint8(agentrun.TierClear):
 		return eb.Build().Str("alias", alias).Errorf("the call is labelled %s; a task exposes data only from a run at TLP:CLEAR, and the person exposes the rest", agentrun.TierE(cc.Tier)) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text"
+	}
+	return nil
+}
+
+// ErrManagedHost refuses an exposure on a host the organisation manages
+// when the sealed data it would hand out is above the export clearance.
+var ErrManagedHost = errors.New("this host is managed by an organisation, and an exposure hands sealed data to a program outside boxer above the export clearance; no approval path for an exposure is wired")
+
+// checkCell refuses an exposure the deployment's cell does not clear. An
+// exposure hands plaintext to a program outside boxer, as an export does
+// (ADR-0317 §SD4): on a managed host that is prevented above the export
+// clearance, and sealed data carries at least the confined tier. A host
+// the person administers records it rather than prevents it.
+func (inst *Service) checkCell(rec *record, cc option.Option[app.CallContext]) (err error) {
+	if !inst.cell.Managed {
+		return nil
+	}
+	declared := agentrun.TierClear
+	rec.mu.RLock()
+	if rec.context.Has {
+		declared = max(declared, agentrun.TierE(rec.context.Val.Tier))
+	}
+	rec.mu.RUnlock()
+	if cc.Has {
+		declared = max(declared, agentrun.TierE(cc.Val.Tier))
+	}
+	tier := inst.cell.TierOf(declared, true)
+	if tier > inst.cell.Clearances.Export {
+		return eb.Build().Str("tier", tier.String()).Str("clearance", inst.cell.Clearances.Export.String()).Errorf("%w (%s above %s)", ErrManagedHost, tier, inst.cell.Clearances.Export) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text and names the tiers"
 	}
 	return nil
 }
@@ -587,7 +619,7 @@ func (inst *Service) endAllExposures(ctx context.Context) {
 // exposureOutcome is the trail outcome of a refused exposure request.
 func exposureOutcome(err error) (outcome string) {
 	var ge *GrantError
-	if errors.As(err, &ge) || errors.Is(err, ErrUnattested) || errors.Is(err, ErrNotTheTasks) {
+	if errors.As(err, &ge) || errors.Is(err, ErrUnattested) || errors.Is(err, ErrNotTheTasks) || errors.Is(err, ErrManagedHost) {
 		return auditDenied
 	}
 	return auditFailed

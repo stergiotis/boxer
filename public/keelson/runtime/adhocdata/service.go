@@ -29,6 +29,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sealed"
@@ -114,6 +115,11 @@ type Config struct {
 	// lands there (ADR-0288 §SD5). Nil keeps only the
 	// in-process record.
 	Trail *trail.Recorder
+	// Cell is the deployment's declared boundary (ADR-0307 §SD1): on a host
+	// the organisation manages, an exposure that would hand sealed data to
+	// a program outside boxer above the export clearance is refused
+	// (ADR-0407). Nil is cell.Defaults.
+	Cell *cell.Declaration
 }
 
 // PublishInput is the in-process shape of a publish (the bus wire mirrors
@@ -265,6 +271,7 @@ type Service struct {
 	unsubs    []func()
 
 	trail   *trail.Recorder
+	cell    cell.Declaration
 	callCtx atomic.Pointer[callContextRef]
 	// auditHook, when set, sees every audit record as it is made; the
 	// package's tests set it, production leaves the trail the one record.
@@ -312,6 +319,7 @@ func NewService(cfg Config) (inst *Service, err error) {
 		log:              cfg.Log,
 		retractGrace:     grace,
 		trail:            cfg.Trail,
+		cell:             cell.Defaults(),
 		live:             make(map[string]*record),
 		bundles:          make(map[string]*bundleRec),
 		retiredRevisions: make(map[string]uint64),
@@ -319,6 +327,9 @@ func NewService(cfg Config) (inst *Service, err error) {
 		exp:              exposures{byId: make(map[string]*exposure), byDigest: make(map[[32]byte]*exposure)},
 	}
 	inst.unloaded = sync.NewCond(&inst.mu)
+	if cfg.Cell != nil {
+		inst.cell = *cfg.Cell
+	}
 	// A probe publish is not worth a start-up dependency on the base
 	// directory, but an unusable one must not surface as the first app's
 	// publish error: allocate and drop one unnamed file now.

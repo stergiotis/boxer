@@ -475,3 +475,22 @@ func TestClosingTheServiceEndsItsExposures(t *testing.T) {
 	recs := r.records()
 	assert.Equal(t, "the host stopped", recs[len(recs)-1].Reason)
 }
+
+// On a host the organisation manages, an exposure hands sealed data, at the
+// confined tier, to a program outside boxer: above the export clearance it
+// is refused, the person's included; a clearance at the confined tier
+// admits it.
+func TestAManagedHostRefusesAnExposureAboveTheExportClearance(t *testing.T) {
+	r := newExposeRig(t)
+	_, err := r.svc.Publish(PublishInput{Alias: "result", ArrowIPCStream: int64Stream(t, false, 1), By: windowA})
+	require.NoError(t, err)
+	r.svc.cell.Managed = true
+	_, err = r.svc.Expose(t.Context(), ExposeInput{Alias: "result", By: windowA})
+	require.ErrorIs(t, err, ErrManagedHost)
+	assert.ErrorContains(t, err, "AMBER above GREEN")
+	recs := r.records()
+	assert.Equal(t, auditDenied, recs[len(recs)-1].Outcome)
+	r.svc.cell.Clearances.Export = agentrun.TierAmber
+	_, err = r.svc.Expose(t.Context(), ExposeInput{Alias: "result", By: windowA})
+	assert.NoError(t, err)
+}
