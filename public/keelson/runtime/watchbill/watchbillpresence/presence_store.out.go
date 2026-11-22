@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/identity/callident"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillpresence/internal/lowlevel"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
@@ -209,6 +210,10 @@ type PresenceStoreConfig struct {
 	// dropped. It is notification-only and independent of
 	// attached cache views. Nil (the default) tracks nothing.
 	WriteObserver recordstore.WriteObserverI[uint64, time.Time]
+	// Keys is the tagged id stream MintKey draws from:
+	// ids unique across every process that leases from the same stream,
+	// never an order. Nil leaves MintKey refusing.
+	Keys identifier.IdGeneratorI
 }
 
 // PresenceStore is single-goroutine, like every part it composes. Batched
@@ -1203,6 +1208,24 @@ func (inst *PresenceStore) Replay(ctx context.Context, key uint64, fromOrder tim
 	}
 	sql += factsArrowOutputSettings
 	return inst.iterateEntities(ctx, sql)
+}
+
+// MintKey draws the next Key from cfg.Keys: a tagged id
+// that says which stream it belongs to and is unique across every
+// process leasing from it. It identifies a row and orders nothing; pass
+// it to Begin as the id.
+func (inst *PresenceStore) MintKey(ctx context.Context) (key uint64, err error) {
+	if inst.cfg.Keys == nil {
+		err = eh.Errorf("mint key: the store has no key stream (PresenceStoreConfig.Keys)")
+		return
+	}
+	id, _, err := inst.cfg.Keys.GetId(ctx, nil)
+	if err != nil {
+		err = eh.Errorf("mint key: %w", err)
+		return
+	}
+	key = id.Value()
+	return
 }
 
 // PresenceComponentSQL publishes this store's component read-back artefacts —

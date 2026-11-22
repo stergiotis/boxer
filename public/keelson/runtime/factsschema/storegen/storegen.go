@@ -299,6 +299,10 @@ func (inst Input) Generate() (err error) {
 		InsertSettings:   inst.InsertSettings,
 		// Not a parameter — see the externallyProvisioned doc.
 		ExternallyProvisioned: externallyProvisioned,
+		// Not a parameter either: every row of the facts table carries an
+		// id minted from the table's stream (ADR-0405 §SD3), so every store
+		// over it takes the generator and mints its key.
+		KeyStream: true,
 	}.Generate()
 	if err != nil {
 		err = eb.Build().Str("storeName", inst.StoreName).Errorf("storegen: generate store: %w", err)
