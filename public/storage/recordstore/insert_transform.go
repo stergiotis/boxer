@@ -37,6 +37,57 @@ type InsertTransformI interface {
 // run against a relation that holds none of them. Match with errors.Is.
 var ErrTransformedTable = errors.New("the table's inserts are transformed into a deployment's own table, which this statement does not reach")
 
+// InPlaceStatement is one statement that changes stored rows of a table by
+// the table's name: the kind of statement an insert transform leaves
+// pointing at a relation that holds none of the rows (ADR-0402 §SD5).
+type InPlaceStatement struct {
+	// Op names what the statement does, for a transform to dispatch on. It
+	// is a constant the statement's owner exports.
+	Op string
+	// SQL is the statement as its owner composed it against the table. A
+	// transform reads or rewrites it; it is not what runs.
+	SQL string
+	// Args are the values SQL was composed from, by the names Op's owner
+	// documents, so that a transform need not parse them back out.
+	Args map[string]string
+}
+
+// InPlaceTransformI is what an [InsertTransformI] also implements when its
+// deployment can say what an in-place statement is in its own storage.
+// TransformInPlace returns the statement to run instead of stmt.SQL, against
+// the deployment's table. A transform that has no answer for stmt.Op
+// returns an error wrapping [ErrTransformedTable], and the statement is
+// refused as it is for a transform that does not implement this at all.
+type InPlaceTransformI interface {
+	TransformInPlace(table string, stmt InPlaceStatement) (sql string, err error)
+}
+
+// InPlaceStatementFor is the statement to run for stmt against table: stmt.SQL
+// when no insert transform is registered for table; what the registered
+// transform makes of it when that transform is an [InPlaceTransformI]; and
+// otherwise an error wrapping [ErrTransformedTable], since the statement
+// would reach a relation that holds none of the rows.
+func InPlaceStatementFor(table string, stmt InPlaceStatement) (sql string, err error) {
+	t, ok := RegisteredInsertTransform(table)
+	if !ok {
+		return stmt.SQL, nil
+	}
+	ip, ok := t.(InPlaceTransformI)
+	if !ok {
+		err = eb.Build().Str("table", table).Str("op", stmt.Op).Errorf("recordstore: %w", ErrTransformedTable)
+		return
+	}
+	sql, err = ip.TransformInPlace(table, stmt)
+	if err != nil {
+		err = eb.Build().Str("table", table).Str("op", stmt.Op).Errorf("recordstore: in-place statement: %w", err)
+		return
+	}
+	if strings.TrimSpace(sql) == "" {
+		err = eb.Build().Str("table", table).Str("op", stmt.Op).Errorf("recordstore: the transform returned no statement: %w", ErrTransformedTable)
+	}
+	return
+}
+
 // InsertTransformFunc adapts a function as an InsertTransformI.
 type InsertTransformFunc func(table string, records []arrow.RecordBatch) (target string, out []arrow.RecordBatch, err error)
 

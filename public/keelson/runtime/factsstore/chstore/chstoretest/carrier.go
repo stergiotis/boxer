@@ -41,6 +41,11 @@ type Carrier struct {
 	// [DefaultEngine]. FactsColumn names a facts column's carrier name for a
 	// clause that keys or partitions by it.
 	Engine string
+	// InPlace makes the transform answer in-place statements
+	// (recordstore.InPlaceTransformI) by rewriting them for the carrier.
+	// Without it the transform refuses them, as one that only maps inserts
+	// does.
+	InPlace bool
 
 	columns []recordstore.ColumnSpec
 	names   map[string]string
@@ -110,6 +115,43 @@ next:
 // under its carrier name, by reference, with the tenant column in front.
 // It is a pure function of its input, as recordstore.InsertTransformI asks.
 func (inst *Carrier) Transform() recordstore.InsertTransformI {
+	insert := inst.insertTransform()
+	if inst.InPlace {
+		return inPlaceTransform{InsertTransformFunc: insert, carrier: inst}
+	}
+	return insert
+}
+
+// inPlaceTransform is the carrier's transform with the in-place statements
+// answered.
+type inPlaceTransform struct {
+	recordstore.InsertTransformFunc
+	carrier *Carrier
+}
+
+// TransformInPlace rewrites a mutation of the facts table — ALTER TABLE …
+// UPDATE … WHERE … SETTINGS …, composed over the facts columns — into the
+// same mutation of the carrier: the carrier's table and column names, and
+// the tenant added to the predicate. It is a rewrite by text, good for a
+// carrier that only renames; a deployment whose columns differ in more
+// than name writes its statement out.
+func (inst inPlaceTransform) TransformInPlace(table string, stmt recordstore.InPlaceStatement) (sql string, err error) {
+	c := inst.carrier
+	head := "ALTER TABLE " + table + " "
+	where, settings := strings.Index(stmt.SQL, " WHERE "), strings.LastIndex(stmt.SQL, " SETTINGS ")
+	if !strings.HasPrefix(stmt.SQL, head) || where < 0 || settings < where {
+		return "", eb.Build().Str("op", stmt.Op).Errorf("chstoretest: not a mutation of the shape this carrier rewrites: %w", recordstore.ErrTransformedTable)
+	}
+	sql = "ALTER TABLE " + c.Table + " " + stmt.SQL[len(head):where] +
+		" WHERE tenant = " + quoteString(c.Tenant) + " AND (" + stmt.SQL[where+len(" WHERE "):settings] + ")" + stmt.SQL[settings:]
+	for _, col := range c.columns {
+		sql = strings.ReplaceAll(sql, `"`+col.Name+`"`, c.names[col.Name])
+		sql = strings.ReplaceAll(sql, "`"+col.Name+"`", c.names[col.Name])
+	}
+	return
+}
+
+func (inst *Carrier) insertTransform() recordstore.InsertTransformFunc {
 	alloc := memory.NewGoAllocator()
 	return recordstore.InsertTransformFunc(func(table string, records []arrow.RecordBatch) (target string, out []arrow.RecordBatch, err error) {
 		out = make([]arrow.RecordBatch, 0, len(records))

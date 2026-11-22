@@ -72,6 +72,17 @@ func quoteString(s string) (q string) {
 	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(s) + "'"
 }
 
+// OpDitchBodies is the [recordstore.InPlaceStatement.Op] of the removal of
+// kept conversation text, and DitchArgApp the name of its one argument: the
+// app whose messages are meant, "" for every app's. A deployment that keeps
+// the facts in a table of its own answers it from its insert transform
+// ([recordstore.InPlaceTransformI]) with the statement that empties the
+// text section of those message rows in that table, and waits for it.
+const (
+	OpDitchBodies = "trail.ditchBodies"
+	DitchArgApp   = "app"
+)
+
 // DitchBodies runs [DitchBodiesSQL] over the table the recorder writes to,
 // through the recorder's own executor, and records it as the trail's ditch
 // event (ADR-0296, the Update of 2026-10-31): outcome ok or failed, the app
@@ -80,20 +91,24 @@ func quoteString(s string) (q string) {
 // ran, the error writing its event. A recorder that is not durable — no
 // store, or closed — ditches nothing and says why, so this path never
 // ditches without its row. Under an insert transform for the facts table
-// the statement is not run and the ditch is recorded as failed with
-// [recordstore.ErrTransformedTable] (ADR-0402 §SD5).
+// the statement run is the one the transform gives for [OpDitchBodies];
+// a transform that gives none leaves the ditch refused and recorded as
+// failed with [recordstore.ErrTransformedTable] (ADR-0402 §SD5).
 func (inst *Recorder) DitchBodies(ctx context.Context, app string) (err error) {
 	if !inst.Durable() || inst.st == nil {
 		return eb.Build().Str("why", inst.NotDurable()).Errorf("trail: the trail is not durable, so nothing is ditched")
 	}
-	var xerr error
-	if _, transformed := recordstore.RegisteredInsertTransform(TrailTableName); transformed {
-		// The rows are stored in a deployment's own table, which the
-		// mutation by the facts table's name would not reach (ADR-0402
-		// §SD5). The refusal is recorded as a failed ditch.
-		xerr = eb.Build().Str("table", TrailTableName).Errorf("trail: %w", recordstore.ErrTransformedTable)
+	// Where the rows are stored in a deployment's own table the mutation by
+	// the facts table's name would not reach them (ADR-0402 §SD5): the
+	// deployment's transform says what the statement is there, or it is
+	// refused, and the refusal recorded as a failed ditch.
+	sql, xerr := recordstore.InPlaceStatementFor(TrailTableName, recordstore.InPlaceStatement{
+		Op: OpDitchBodies, SQL: DitchBodiesSQL("", app), Args: map[string]string{DitchArgApp: app},
+	})
+	if xerr == nil {
+		xerr = inst.st.exec.Exec(ctx, sql)
 	} else {
-		xerr = inst.st.exec.Exec(ctx, DitchBodiesSQL("", app))
+		xerr = eh.Errorf("trail: %w", xerr)
 	}
 	row := DitchEvent(app, xerr)
 	if werr := inst.Event(ctx, time.Now().UTC(), Context{Origin: inst.OriginOf("", 0)}, row); werr == nil {

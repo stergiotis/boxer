@@ -329,3 +329,53 @@ func TestInsertTransform_ObserverLearnsTheTarget(t *testing.T) {
 	assert.Equal(t, "scratch_obs.carrier", events[0].Table)
 	assert.Empty(t, events[0].Target)
 }
+
+// inPlace is a transform that also answers in-place statements.
+type inPlace struct {
+	recordstore.InsertTransformFunc
+	answer func(table string, stmt recordstore.InPlaceStatement) (string, error)
+}
+
+func (inst inPlace) TransformInPlace(table string, stmt recordstore.InPlaceStatement) (string, error) {
+	return inst.answer(table, stmt)
+}
+
+// A statement that changes stored rows by a table's name runs as composed
+// when nothing transforms the table, as the transform rewrites it when the
+// transform can, and not at all otherwise.
+func TestInPlaceStatementFor(t *testing.T) {
+	alloc := memory.NewGoAllocator()
+	stmt := recordstore.InPlaceStatement{Op: "test.op", SQL: "ALTER TABLE scratch_ip.facts DELETE WHERE 1", Args: map[string]string{"k": "v"}}
+
+	sql, err := recordstore.InPlaceStatementFor("scratch_ip.facts", stmt)
+	require.NoError(t, err)
+	assert.Equal(t, stmt.SQL, sql, "no transform: the statement as composed")
+
+	unregister := recordstore.RegisterInsertTransform("scratch_ip.facts", renameTo(alloc, "scratch_ip.carrier"))
+	_, err = recordstore.InPlaceStatementFor("`scratch_ip`.`facts`", stmt)
+	require.ErrorIs(t, err, recordstore.ErrTransformedTable, "a transform that maps inserts only leaves the statement refused")
+	unregister()
+
+	var seen recordstore.InPlaceStatement
+	answer := "ALTER TABLE scratch_ip.carrier DELETE WHERE tenant = 'one'"
+	var answerErr error
+	unregister = recordstore.RegisterInsertTransform("scratch_ip.facts", inPlace{
+		InsertTransformFunc: renameTo(alloc, "scratch_ip.carrier"),
+		answer: func(table string, s recordstore.InPlaceStatement) (string, error) {
+			seen = s
+			return answer, answerErr
+		},
+	})
+	defer unregister()
+	sql, err = recordstore.InPlaceStatementFor("scratch_ip.facts", stmt)
+	require.NoError(t, err)
+	assert.Equal(t, answer, sql)
+	assert.Equal(t, stmt, seen, "the transform is handed the op, the statement and its arguments")
+
+	answer = "  "
+	_, err = recordstore.InPlaceStatementFor("scratch_ip.facts", stmt)
+	require.ErrorIs(t, err, recordstore.ErrTransformedTable, "no statement is a refusal, not a statement that does nothing")
+	answer, answerErr = "", errors.New("this carrier keeps no text")
+	_, err = recordstore.InPlaceStatementFor("scratch_ip.facts", stmt)
+	require.ErrorContains(t, err, "keeps no text")
+}
