@@ -38,7 +38,7 @@ const integrationDatabase = "capmap_facts_integration_test"
 // runtime's own table would be destroying real state to check an encoding.
 func newLiveTable(t *testing.T) (cli *chclient.Client, qualified string, cleanup func()) {
 	t.Helper()
-	cfg := chstore.Defaults()
+	cfg := chstore.ConfigFromEnv()
 	cfg.Database = integrationDatabase
 	ctx := context.Background()
 	store, err := chstore.New(cfg)
