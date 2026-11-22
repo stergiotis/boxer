@@ -232,7 +232,7 @@ func (inst *Service) record(ctx context.Context, rec CallRecord, t *turn) (reten
 			}
 			reason = "this host's BOXER_LLM_RETAIN is " + string(level) + ", not durable"
 		case !inst.cfg.Trail.Durable():
-			reason = "this host has no durable backend for boxer.facts"
+			reason = inst.cfg.Trail.NotDurable()
 		default:
 			reason = "the write failed (the rows stay buffered and may land with a later one): " + failed.Error()
 		}

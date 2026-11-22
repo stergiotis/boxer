@@ -70,11 +70,18 @@ func TestRetainBelowDurableIsServedNotKept(t *testing.T) {
 	}{
 		{"off", func(c Config) Config { return c }, "is off"},
 		{"ring", func(c Config) Config { c.Retain = RetainRing; return c }, "is ring"},
-		{"durable without a backend", func(c Config) Config { c.Retain = RetainDurable; return c }, "no durable backend"},
+		{"durable without a backend", func(c Config) Config {
+			c.Retain, c.Trail = RetainDurable, trail.NewRecorder(nil, "run-test", zerolog.Nop())
+			return c
+		}, "no durable backend"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "a", FinishReason: "stop"}}
-			cli, svc := serveRetaining(t, inprocbus.NewInst(zerolog.Nop()), tc.cfg(localCfg(p)), appId)
+			cfg := tc.cfg(localCfg(p))
+			if cfg.Trail != nil {
+				t.Cleanup(cfg.Trail.Close)
+			}
+			cli, svc := serveRetaining(t, inprocbus.NewInst(zerolog.Nop()), cfg, appId)
 			res, err := cli.Complete(context.Background(), Request{Retain: true, Conversation: "c1", Messages: []openaichat.Message{user("hi")}})
 			require.NoError(t, err)
 			assert.Equal(t, "a", res.Content)

@@ -198,6 +198,25 @@ func (inst *Service) rebuildLedger() (rows int, err error) {
 	}
 	ctx, cancel := context.WithTimeout(inst.base, rebuildTimeout)
 	defer cancel()
+	return inst.chargeFromTrail(ctx)
+}
+
+// RebuildLedger is the rebuild NewService does over a durable trail, for a
+// host whose trail was held at boot (ADR-0408 §SD5): it reads through the
+// held trail's store. The host calls it once, before it releases the
+// trail, so none of this run's calls is on the server yet and none is
+// charged twice. On a trail that is not held it does nothing. An error is
+// the read's, and the host does not release the trail on one.
+func (inst *Service) RebuildLedger(ctx context.Context) (rows int, err error) {
+	if !inst.cfg.Trail.Held() {
+		return
+	}
+	return inst.chargeFromTrail(ctx)
+}
+
+// chargeFromTrail charges the ledger with the calls the trail's store
+// holds inside the longest window a rule can name.
+func (inst *Service) chargeFromTrail(ctx context.Context) (rows int, err error) {
 	since := time.Now().Add(-ration.HourHorizon)
 	opts := recordstore.ScanOpts{ExtraPredicate: trail.TrailColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(since.UTC().UnixNano(), 10) + ")"}
 	ents, err := inst.cfg.Trail.Scan(func(st *trail.TrailStore) iter.Seq2[*trail.TrailEntity, error] { return st.ScanLlmCall(ctx, opts) })
