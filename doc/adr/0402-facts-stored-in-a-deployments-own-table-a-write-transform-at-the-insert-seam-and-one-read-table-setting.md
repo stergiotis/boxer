@@ -469,6 +469,38 @@ server release, against a reference carrier; no deployment has adopted it.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-11-22 — four of the deferrals built; the query-run capture stays deferred
+
+- **Existing rows and IPC captures go through the seam.** `boxer schema
+  load` (`chstore.LoadFacts`) reads facts-shaped rows from a relation — a
+  facts table moved aside — or from an Arrow IPC stream and inserts them
+  through the executor, so the registered transform applies to them. This
+  replaces the SQL copy of *Migration* and is the loader the IPC capture
+  lacked. Batches read from the server arrive in its Arrow rendering of
+  the columns and are brought to the stores' schema by renaming types,
+  values untouched. A load is not idempotent: it refuses a window that
+  holds facts and checks the read relation afterwards.
+- **A transform may answer the in-place statements.** A transform that
+  also implements `recordstore.InPlaceTransformI` says what a statement
+  that changes stored rows by the facts table's name is in the
+  deployment's storage; the removal of kept text asks it
+  (`trail.OpDitchBodies`), runs the answer and records the ditch. A
+  transform that maps inserts only leaves SD5's refusal as it was.
+  `Truncate` and `DropTable` stay refused either way.
+- **The round trip carries the generated stores' rows.** A store package
+  registers a writer of sample rows for the table it shares
+  (`recordstore.RegisterSampleRows`), and SD6's check runs every writer
+  the binary links: one entity per component, written through the store,
+  under its own memberships. The values are samples, so a transform that
+  depends on what a field says is still not exercised.
+- **Still deferred: the query-run capture.** The view appends on the
+  server and deduplicates by an anti-join over the destination's facts
+  columns. Under a transform both would have to move: the service would
+  serve transformed batches and drop the rows already stored itself, and
+  the view would append them to the deployment's table as they come.
+
 ## References
 
 - [ADR-0296](./0296-audit-events-as-a-trail-component.md) §SD8, §SD9 — the read table on generated stores and what keeps `boxer.facts` dispatchable.

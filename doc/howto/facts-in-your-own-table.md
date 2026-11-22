@@ -9,8 +9,8 @@ status: draft
 > **Status: draft — pre-human-review.** No deployment has adopted this. The
 > steps were run against the reference carrier of
 > `public/keelson/runtime/factsstore/chstore/chstoretest`, on one ClickHouse
-> release, by the `integration`-tagged tests of `hostboot` and `chstore`.
-> The copy of existing rows in step 4 has no tool and has not been run.
+> release, by the `integration`-tagged tests of `hostboot`, `chstore` and
+> `trail`.
 
 # How to keep facts in a table of your own
 
@@ -20,10 +20,11 @@ query, retain and delete. The decision and its limits are
 [ADR-0402](../adr/0402-facts-stored-in-a-deployments-own-table-a-write-transform-at-the-insert-seam-and-one-read-table-setting.md);
 this page is the order of work.
 
-It costs something. Removing kept conversation text and capturing query
-runs stop working (see [What stops working](#what-stops-working)), every
-binary that writes facts has to carry your transform, and the mapping
-exists twice — once in Go, once in SQL.
+It costs something. Capturing query runs stops working, and removing kept
+conversation text does unless your transform answers it (see
+[What stops working](#what-stops-working)); every binary that writes facts
+has to carry your transform; and the mapping exists twice — once in Go,
+once in SQL.
 
 ## What you write
 
@@ -67,9 +68,15 @@ It writes one row of every kind of the runtime vocabulary through the
 transform into a clickhouse-local scratch directory, reads each back
 through the view and compares every column. It reaches no server. Run it
 again after every change to the facts columns, the transform or the view.
-Its rows for the kinds the generated stores write are synthetic: a
-transform that treats rows differently by a membership those stores write
-is not exercised by it.
+
+Beside the runtime kinds it carries one entity per component of every
+generated store over the facts table that the binary links, written
+through that store, so the memberships those stores select by are there.
+A store of your own over the facts table joins in by registering a writer
+(`recordstore.RegisterSampleRows`, with `recordstore.IngestSamples` doing
+the writing). The rows hold sample values: a transform that depends on
+what a field says, rather than on which membership it sits under, is not
+exercised.
 
 ## Adopt it on a server that already holds facts
 
@@ -78,13 +85,8 @@ is not exercised by it.
 2. **Stop every process that writes facts** — hosts, workers, the query-run
    daemon, anything with `BOXER_LOG_FACTS` set. A row written during the
    copy stays behind in the old table.
-3. **Create the carrier**, and the view under a name that is not yet
-   `boxer.facts`.
-4. **Copy the existing rows** with an `INSERT … SELECT` from `boxer.facts`
-   that states your mapping in SQL, and compare counts. Nothing in this
-   repository does the copy through the Go transform; the round trip checks
-   the transform against the view, not this statement.
-5. **Move the old table aside and put the view in its place** — or leave
+3. **Create the carrier.**
+4. **Move the old table aside and put the view in its place** — or leave
    the name unused and set `BOXER_FACTS_READ_TABLE`:
 
    ```sql
@@ -93,6 +95,20 @@ is not exercised by it.
 
    Do not leave a table named `boxer.facts` beside the carrier: a binary
    without the transform would write into it, unseen.
+5. **Load the existing rows through your transform**, from a binary that
+   registers it:
+
+   ```sh
+   your-binary schema load --from-table boxer.facts_before --yes
+   ```
+
+   The rows take the path every later write takes — the executor, your
+   transform, your table — and keep their ids. The command refuses a
+   window that already holds facts, and afterwards checks that your view
+   shows the rows it inserted. It is not idempotent: load a large table
+   month by month with `--since` and `--until`, so that a failure leaves
+   one window to clear and repeat, and drop `boxer.facts_before` only
+   when the counts agree.
 6. **Leave `boxer.idlease` where it is.** The row ids the facts store mints
    are leased through it (ADR-0397 §SD2), and it is the only place the
    next unleased id of a stream is kept. The `boxer` database is not
@@ -129,17 +145,21 @@ only the executors apply the transform. An `INSERT` typed against
 
 ## What stops working
 
-- **Removing kept conversation text.** The removal is refused and recorded
-  on the trail as a failed ditch. To remove the text, write the statement
-  for your carrier: `trail.DitchBodiesSQL` composes the one boxer runs
-  against a facts table, and shows which section it empties and which rows
-  it selects. Run by hand, it leaves no row on the trail.
+- **Removing kept conversation text**, unless your transform answers it.
+  Implement `recordstore.InPlaceTransformI` on the transform and return,
+  for `trail.OpDitchBodies`, the statement that empties the text section
+  of the message rows in your table; it is handed the statement boxer
+  composes against a facts table (`trail.DitchBodiesSQL`), which shows the
+  section and the rows meant, and the app filter as an argument. The trail
+  then runs yours and records the ditch. Without it the removal is refused
+  and recorded as a failed ditch.
 - **Query-run capture.** The view that appends query runs is not
   installed: it inserts on the server, where no transform runs.
 - **`Truncate` and `DropTable` of the facts store**, which are test
   helpers, are refused.
 - **A capture to an Arrow IPC stream** holds the facts shape, not your
-  table's; loading one into the carrier has no tool.
+  table's. Load one with `schema load --from-stream`, which sends its
+  batches through your transform.
 
 ## Checking the result
 
