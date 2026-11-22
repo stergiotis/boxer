@@ -1,0 +1,2 @@
+wasm-opt 120
+wasm-strip 1.0.36

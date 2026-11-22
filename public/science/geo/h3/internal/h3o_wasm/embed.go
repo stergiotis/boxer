@@ -4,6 +4,8 @@
 // The artifact is produced by scripts/dev/build_h3_wasm.sh from the Rust
 // sources under rust/h3bridge and byte-compared in CI by
 // scripts/ci/h3_wasm_parity.sh. Consumers must not edit h3.wasm by hand.
+// h3.wasm.tools names the post-processors that wrote it; the comparison
+// holds only with those versions.
 package h3o_wasm
 
 import _ "embed"

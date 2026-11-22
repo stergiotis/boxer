@@ -198,3 +198,24 @@ are unchecked until the first CI run under SD7.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+
+## Updates
+
+### 2026-11-22 — the h3 blob's post-processors are recorded, since their versions are not pinned
+
+The first parity run on a machine with `wasm-strip` and `wasm-opt` installed
+reported drift against the committed `h3.wasm`: the same pinned rustc, two
+functions and 61 bytes apart. The blob had been optimised by another
+binaryen release, and `wasm-opt -Oz` does not give the same bytes across
+releases. The pin on rustc was therefore not enough for byte parity, and
+the note above on the committed blob being unchecked is closed with that
+result.
+
+The build now writes the versions of the two post-processors beside the
+blob (`h3.wasm.tools`, from `scripts/dev/h3-wasm-tools.sh`), and the parity
+step compares a rebuild only where the same versions are installed; with
+others it skips and names both sets, which a release run counts as a
+failure. The blob was rebuilt with the versions that file names and the
+build is reproducible on that machine. Pinning the post-processors — a
+fetched binaryen at a fixed release, as the ClickHouse test server is
+fetched — would make the check hold on any machine and is not done.

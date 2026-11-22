@@ -68,6 +68,21 @@ if [ ! -f "$committed" ]; then
     exit 1
 fi
 
+# The blob is byte-comparable only with the post-processors that wrote it:
+# wasm-opt's output differs between binaryen releases. With other versions
+# installed a rebuild cannot match and says nothing about drift, so the step
+# skips and names both sets. A blob with no record is compared as before.
+# shellcheck source=/dev/null
+source "$here/../dev/h3-wasm-tools.sh"
+if [ -f "$committed.tools" ]; then
+    have=$(h3_wasm_tools)
+    built_with=$(cat "$committed.tools")
+    if [ "$have" != "$built_with" ]; then
+        echo "h3_wasm_parity: skipped (post-processor versions differ: have $(echo "$have" | paste -sd, -); the artifact was built with $(echo "$built_with" | paste -sd, -))"
+        exit 0
+    fi
+fi
+
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 

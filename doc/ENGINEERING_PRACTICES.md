@@ -521,7 +521,11 @@ things, and the difference matters when the property is quoted:
   [h3.wasm artifact](../public/science/geo/h3/internal/h3o_wasm/h3.wasm).
   It skips on machines without the toolchain, so local lint stays green for
   contributors not touching the bridge; the lint workflow installs what it
-  needs and is the enforcer.
+  needs and is the enforcer. `wasm-opt`'s output differs between binaryen
+  releases, so the build records the post-processor versions beside the
+  blob (`h3.wasm.tools`) and the step also skips, naming both sets, where
+  other versions are installed; `release.sh` counts either skip as a
+  failure.
 - **Gated in CI:** the Go host and the lean Rust render head.
   [scripts/ci/repro_build_parity.sh](../scripts/ci/repro_build_parity.sh)
   builds each twice, from two copies of the tree at paths of different

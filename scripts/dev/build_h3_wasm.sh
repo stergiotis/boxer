@@ -18,6 +18,10 @@
 # the committed artifact hands the drift to scripts/ci/h3_wasm_parity.sh on
 # every machine that HAS them. Missing either is now an error.
 #
+# Their versions are not pinned, and wasm-opt's output differs between
+# binaryen releases, so the script records the two it ran beside the blob
+# (h3.wasm.tools); commit that file with the blob.
+#
 # The script is idempotent: running it twice on a clean tree should produce
 # byte-identical output.
 
@@ -119,6 +123,13 @@ mv "$tmp.opt" "$tmp"
 mkdir -p "$(dirname "$dst")"
 cp "$tmp" "$dst"
 echo "=== wrote $dst ($(wc -c < "$dst") bytes) ==="
+
+# Which post-processors wrote it (see h3-wasm-tools.sh): the parity check
+# reads this before it compares.
+# shellcheck source=/dev/null
+source "$here/h3-wasm-tools.sh"
+h3_wasm_tools > "$dst.tools"
+echo "=== wrote $dst.tools ==="
 
 echo "=== cargo run --bin emit_golden ==="
 # shellcheck disable=SC2086 # $tc is one optional word
