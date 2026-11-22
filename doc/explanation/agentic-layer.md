@@ -83,6 +83,18 @@ time. Agents also read the desktop as data and may arrange windows
 things through an overlay anchored to windows
 ([ADR-0297](../adr/0297-inscribe-an-overlay-agents-annotate-the-desktop-through.md)).
 
+Beside the windows, a grant names **destinations** — what the task's work
+may reach outside them, each placed on the ceiling's ladder by its reach:
+this host's tables and datasets (`keelson:<table>`,
+`keelson-bundle:<bundle>`), publishing under a name prefix without a
+confirmation each (`publish:<prefix>`), a ClickHouse server and the session
+tables a task keeps on it (`clickhouse:<host>`,
+`clickhouse-session:<host>`), letting programs on this machine read the
+ad-hoc datasets whose names start with a prefix (`expose:<prefix>`), a local
+git repository (`git:<path>`), an egress destination (`http:<name>`) and
+the model service (`llm`). A refused call names the destination it lacked,
+and the coordinator asks for it.
+
 *Why not drive the UI by clicking?* A click reaches only widgets, breaks on
 a layout change, and cannot be checked against a declared purpose. A
 declared operation can be refused, previewed, undone and audited.
@@ -291,6 +303,17 @@ working for the task reaches the same ones
 ([ADR-0406](../adr/0406-session-data-sets-named-reads-a-task-keeps-in-a-clickhouse-session-and-makes-again-from-their-definitions.md),
 proposed). In play the model keeps one with `query`'s `keep_as` and reads
 it in later statements as `session('<name>')`.
+
+A result can also leave the host's process for a program on the same
+machine — a grader, a script, a ClickHouse server reading it with `url()` —
+when the person, or a task under `expose:<prefix>`, **exposes** an ad-hoc
+dataset: the host serves it on its loopback port to a request presenting a
+token that only the answer to the exposure carries, until it lapses with
+the dataset, the window or its lifetime
+([ADR-0407](../adr/0407-an-exposed-dataset-a-program-on-this-machine-reads-an-ad-hoc-dataset-by-alias-and-token.md),
+proposed). A task exposes only what its own call published; every expose
+and every read is on the trail. In play the model calls `expose_dataset`
+and hands the URL and the `url()` line on in its reply.
 
 ### 12. Long work does not hold a turn open
 

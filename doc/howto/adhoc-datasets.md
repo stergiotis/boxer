@@ -147,3 +147,89 @@ grant rules and the confinement wall — see
 window not wired to the service, or a `keelson('…')` table of the host's
 own plane rather than an ad-hoc dataset, is still refused there: no
 endpoint serves both.
+
+## 7. Hand a dataset to a program on this machine
+
+An exposure makes one dataset readable outside the host's process, by a
+program on the same machine, until it lapses
+([ADR-0407](../adr/0407-an-exposed-dataset-a-program-on-this-machine-reads-an-ad-hoc-dataset-by-alias-and-token.md),
+proposed). Nothing leaves the machine: the host serves it on its loopback
+listener, to a request that presents the exposure's token.
+
+**Expose it.** In play's *Data sets* tab, Expose beside an ad-hoc dataset;
+the tab then shows a `curl` line and a `url()` line with Copy. An agent
+calls play's `expose_dataset` with the alias, or the name the window binds
+it under, and needs `expose:<alias>` — or `expose:<prefix>` for every alias
+starting with the prefix — in its grant; it exposes only a dataset its own
+call published. An app calls `adhocdata.ExposeRequest` and declares
+`adhocdata.ExposeCap`. The answer is the only place the token is given:
+
+```text
+url        http://127.0.0.1:41537/exposed/kernel_top__result
+csv url    http://127.0.0.1:41537/exposed/kernel_top__result/csv
+token      bxe_3f0c…(64 hex digits)
+clickhouse url('http://127.0.0.1:41537/exposed/kernel_top__result', 'ArrowStream', '`id` Int64, `score` Float64', headers('Authorization' = 'Bearer bxe_3f0c…'))
+curl       curl -sf -H 'Authorization: Bearer bxe_3f0c…' 'http://127.0.0.1:41537/exposed/kernel_top__result'
+expires    2026-11-23T15:04:05Z
+```
+
+**Read it from a ClickHouse server on this machine.** Paste the `url()`
+expression where a table goes:
+
+```sql
+SELECT m.sender, r.score
+FROM url('http://127.0.0.1:41537/exposed/kernel_top__result', 'ArrowStream',
+         '`id` Int64, `score` Float64',
+         headers('Authorization' = 'Bearer bxe_3f0c…')) AS r
+INNER JOIN mail.messages AS m ON m.id = r.id
+ORDER BY r.score DESC
+LIMIT 20;
+```
+
+The server's user needs `READ ON URL` (`GRANT URL ON *.* TO reader`), and
+the server must admit the host in its `remote_url_allow_hosts`:
+
+```xml
+<clickhouse>
+  <remote_url_allow_hosts>
+    <host>127.0.0.1</host>
+    <host>localhost</host>
+  </remote_url_allow_hosts>
+</clickhouse>
+```
+
+A user without the grant is answered `ACCESS_DENIED`. ClickHouse shows the
+header's value as `[HIDDEN]` in its query log; the token is still in the
+statement text the server receives. If the user agent work runs as is the
+one that reads, granting it `READ ON URL` lets it read any URL the setting
+admits; play refuses `url()` in a task's statement, and a separate reading
+user avoids the question.
+
+**Fetch it from a script.**
+
+```bash
+curl -sf -H 'Authorization: Bearer bxe_3f0c…' \
+  'http://127.0.0.1:41537/exposed/kernel_top__result' > result.arrows
+curl -sf -H 'Authorization: Bearer bxe_3f0c…' \
+  'http://127.0.0.1:41537/exposed/kernel_top__result/csv' > result.csv
+```
+
+```python
+import urllib.request, pyarrow.ipc as ipc
+req = urllib.request.Request(url, headers={"Authorization": "Bearer " + token})
+table = ipc.open_stream(urllib.request.urlopen(req).read()).read_all()
+```
+
+**What a reader is told.** Every request that opens nothing — no token, a
+wrong one, an exposure lapsed or revoked, an alias not exposed — is a `404`
+with the same body. A request with the right token while 16 reads of the
+exposure are open is a `503` to retry. A republish under the alias with
+the same columns is served at its new revision, named in the `ETag`.
+
+**When it ends.** At the end of its lifetime (an hour unless asked, at most
+a day); when the dataset is retracted, its columns change or the window
+that published it closes; when the window that exposed it closes; on
+Revoke or `revoke_exposure`; when the host stops. On a host the
+organisation manages (`BOXER_CELL_MANAGED`), an exposure above the export
+clearance is refused. Every expose, read, revoke and lapse is on the trail
+in the domain `adhoc-expose`, without the token.

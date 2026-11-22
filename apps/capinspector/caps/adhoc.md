@@ -24,7 +24,11 @@ process frees it.
 **Subjects.** `runtime.adhoc.publish`, `runtime.adhoc.retract`, `runtime.adhoc.resolve` and
 `runtime.adhoc.read`, request/reply; `runtime.adhoc.event.*` announces a publish or a
 retraction as a hint, and `runtime.adhoc.bundle.*` does the same for a named group of
-datasets. An app declares the subjects it uses on its manifest.
+datasets. `runtime.adhoc.expose`, `.expose.revoke` and `.expose.list` make a
+dataset readable by a program on this machine, on the host's loopback port, by
+a token
+([ADR-0407](../../../doc/adr/0407-an-exposed-dataset-a-program-on-this-machine-reads-an-ad-hoc-dataset-by-alias-and-token.md),
+proposed). An app declares the subjects it uses on its manifest.
 
 **Backend.** One service, `adhocdata.Service`, over the `sealed` store: each
 dataset is an unnamed file under a key held only in process memory, registered
