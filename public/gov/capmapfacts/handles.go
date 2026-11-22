@@ -25,8 +25,9 @@ import (
 // point, and the repository's standing instruction is to reach for that
 // surface before hand-writing anything against a leeway table.
 const (
-	hId = "`id:id`"
-	hTs = "`timestamp:ts`"
+	hId         = "`id:id`"
+	hNaturalKey = "`id:naturalKey`"
+	hTs         = "`timestamp:ts`"
 
 	// The membership lane of the symbol section, named only as the WHERE
 	// pruner: a selector is opaque to index analysis, so the `has()` guard is

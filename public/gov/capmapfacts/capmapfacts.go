@@ -24,16 +24,19 @@
 // it, which also means the encoding is testable with no ClickHouse anywhere
 // near it.
 //
-// # Ids are derived, not counted
+// # Ids are resolved from the natural key
 //
-// The runtime's facts store mints row ids from a leased stream (ADR-0397):
-// unique, and arbitrary, which is right for an append-only event trail and
-// wrong here. A relation has to point at the
-// competence rows it joins, and a re-ingest of an unchanged vault should
-// produce the same rows rather than a second set wearing new ids. So an id is
-// [DeriveId] over the row's natural key: stable across runs and across
-// processes, and computable for a relation's endpoints without first inserting
-// the competences and reading ids back.
+// A relation has to point at the competence rows it joins, and a re-ingest
+// of an unchanged vault should restate the same entities rather than a
+// second set wearing new ids. So a row's id is what the facts table's keyed
+// id generator resolves the row's natural key to (ADR-0405 §SD2): the same
+// id from every process and across ingests, drawn from the table's stream.
+// A relation's endpoints resolve through the same generator, so they are
+// the ids of the competence rows. The encoder therefore needs a generator,
+// and a load needs the server that holds the id directory.
+//
+// Rows written before that carry [LegacyId], a truncation of the natural
+// key. The read-back knows both.
 package capmapfacts
 
 import (
@@ -46,6 +49,8 @@ import (
 
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
+	"github.com/stergiotis/boxer/public/identity/identgen"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
@@ -72,19 +77,74 @@ type Stats struct {
 	Rows        int
 }
 
-// DeriveId turns a natural key into the row's uint64 id.
-//
-// The low eight bytes of the key, which is already a blake3 digest, so this is
-// a truncation rather than a second hash. Collision risk over a corpus of a
-// few thousand rows is negligible, and the payoff is that a relation can
-// address its endpoints arithmetically instead of through an insert-then-read.
-func DeriveId(naturalKey []byte) (id uint64) {
+// IdScope is the scope the corpus's natural keys are resolved in. One scope
+// serves competences and relations: their keys are digests under two
+// domains and cannot meet.
+const IdScope = "capmap"
+
+// LegacyId is the id a row carried before ids were resolved through the
+// facts table's generator (ADR-0405 §SD5): the low eight bytes of its
+// natural key. Rows written then keep it, and a relation among them points
+// at its endpoints by it, so the read-back accepts it beside the id a
+// competence row carries.
+func LegacyId(naturalKey []byte) (id uint64) {
 	if len(naturalKey) < 8 {
 		var padded [8]byte
 		copy(padded[:], naturalKey)
 		return binary.LittleEndian.Uint64(padded[:])
 	}
 	return binary.LittleEndian.Uint64(naturalKey[:8])
+}
+
+// corpusIds holds the id of every natural key an ingest names.
+type corpusIds map[string]uint64
+
+// resolveIds resolves every natural key the corpus names — each
+// competence, each relation, and each relation's endpoints — in one batch
+// when the generator takes one. An endpoint is resolved whether or not its
+// competence is in this corpus, so a relation's foreign key is the id that
+// competence has or will have.
+func resolveIds(ctx context.Context, corpus capmapcorpus.Corpus, ids identifier.IdGeneratorI) (resolved corpusIds, err error) {
+	if ids == nil {
+		return nil, eh.Errorf("capmapfacts: no id generator: a row's id is resolved from its natural key (ADR-0405)")
+	}
+	resolved = make(corpusIds, len(corpus.Competences)+2*len(corpus.Relations))
+	var keys identgen.KeysColumn
+	add := func(key []byte) {
+		if _, seen := resolved[string(key)]; seen {
+			return
+		}
+		resolved[string(key)] = 0
+		keys = keys.AppendKey(key)
+	}
+	for i := range corpus.Competences {
+		add(corpus.Competences[i].NaturalKey)
+	}
+	for i := range corpus.Relations {
+		rel := corpus.Relations[i]
+		add(relationNaturalKey(rel))
+		add(capmapcorpus.NaturalKey(rel.SourceSlug))
+		if resolvesToCompetence(rel.Resolution) {
+			add(capmapcorpus.NaturalKey(rel.Target))
+		}
+	}
+	var tagged []identifier.TaggedId
+	if batch, ok := ids.(identgen.BatchInternalizerI); ok {
+		if tagged, _, err = batch.AppendIds(ctx, nil, keys, nil); err != nil {
+			return nil, eh.Errorf("capmapfacts: resolve ids: %w", err)
+		}
+	} else {
+		tagged = make([]identifier.TaggedId, keys.Len())
+		for i := range tagged {
+			if tagged[i], _, err = ids.GetId(ctx, keys.At(i)); err != nil {
+				return nil, eh.Errorf("capmapfacts: resolve ids: %w", err)
+			}
+		}
+	}
+	for i, id := range tagged {
+		resolved[string(keys.At(i))] = id.Value()
+	}
+	return
 }
 
 // relationNaturalKey identifies one relation by everything that makes it
@@ -109,14 +169,24 @@ func relationNaturalKey(rel capmapcorpus.Relation) (key []byte) {
 // a call to time.Now so a test can assert on a fixed value and two ingests of
 // an unchanged vault differ only where the vault differs. origin is who
 // ingests (ADR-0330 §SD3); every row carries it under its own id.
-func BuildRecords(corpus capmapcorpus.Corpus, now time.Time, origin Origin) (records []arrow.RecordBatch, stats Stats, err error) {
+//
+// ids is the facts table's keyed id generator for [IdScope]: it is what
+// makes a competence's id the same across ingests and processes. A
+// generator that ignores the key still gives one ingest consistent ids — a
+// relation points at the competence rows beside it — and gives the next
+// ingest others.
+func BuildRecords(ctx context.Context, corpus capmapcorpus.Corpus, now time.Time, origin Origin, ids identifier.IdGeneratorI) (records []arrow.RecordBatch, stats Stats, err error) {
 	total := len(corpus.Competences) + len(corpus.Relations)
 	if total == 0 {
 		return nil, stats, nil
 	}
+	resolved, err := resolveIds(ctx, corpus, ids)
+	if err != nil {
+		return nil, stats, err
+	}
 	ent := dml.NewInEntityFacts(memory.NewGoAllocator(), total)
 	for i := range corpus.Competences {
-		if eErr := encodeCompetence(ent, corpus.Competences[i], now, origin); eErr != nil {
+		if eErr := encodeCompetence(ent, corpus.Competences[i], now, origin, resolved); eErr != nil {
 			return nil, stats, eb.Build().Str("slug", corpus.Competences[i].Slug).Errorf("unable to encode competence: %w", eErr)
 		}
 		if cErr := ent.CommitEntity(); cErr != nil {
@@ -125,7 +195,7 @@ func BuildRecords(corpus capmapcorpus.Corpus, now time.Time, origin Origin) (rec
 		stats.Competences++
 	}
 	for i := range corpus.Relations {
-		if eErr := encodeRelation(ent, corpus.Relations[i], now, origin); eErr != nil {
+		if eErr := encodeRelation(ent, corpus.Relations[i], now, origin, resolved); eErr != nil {
 			return nil, stats, eb.Build().Str("sourceSlug", corpus.Relations[i].SourceSlug).Str("target", corpus.Relations[i].Target).
 				Errorf("unable to encode relation: %w", eErr)
 		}
@@ -146,7 +216,7 @@ func BuildRecords(corpus capmapcorpus.Corpus, now time.Time, origin Origin) (rec
 //
 // Records are released here whatever happens: they hold Arrow buffers, and a
 // failed insert is exactly when a caller is least likely to remember.
-func Ingest(ctx context.Context, corpus capmapcorpus.Corpus, sink RecordSinkI, table string, now time.Time, origin Origin) (stats Stats, err error) {
+func Ingest(ctx context.Context, corpus capmapcorpus.Corpus, sink RecordSinkI, table string, now time.Time, origin Origin, ids identifier.IdGeneratorI) (stats Stats, err error) {
 	if sink == nil {
 		return stats, eh.Errorf("capmapfacts: nil sink")
 	}
@@ -154,7 +224,7 @@ func Ingest(ctx context.Context, corpus capmapcorpus.Corpus, sink RecordSinkI, t
 		table = QualifiedTable
 	}
 	var records []arrow.RecordBatch
-	if records, stats, err = BuildRecords(corpus, now, origin); err != nil {
+	if records, stats, err = BuildRecords(ctx, corpus, now, origin, ids); err != nil {
 		return stats, err
 	}
 	if len(records) == 0 {
@@ -178,9 +248,9 @@ func Ingest(ctx context.Context, corpus capmapcorpus.Corpus, sink RecordSinkI, t
 // CompetenceLifecycle, CompetenceClaims, CompetenceClaimBases); the symbol
 // section holds attributes of all six, the string and time sections of two
 // each.
-func encodeCompetence(ent *dml.InEntityFacts, competence capmapcorpus.Competence, now time.Time, origin Origin) (err error) {
+func encodeCompetence(ent *dml.InEntityFacts, competence capmapcorpus.Competence, now time.Time, origin Origin, ids corpusIds) (err error) {
 	nk := competence.NaturalKey
-	id := DeriveId(nk)
+	id := ids[string(nk)]
 	ent.BeginEntity().SetId(id, nk).SetTimestamp(now)
 	rec, tags, lifecycle, claims, bases := competenceComponents(competence)
 	origin.Id = id
@@ -301,11 +371,11 @@ func competenceComponents(c capmapcorpus.Competence) (rec CompetenceRecord, tags
 }
 
 // encodeRelation writes one relation row, carrying the origin.
-func encodeRelation(ent *dml.InEntityFacts, rel capmapcorpus.Relation, now time.Time, origin Origin) (err error) {
+func encodeRelation(ent *dml.InEntityFacts, rel capmapcorpus.Relation, now time.Time, origin Origin, ids corpusIds) (err error) {
 	nk := relationNaturalKey(rel)
-	id := DeriveId(nk)
+	id := ids[string(nk)]
 	ent.BeginEntity().SetId(id, nk).SetTimestamp(now)
-	rec := relationRecord(rel)
+	rec := relationRecord(rel, ids)
 	origin.Id = id
 
 	sym := ent.GetSectionSymbol()
@@ -341,17 +411,17 @@ func encodeRelation(ent *dml.InEntityFacts, rel capmapcorpus.Relation, now time.
 // relationRecord maps a relation onto its row's component: a foreign key
 // to the target only when it resolved to a competence, a score only for a
 // similarity.
-func relationRecord(rel capmapcorpus.Relation) (rec RelationRecord) {
+func relationRecord(rel capmapcorpus.Relation, ids corpusIds) (rec RelationRecord) {
 	rec = RelationRecord{
 		RelKind:      string(rel.Kind),
 		Resolution:   rel.Resolution.String(),
 		TargetText:   rel.Target,
 		Section:      nonEmpty(rel.Section),
 		TargetStatus: nonEmpty(rel.TargetStatus),
-		Source:       DeriveId(capmapcorpus.NaturalKey(rel.SourceSlug)),
+		Source:       ids[string(capmapcorpus.NaturalKey(rel.SourceSlug))],
 	}
 	if resolvesToCompetence(rel.Resolution) {
-		rec.Target = option.Some(DeriveId(capmapcorpus.NaturalKey(rel.Target)))
+		rec.Target = option.Some(ids[string(capmapcorpus.NaturalKey(rel.Target))])
 	}
 	if rel.Kind == capmapcorpus.RelationKindSimilar {
 		rec.Ncd = option.Some(rel.Ncd)

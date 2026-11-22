@@ -15,6 +15,8 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/gov/capmapfacts"
 	"github.com/stergiotis/boxer/public/gov/capmapvocab"
+	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 )
 
@@ -57,6 +59,18 @@ func newLiveTable(t *testing.T) (cli *chclient.Client, qualified string, cleanup
 	}
 }
 
+// liveIds is the facts table's keyed id generator for the corpus over the
+// scratch database's id directory, built anew on every call as each load
+// builds its own: what two of them agree on is the server's.
+func liveIds(t *testing.T, cli *chclient.Client) identifier.IdGeneratorI {
+	t.Helper()
+	exec, err := storeexec.New(cli, nil)
+	require.NoError(t, err)
+	ids, err := chstore.NewKeyedIdGenerator(exec, chstore.Config{Database: integrationDatabase}, capmapfacts.IdScope)
+	require.NoError(t, err)
+	return ids
+}
+
 // queryText runs sql and returns its TabSeparated body. The format is appended
 // here rather than passed as an argument because the client takes none.
 func queryText(t *testing.T, cli *chclient.Client, ctx context.Context, sql string) (out string) {
@@ -83,7 +97,7 @@ func TestIngestRoundTripsThroughClickHouse(t *testing.T) {
 
 	corpus := sampleCorpus()
 	ctx := context.Background()
-	stats, err := capmapfacts.Ingest(ctx, corpus, cli, qualified, fixedNow, capmapfacts.Origin{Run: "run-capmap"})
+	stats, err := capmapfacts.Ingest(ctx, corpus, cli, qualified, fixedNow, capmapfacts.Origin{Run: "run-capmap"}, liveIds(t, cli))
 	require.NoError(t, err)
 	require.Equal(t, 6, stats.Rows)
 
@@ -150,9 +164,9 @@ func TestReIngestReusesIds(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	_, err := capmapfacts.Ingest(ctx, sampleCorpus(), cli, qualified, fixedNow, capmapfacts.Origin{Run: "run-capmap"})
+	_, err := capmapfacts.Ingest(ctx, sampleCorpus(), cli, qualified, fixedNow, capmapfacts.Origin{Run: "run-capmap"}, liveIds(t, cli))
 	require.NoError(t, err)
-	_, err = capmapfacts.Ingest(ctx, sampleCorpus(), cli, qualified, fixedNow.Add(time.Hour), capmapfacts.Origin{Run: "run-capmap"})
+	_, err = capmapfacts.Ingest(ctx, sampleCorpus(), cli, qualified, fixedNow.Add(time.Hour), capmapfacts.Origin{Run: "run-capmap"}, liveIds(t, cli))
 	require.NoError(t, err)
 
 	got := queryText(t, cli, ctx, fmt.Sprintf("SELECT count(), uniqExact(%s) FROM %s", colId, qualified))

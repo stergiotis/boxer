@@ -6,8 +6,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"context"
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/ra"
+	"github.com/stergiotis/boxer/public/storage/recordstore/recordstoretest"
 )
 
 // Each facts row reads back as the components it was written from, through
@@ -40,7 +42,10 @@ func TestFactsRowsReadBackAsTheirComponents(t *testing.T) {
 			{SourceSlug: "b", Target: "nowhere", Kind: capmapcorpus.RelationKindWikilink, Section: "S", Resolution: capmapcorpus.ResolutionUnresolved},
 		},
 	}
-	records, _, err := BuildRecords(corpus, now, Origin{Run: "run-capmap"})
+	ids := recordstoretest.KeyedStream(recordstoretest.FactsRowTag)
+	resolved, err := resolveIds(context.Background(), corpus, ids)
+	require.NoError(t, err)
+	records, _, err := BuildRecords(context.Background(), corpus, now, Origin{Run: "run-capmap"}, ids)
 	require.NoError(t, err)
 	require.Len(t, records, 1)
 	defer records[0].Release()
@@ -99,7 +104,7 @@ func TestFactsRowsReadBackAsTheirComponents(t *testing.T) {
 			f64.GetAttributes(), f64.GetMemberships())
 		require.NoError(t, err)
 		require.True(t, present)
-		require.Equal(t, relationRecord(rel), got)
+		require.Equal(t, relationRecord(rel, resolved), got)
 		_, present, err = CompetenceTagsReadRow(i, sym.GetAttributes(), sym.GetMemberships())
 		require.NoError(t, err)
 		require.False(t, present)

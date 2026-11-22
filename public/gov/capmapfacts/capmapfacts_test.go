@@ -12,7 +12,9 @@ import (
 
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
 	"github.com/stergiotis/boxer/public/gov/capmapfacts"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
+	"github.com/stergiotis/boxer/public/storage/recordstore/recordstoretest"
 )
 
 // captureSink records what an ingest would have written. The encoding is
@@ -91,7 +93,7 @@ func totalRows(records []arrow.RecordBatch) (n int64) {
 
 func TestBuildRecordsEncodesEveryRow(t *testing.T) {
 	corpus := sampleCorpus()
-	records, stats, err := capmapfacts.BuildRecords(corpus, fixedNow, capmapfacts.Origin{Run: "run-capmap"})
+	records, stats, err := capmapfacts.BuildRecords(context.Background(), corpus, fixedNow, capmapfacts.Origin{Run: "run-capmap"}, testIds())
 	require.NoError(t, err)
 	defer func() {
 		for _, r := range records {
@@ -111,35 +113,80 @@ func TestBuildRecordsEncodesEveryRow(t *testing.T) {
 }
 
 func TestBuildRecordsEmptyCorpusWritesNothing(t *testing.T) {
-	records, stats, err := capmapfacts.BuildRecords(capmapcorpus.Corpus{}, fixedNow, capmapfacts.Origin{Run: "run-capmap"})
+	records, stats, err := capmapfacts.BuildRecords(context.Background(), capmapcorpus.Corpus{}, fixedNow, capmapfacts.Origin{Run: "run-capmap"}, testIds())
 	require.NoError(t, err)
 	assert.Empty(t, records)
 	assert.Zero(t, stats.Rows)
 }
 
-// Ids follow the natural key, so two ingests of an unchanged vault produce the
-// same rows rather than a second set wearing fresh ids. This is what lets a
-// relation address its endpoints without inserting competences first and
-// reading their ids back.
-func TestDeriveIdIsStableAndFollowsTheSlug(t *testing.T) {
-	a := capmapfacts.DeriveId(capmapcorpus.NaturalKey("analytics"))
-	assert.Equal(t, a, capmapfacts.DeriveId(capmapcorpus.NaturalKey("analytics")))
-	assert.NotEqual(t, a, capmapfacts.DeriveId(capmapcorpus.NaturalKey("robustness")))
-	assert.NotZero(t, a)
+// testIds is a keyed generator as a load is given one: the same natural key
+// resolves to the same id for the life of the value.
+func testIds() identifier.IdGeneratorI {
+	return recordstoretest.KeyedStream(recordstoretest.FactsRowTag)
 }
 
-// Encoding must be a pure function of the corpus and the timestamp: a second
+// idsOf reads the id column of the encoded rows, in row order.
+func idsOf(t *testing.T, records []arrow.RecordBatch) (ids []uint64) {
+	t.Helper()
+	for _, r := range records {
+		idx := r.Schema().FieldIndices("id:id:u64:47::0:")
+		require.Len(t, idx, 1)
+		ids = append(ids, r.Column(idx[0]).(*array.Uint64).Uint64Values()...)
+	}
+	return
+}
+
+// A row's id is what the generator resolves its natural key to: ids of the
+// facts table's stream, one per entity, the same on a second ingest through
+// the same generator — which is what makes a re-ingest restate the corpus
+// rather than add a second set wearing new ids (ADR-0405 §SD2).
+func TestIdsAreResolvedFromTheNaturalKey(t *testing.T) {
+	ids := testIds()
+	build := func(now time.Time) []uint64 {
+		records, _, err := capmapfacts.BuildRecords(context.Background(), sampleCorpus(), now, capmapfacts.Origin{Run: "run-capmap"}, ids)
+		require.NoError(t, err)
+		defer func() {
+			for _, r := range records {
+				r.Release()
+			}
+		}()
+		return idsOf(t, records)
+	}
+	first := build(fixedNow)
+	require.Len(t, first, 6)
+	seen := map[uint64]struct{}{}
+	for _, id := range first {
+		assert.Equal(t, recordstoretest.FactsRowTag, identifier.TaggedId(id).GetTag().GetValue())
+		seen[id] = struct{}{}
+	}
+	assert.Len(t, seen, 6, "an id per entity")
+	assert.Equal(t, first, build(fixedNow.Add(time.Hour)), "the second ingest restates the same ids")
+
+	// The competence's id is the one its natural key resolves to.
+	want, fresh, err := ids.GetId(context.Background(), capmapcorpus.NaturalKey("analytics"))
+	require.NoError(t, err)
+	assert.False(t, fresh)
+	assert.Equal(t, want.Value(), first[0])
+	assert.NotEqual(t, capmapfacts.LegacyId(capmapcorpus.NaturalKey("analytics")), first[0], "not the truncated key rows carried before")
+
+	_, _, err = capmapfacts.BuildRecords(context.Background(), sampleCorpus(), fixedNow, capmapfacts.Origin{Run: "run-capmap"}, nil)
+	require.Error(t, err, "without a generator there is no id to give a row")
+}
+
+// Encoding must be a function of the corpus, the timestamp and the ids its
+// natural keys resolve to: a second
 // build of the same input has to be byte-identical, or a re-ingest would
 // double the corpus instead of replacing it.
 func TestBuildRecordsIsDeterministic(t *testing.T) {
-	first, _, err := capmapfacts.BuildRecords(sampleCorpus(), fixedNow, capmapfacts.Origin{Run: "run-capmap"})
+	ids := testIds()
+	first, _, err := capmapfacts.BuildRecords(context.Background(), sampleCorpus(), fixedNow, capmapfacts.Origin{Run: "run-capmap"}, ids)
 	require.NoError(t, err)
 	defer func() {
 		for _, r := range first {
 			r.Release()
 		}
 	}()
-	second, _, err := capmapfacts.BuildRecords(sampleCorpus(), fixedNow, capmapfacts.Origin{Run: "run-capmap"})
+	second, _, err := capmapfacts.BuildRecords(context.Background(), sampleCorpus(), fixedNow, capmapfacts.Origin{Run: "run-capmap"}, ids)
 	require.NoError(t, err)
 	defer func() {
 		for _, r := range second {
@@ -157,7 +204,7 @@ func TestBuildRecordsIsDeterministic(t *testing.T) {
 func TestIngestWritesToTheSinkOnce(t *testing.T) {
 	sink := &captureSink{}
 	defer sink.release()
-	stats, err := capmapfacts.Ingest(context.Background(), sampleCorpus(), sink, "", fixedNow, capmapfacts.Origin{Run: "run-capmap"})
+	stats, err := capmapfacts.Ingest(context.Background(), sampleCorpus(), sink, "", fixedNow, capmapfacts.Origin{Run: "run-capmap"}, testIds())
 	require.NoError(t, err)
 	assert.Equal(t, 6, stats.Rows)
 	assert.Equal(t, 1, sink.calls, "the whole corpus lands in one insert, not one per row")
@@ -168,14 +215,14 @@ func TestIngestWritesToTheSinkOnce(t *testing.T) {
 func TestIngestEmptyCorpusDoesNotCallTheSink(t *testing.T) {
 	sink := &captureSink{}
 	defer sink.release()
-	stats, err := capmapfacts.Ingest(context.Background(), capmapcorpus.Corpus{}, sink, "", fixedNow, capmapfacts.Origin{Run: "run-capmap"})
+	stats, err := capmapfacts.Ingest(context.Background(), capmapcorpus.Corpus{}, sink, "", fixedNow, capmapfacts.Origin{Run: "run-capmap"}, testIds())
 	require.NoError(t, err)
 	assert.Zero(t, stats.Rows)
 	assert.Zero(t, sink.calls, "an empty corpus must not issue an empty insert")
 }
 
 func TestIngestRefusesNilSink(t *testing.T) {
-	_, err := capmapfacts.Ingest(context.Background(), sampleCorpus(), nil, "", fixedNow, capmapfacts.Origin{Run: "run-capmap"})
+	_, err := capmapfacts.Ingest(context.Background(), sampleCorpus(), nil, "", fixedNow, capmapfacts.Origin{Run: "run-capmap"}, testIds())
 	require.Error(t, err)
 }
 
@@ -183,7 +230,7 @@ func TestIngestRefusesNilSink(t *testing.T) {
 // leak the Arrow buffers it was holding.
 func TestIngestSurfacesSinkErrors(t *testing.T) {
 	sink := &captureSink{err: assert.AnError}
-	_, err := capmapfacts.Ingest(context.Background(), sampleCorpus(), sink, "custom.table", fixedNow, capmapfacts.Origin{Run: "run-capmap"})
+	_, err := capmapfacts.Ingest(context.Background(), sampleCorpus(), sink, "custom.table", fixedNow, capmapfacts.Origin{Run: "run-capmap"}, testIds())
 	require.Error(t, err)
 	assert.Equal(t, "custom.table", ebtest.Fields(t, err)["table"], "the error names the table it tried to write")
 }

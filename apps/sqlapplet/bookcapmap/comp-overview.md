@@ -92,10 +92,11 @@ ORDER BY ord, metric
 
 | Table | One row per |
 |---|---|
-| `keelson('competence')` | competence: `slug`, `name`, `abbrev`, `synopsis`, `domain`, `catalog`, `owner`, `level`, `maturity`, `pain`, `tags`, `section_count`, `vault_path`, `fact_id`, and the three `lifecycle_*` arrays |
+| `keelson('competence')` | competence: `slug`, `name`, `abbrev`, `synopsis`, `domain`, `catalog`, `owner`, `level`, `maturity`, `pain`, `tags`, `section_count`, `vault_path`, `natural_key`, and the three `lifecycle_*` arrays |
 | `keelson('competencesection')` | body section: `slug`, `ordinal`, `heading`, `bytes`, `` `text@text/markdown` `` |
-| `keelson('competencerelation')` | link: `source_slug`, `target`, `kind`, `resolution`, `section`, `ncd`, `source_fact_id`, `target_fact_id` |
+| `keelson('competencerelation')` | link: `source_slug`, `target`, `kind`, `resolution`, `section`, `ncd`, `source_natural_key`, `target_natural_key` |
 
-`fact_id` is the id `boxer capmap load` writes into `boxer.facts` for the same
-competence, so the live view here and the persisted history there join without
-either side knowing how the other derives it.
+`natural_key` is the natural key `boxer capmap load` writes into `boxer.facts`
+for the same competence, spelled as `hex()` spells it, so the live view here
+and the persisted history there join on `hex(naturalKey)`. The stored row's id
+is resolved on the server and is not in these tables.

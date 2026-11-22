@@ -131,9 +131,9 @@ func TestCapmapSchemasCarryTheExpectedColumns(t *testing.T) {
 		p    introspect.Provider
 		want []string
 	}{
-		{competenceProvider{}, []string{"slug", "name", "domain", "catalog", "level", "maturity", "pain", "tags", "fact_id", "claim_count", "dimensions"}},
+		{competenceProvider{}, []string{"slug", "name", "domain", "catalog", "level", "maturity", "pain", "tags", "natural_key", "claim_count", "dimensions"}},
 		{competencesectionProvider{}, []string{"slug", "ordinal", "heading", "bytes", "words", "text@text/markdown"}},
-		{competencerelationProvider{}, []string{"source_slug", "target", "kind", "resolution", "target_status", "section", "ncd", "source_fact_id", "target_fact_id"}},
+		{competencerelationProvider{}, []string{"source_slug", "target", "kind", "resolution", "target_status", "section", "ncd", "source_natural_key", "target_natural_key"}},
 		{competenceclaimProvider{}, []string{"slug", "dimension", "rating", "rank", "rung_name", "supported_rung", "basis", "basis_count", "by", "at", "problems"}},
 		{competenceevidenceProvider{}, []string{"slug", "anchor", "signal", "value", "rung"}},
 	} {

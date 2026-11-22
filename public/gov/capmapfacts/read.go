@@ -77,19 +77,23 @@ func ReadCorpus(ctx context.Context, q QuerierI, table string) (corpus capmapcor
 	if err = requireSurface(ctx, q); err != nil {
 		return corpus, err
 	}
-	comps, err := readCompetences(ctx, q, table)
+	comps, rowIds, err := readCompetences(ctx, q, table)
 	if err != nil {
 		return corpus, err
 	}
 	corpus.Competences = comps
 
-	// Relations address their endpoints by derived id, so the slug behind an
-	// id is recovered from the competences just read rather than by joining
-	// the table to itself — a join would have to repeat the decode, and the
-	// mapping is arithmetic anyway.
-	slugById := make(map[uint64]string, len(comps))
+	// A relation holds its endpoints' ids, so the slug behind an id is
+	// recovered from the competences just read rather than by joining the
+	// table to itself, which would have to repeat the decode. A relation
+	// written before ids were resolved through the generator holds its
+	// endpoints' legacy ids (ADR-0405 §SD5); those map to the same slugs.
+	slugById := make(map[uint64]string, 2*len(comps))
 	for i := range comps {
-		slugById[DeriveId(comps[i].NaturalKey)] = comps[i].Slug
+		slugById[LegacyId(comps[i].NaturalKey)] = comps[i].Slug
+	}
+	for i := range comps {
+		slugById[rowIds[i]] = comps[i].Slug
 	}
 	rels, err := readRelations(ctx, q, table, slugById)
 	if err != nil {
@@ -105,6 +109,8 @@ func ReadCorpus(ctx context.Context, q QuerierI, table string) (corpus capmapcor
 // asking for them as strings explicitly means the decode does not depend on a
 // server setting.
 type competenceRow struct {
+	// Id is the row's id, which a relation's endpoints name.
+	Id        string   `json:"id"`
 	Slug      string   `json:"slug"`
 	Name      string   `json:"name"`
 	Abbrev    string   `json:"abbrev"`
@@ -152,19 +158,27 @@ type relationRow struct {
 	TargetStatus string `json:"target_status"`
 }
 
-func readCompetences(ctx context.Context, q QuerierI, table string) (comps []capmapcorpus.Competence, err error) {
+// readCompetences reads the newest row of every competence; rowIds[i] is the
+// id comps[i]'s row carries.
+func readCompetences(ctx context.Context, q QuerierI, table string) (comps []capmapcorpus.Competence, rowIds []uint64, err error) {
 	sql := competenceSQL(table)
 	rows, err := queryJSON[competenceRow](ctx, q, table, sql)
 	if err != nil {
-		return nil, eb.Build().Str("table", table).Errorf("unable to read competences: %w", err)
+		return nil, nil, eb.Build().Str("table", table).Errorf("unable to read competences: %w", err)
 	}
 	comps = make([]capmapcorpus.Competence, 0, len(rows))
+	rowIds = make([]uint64, 0, len(rows))
 	for _, r := range rows {
 		if r.Slug == "" {
 			// A row wearing the competence kind but carrying no slug is not
 			// addressable, so there is nothing to write it back as.
-			return nil, eb.Build().Str("table", table).Errorf("capmapfacts: a competence row in carries no slug")
+			return nil, nil, eb.Build().Str("table", table).Errorf("capmapfacts: a competence row in carries no slug")
 		}
+		rowId, pErr := strconv.ParseUint(r.Id, 10, 64)
+		if pErr != nil {
+			return nil, nil, eb.Build().Str("id", r.Id).Str("slug", r.Slug).Errorf("capmapfacts: competence id is not a number: %w", pErr)
+		}
+		rowIds = append(rowIds, rowId)
 		comp := capmapcorpus.Competence{
 			Slug:       r.Slug,
 			NaturalKey: capmapcorpus.NaturalKey(r.Slug),
@@ -189,7 +203,7 @@ func readCompetences(ctx context.Context, q QuerierI, table string) (comps []cap
 		}
 		comps = append(comps, comp)
 	}
-	return comps, nil
+	return comps, rowIds, nil
 }
 
 // requireSurface refuses to read from a server that has not been provisioned
@@ -507,15 +521,17 @@ func selParameters(section string, memb uint64, paramLane string) (expr string) 
 	return fmt.Sprintf("LW_CO_GATHER(%s, LW_SEL('%s', '%d', '%s'))", paramLane, section, memb, mixedChannel)
 }
 
-// newestPerId is the tail every read shares: a re-ingest restates entities
-// under the same ids, so without it a dump would emit each competence once per
-// ingest.
-func newestPerId() (clause string) {
-	return fmt.Sprintf("ORDER BY %s DESC LIMIT 1 BY %s", hTs, hId)
+// newestPerKey is the tail every read shares: a re-ingest restates an entity
+// under its natural key, so without it a dump would emit each competence
+// once per ingest. By natural key and not by id, because an entity's rows
+// from before ADR-0405 carry another id than its rows since.
+func newestPerKey() (clause string) {
+	return fmt.Sprintf("ORDER BY %s DESC LIMIT 1 BY %s", hTs, hNaturalKey)
 }
 
 func competenceSQL(table string) (sql string) {
 	return fmt.Sprintf(`SELECT
+  toString(%s) AS id,
   %s AS slug,
   %s AS name,
   %s AS abbrev,
@@ -545,6 +561,7 @@ func competenceSQL(table string) (sql string) {
 FROM %s
 WHERE has(%s, %d)
 %s`,
+		hId,
 		getScalar("symbol", membId(capmapvocab.MembCompSlug)),
 		getListFirst("stringArray", membId(capmapvocab.MembCompName)),
 		getListFirst("stringArray", membId(capmapvocab.MembCompAbbrev)),
@@ -573,7 +590,7 @@ WHERE has(%s, %d)
 		selValues("symbol", membId(capmapvocab.MembCompClaimBasis), mixedChannel, hSymValue),
 		table,
 		hSymLr, membId(capmapvocab.MembKindCompetence),
-		newestPerId())
+		newestPerKey())
 }
 
 func relationSQL(table string) (sql string) {
@@ -599,5 +616,5 @@ WHERE has(%s, %d)
 		getScalar("symbol", membId(capmapvocab.MembRelTargetStatus)),
 		table,
 		hSymLr, membId(capmapvocab.MembKindRelation),
-		newestPerId())
+		newestPerKey())
 }

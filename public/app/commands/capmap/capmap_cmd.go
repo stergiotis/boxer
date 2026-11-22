@@ -337,9 +337,16 @@ func actionLoad(cliCtx context.Context, cmd *cli.Command) (err error) {
 	if err != nil {
 		return eh.Errorf("run info: %w", err)
 	}
+	// A row's id is resolved from its natural key through the id directory
+	// in the table's database (ADR-0405 §SD2), so a competence keeps its id
+	// across loads and a relation points at the competence rows.
+	ids, err := chstore.NewKeyedIdGenerator(sink, chstore.Config{Database: database}, capmapfacts.IdScope)
+	if err != nil {
+		return eh.Errorf("unable to build the id generator: %w", err)
+	}
 	var stats capmapfacts.Stats
-	if stats, err = capmapfacts.Ingest(ctx, corpus, sink, database+"."+table, time.Now().UTC(), capmapfacts.Origin{Run: runInst.RunId}); err != nil {
-		return err
+	if stats, err = capmapfacts.Ingest(ctx, corpus, sink, database+"."+table, time.Now().UTC(), capmapfacts.Origin{Run: runInst.RunId}, ids); err != nil {
+		return eb.Build().Str("database", database).Errorf("%w (a load needs the id lease table and the id directory in the database; --setup-table creates them, as a host does at boot)", err)
 	}
 	fmt.Printf("loaded %d rows into %s.%s from %s (%d competences, %d relations)\n",
 		stats.Rows, database, table, dir, stats.Competences, stats.Relations)

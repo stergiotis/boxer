@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"encoding/hex"
 	"strings"
 	"sync"
 
@@ -8,7 +9,6 @@ import (
 
 	"github.com/stergiotis/boxer/public/gov/capmapanchors"
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
-	"github.com/stergiotis/boxer/public/gov/capmapfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
 
@@ -80,9 +80,11 @@ func installAnchorResolver() {
 // is split from `adr` — it is the bulk of the corpus by bytes, and a query
 // about maturity should not pay for it.
 //
-// fact_id is the id `boxer capmap load` writes for this competence, so a
-// reader who wants the persisted trail can join this table to boxer.facts
-// without knowing how the id is derived.
+// natural_key is the natural key `boxer capmap load` writes for this
+// competence, as hex() spells it, so a reader who wants the persisted trail
+// joins this table to boxer.facts on hex(naturalKey). The row's id is not
+// here: it is resolved on the server (ADR-0405), and this table is read
+// from the vault with no server.
 type competenceProvider struct{}
 
 func (competenceProvider) Name() string                         { return "competence" }
@@ -280,7 +282,7 @@ func competenceTable(rows []capmapcorpus.Competence) *introspect.Table {
 			}
 			return out
 		}).
-		Uint64("fact_id", func(i int) uint64 { return capmapfacts.DeriveId(rows[i].NaturalKey) }).
+		String("natural_key", func(i int) string { return naturalKeyHex(rows[i].NaturalKey) }).
 		StringList("lifecycle_phases", func(i int) []string {
 			out := make([]string, 0, len(rows[i].Lifecycle))
 			for _, ev := range rows[i].Lifecycle {
@@ -361,18 +363,24 @@ func competencerelationTable(rows []capmapcorpus.Relation) *introspect.Table {
 		String("target_status", func(i int) string { return rows[i].TargetStatus }).
 		String("section", func(i int) string { return rows[i].Section }).
 		Float64("ncd", func(i int) float64 { return rows[i].Ncd }).
-		Uint64("source_fact_id", func(i int) uint64 {
-			return capmapfacts.DeriveId(capmapcorpus.NaturalKey(rows[i].SourceSlug))
+		String("source_natural_key", func(i int) string {
+			return naturalKeyHex(capmapcorpus.NaturalKey(rows[i].SourceSlug))
 		}).
-		Uint64("target_fact_id", func(i int) uint64 {
-			// Zero when the target is not a competence: there is no row to
-			// point at, and a derived id would invite a join that silently
-			// matches nothing.
+		String("target_natural_key", func(i int) string {
+			// Empty when the target is not a competence: there is no row to
+			// point at, and a key would invite a join that silently matches
+			// nothing.
 			switch rows[i].Resolution {
 			case capmapcorpus.ResolutionDirect, capmapcorpus.ResolutionDirRef:
-				return capmapfacts.DeriveId(capmapcorpus.NaturalKey(rows[i].Target))
+				return naturalKeyHex(capmapcorpus.NaturalKey(rows[i].Target))
 			default:
-				return 0
+				return ""
 			}
 		})
+}
+
+// naturalKeyHex spells a natural key as ClickHouse's hex() does, so the
+// column compares against hex(naturalKey) as it is.
+func naturalKeyHex(key []byte) string {
+	return strings.ToUpper(hex.EncodeToString(key))
 }

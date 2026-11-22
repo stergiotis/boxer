@@ -14,6 +14,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
 	"github.com/stergiotis/boxer/public/gov/capmapfacts"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 )
 
 // The read-back half of the ingest gate. `boxer capmap dump` writes a vault
@@ -30,7 +31,7 @@ func TestReadCorpusRoundTripsTheEncoding(t *testing.T) {
 
 	ctx := context.Background()
 	want := sampleCorpus()
-	_, err := capmapfacts.Ingest(ctx, want, cli, qualified, fixedNow, capmapfacts.Origin{Run: "run-capmap"})
+	_, err := capmapfacts.Ingest(ctx, want, cli, qualified, fixedNow, capmapfacts.Origin{Run: "run-capmap"}, liveIds(t, cli))
 	require.NoError(t, err)
 
 	got, err := capmapfacts.ReadCorpus(ctx, cli, qualified)
@@ -50,7 +51,7 @@ func TestReadCorpusTakesTheNewestIngest(t *testing.T) {
 
 	ctx := context.Background()
 	first := sampleCorpus()
-	_, err := capmapfacts.Ingest(ctx, first, cli, qualified, fixedNow, capmapfacts.Origin{Run: "run-capmap"})
+	_, err := capmapfacts.Ingest(ctx, first, cli, qualified, fixedNow, capmapfacts.Origin{Run: "run-capmap"}, liveIds(t, cli))
 	require.NoError(t, err)
 
 	second := sampleCorpus()
@@ -60,7 +61,7 @@ func TestReadCorpusTakesTheNewestIngest(t *testing.T) {
 			second.Competences[i].Tags = []string{"reviewed"}
 		}
 	}
-	_, err = capmapfacts.Ingest(ctx, second, cli, qualified, fixedNow.Add(time.Hour), capmapfacts.Origin{Run: "run-capmap"})
+	_, err = capmapfacts.Ingest(ctx, second, cli, qualified, fixedNow.Add(time.Hour), capmapfacts.Origin{Run: "run-capmap"}, liveIds(t, cli))
 	require.NoError(t, err)
 
 	got, err := capmapfacts.ReadCorpus(ctx, cli, qualified)
@@ -91,7 +92,7 @@ func TestVaultSurvivesLoadAndDump(t *testing.T) {
 	require.Len(t, want.Competences, 3)
 
 	ctx := context.Background()
-	_, err = capmapfacts.Ingest(ctx, want, cli, qualified, fixedNow, capmapfacts.Origin{Run: "run-capmap"})
+	_, err = capmapfacts.Ingest(ctx, want, cli, qualified, fixedNow, capmapfacts.Origin{Run: "run-capmap"}, liveIds(t, cli))
 	require.NoError(t, err)
 
 	stored, err := capmapfacts.ReadCorpus(ctx, cli, qualified)
@@ -145,4 +146,63 @@ func writeIntegrationVault(t *testing.T) (root string) {
 		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	}
 	return root
+}
+
+// legacyIds gives every natural key the id rows carried before ids were
+// resolved through the facts table's generator.
+type legacyIds struct{}
+
+func (legacyIds) GetId(_ context.Context, key []byte) (identifier.TaggedId, bool, error) {
+	return identifier.TaggedId(capmapfacts.LegacyId(key)), false, nil
+}
+func (legacyIds) GetUntaggedId(_ context.Context, key []byte) (identifier.UntaggedId, bool, error) {
+	return identifier.TaggedId(capmapfacts.LegacyId(key)).RemoveTag(), false, nil
+}
+func (legacyIds) Release() error           { return nil }
+func (legacyIds) GetTag() identifier.IdTag { return identifier.IdTag(0) }
+
+// A table that holds a corpus from before ids were resolved, and then a load
+// since: each competence reads once, as the newest load wrote it, although
+// its two rows carry two ids; and a relation the newer load no longer names
+// still finds its source, by the id its era gave it (ADR-0405 §SD5).
+func TestReadCorpusSpansRowsFromBeforeIdsWereResolved(t *testing.T) {
+	cli, qualified, cleanup := newLiveTable(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	old := sampleCorpus()
+	_, err := capmapfacts.Ingest(ctx, old, cli, qualified, fixedNow, capmapfacts.Origin{Run: "run-capmap"}, legacyIds{})
+	require.NoError(t, err)
+	got, err := capmapfacts.ReadCorpus(ctx, cli, qualified)
+	require.NoError(t, err)
+	capmapcorpus.SortCorpus(&old)
+	require.Equal(t, old.Relations, got.Relations, "a table of the old era alone reads as it did")
+
+	newer := sampleCorpus()
+	for i := range newer.Competences {
+		if newer.Competences[i].Slug == "robustness" {
+			newer.Competences[i].Maturity = 5
+		}
+	}
+	dropped := newer.Relations[len(newer.Relations)-1]
+	newer.Relations = newer.Relations[:len(newer.Relations)-1]
+	_, err = capmapfacts.Ingest(ctx, newer, cli, qualified, fixedNow.Add(time.Hour), capmapfacts.Origin{Run: "run-capmap"}, liveIds(t, cli))
+	require.NoError(t, err)
+
+	got, err = capmapfacts.ReadCorpus(ctx, cli, qualified)
+	require.NoError(t, err)
+	require.Len(t, got.Competences, 2, "each competence once, under either id")
+	for _, comp := range got.Competences {
+		if comp.Slug == "robustness" {
+			assert.Equal(t, uint8(5), comp.Maturity, "the newest load wins across the two eras")
+		}
+	}
+	require.Len(t, got.Relations, len(old.Relations), "the relation only the old load named is still there")
+	found := false
+	for _, rel := range got.Relations {
+		if rel.SourceSlug == dropped.SourceSlug && rel.Target == dropped.Target && rel.Kind == dropped.Kind && rel.Section == dropped.Section {
+			found = true
+		}
+	}
+	assert.True(t, found, "and its source resolves through the id it was written with")
 }
