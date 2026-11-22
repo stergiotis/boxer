@@ -79,7 +79,9 @@ statement leave only as a read.
   untouched. That classifier is the weakest of the per-app checks — tally
   and the keelson query gate apply it, play and the SQL applets require the
   stricter security class — so a statement an app's check let through is
-  not refused here. The refusal names what was refused and why, and the
+  not expected to be refused here. Play checks the statement before its
+  wrapper and format clause are added and the pass judges the text that is
+  sent; the wrappers play adds are reads or `EXPLAIN`. The refusal names what was refused and why, and the
   task and the kind travel as fields. It never rewrites and holds no state.
   The pass lives in its own package so that the fairlead, which low-level
   clients import, keeps not linking the parser (ADR-0367 §SD3).
@@ -138,7 +140,7 @@ statement leave only as a read.
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| Exported Go API: `public/db/fairlead` | `WithTask`, `TaskOf`, `Statement.Task` added | passes that build a `Statement` literal by position (none in the tree) |
+| Exported Go API: `public/db/fairlead` | `WithTask`, `TaskOf`, `Statement.Task` added | a pass that builds a `Statement` literal without field names |
 | Exported Go API: `public/db/fairlead/taskread` | added: `Pass`, `Install` | the host's boot |
 | Exported Go API: `queryengine.Request` | `Task` added | the server and local engines |
 | Exported Go API: `chlocalbroker.ExecRequest`, `chlocalpool.Worker` | `ExecRequest.Task`, `Worker.WriteStatement` added | the broker's handler |
