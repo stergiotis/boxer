@@ -33,6 +33,10 @@ const leewayBookFixtureDatabase = "sqlapplet_it_leeway"
 // system.columns reports per-column sizes for wide parts only, and a one-row
 // insert lands in a compact part, so the fixture makes every part wide. The
 // row is all defaults: an empty array still stores its offsets.
+//
+// The table is created twice, under two names: the affinity chapter draws
+// pairs of tables that share sections, and the server may hold no other
+// leeway table — a run's earlier tests may have dropped boxer.facts.
 func seedLeewayBookFixture(t *testing.T, client *chclient.Client, ctx context.Context) {
 	t.Helper()
 	drop := func() {
@@ -40,18 +44,20 @@ func seedLeewayBookFixture(t *testing.T, client *chclient.Client, ctx context.Co
 	}
 	drop()
 	t.Cleanup(drop)
-	cfg := chstore.Config{Database: leewayBookFixtureDatabase, Table: factsschema.TableName}
-	ddl, err := chstore.ComposeSetupSQL(cfg, "")
-	require.NoError(t, err)
-	for _, stmt := range strings.Split(ddl, ";\n") {
-		if strings.TrimSpace(stmt) == "" {
-			continue
+	for _, name := range []string{factsschema.TableName, factsschema.TableName + "_twin"} {
+		cfg := chstore.Config{Database: leewayBookFixtureDatabase, Table: name}
+		ddl, err := chstore.ComposeSetupSQL(cfg, "")
+		require.NoError(t, err)
+		for _, stmt := range strings.Split(ddl, ";\n") {
+			if strings.TrimSpace(stmt) == "" {
+				continue
+			}
+			require.NoError(t, client.Exec(ctx, stmt))
 		}
-		require.NoError(t, client.Exec(ctx, stmt))
+		table := cfg.Database + "." + cfg.Table
+		require.NoError(t, client.Exec(ctx, "ALTER TABLE "+table+" MODIFY SETTING min_bytes_for_wide_part = 0"))
+		require.NoError(t, client.Exec(ctx, "INSERT INTO "+table+" FORMAT JSONEachRow {}"))
 	}
-	table := cfg.Database + "." + cfg.Table
-	require.NoError(t, client.Exec(ctx, "ALTER TABLE "+table+" MODIFY SETTING min_bytes_for_wide_part = 0"))
-	require.NoError(t, client.Exec(ctx, "INSERT INTO "+table+" FORMAT JSONEachRow {}"))
 }
 
 // TestLeewayBookQueries_LiveServer runs every chapter buffer verbatim against a
