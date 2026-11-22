@@ -20,6 +20,7 @@ import (
 	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -124,6 +125,7 @@ func checkScope(assertion string, source string) (err error) {
 			}
 		}
 	}
+	read := sourceTablesText(allowed)
 	named := 0
 	for _, t := range analysis.ExtractTables(apr) {
 		if ctes[t.Table] {
@@ -135,26 +137,51 @@ func checkScope(assertion string, source string) (err error) {
 			if t.Database != "" {
 				name = t.Database + "." + t.Table
 			}
-			return app.RefuseOperation("the assertion names " + name + ", which the result's statement did not read as such; name tables as that statement did")
+			return app.RefuseOperation("the assertion names " + name + ", which the result's statement did not read as such; name tables as that statement did" + read)
 		}
 	}
 	for _, t := range keelsonsql.References(assertion) {
 		named++
 		if !allowed["keelson('"+t+"')"] {
-			return app.RefuseOperation("the assertion names keelson('" + t + "'), which the result's statement did not read")
+			return app.RefuseOperation("the assertion names keelson('" + t + "'), which the result's statement did not read" + read)
 		}
 	}
 	assertionSets, _ := sessiondata.References(assertion)
 	for _, t := range assertionSets {
 		named++
 		if !allowed["session('"+t+"')"] {
-			return app.RefuseOperation("the assertion names session('" + t + "'), which the result's statement did not read")
+			return app.RefuseOperation("the assertion names session('" + t + "'), which the result's statement did not read" + read)
 		}
 	}
 	if named == 0 {
-		return app.RefuseOperation("the assertion names no table of the result's statement, so it checks nothing")
+		return app.RefuseOperation("the assertion names no table of the result's statement, so it checks nothing" + read)
 	}
 	return
+}
+
+// checkScopeNamesMax bounds how many of the source's tables a refusal
+// names.
+const checkScopeNamesMax = 8
+
+// sourceTablesText is "; it read " and the tables the source statement
+// read, in the form an assertion names them — db.table, an unqualified
+// table bare, keelson('alias'), session('name') — sorted and bounded, or
+// "; it read no table" when there are none.
+func sourceTablesText(allowed map[string]bool) (text string) {
+	names := make([]string, 0, len(allowed))
+	for k := range allowed {
+		names = append(names, strings.TrimPrefix(k, "."))
+	}
+	if len(names) == 0 {
+		return "; it read no table"
+	}
+	slices.Sort(names)
+	more := ""
+	if len(names) > checkScopeNamesMax {
+		more = " and " + strconv.Itoa(len(names)-checkScopeNamesMax) + " more"
+		names = names[:checkScopeNamesMax]
+	}
+	return "; it read " + strings.Join(names, ", ") + more
 }
 
 // checkSource is what a check needs of a result: its id and label, the

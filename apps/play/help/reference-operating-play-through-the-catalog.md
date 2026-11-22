@@ -243,7 +243,8 @@ it.
   main run, so the answer's `result_id` is a result `check` and a
   citation rest on. An assertion resting on it reads `session('<name>')`,
   the table that statement read — not the tables of the definition — as
-  the answer's `cite` says.
+  the answer's `cite` says. A check that names a table its result's
+  statement did not read is refused with the tables that statement read.
 - **Joins.** `session('…')` joins server tables and `keelson('<alias>')`
   ad-hoc datasets in one statement; an ad-hoc dataset named with a server
   table goes to the server as external data, which the endpoint must have

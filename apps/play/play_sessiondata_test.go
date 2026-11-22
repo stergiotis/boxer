@@ -340,3 +340,30 @@ func (inst *siteRecorder) Lead(_ context.Context, st fairlead.Statement) (string
 	inst.bySite[st.Site] = st.Task
 	return st.SQL, nil
 }
+
+// TestACitationRestsOnAKeptDataSet: the result of a keep is the data set's
+// first rows, so an assertion citing it reads session('<name>') and holds;
+// one naming the definition's base table is refused, and the refusal names
+// the tables the result's statement read, as an assertion must name them.
+func TestACitationRestsOnAKeptDataSet(t *testing.T) {
+	r := newSdRig(t)
+	c := r.client("github.com/x/play", 1)
+	dests := []string{DestinationClickHouse(r.host), sessiondata.DestinationSession(r.host)}
+	r.grant("t1", dests...)
+	obo := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: dests}
+	res, err := c.defineSession(t.Context(), obo, "top", "SELECT 1 AS x FROM db.message", nil)
+	require.NoError(t, err)
+	kept := keptOf(res, nil)
+	assert.Contains(t, kept.Cite, "session('top')", "the keep's answer says how to cite it")
+	cs := checkSnap{checkSource: checkSource{resultId: 3, source: sampleStatement("top", 50)}}
+
+	out, err := runCheck(quickly(t), c, cs, obo, CheckArgs{ResultId: 3, Statement: "SELECT count() FROM session('top')"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"3"}, out.Cells, "the stub's data set holds three rows")
+
+	_, err = runCheck(quickly(t), c, cs, obo, CheckArgs{ResultId: 3, Statement: "SELECT count() FROM db.message"})
+	var refusal *app.OperationRefusal
+	require.ErrorAs(t, err, &refusal)
+	assert.Contains(t, refusal.Reason, "names db.message")
+	assert.Contains(t, refusal.Reason, "it read session('top')", "the refusal says what the statement read")
+}
