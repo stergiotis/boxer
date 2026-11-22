@@ -167,3 +167,24 @@ func TestRegistryRefusesACapabilityOnOperationSubjects(t *testing.T) {
 	m.Caps = []SubjectFilter{{Pattern: "app.snoop.request.>", Direction: CapDirectionPub}}
 	require.NoError(t, r.RegisterFactory(m, func() (AppI, error) { return nil, nil }))
 }
+
+// A direct operation is a tool of an agent's model, so it is one agents may
+// call, and a catalog offers few of them, since each is in every request.
+func TestADirectOperationIsAnAgentOperationAndFew(t *testing.T) {
+	c := validCatalog()
+	c.Operations[1].Direct = true
+	require.NoError(t, c.Validate())
+
+	c.Operations[0].Direct = true
+	err := c.Validate()
+	require.Error(t, err, "get_doc is not exposed to agents")
+	assert.Contains(t, err.Error(), "operation get_doc: a direct operation is a tool of an agent's model")
+
+	c.Operations[0].Agents = true
+	require.NoError(t, c.Validate(), "two direct operations are within the bound")
+	c.Operations = append(c.Operations, OperationSpec{Name: "get_doc_too", Version: 1, Summary: "read it again", Class: OperationClassQuery,
+		Effect: OperationEffectNone, Reads: []string{"doc"}, Agents: true, Direct: true})
+	err = c.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "operation get_doc_too: a catalog declares at most 2 direct operations")
+}

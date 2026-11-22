@@ -336,13 +336,19 @@ func (inst *coordinator) citable(entries []agentrun.Entry, intents map[string]ag
 }
 
 // windowOf is the window and operation an intent called, when it called
-// one: a typed tool's, or call_operation's arguments.
+// one: a typed tool's, the window a direct tool's call ran in, or
+// call_operation's arguments.
 func (inst *coordinator) windowOf(in agentrun.Entry) (window uint64, op string, ok bool) {
 	inst.mu.Lock()
 	t, typed := inst.typed[in.Name]
+	d, direct := inst.directOfLocked(in.Name)
+	ran, known := inst.directWindows[in.Key]
 	inst.mu.Unlock()
 	if typed {
 		return t.window, t.op, true
+	}
+	if direct {
+		return ran, d.op, known
 	}
 	if in.Name != "call_operation" {
 		return

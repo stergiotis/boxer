@@ -144,3 +144,33 @@ func TestDescribeNeedsTheCap(t *testing.T) {
 	_, err = cli.Describe(context.Background(), DescribeRequest{})
 	require.ErrorIs(t, err, inprocbus.ErrPermissionViolation)
 }
+
+// describe carries an app's advice on when to use it and which of its
+// operations are direct, and a search finds the app by its advice.
+func TestDescribeCarriesWhenToUseAndDirect(t *testing.T) {
+	r := app.NewRegistry()
+	s := notesSet()
+	cat := s.Catalog()
+	cat.Operations[0].Direct = true
+	m := app.Manifest{Id: "github.com/x/apps/calc", Display: "Calc", Summary: "compute over a note",
+		WhenToUse: "Use for sums the note cannot do by itself.",
+		Surface:   app.SurfaceWindowed, Topics: []app.TopicT{app.Topics()[0]}, Operations: cat}
+	require.NoError(t, r.RegisterFactory(m, func() (app.AppI, error) { return nil, nil }))
+	bus := inprocbus.NewInst(zerolog.Nop())
+	svc, err := NewService(t.Context(), bus, zerolog.Nop(), Config{Journal: AcceptAnyIntent{}, Registry: r})
+	require.NoError(t, err)
+	t.Cleanup(svc.Close)
+	cli := NewClient(bus.NewClient("test.coordinator", ClientCaps("test: drive apps")))
+	cli.Timeout = 5 * time.Second
+
+	apps, err := cli.Describe(context.Background(), DescribeRequest{})
+	require.NoError(t, err)
+	require.Len(t, apps, 1)
+	assert.Equal(t, "Use for sums the note cannot do by itself.", apps[0].WhenToUse)
+	require.Len(t, apps[0].Operations, 1)
+	assert.True(t, apps[0].Operations[0].Direct)
+
+	found, err := cli.Describe(context.Background(), DescribeRequest{Search: "sums"})
+	require.NoError(t, err)
+	require.Len(t, found, 1, "the advice is searched with the summary")
+}

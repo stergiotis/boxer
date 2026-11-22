@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -332,4 +333,27 @@ func TestAddTopicExtendsTheVocabulary(t *testing.T) {
 	require.NoError(t, AddTopic(extra))
 	assert.True(t, extra.IsRegistered())
 	assert.Equal(t, extra, Topics()[len(Topics())-1])
+}
+
+// WhenToUse is optional, and when given one line within MaxWhenToUseRunes:
+// every request a model is sent carries it.
+func TestManifest_Validate_WhenToUseIsBounded(t *testing.T) {
+	m := Manifest{Id: "org.test.hint", Display: "Hint", Topics: []TopicT{TopicRuntime}, Summary: "fixture summary", Surface: SurfaceWindowed}
+	require.NoError(t, m.Validate(), "an app need not say")
+	m.WhenToUse = "Use for what SQL cannot express: fitting models over a query result."
+	require.NoError(t, m.Validate())
+	for name, bad := range map[string]string{
+		"two lines":      "Use for this.\nAnd for that.",
+		"trailing space": "Use for this. ",
+		"leading space":  " Use for this.",
+		"too long":       strings.Repeat("x", MaxWhenToUseRunes+1),
+	} {
+		m.WhenToUse = bad
+		err := m.Validate()
+		require.Error(t, err, name)
+		assert.Contains(t, err.Error(), "invalid WhenToUse", name)
+		assert.NotEmpty(t, WhenToUseProblem(bad), name)
+	}
+	m.WhenToUse = strings.Repeat("é", MaxWhenToUseRunes)
+	require.NoError(t, m.Validate(), "the bound counts runes, not bytes")
 }

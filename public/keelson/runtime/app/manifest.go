@@ -42,7 +42,9 @@ package app
 
 import (
 	"io/fs"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -319,6 +321,18 @@ type Manifest struct {
 	//   - roughly 60 characters; the row dims and truncates past that
 	//   - no marketing register (AGENTS § Writing style applies here too)
 	Summary string
+	// WhenToUse is the optional advice an agent's model reads beside the
+	// app's Summary: when to reach for the app, in one or two sentences
+	// addressed to the model ("Use for what SQL cannot express: …"). Where
+	// Summary tells the app from its siblings, this names the situation
+	// that calls for it, so a model working elsewhere thinks of it. A chat
+	// lists the apps that give it before those that do not.
+	//
+	// Validate bounds it at MaxWhenToUseRunes on one line without leading
+	// or trailing space, since every request a model is sent carries it.
+	// Style, by review: say what the app does today, name situations
+	// rather than other apps, no marketing register.
+	WhenToUse string
 	// Icon is an optional glyph prepended to the window title.
 	// Convention: one Unicode codepoint (emoji or material-design glyph).
 	// The runtime renders it as "Icon Title" in the title bar.
@@ -457,6 +471,26 @@ func (inst Manifest) WindowTitle() (title string) {
 	return
 }
 
+// MaxWhenToUseRunes bounds Manifest.WhenToUse.
+const MaxWhenToUseRunes = 240
+
+// WhenToUseProblem says why s cannot be a manifest's WhenToUse, "" when it
+// can: empty, or one line of at most MaxWhenToUseRunes without leading or
+// trailing space.
+func WhenToUseProblem(s string) (problem string) {
+	switch {
+	case s == "":
+		return ""
+	case strings.TrimSpace(s) != s:
+		return "leading or trailing space"
+	case strings.ContainsAny(s, "\r\n"):
+		return "more than one line"
+	case utf8.RuneCountInString(s) > MaxWhenToUseRunes:
+		return "longer than " + strconv.Itoa(MaxWhenToUseRunes) + " runes"
+	}
+	return ""
+}
+
 // Validate returns an error when the manifest is structurally broken.
 // Uniqueness is enforced by Registry, not here.
 func (inst Manifest) Validate() (err error) {
@@ -514,6 +548,11 @@ func (inst Manifest) Validate() (err error) {
 	if inst.Summary == "" {
 		err = eb.Build().Str("id", string(inst.Id)).Str("surface", inst.Surface.String()).
 			Errorf("manifest: app declares no Summary")
+		return
+	}
+	if problem := WhenToUseProblem(inst.WhenToUse); problem != "" {
+		err = eb.Build().Str("id", string(inst.Id)).Str("problem", problem).
+			Errorf("manifest: invalid WhenToUse")
 		return
 	}
 	if !inst.Kind.IsValid() {

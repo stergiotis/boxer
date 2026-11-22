@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inscribe"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -109,10 +110,12 @@ const notesId app.AppIdT = "github.com/x/apps/notes"
 
 var noteOps = noteOpsSet()
 
-func noteOpsSet() *appops.Set[*note, noteSnap] {
+// noteOpsSet is the notes' operations; those named in direct are direct.
+func noteOpsSet(direct ...string) *appops.Set[*note, noteSnap] {
 	s := appops.NewSet(func(n *note) noteSnap { return noteSnap{text: n.text} })
 	s.Resource("text", "the note", func(n *note) any { return n.text })
-	appops.Query(s, app.OperationSpec{Name: "get_note", Version: 1, Summary: "read the note", Reads: []string{"text"}, Agents: true, Untrusted: true},
+	appops.Query(s, app.OperationSpec{Name: "get_note", Version: 1, Summary: "read the note", Reads: []string{"text"}, Agents: true, Untrusted: true,
+		Direct: slices.Contains(direct, "get_note")},
 		func(sn noteSnap, in appops.None) (noteResult, error) { return noteResult{Text: sn.text}, nil })
 	appops.Query(s, app.OperationSpec{Name: "count_words", Version: 1, Summary: "count the note's words, as a result", Reads: []string{"text"}, Agents: true, Untrusted: true},
 		func(sn noteSnap, in appops.None) (wordCount, error) {
@@ -120,7 +123,7 @@ func noteOpsSet() *appops.Set[*note, noteSnap] {
 		})
 	appops.Query(s, app.OperationSpec{Name: "check", Version: 1, Summary: "run an assertion over the note's count", Reads: []string{"text"}, Agents: true, Untrusted: true}, noteCheck)
 	appops.Command(s, app.OperationSpec{Name: "set_note", Version: 1, Summary: "replace the note", Effect: app.OperationEffectDocument,
-		Writes: []string{"text"}, Agents: true},
+		Writes: []string{"text"}, Agents: true, Direct: slices.Contains(direct, "set_note")},
 		func(n *note, call app.OperationCall, in setNoteArgs) (appops.None, error) {
 			n.text = in.Text
 			return appops.None{}, nil
@@ -392,6 +395,15 @@ func coordRig(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opTools b
 // §SD7), and the coordinator journals there.
 func coordRigWith(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opTools bool, ops *appops.Set[*note, noteSnap], store agentrun.StoreI) (host *noteHost, coord *coordinator, cli *llm.Client, req llm.Request, ctx context.Context) {
 	t.Helper()
+	return coordRigCfg(t, bus, model, opTools, ops, store, nil)
+}
+
+// coordRigCfg is coordRigWith with the host's agent service configured by
+// configure, after the rig's own settings, and with more apps registered
+// beside the notes.
+func coordRigCfg(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opTools bool, ops *appops.Set[*note, noteSnap], store agentrun.StoreI,
+	configure func(cfg *agent.Config), more ...app.Manifest) (host *noteHost, coord *coordinator, cli *llm.Client, req llm.Request, ctx context.Context) {
+	t.Helper()
 	var llmJournal llm.JournalCheckerI = llm.AcceptAnyJournal{}
 	var intents agent.IntentCheckerI = agent.AcceptAnyIntent{}
 	if store != nil {
@@ -406,6 +418,9 @@ func coordRigWith(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opToo
 		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.Topics()[0]}, Operations: ops.Catalog(),
 		Help: fstest.MapFS{"overview.md": {Data: []byte("# Notes\n\nA note holds one text.\n\n## Tidying\n\nTidy a note by replacing its text with set_note.\n")}}},
 		func() (app.AppI, error) { return nil, nil }))
+	for _, m := range more {
+		require.NoError(t, reg.RegisterFactory(m, func() (app.AppI, error) { return nil, nil }))
+	}
 	host = &noteHost{ops: ops, engines: map[uint64]*opengine.Engine{}, notes: map[uint64]*note{}}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -420,7 +435,11 @@ func coordRigWith(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opToo
 		_ = buscodec.Reply(hostClient.Publish, msg.Reply, opwire.CallReply{V: opwire.WireVersion, Outcome: host.submit(msg.Context(), key, op, req)})
 	})
 	require.NoError(t, err)
-	asvc, err := agent.NewService(ctx, bus, zerolog.Nop(), agent.Config{Journal: intents, Registry: reg, Host: host, TestGrants: true, Pace: time.Millisecond})
+	acfg := agent.Config{Journal: intents, Registry: reg, Host: host, TestGrants: true, Pace: time.Millisecond}
+	if configure != nil {
+		configure(&acfg)
+	}
+	asvc, err := agent.NewService(ctx, bus, zerolog.Nop(), acfg)
 	require.NoError(t, err)
 	t.Cleanup(asvc.Close)
 

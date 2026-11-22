@@ -480,8 +480,8 @@ func stripPixelEntries(ctx context.Context, w *agentrun.Writer) (stripped bool, 
 }
 
 // effectOf is the declared effect class of a tool call (ADR-0269 §SD5):
-// the operation's for call_operation and a typed tool, read from the
-// window's app's catalog; for the coordinator's own tools, document for
+// the operation's for call_operation, a typed tool and a direct tool, read
+// from the app's catalog; for the coordinator's own tools, document for
 // the artefact's and its images' writes and captures, none for the
 // questions and the views, view for request_access, open_window,
 // arrange_windows, raise_window, place_window, close_window, point_out,
@@ -494,6 +494,9 @@ func (inst *coordinator) effectOf(ctx context.Context, name string, arguments st
 	inst.mu.Unlock()
 	if typed {
 		return inst.operationEffect(ctx, t.window, t.op)
+	}
+	if d, direct := inst.directOf(name); direct {
+		return directEffect(d)
 	}
 	if name == "call_operation" {
 		var args struct {

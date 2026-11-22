@@ -61,17 +61,19 @@ func schemaValue(s string) (v jsontext.Value) {
 }
 
 type describedOperation struct {
-	Name         string         `json:"name"`
-	Summary      string         `json:"summary"`
-	Class        string         `json:"class"`
-	Effect       string         `json:"effect"`
-	Reads        []string       `json:"reads,omitempty"`
-	Writes       []string       `json:"writes,omitempty"`
-	Refs         []string       `json:"refs,omitempty"`
-	Follows      []string       `json:"follows,omitempty"`
-	Untrusted    bool           `json:"untrusted,omitempty"`
-	Gesture      string         `json:"gesture,omitempty"`
-	Consent      string         `json:"consent,omitempty"`
+	Name      string   `json:"name"`
+	Summary   string   `json:"summary"`
+	Class     string   `json:"class"`
+	Effect    string   `json:"effect"`
+	Reads     []string `json:"reads,omitempty"`
+	Writes    []string `json:"writes,omitempty"`
+	Refs      []string `json:"refs,omitempty"`
+	Follows   []string `json:"follows,omitempty"`
+	Untrusted bool     `json:"untrusted,omitempty"`
+	Gesture   string   `json:"gesture,omitempty"`
+	Consent   string   `json:"consent,omitempty"`
+	// Tool is the operation's direct tool, which calls it without a window.
+	Tool         string         `json:"tool,omitempty"`
 	ArgsSchema   jsontext.Value `json:"args_schema,omitempty"`
 	ResultSchema jsontext.Value `json:"result_schema,omitempty"`
 }
@@ -85,6 +87,8 @@ type describedApp struct {
 	App     string `json:"app"`
 	Display string `json:"display"`
 	Summary string `json:"summary,omitempty"`
+	// WhenToUse is the app's advice on when to use it.
+	WhenToUse string `json:"when_to_use,omitempty"`
 	// Help says read_help has documentation for the app.
 	Help       bool                 `json:"help,omitempty"`
 	Resources  []describedResource  `json:"resources,omitempty"`
@@ -92,20 +96,32 @@ type describedApp struct {
 }
 
 // describeView is what the model reads of describe_app: the schemas as JSON
-// objects rather than text holding JSON.
-func describeView(apps []agent.AppOperations) (out []describedApp) {
+// objects rather than text holding JSON, and each direct operation's tool
+// among directs.
+func describeView(apps []agent.AppOperations, directs []directOp) (out []describedApp) {
 	out = make([]describedApp, 0, len(apps))
 	for _, a := range apps {
-		d := describedApp{App: a.App, Display: a.Display, Summary: a.Summary, Help: a.Help, Operations: make([]describedOperation, 0, len(a.Operations))}
+		d := describedApp{App: a.App, Display: a.Display, Summary: a.Summary, WhenToUse: a.WhenToUse, Help: a.Help, Operations: make([]describedOperation, 0, len(a.Operations))}
 		for _, r := range a.Resources {
 			d.Resources = append(d.Resources, describedResource{Name: r.Name, Summary: r.Summary})
 		}
 		for _, o := range a.Operations {
 			d.Operations = append(d.Operations, describedOperation{Name: o.Name, Summary: o.Summary, Class: o.Class, Effect: o.Effect,
 				Reads: o.Reads, Writes: o.Writes, Refs: o.Refs, Follows: o.Follows, Untrusted: o.Untrusted, Gesture: o.Gesture, Consent: o.Consent,
-				ArgsSchema: schemaValue(o.ArgsSchema), ResultSchema: schemaValue(o.ResultSchema)})
+				Tool: directToolFor(directs, a.App, o.Name), ArgsSchema: schemaValue(o.ArgsSchema), ResultSchema: schemaValue(o.ResultSchema)})
 		}
 		out = append(out, d)
+	}
+	return
+}
+
+// directToolFor is the direct tool of op in appId among directs, empty for
+// none.
+func directToolFor(directs []directOp, appId string, op string) (name string) {
+	for _, d := range directs {
+		if d.app == appId && d.op == op {
+			return d.name
+		}
 	}
 	return
 }
@@ -265,8 +281,16 @@ func withReason(argsSchema string) (v jsontext.Value, titled bool) {
 }
 
 // withProperties adds properties to an object schema, never over one the
-// schema has; added says whether title was among those added.
+// schema has; titled says whether title was among those added.
 func withProperties(argsSchema string, add map[string]any) (v jsontext.Value, titled bool) {
+	v, added := withPropertiesAdded(argsSchema, add)
+	return v, added["title"]
+}
+
+// withPropertiesAdded is withProperties saying which of the properties it
+// added.
+func withPropertiesAdded(argsSchema string, add map[string]any) (v jsontext.Value, added map[string]bool) {
+	added = make(map[string]bool, len(add))
 	s := map[string]any{}
 	if argsSchema != "" {
 		_ = json.Unmarshal([]byte(argsSchema), &s)
@@ -286,16 +310,14 @@ func withProperties(argsSchema string, add map[string]any) (v jsontext.Value, ti
 			continue
 		}
 		props[k] = p
-		if k == "title" {
-			titled = true
-		}
+		added[k] = true
 	}
 	s["properties"] = props
 	b, err := json.Marshal(s, json.Deterministic(true))
 	if err != nil {
-		return schema(`{"type":"object"}`), false
+		return schema(`{"type":"object"}`), map[string]bool{}
 	}
-	return jsontext.Value(b), titled
+	return jsontext.Value(b), added
 }
 
 type helpSection struct {

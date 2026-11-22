@@ -53,6 +53,7 @@ type wireOperation struct {
 	Refs         []string `json:"refs,omitempty"`
 	Follows      []string `json:"follows,omitempty"`
 	Untrusted    bool     `json:"untrusted,omitempty"`
+	Direct       bool     `json:"direct,omitempty"`
 	Gesture      string   `json:"gesture,omitempty"`
 	Consent      string   `json:"consent,omitempty"`
 	ArgsSchema   string   `json:"args_schema,omitempty"`
@@ -63,6 +64,8 @@ type wireApp struct {
 	App     string `json:"app"`
 	Display string `json:"display"`
 	Summary string `json:"summary,omitempty"`
+	// WhenToUse is the app's advice to an agent on when to use it.
+	WhenToUse string `json:"when_to_use,omitempty"`
 	// Help says the app ships inline help, read with SubjectHelp.
 	Help       bool            `json:"help,omitempty"`
 	Resources  []wireResource  `json:"resources,omitempty"`

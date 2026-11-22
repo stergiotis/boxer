@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opjson"
@@ -195,10 +196,20 @@ type OperationSpec struct {
 	// reference or a data handle — rather than literal values.
 	Refs []string
 	// Follows names effects that follow from the operation, in prose: "a
-	// parameter write reruns a Live query".
+	// parameter write reruns a Live query". A Direct operation's tool
+	// description carries its leading lines, up to a bound, in every
+	// request: put first what a model needs on every call.
 	Follows []string
 	// Agents exposes the operation to agents. Off unless declared.
 	Agents bool
+	// Direct offers the operation to an agent's model as a tool of its own,
+	// named by the app and the operation, whether or not a window of the
+	// app is open: a call to it asks for access to the app and opens a
+	// window of it when the task has neither, then calls the operation
+	// there. It suits the one or two operations an app is reached for, such
+	// as running a query. Only an operation Agents exposes is direct, and a
+	// catalog declares at most MaxDirectOperations.
+	Direct bool
 	// Untrusted marks output that may carry content an attacker can
 	// influence: cells, documents, titles.
 	Untrusted bool
@@ -271,6 +282,10 @@ type OperationsCatalog struct {
 	Operations []OperationSpec
 }
 
+// MaxDirectOperations bounds the direct operations of one catalog: each is
+// a tool in every request a model is sent, whether the app is used or not.
+const MaxDirectOperations = 2
+
 var operationNameRe = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 // ValidOperationName reports whether s may name an operation or a resource.
@@ -330,6 +345,7 @@ func (inst *OperationsCatalog) Validate() (err error) {
 	}
 	names := make(map[string]bool, len(inst.Operations))
 	classes := make(map[string]OperationClassE, len(inst.Operations))
+	direct := 0
 	for _, o := range inst.Operations {
 		if problem := o.problem(resources); problem != "" {
 			return &CatalogError{Operation: o.Name, Problem: problem}
@@ -339,6 +355,12 @@ func (inst *OperationsCatalog) Validate() (err error) {
 		}
 		names[o.Name] = true
 		classes[o.Name] = o.Class
+		if o.Direct {
+			direct++
+			if direct > MaxDirectOperations {
+				return &CatalogError{Operation: o.Name, Problem: "a catalog declares at most " + strconv.Itoa(MaxDirectOperations) + " direct operations"}
+			}
+		}
 	}
 	for _, o := range inst.Operations {
 		// A dry-run twin is a query of the same catalog that takes the
@@ -370,6 +392,8 @@ func (inst OperationSpec) problem(resources map[string]bool) (problem string) {
 		return "unspecified class"
 	case !slices.Contains(AllOperationEffects, inst.Effect):
 		return "unspecified effect"
+	case inst.Direct && !inst.Agents:
+		return "a direct operation is a tool of an agent's model; it declares Agents"
 	}
 	// The stateful-tool contract (ADR-0315 §SD4–§SD7): each field is one
 	// of its enumerated values or unspecified; a rebuild class is a

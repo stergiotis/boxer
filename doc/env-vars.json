@@ -545,6 +545,18 @@
       }
     },
     {
+      "name": "BOXER_CHAT_DIRECT_TOOLS",
+      "type": "bool",
+      "default": "true",
+      "description": "offer each operation an app marks direct as a tool of its own, <app alias>_<operation>, in every request of a chat with Apps on, whether or not a window of the app is open; a call asks for access to the app and opens a window of it when the task has neither",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
       "name": "BOXER_CHAT_DRAFT",
       "type": "string",
       "description": "text in the chat app's composer when a window opens; for scenes and demos",

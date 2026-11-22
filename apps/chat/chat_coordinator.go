@@ -209,6 +209,15 @@ type coordinator struct {
 	typed      map[string]typedOp
 	opCache    map[string][]agent.Operation
 	windowApps map[uint64]string
+	// direct offers the apps' direct operations as tools of their own;
+	// directs are those tools, read once (directsBuilt); directWindows is
+	// the window each direct call ran in, by call key, and directLast the
+	// window the last direct call into each app used (chat_coordinator_direct.go).
+	direct        bool
+	directs       []directOp
+	directsBuilt  bool
+	directWindows map[string]uint64
+	directLast    map[string]uint64
 	// resultIds are the result ids the windows' queries named, by call
 	// key, for the citations that rest on them (chat_cite.go).
 	resultIds map[string]uint64
@@ -286,7 +295,8 @@ func newCoordinatorIn(parent *lifetime.Scope, cli *agent.Client, kq *keelsonquer
 	inst = &coordinator{cli: cli, kq: kq, conversation: conversation, opTools: OperationToolsSeed.Get(), ask: &asker{}, steps: &turnSteps{},
 		ceiling: defaultPermissions().ceiling(true), store: agentrun.NewMemStore(),
 		pendingCalls: make(map[string]pendingCall), refused: make(map[string]string), typed: make(map[string]typedOp), opCache: make(map[string][]agent.Operation), windowApps: make(map[uint64]string),
-		opEffects: make(map[string]map[string]string), resultIds: make(map[string]uint64), scope: lifetime.New(parent), confinedTier: fallbackConfinedTier()}
+		opEffects: make(map[string]map[string]string), resultIds: make(map[string]uint64), scope: lifetime.New(parent), confinedTier: fallbackConfinedTier(),
+		direct: DirectToolsEnv.Get(), directWindows: make(map[string]uint64), directLast: make(map[string]uint64)}
 	inst.scope.OnDrained(inst.closeJournal)
 	inst.ask.clock = &inst.stops.clock
 	return
@@ -506,8 +516,9 @@ func cleanTitle(s string) (t string) {
 func (inst *coordinator) callTitle(name string, args map[string]any) (title string) {
 	inst.mu.Lock()
 	t, typed := inst.typed[name]
+	d, direct := inst.directOfLocked(name)
 	inst.mu.Unlock()
-	if typed && !t.titled {
+	if typed && !t.titled || direct && !d.titled {
 		return
 	}
 	title, _ = args["title"].(string)
@@ -540,9 +551,10 @@ func (inst *coordinator) offers() (apps bool, questions bool) {
 // tools are what the model is given, a projection of the registry under
 // what the conversation offers now: ask_user with Questions on; the
 // artefact's tools with an artefact, the writes under a write policy; with
-// Apps on the fixed tools, and with operation tools on a typed tool per
-// operation of the task's windows; otherwise operation schemas load on
-// demand through describe_app (ADR-0269 §SD3).
+// Apps on the fixed tools, then the apps' direct operations, the same in
+// every round, and with operation tools on a typed tool per operation of
+// the task's windows; otherwise operation schemas load on demand through
+// describe_app (ADR-0269 §SD3).
 func (inst *coordinator) tools(ctx context.Context) (out []openaichat.Tool) {
 	offer := inst.offerNow()
 	for i := range coordinatorTools {
@@ -552,6 +564,12 @@ func (inst *coordinator) tools(ctx context.Context) (out []openaichat.Tool) {
 	}
 	if !offer.apps {
 		return
+	}
+	for _, d := range inst.directOps(ctx) {
+		// The registry's tool of the same name is the one dispatched.
+		if lookupTool(d.name) == nil {
+			out = append(out, d.tool)
+		}
 	}
 	inst.mu.Lock()
 	typed := inst.opTools
@@ -747,6 +765,7 @@ func (inst *coordinator) dropGrant() (dropped bool) {
 	dropped = inst.grant.Handle != ""
 	inst.grant = agent.Grant{}
 	clear(inst.typed)
+	clear(inst.directLast)
 	return
 }
 
@@ -787,6 +806,9 @@ func (inst *coordinator) dispatch(ctx context.Context, o toolOrigin, call openai
 		}
 		return inst.call(ctx, o, call.Id, map[string]any{"window": float64(t.window), "operation": t.op, "args": opArgs, "reason": reason})
 	}
+	if d, isDirect := inst.directOf(call.Name); isDirect {
+		return inst.directCall(ctx, o, call.Id, d, args)
+	}
 	return "error: no tool " + call.Name, "unknown tool " + call.Name
 }
 
@@ -799,7 +821,7 @@ func (inst *coordinator) describeApp(ctx context.Context, asked agent.Asked, arg
 		return "error: " + err.Error(), "describe: " + err.Error()
 	}
 	inst.noteEffects(apps)
-	b, _ := json.Marshal(describeView(apps))
+	b, _ := json.Marshal(describeView(apps, inst.directOps(ctx)))
 	return string(b), "described " + strconv.Itoa(len(apps)) + " app(s)"
 }
 
@@ -1057,9 +1079,20 @@ type callOutcome struct {
 	DataHandle string `json:"data_handle,omitempty"`
 	// Next, on a refusal, is what would let the call through.
 	Next *nextStep `json:"next,omitempty"`
+	// Window, Opened and Access answer a direct tool's call: the window it
+	// ran in, that the call opened it, and the access it was granted.
+	Window uint64 `json:"window,omitzero"`
+	Opened bool   `json:"opened,omitzero"`
+	Access string `json:"access,omitempty"`
 }
 
 func (inst *coordinator) call(ctx context.Context, o toolOrigin, toolCall string, args map[string]any) (content string, activity string) {
+	return inst.callWith(ctx, o, toolCall, args, nil)
+}
+
+// callWith is call; place, set for a direct tool, is where the call runs
+// and what it did on its way, which the answer states.
+func (inst *coordinator) callWith(ctx context.Context, o toolOrigin, toolCall string, args map[string]any, place *directPlace) (content string, activity string) {
 	h := inst.handle()
 	if h == "" {
 		return "error: no task yet; call request_access first", "call_operation: no task"
@@ -1112,6 +1145,9 @@ func (inst *coordinator) call(ctx context.Context, o toolOrigin, toolCall string
 		return "error: " + err.Error(), where + ": " + err.Error()
 	}
 	co := callOutcome{Phase: out.Phase, Reason: out.Reason, Revisions: out.Revisions, Next: inst.nextFor(instance, op, out.Remedy)}
+	if place != nil {
+		co.Window, co.Opened, co.Access = place.window, place.opened, place.access
+	}
 	switch out.Phase {
 	case "refused", "denied", "conflict":
 		inst.refuse(out.Reason)

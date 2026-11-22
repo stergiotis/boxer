@@ -323,9 +323,9 @@ func (inst *Service) describe(msg *app.Msg) (rep wireDescribeReply, req wireDesc
 		if (m.Kind == app.KindApplet || m.Kind == app.KindChatlet || m.Kind == app.KindDashboardlet || m.Kind == app.KindNotebooklet) && req.App == "" && search == "" {
 			continue
 		}
-		appHit := search == "" || containsFold(string(m.Id), search) || containsFold(m.Display, search) || containsFold(m.Summary, search) ||
+		appHit := search == "" || containsFold(string(m.Id), search) || containsFold(m.Display, search) || containsFold(m.Summary, search) || containsFold(m.WhenToUse, search) ||
 			slices.ContainsFunc(m.Keywords, func(k string) bool { return containsFold(k, search) })
-		entry := wireApp{App: string(m.Id), Display: m.Display, Summary: m.Summary, Help: m.Help != nil}
+		entry := wireApp{App: string(m.Id), Display: m.Display, Summary: m.Summary, WhenToUse: m.WhenToUse, Help: m.Help != nil}
 		var ops []app.OperationSpec
 		if m.Operations != nil {
 			ops = m.Operations.Operations
@@ -380,7 +380,7 @@ func usesResource(ops []wireOperation, name string) (ok bool) {
 func wireOperationOf(m app.Manifest, o app.OperationSpec, withSchemas bool) (w wireOperation) {
 	w = wireOperation{
 		Name: o.Name, Version: o.Version, Summary: o.Summary, Class: o.Class.String(), Effect: o.Effect.String(),
-		Reads: o.Reads, Writes: o.Writes, Refs: o.Refs, Follows: o.Follows, Untrusted: o.Untrusted, Gesture: o.Gesture,
+		Reads: o.Reads, Writes: o.Writes, Refs: o.Refs, Follows: o.Follows, Untrusted: o.Untrusted, Direct: o.Direct, Gesture: o.Gesture,
 		Consent: o.Consent.Pattern(),
 	}
 	if withSchemas {

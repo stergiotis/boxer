@@ -83,7 +83,10 @@ type Operation struct {
 	Refs      []string
 	Follows   []string
 	Untrusted bool
-	Gesture   string
+	// Direct says the app offers the operation to a model as a tool of its
+	// own, which opens a window of the app when the task has none.
+	Direct  bool
+	Gesture string
 	// Consent is the grant destination under which a consequential call is
 	// applied without the person's confirmation: "publish:<bundle prefix>".
 	Consent      string
@@ -91,12 +94,14 @@ type Operation struct {
 	ResultSchema string
 }
 
-// AppOperations is one app's operations agents may call. Help says the
-// app ships inline help, read with [Client.Help].
+// AppOperations is one app's operations agents may call. WhenToUse is the
+// app's advice on when to use it; Help says the app ships inline help, read
+// with [Client.Help].
 type AppOperations struct {
 	App        string
 	Display    string
 	Summary    string
+	WhenToUse  string
 	Help       bool
 	Resources  []Resource
 	Operations []Operation
@@ -156,7 +161,7 @@ func (inst *Client) Describe(ctx context.Context, r DescribeRequest) (apps []App
 		return
 	}
 	for _, a := range rep.Apps {
-		out := AppOperations{App: a.App, Display: a.Display, Summary: a.Summary, Help: a.Help}
+		out := AppOperations{App: a.App, Display: a.Display, Summary: a.Summary, WhenToUse: a.WhenToUse, Help: a.Help}
 		for _, res := range a.Resources {
 			out.Resources = append(out.Resources, Resource(res))
 		}
