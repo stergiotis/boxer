@@ -104,6 +104,15 @@ relied on the old behaviour.
   has drawn for 36000 frames, and `U64Edit` drafts age the same way; a plot
   drawn again after that starts from its defaults (no ADR; `retainFrames` in
   `implot` holds the age).
+- **A number written against a word is a syntax error.** `nanopass.Parse`
+  and `ParseCanonical` refuse `1A`, `00FROM`, `0b101` and `1_000`, with the
+  position. ClickHouse reads each as one token — an identifier, or the
+  numbers 5 and 1000 — and the grammars read a number and a separate word,
+  so the pipeline used to send a statement with another meaning. A statement
+  that relied on the spelling is written with a space, a backquoted
+  identifier, or the decimal number (no ADR; the note beside
+  `refuseNumberGluedToWord` records the lexer change that would accept
+  them).
 
 ## Stored data and formats
 
