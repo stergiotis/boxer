@@ -128,7 +128,7 @@ func TestFailuresBecomeDeadLettersAndTheRunGoesOn(t *testing.T) {
 	for _, r := range d.rows {
 		classes[r.Origin] = r.Class
 		require.Equal(t, "list", r.Topic)
-		require.NotZero(t, r.Id)
+		require.NotEmpty(t, r.NaturalKey)
 	}
 	require.Equal(t, map[string]string{"r0": "permanent", "r1": "permanent", "r3": "transient", "r4": "permanent"}, classes)
 	require.Equal(t, uint64(4), res.DeadLetters)

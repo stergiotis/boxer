@@ -162,7 +162,7 @@ func (inst *Lander) record(ctx context.Context, rec *kgo.Record) (err error) {
 // where it decoded.
 func (inst *Lander) deadLetter(ctx context.Context, rec *kgo.Record, item *stevedore.Item, cause error) (err error) {
 	row := deadletter.New(inst.now())
-	row.Id, row.NaturalKey = deadletter.Identity(rec.Topic, rec.Partition, rec.Offset)
+	row.NaturalKey = deadletter.NaturalKey(rec.Topic, rec.Partition, rec.Offset)
 	if item != nil {
 		row.Ref = item.Ref.Value()
 		row.Origin = item.Origin

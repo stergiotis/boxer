@@ -2,7 +2,6 @@ package deadletter
 
 import (
 	"context"
-	"encoding/binary"
 	"strconv"
 	"time"
 
@@ -25,7 +24,8 @@ type StoreI interface {
 	Flush(ctx context.Context) error
 }
 
-// Store writes dead letters through the facts-bound generated store.
+// Store writes dead letters through the facts-bound generated store, which
+// must have been built with the facts table's id generator as its Keys.
 type Store struct {
 	Store *stevedorefacts.StevedoreStore
 	// Run is the run id every row's origin carries (ADR-0330 §SD3). Empty
@@ -44,6 +44,11 @@ func (inst *Store) Add(ctx context.Context, row stevedorefacts.DeadLetter) (err 
 		if ri, riErr := runinfo.Get(); riErr == nil {
 			run = ri.RunId
 		}
+	}
+	// The row's id is minted from the facts table's stream, whatever the
+	// row came with (ADR-0405 §SD1).
+	if row.Id, err = inst.Store.MintKey(ctx); err != nil {
+		return eh.Errorf("dead letter row id: %w", err)
 	}
 	err = inst.Store.Begin(ctx, row.Id, row.Ts, stevedorefacts.StevedoreEnvelope{NaturalKey: row.NaturalKey}).
 		AddOrigin(stevedorefacts.Origin{Id: row.Id, Run: run}).
@@ -89,16 +94,17 @@ func New(ts time.Time) stevedorefacts.DeadLetter {
 	return stevedorefacts.DeadLetter{Ts: ts, Kind: Kind}
 }
 
-// Identity derives a row's id and natural key from where the message or
+// NaturalKey is a row's natural key: a digest of where the message or
 // request sat — a topic, a partition and an offset, or a source name and a
-// position — so a redelivered failure is the same row again.
-func Identity(topic string, partition int32, offset int64) (id uint64, key []byte) {
+// position — so a failure delivered again is recognised as the same one.
+// The row's id is not derived from it: the store mints one per row
+// (ADR-0405), so a redelivery is another row under the same natural key.
+func NaturalKey(topic string, partition int32, offset int64) (key []byte) {
 	h := blake3.New(32, nil)
 	_, _ = h.Write([]byte(topic))
 	_, _ = h.Write([]byte{0})
 	_, _ = h.Write([]byte(strconv.FormatInt(int64(partition), 10)))
 	_, _ = h.Write([]byte{0})
 	_, _ = h.Write([]byte(strconv.FormatInt(offset, 10)))
-	key = h.Sum(nil)
-	return binary.BigEndian.Uint64(key[:8]), key
+	return h.Sum(nil)
 }

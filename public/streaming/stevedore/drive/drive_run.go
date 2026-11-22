@@ -301,11 +301,12 @@ func (inst *runner) landOne(ctx context.Context, p *pending) (err error) {
 	return
 }
 
-// deadLetter records one request given up on. Its row is keyed by the
-// source's name and the request's origin, so a rerun writes the same row.
+// deadLetter records one request given up on. Its natural key is the
+// source's name and the request's origin, so a rerun's row is recognised as
+// the same failure.
 func (inst *runner) deadLetter(ctx context.Context, req stevedore.Request, cause error) (err error) {
 	row := deadletter.New(inst.now())
-	row.Id, row.NaturalKey = deadletter.Identity(inst.src.Name()+"/"+req.Origin, 0, 0)
+	row.NaturalKey = deadletter.NaturalKey(inst.src.Name()+"/"+req.Origin, 0, 0)
 	row.Ref = stevedore.ReferenceOf(req).Value()
 	row.Origin = req.Origin
 	row.Class = stevedore.ClassOf(cause).String()

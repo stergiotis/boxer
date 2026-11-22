@@ -144,7 +144,7 @@ func TestPermanentFailuresBecomeDeadLetters(t *testing.T) {
 	require.Equal(t, int64(5), d.rows[1].Offset)
 	require.Equal(t, "not an envelope", string(d.rows[1].Message))
 	require.Zero(t, d.rows[1].Ref, "an envelope that did not decode has no reference")
-	require.NotEqual(t, d.rows[0].Id, d.rows[1].Id)
+	require.NotEqual(t, d.rows[0].NaturalKey, d.rows[1].NaturalKey)
 	require.Equal(t, 1, s.landed)
 	require.Equal(t, uint64(2), l.DeadLettered())
 }

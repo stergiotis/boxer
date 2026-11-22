@@ -14,9 +14,11 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/runinfo"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 	pkafka "github.com/stergiotis/boxer/public/streaming/persisted/kafka"
 	"github.com/stergiotis/boxer/public/streaming/stevedore"
 	"github.com/stergiotis/boxer/public/streaming/stevedore/deadletter"
@@ -105,6 +107,14 @@ func openDeadLetters(ctx context.Context, cmd *cli.Command) (dead deadletter.Sto
 		if cfg.ReadTable, terr = factsschema.ReadTableFor(table); terr != nil {
 			return nil, closeFn, eh.Errorf("read table: %w", terr)
 		}
+		// Every row's id is minted from the facts table's stream, leased
+		// through the lease table in the table's database (ADR-0405).
+		database, _ := recordstore.SplitTableRef(table)
+		keys, kerr := chstore.NewRowIdGenerator(exec, chstore.Config{Database: database})
+		if kerr != nil {
+			return nil, closeFn, eh.Errorf("row id generator: %w", kerr)
+		}
+		cfg.Keys = keys
 		store, oerr := stevedorefacts.OpenStevedoreStore(ctx, exec, nil, cfg)
 		if oerr != nil {
 			return nil, closeFn, eh.Errorf("open dead-letter store: %w", oerr)
