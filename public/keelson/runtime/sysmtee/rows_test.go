@@ -81,6 +81,11 @@ func TestCpuInfoRow_IsADistinctSeriesFromTheSample(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NotEqual(t, sample.Id, info.Id)
+	assert.NotEqual(t, sample.NaturalKey, info.NaturalKey, "the natural key names the descriptor's series, not the sample's")
+	want, err := entityNaturalKey("box1", "cpu/info")
+	require.NoError(t, err)
+	assert.Equal(t, want, info.NaturalKey)
+	assert.Equal(t, entityKey("box1", "cpu/info"), info.Id, "the id digests the pair the natural key records")
 	assert.Equal(t, "Test CPU", info.ModelName)
 	assert.EqualValues(t, 8, info.LogicalCores)
 	assert.Equal(t, kindCpuInfo, info.Kind)

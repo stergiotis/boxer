@@ -24,6 +24,9 @@ const (
 // the same thing.
 const (
 	domainCpu = string(sysmsnap.DomainCPU)
+	// domainCpuInfo is the series of the per-host CPU descriptor, beside
+	// the sample's.
+	domainCpuInfo = domainCpu + "/info"
 	domainMem = string(sysmsnap.DomainMem)
 )
 
@@ -83,12 +86,14 @@ func cpuRow(host string, snap *sysmsnap.CPUSnapshot, ts time.Time) (row sysmfact
 // snapshot as the sample — the collector reads them once at construction and
 // restamps them on every tick — so the split is the tee's, not the plane's.
 func cpuInfoRow(host string, snap *sysmsnap.CPUSnapshot, ts time.Time) (row sysmfacts.SysCpuInfo, err error) {
-	nk, err := entityNaturalKey(host, domainCpu)
+	// The descriptor is a series of its own, and its natural key names that
+	// series, as every other row's does: the pair its Id digests.
+	nk, err := entityNaturalKey(host, domainCpuInfo)
 	if err != nil {
 		return
 	}
 	row = sysmfacts.SysCpuInfo{
-		Id:           entityKey(host, domainCpu+"/info"),
+		Id:           entityKey(host, domainCpuInfo),
 		NaturalKey:   nk,
 		Ts:           ts,
 		Kind:         kindCpuInfo,
