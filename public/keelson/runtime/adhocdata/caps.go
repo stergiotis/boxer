@@ -49,3 +49,18 @@ func EventsCap(reason string) (c app.SubjectFilter) {
 func BundleEventsCap(reason string) (c app.SubjectFilter) {
 	return app.SubjectFilter{Pattern: SubjectBundleEventAll, Direction: app.CapDirectionSub, Reason: reason}
 }
+
+// ExposeCap exposes a dataset to readers on this machine (ADR-0407).
+func ExposeCap(reason string) (c app.SubjectFilter) {
+	return app.SubjectFilter{Pattern: SubjectExpose, Direction: app.CapDirectionPub, Reason: reason}
+}
+
+// ExposeRevokeCap revokes an exposure.
+func ExposeRevokeCap(reason string) (c app.SubjectFilter) {
+	return app.SubjectFilter{Pattern: SubjectExposeRevoke, Direction: app.CapDirectionPub, Reason: reason}
+}
+
+// ExposeListCap lists the exposures.
+func ExposeListCap(reason string) (c app.SubjectFilter) {
+	return app.SubjectFilter{Pattern: SubjectExposeList, Direction: app.CapDirectionPub, Reason: reason}
+}

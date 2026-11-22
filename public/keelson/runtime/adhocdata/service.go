@@ -269,6 +269,10 @@ type Service struct {
 	// auditHook, when set, sees every audit record as it is made; the
 	// package's tests set it, production leaves the trail the one record.
 	auditHook atomic.Pointer[func(AuditRecord)]
+	// exposureHook is auditHook for exposure records.
+	exposureHook atomic.Pointer[func(ExposureAuditRecord)]
+	// exp holds the live exposures (ADR-0407); its lock is taken after mu.
+	exp exposures
 
 	mu      sync.RWMutex
 	live    map[string]*record
@@ -312,6 +316,7 @@ func NewService(cfg Config) (inst *Service, err error) {
 		bundles:          make(map[string]*bundleRec),
 		retiredRevisions: make(map[string]uint64),
 		leaving:          make(map[string]*time.Timer),
+		exp:              exposures{byId: make(map[string]*exposure), byDigest: make(map[[32]byte]*exposure)},
 	}
 	inst.unloaded = sync.NewCond(&inst.mu)
 	// A probe publish is not worth a start-up dependency on the base
@@ -334,6 +339,9 @@ func NewService(cfg Config) (inst *Service, err error) {
 			return nil, subErr
 		}
 	}
+	// The listener serving this registry opens exposed datasets through
+	// the service (ADR-0407).
+	reg.SetExposureSource(inst)
 	return inst, nil
 }
 
@@ -347,6 +355,7 @@ func (inst *Service) Close(context.Context) (err error) {
 		return
 	}
 	inst.closed = true
+	inst.reg.SetExposureSource(nil)
 	recs := make([]*record, 0, len(inst.live)+len(inst.leaving))
 	for _, r := range inst.live {
 		recs = append(recs, r)
@@ -370,6 +379,7 @@ func (inst *Service) Close(context.Context) (err error) {
 	for _, u := range unsubs {
 		u()
 	}
+	inst.endAllExposures(context.Background())
 	for _, r := range recs {
 		inst.reg.Unregister(r.handle)
 		r.mu.RLock()
@@ -671,6 +681,12 @@ func (inst *Service) leaveLocked(rec *record) (ev Event) {
 	ev = Event{Op: EventOpRetracted, Handle: handle, Alias: rec.alias, Bundle: rec.bundle, Publisher: string(rec.owner.App), Revision: rec.revision}
 	nbytes := rec.bytes
 	rec.mu.RUnlock()
+	if inst.hasExposureOfLocked(ev.Alias) {
+		// An exposure of the alias lapses once no dataset it may serve is
+		// live; a read finds that out by itself, the sweep says so on the
+		// trail and in the catalog without waiting for one.
+		go inst.sweepExposures(context.Background())
+	}
 	inst.totalBytes -= nbytes
 	grace := inst.retractGrace
 	inst.leaving[handle] = time.AfterFunc(grace, func() {

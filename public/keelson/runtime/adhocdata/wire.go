@@ -156,6 +156,9 @@ func (inst *Service) subscribe(bus *inprocbus.Inst) (err error) {
 		{Pattern: SubjectBundleRetract, Direction: app.CapDirectionSub, Reason: "adhoc capability: retract a bundle (ADR-0288)"},
 		{Pattern: SubjectBundleResolve, Direction: app.CapDirectionSub, Reason: "adhoc capability: resolve a bundle (ADR-0288)"},
 		{Pattern: SubjectRead, Direction: app.CapDirectionSub, Reason: "adhoc capability: read a dataset whole (ADR-0288)"},
+		{Pattern: SubjectExpose, Direction: app.CapDirectionSub, Reason: "adhoc capability: expose a dataset to readers on this machine (ADR-0407)"},
+		{Pattern: SubjectExposeRevoke, Direction: app.CapDirectionSub, Reason: "adhoc capability: revoke an exposure (ADR-0407)"},
+		{Pattern: SubjectExposeList, Direction: app.CapDirectionSub, Reason: "adhoc capability: list the exposures (ADR-0407)"},
 		{Pattern: SubjectEventAll, Direction: app.CapDirectionPub, Reason: "adhoc: announce publish and retract"},
 		{Pattern: SubjectBundleEventAll, Direction: app.CapDirectionPub, Reason: "adhoc: announce bundle publish and retract (ADR-0288)"},
 		{Pattern: app.SubjectInstanceClosed, Direction: app.CapDirectionSub, Reason: "adhoc: retract what a closed instance published (ADR-0240 §SD5)"},
@@ -173,6 +176,9 @@ func (inst *Service) subscribe(bus *inprocbus.Inst) (err error) {
 		{SubjectBundleRetract, inst.handleRequest},
 		{SubjectBundleResolve, inst.handleRequest},
 		{SubjectRead, inst.handleRequest},
+		{SubjectExpose, inst.handleExposure},
+		{SubjectExposeRevoke, inst.handleExposure},
+		{SubjectExposeList, inst.handleExposure},
 		{app.SubjectInstanceClosed, inst.handleInstanceClosed},
 	}
 	for _, sub := range subs {
@@ -200,7 +206,9 @@ func (inst *Service) handleInstanceClosed(msg *app.Msg) {
 		inst.log.Warn().Err(err).Msg("adhocdata: decode instance-closed")
 		return
 	}
-	if n := inst.retractOwnedBy(context.WithoutCancel(msg.Context()), Identity{App: app.AppIdT(ev.AppId), Instance: ev.InstanceKey}); n > 0 {
+	who := Identity{App: app.AppIdT(ev.AppId), Instance: ev.InstanceKey}
+	inst.endExposuresBy(context.WithoutCancel(msg.Context()), who)
+	if n := inst.retractOwnedBy(context.WithoutCancel(msg.Context()), who); n > 0 {
 		inst.log.Info().Str("app", ev.AppId).Uint64("instance", ev.InstanceKey).Int("retracted", n).
 			Msg("adhocdata: instance closed; its datasets retracted")
 	}
