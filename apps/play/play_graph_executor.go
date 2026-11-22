@@ -58,6 +58,13 @@ func (inst clientExecutor) executeWithProgress(ctx context.Context, c compiledNo
 // whether the statement reads confined data, from the same resolution the
 // request is sent with.
 func (inst clientExecutor) executeLabelled(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(p runstream.Progress)) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, confined bool, err error) {
+	if inst.client == nil {
+		// A playground without a client (the demo tour's seeded one) has no
+		// endpoint to run on; a lane it opens reports that instead of
+		// dereferencing the client.
+		err = eh.Errorf("clientExecutor.execute: the window has no endpoint")
+		return
+	}
 	opts := inst.opts
 	if onProgress != nil && opts != nil {
 		o := *opts

@@ -455,3 +455,12 @@ func TestNodeLaneAbortThenFlipBackThenReturnRestarts(t *testing.T) {
 	require.Eventually(t, func() bool { return g.callCount() == calls+2 },
 		2*time.Second, time.Millisecond, "B executed a second time")
 }
+
+// A playground built without a client (the demo tour's) still opens lanes —
+// the completion panel's vocabulary probe is one. Running one must report
+// the missing endpoint, not dereference the client.
+func TestClientExecutorWithoutClientRefuses(t *testing.T) {
+	_, _, _, err := clientExecutor{}.execute(context.Background(), compiledNode{SQL: "SELECT 1"}, memory.NewGoAllocator())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no endpoint")
+}
