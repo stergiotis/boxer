@@ -103,7 +103,9 @@ boxer fs snapshot --mount 0x3BFE363BCF148002 --remote s3:bucket/prefix   # any r
 browser show the mount by that name; `--meta-only`, `--inline-max`,
 `--text-rule`, `--skip-ref-hash` and `--profile` mirror the policy fields
 below, and the tables are provisioned idempotently first unless
-`--no-provision` is given. `--database` names a store that lives outside the
+`--no-provision` is given — with `--name`, so is the facts table in the
+store's database that the record goes to, and under `--no-provision` a
+missing one stops the command before the walk. `--database` names a store that lives outside the
 default database (§1); every `boxer fs` verb takes it. The command prints the
 snapshot's instant and the walk's totals.
 

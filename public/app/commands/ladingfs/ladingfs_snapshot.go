@@ -16,9 +16,12 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingpolicy"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingremote"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/runinfo"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // newSnapshotCommand is `boxer fs snapshot`: walk one tree into the store as
@@ -31,7 +34,8 @@ func newSnapshotCommand() *cli.Command {
 		Usage:     "walk a directory (or an rclone remote) into the store as one snapshot",
 		ArgsUsage: "<dir | remote:path>",
 		Description: "Writes one complete snapshot of the tree under the mount id given. " +
-			"The store is provisioned idempotently first unless --no-provision is set. " +
+			"The store is provisioned idempotently first unless --no-provision is set, " +
+			"and with --name so is the facts table the policy record goes to. " +
 			"A failed walk leaves nothing a query can see; retry by running again. " +
 			"With --remote the argument is an rclone remote (\"remote:path\"), served " +
 			"through `rclone serve sftp --stdio`; a bare local path is refused there, " +
@@ -53,7 +57,7 @@ func newSnapshotCommand() *cli.Command {
 				Usage: "table profile for provisioning: corpus (few mounts, large files) or fleet (very many small trees); fixed at table creation"},
 			&cli.BoolFlag{Name: "no-provision", Usage: "do not create or finish the tables; only verify them"},
 			&cli.StringFlag{Name: "name",
-				Usage: "record the mount's declared policy under this name in boxer.facts (ladingingest.RecordPolicy); the book and the browser show it"},
+				Usage: "record the mount's declared policy under this name in the facts table of the store's database, boxer.facts by default (ladingingest.RecordPolicy); the book and the browser show it"},
 			&cli.StringFlag{Name: "store",
 				Usage: "the origin label written into the policy record beside --name; default is the database the store lives in"},
 			&cli.BoolFlag{Name: "remote", Usage: "the argument is an rclone remote (\"remote:path\"), not a local directory"},
@@ -110,6 +114,14 @@ func runSnapshot(ctx context.Context, cmd *cli.Command) (err error) {
 	if err != nil {
 		return eh.Errorf("%w", err)
 	}
+	var policies *ladingpolicy.PolicyStore
+	if cmd.String("name") != "" {
+		policies, err = openPolicyStore(ctx, exec, layout, !cmd.Bool("no-provision"))
+		if err != nil {
+			return
+		}
+		defer policies.Close()
+	}
 	stores := lading.NewStores(exec, layout)
 	defer stores.Meta.Close()
 	defer stores.Data.Close()
@@ -149,8 +161,6 @@ func runSnapshot(ctx context.Context, cmd *cli.Command) (err error) {
 	}
 
 	if name := cmd.String("name"); name != "" {
-		policies := ladingpolicy.NewPolicyStore(exec, nil, ladingpolicy.PolicyStoreConfig{Table: layout.PolicyTable()})
-		defer policies.Close()
 		store := cmd.String("store")
 		if store == "" {
 			store = layout.DatabaseName()
@@ -178,5 +188,31 @@ func runSnapshot(ctx context.Context, cmd *cli.Command) (err error) {
 		mount.Value(), res.Snap.UTC().Format(time.RFC3339Nano), res.ExpiresAt.UTC().Format(time.RFC3339),
 		res.Entries, res.Bytes, res.Blocks, res.Stored, res.Referenced, res.Skipped, res.Errors,
 		time.Since(started).Round(time.Millisecond))
+	return
+}
+
+// openPolicyStore opens the store the mount's policy record goes to: the
+// facts table in the layout's database. With provision it first sets that
+// table up as the facts store does — the table, unless an insert transform
+// keeps the facts in a deployment's own table, and the read surface the
+// book and the browser read the record through. The store is then checked,
+// so a missing or older table fails before the walk instead of after it.
+func openPolicyStore(ctx context.Context, exec recordstore.ExecutorI, layout ladingschema.Layout, provision bool) (st *ladingpolicy.PolicyStore, err error) {
+	if provision {
+		var stmts []string
+		stmts, err = chstore.SetupStatements(chstore.Config{Database: layout.DatabaseName(), Table: factsschema.TableName}, "")
+		if err != nil {
+			return nil, eh.Errorf("provision the policy table: %w", err)
+		}
+		for _, stmt := range stmts {
+			if err = exec.Exec(ctx, stmt); err != nil {
+				return nil, eb.Build().Str("table", layout.PolicyTable()).Errorf("provision the policy table: %w", err)
+			}
+		}
+	}
+	st, err = ladingpolicy.OpenPolicyStore(ctx, exec, nil, ladingpolicy.PolicyStoreConfig{Table: layout.PolicyTable()})
+	if err != nil {
+		err = eb.Build().Str("table", layout.PolicyTable()).Errorf("the policy table cannot take the record; without --no-provision it is set up: %w", err)
+	}
 	return
 }
