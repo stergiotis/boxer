@@ -105,8 +105,8 @@ func predictionCorpus() []struct {
 		{"bench_large", benchLargeSQL},
 		{"applet_9kb", runtimeTimelineAppletSQL},
 		// A table function's argument reads as a query, a name or an
-		// expression; the query alternative comes first.
-		{"table_arg_query", "SELECT * FROM view(SELECT x)"},
+		// expression; the query alternative comes first. The bare query,
+		// `view(SELECT x)`, is an island fixture below.
 		{"table_arg_paren_query", "SELECT * FROM f((SELECT x), 1)"},
 		{"table_arg_select_name", "SELECT * FROM f(SELECT, 1)"},
 	}
@@ -167,6 +167,7 @@ var llIslandFixtures = []struct {
 	{"between_then_format", "SELECT a FROM t WHERE a BETWEEN 1 AND 10 FORMAT CSV"},
 	{"between_parenthesised_low", "SELECT a BETWEEN (b AND c) AND d FROM t"},
 	{"view_of_select", "SELECT * FROM view(SELECT * FROM numbers(3))"},
+	{"view_of_select_column", "SELECT * FROM view(SELECT x)"},
 	{"bench_medium", benchMediumSQL},
 	{"bench_large", benchLargeSQL},
 }
