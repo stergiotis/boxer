@@ -36,6 +36,7 @@ package rowintern
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"regexp"
 	"strconv"
 	"strings"
@@ -173,6 +174,34 @@ func New(exec recordstore.ExecutorI, layout Layout, scope string, candidates ide
 	return
 }
 
+// ErrReadOnly is what a generator built by [NewReadOnly] returns when asked
+// for the id of a key that has none. Match with errors.Is.
+var ErrReadOnly = errors.New("rowintern: the generator is read-only and the key has no id")
+
+// NewReadOnly is the reader's generator for scope over the directory in
+// layout: it looks keys up under the stream tagValue names and gives no key
+// an id. [Internalizer.Lookup] and [Internalizer.Lookups] answer as they do
+// on any generator; [Internalizer.GetId] of a key without an id fails with
+// [ErrReadOnly]. It holds no lease and writes nothing.
+func NewReadOnly(exec recordstore.ExecutorI, layout Layout, scope string, tagValue identifier.TagValue) (inst *Internalizer, err error) {
+	if exec == nil {
+		return nil, eh.Errorf("rowintern: executor is nil")
+	}
+	if err = layout.validate(); err != nil {
+		return nil, err
+	}
+	if !scopePattern.MatchString(scope) {
+		return nil, eb.Build().Str("scope", scope).Errorf("rowintern: a scope is a name: letters, digits, '_', '.', '-', starting with a letter")
+	}
+	tag := tagValue.GetTag()
+	if !tag.IsValid() {
+		return nil, eb.Build().Uint64("tagValue", uint64(tagValue)).Errorf("rowintern: not a valid tag value")
+	}
+	inst = &Internalizer{exec: exec, layout: layout, scope: scope, tag: tag,
+		cache: make(map[string]identifier.TaggedId), maxCached: DefaultMaxCached}
+	return
+}
+
 // Scope is the scope this generator's keys live in.
 func (inst *Internalizer) Scope() string { return inst.scope }
 
@@ -224,6 +253,47 @@ func (inst *Internalizer) Lookup(ctx context.Context, naturalKey []byte) (id ide
 	return
 }
 
+// Lookups is [Internalizer.Lookup] for several keys in one statement per
+// [resolveChunk]: ids[i] and found[i] answer keys[i].
+func (inst *Internalizer) Lookups(ctx context.Context, keys [][]byte) (ids []identifier.TaggedId, found []bool, err error) {
+	ids = make([]identifier.TaggedId, len(keys))
+	found = make([]bool, len(keys))
+	var unknown []string
+	inst.mu.Lock()
+	for i, key := range keys {
+		if len(key) == 0 {
+			inst.mu.Unlock()
+			return nil, nil, eb.Build().Int("index", i).Errorf("rowintern: empty natural key")
+		}
+		if id, ok := inst.cache[string(key)]; ok {
+			ids[i], found[i] = id, true
+		} else {
+			unknown = append(unknown, string(key))
+		}
+	}
+	inst.mu.Unlock()
+	if len(unknown) == 0 {
+		return
+	}
+	resolved := make(map[string]identifier.TaggedId, len(unknown))
+	for lo := 0; lo < len(unknown); lo += resolveChunk {
+		got, rerr := inst.read(ctx, unknown[lo:min(lo+resolveChunk, len(unknown))])
+		if rerr != nil {
+			return nil, nil, rerr
+		}
+		for k, id := range got {
+			resolved[k] = id
+		}
+	}
+	inst.remember(resolved)
+	for i, key := range keys {
+		if id, ok := resolved[string(key)]; ok {
+			ids[i], found[i] = id, true
+		}
+	}
+	return
+}
+
 // GetIds resolves every key of keys, in order; a key named twice resolves
 // once. It costs the server at most three statements per [resolveChunk]
 // keys it has not seen: a read, an insert of the missing ones, and the read
@@ -267,6 +337,9 @@ func (inst *Internalizer) GetIds(ctx context.Context, keys [][]byte) (ids []iden
 			if id, ok := got[k]; ok {
 				resolved[k] = id
 				continue
+			}
+			if inst.candidates == nil {
+				return nil, nil, eb.Build().Str("scope", inst.scope).Errorf("%w", ErrReadOnly)
 			}
 			var c identifier.TaggedId
 			if c, _, err = inst.candidates.GetId(ctx, nil); err != nil {

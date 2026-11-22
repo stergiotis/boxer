@@ -112,6 +112,23 @@ func TestLookupDoesNotMint(t *testing.T) {
 	assert.Equal(t, want, got)
 	_, _, err = reader.Lookup(ctx, nil)
 	require.Error(t, err)
+
+	// A read-only generator holds no source of ids at all.
+	ro, err := NewReadOnly(exec, layout, "series", testTag)
+	require.NoError(t, err)
+	ids, founds, err := ro.Lookups(ctx, [][]byte{[]byte("unseen"), []byte("never")})
+	require.NoError(t, err)
+	assert.Equal(t, []bool{true, false}, founds)
+	assert.Equal(t, want, ids[0])
+	same, fresh, err := ro.GetId(ctx, []byte("unseen"))
+	require.NoError(t, err, "a key that has its id resolves")
+	assert.False(t, fresh)
+	assert.Equal(t, want, same)
+	_, _, err = ro.GetId(ctx, []byte("never"))
+	require.ErrorIs(t, err, ErrReadOnly)
+	_, found, err = reader.Lookup(ctx, []byte("never"))
+	require.NoError(t, err)
+	assert.False(t, found, "and nothing was recorded")
 }
 
 // A batch resolves in order; a key named twice is resolved once and is

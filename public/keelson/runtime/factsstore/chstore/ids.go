@@ -136,6 +136,20 @@ func NewKeyedIdGenerator(exec recordstore.ExecutorI, cfg Config, scope string) (
 	return rows.Keyed(scope)
 }
 
+// NewKeyedIdLookup is the reader's half of the facts table's keyed
+// generator for scope over exec: it looks natural keys up in the id
+// directory and gives none an id, holds no lease and writes nothing.
+func NewKeyedIdLookup(exec recordstore.ExecutorI, cfg Config, scope string) (lookup *rowintern.Internalizer, err error) {
+	if cfg.Database == "" {
+		return nil, eh.Errorf("chstore: keyed id lookup: cfg requires Database")
+	}
+	lookup, err = rowintern.NewReadOnly(exec, rowintern.Layout{Database: cfg.Database}, scope, cfg.RowIds.stream().Value())
+	if err != nil {
+		err = eh.Errorf("chstore: keyed id lookup: %w", err)
+	}
+	return
+}
+
 // NewRowIdGenerator is the facts table's id generator for cfg, over exec:
 // for a process that writes facts through a generated store and holds no
 // [Store]. cfg names the facts database, whose lease table the blocks come
