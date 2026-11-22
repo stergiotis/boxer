@@ -264,6 +264,47 @@ func TestLiveDenseOverlapDoesNotStall(t *testing.T) {
 	}, factWaitBudget, 500*time.Millisecond, "capture must advance past a window denser than BatchCap")
 }
 
+// TestLiveBackfillFloorHoldsPastTheFirstBatch pins the floor beyond an empty
+// destination. Once the first batch has landed the overlap reaches back to
+// watermark - WatermarkOverlap, and with the floor applied only while the
+// destination was empty that re-opened the minute before the floor: every
+// query the server ran then was captured, oldest first, ahead of the rest of
+// the events after the floor. Under BatchCap 20 a busy minute before the
+// floor outlasted the dense test's wait. Queries before the floor stay out,
+// and the ones after it land.
+func TestLiveBackfillFloorHoldsPastTheFirstBatch(t *testing.T) {
+	ctx := context.Background()
+	cli := chclient.New(chclient.ConfigFromEnv(), nil)
+	if cli.Ping(ctx) != nil {
+		t.Skipf("no live ClickHouse at %s", env.RedactURL(chclient.ConfigFromEnv().URL))
+	}
+	const before, after = 30, 60
+	prefix := fmt.Sprintf("it-queryruns-floor-%d-", time.Now().UnixNano())
+	for i := range before {
+		runTaggedQuery(t, fmt.Sprintf("%sbefore-%d", prefix, i), "")
+	}
+	// The floor is whole seconds: start it at the next one, which every query
+	// above precedes and every one below follows.
+	from := time.Now().Truncate(time.Second).Add(time.Second)
+	time.Sleep(time.Until(from))
+	for i := range after {
+		runTaggedQuery(t, fmt.Sprintf("%safter-%d", prefix, i), "")
+	}
+	require.NoError(t, cli.Exec(ctx, "SYSTEM FLUSH LOGS"))
+
+	const db = scratchDb + "_floor"
+	startScratch(t, cli, db, Config{BatchCap: 20, BackfillFrom: from})
+	count := func(which string) string {
+		return queryScalar(t, cli, fmt.Sprintf("SELECT count() FROM %s.facts WHERE startsWith(`id:naturalKey:y:4::0:`, '%s')", db, prefix+which))
+	}
+	require.Eventually(t, func() bool {
+		return count("after-") == fmt.Sprint(after)
+	}, factWaitBudget, 500*time.Millisecond, "the queries after the floor must land")
+	// A few more refreshes, each reaching back by the overlap.
+	time.Sleep(3 * time.Second)
+	require.Equal(t, "0", count("before-"), "a query before the floor must not be captured")
+}
+
 // TestLiveOldBackfillStaysDuplicateFree pins the MV anti-join window to the
 // watermark: backfilling history days old, every refresh re-serves at least
 // the row at the watermark, and a window anchored on now() missed all of

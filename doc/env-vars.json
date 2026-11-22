@@ -3349,7 +3349,7 @@
       "name": "IMZERO2_QUERYRUNS_BACKFILL",
       "type": "string",
       "default": "all",
-      "description": "how far a FIRST-BOOT backfill reaches: all (the source's whole retention), none (start at service start), or a duration such as 24h; ignored once the destination holds facts, so downtime catch-up is unaffected (ADR-0115)",
+      "description": "how far a FIRST-BOOT backfill reaches: all (the source's whole retention), none (start at service start), or a duration such as 24h; ignored once the destination holds facts older than it, so downtime catch-up is unaffected (ADR-0115)",
       "category": "observability",
       "sensitive": false,
       "cliFlagName": "backfill",

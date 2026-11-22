@@ -63,7 +63,7 @@ var (
 		Name:        "IMZERO2_QUERYRUNS_BACKFILL",
 		CliFlagName: "backfill",
 		Default:     BackfillAll,
-		Description: "how far a FIRST-BOOT backfill reaches: all (the source's whole retention), none (start at service start), or a duration such as 24h; ignored once the destination holds facts, so downtime catch-up is unaffected (ADR-0115)",
+		Description: "how far a FIRST-BOOT backfill reaches: all (the source's whole retention), none (start at service start), or a duration such as 24h; ignored once the destination holds facts older than it, so downtime catch-up is unaffected (ADR-0115)",
 		Category:    env.CategoryObservability,
 	})
 	Scope = env.NewCategorialString(env.Spec{
@@ -135,9 +135,10 @@ type Config struct {
 	// BackfillFrom bounds a first-boot backfill: with an empty destination
 	// the extract has no watermark to be newer than and otherwise reaches
 	// the source's whole retention. Zero keeps that behaviour; a non-zero
-	// value starts there instead. Ignored once the destination holds facts,
-	// so a restart after downtime still catches up over the gap. Left zero,
-	// New resolves IMZERO2_QUERYRUNS_BACKFILL against the current time.
+	// value starts there instead, and later refreshes do not reach back past
+	// it. Ignored once the destination holds facts older than it, so a
+	// restart after downtime still catches up over the gap. Left zero, New
+	// resolves IMZERO2_QUERYRUNS_BACKFILL against the current time.
 	BackfillFrom time.Time
 	// ReadTable is the relation the capture reads stored query runs from
 	// when an insert transform keeps the facts in a deployment's own table

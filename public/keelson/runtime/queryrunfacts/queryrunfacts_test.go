@@ -59,7 +59,7 @@ func TestComposeExtractSql(t *testing.T) {
 	require.Contains(t, sql, "substringUTF8(query, 1, 16384)")
 	require.Contains(t, sql, "substringUTF8(exception, 1, 4096)")
 	require.Contains(t, sql, "position(query, 'http://127.0.0.1:8127/pull') = 0")
-	require.Contains(t, sql, "SELECT max("+ColTs+") FROM boxer.facts")
+	require.Contains(t, sql, "SELECT tuple(min("+ColTs+"), max("+ColTs+")) FROM boxer.facts")
 	require.Contains(t, sql, WatermarkOverlap)
 	require.Contains(t, sql, "LIMIT 10000")
 	require.Contains(t, sql, "log_comment='queryrunsd-extract'")
@@ -291,11 +291,14 @@ func TestComposeExtractSql_BackfillFrom(t *testing.T) {
 	require.Contains(t, sql, fmt.Sprintf("toDateTime64(%d, 9, 'UTC')", from.Unix()),
 		"the floor must be embedded as the first-boot start")
 
-	// It is a FLOOR ON EMPTINESS, not a filter: the watermark still governs
-	// once the destination holds facts, or a restart after downtime would skip
-	// exactly the gap the pipeline exists to close.
-	require.Contains(t, sql, "watermark - "+WatermarkOverlap+") AS lo")
-	require.Contains(t, sql, "watermark = toDateTime64(0, 9, 'UTC')")
+	// It is the start on an empty destination, and after the first batch the
+	// overlap does not reach back past it while the destination holds nothing
+	// older; a destination that does — a restart after downtime — is bounded
+	// by the watermark alone, or the restart would skip exactly the gap the
+	// pipeline exists to close.
+	floor := fmt.Sprintf("toDateTime64(%d, 9, 'UTC')", from.Unix())
+	require.Contains(t, sql, "watermark = toDateTime64(0, 9, 'UTC'), "+floor)
+	require.Contains(t, sql, "if(tupleElement(span, 1) >= "+floor+", greatest("+floor+", watermark - "+WatermarkOverlap+"), watermark - "+WatermarkOverlap+")")
 
 	// The zero value keeps the original unbounded reach.
 	sql, err = ComposeExtractSql("boxer.facts", "http://127.0.0.1:8127/pull", ScopeAll, 0, time.Time{})

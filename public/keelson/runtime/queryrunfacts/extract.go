@@ -75,6 +75,15 @@ func watermarkSql(factsTable string) string {
 		ColTs, factsTable, ColSymbolLr, vocab.MembKindQueryRun.GetId().Value())
 }
 
+// spanSql is the destination's KindQueryRun span as a scalar subquery: the
+// oldest and the newest fact ts as a tuple, both the DateTime64 zero on an
+// empty destination. Its second element is watermarkSql's value; its first
+// says whether the destination holds anything older than a backfill floor.
+func spanSql(factsTable string) string {
+	return fmt.Sprintf("(SELECT tuple(min(%s), max(%s)) FROM %s WHERE has(%s, %d))",
+		ColTs, ColTs, factsTable, ColSymbolLr, vocab.MembKindQueryRun.GetId().Value())
+}
+
 // DefaultBatchCap bounds one extract (and hence one /pull response).
 // First-boot backfill can face the source TTL's worth of query_log;
 // ORDER BY event time ascending + this cap turns that into bounded
@@ -115,10 +124,15 @@ const DefaultBatchCap = 10000
 // refresh. A non-zero backfillFrom starts there instead. The zero value
 // keeps the original unbounded behaviour.
 //
-// It applies ONLY while the destination is empty. Once it holds facts the
-// watermark governs, so a restart after downtime still catches up over the
-// gap — a floor that applied unconditionally would skip exactly that window,
-// which is the property the pipeline exists to guarantee.
+// The floor holds for as long as the destination holds nothing older than
+// it. On an empty destination it is the start; after the first batch it
+// keeps the overlap from reaching back past it, which would otherwise open
+// up to WatermarkOverlap of history from before the floor and drain it,
+// oldest first, ahead of every newer event. A destination holding facts
+// older than the floor — a restart after downtime — is bounded by the
+// watermark alone, so the restart still catches up over the gap: a floor
+// that applied unconditionally would skip exactly that window, which is the
+// property the pipeline exists to guarantee.
 func ComposeExtractSql(factsTable string, pullURL string, scope ScopeE, batchCap int, backfillFrom time.Time) (sql string, err error) {
 	if factsTable == "" || pullURL == "" {
 		err = eh.Errorf("queryrunfacts: extract needs factsTable + pullURL")
@@ -137,17 +151,23 @@ func ComposeExtractSql(factsTable string, pullURL string, scope ScopeE, batchCap
 		err = eb.Build().Str("scope", string(scope)).Errorf("queryrunfacts: extract not composable for scope")
 		return
 	}
-	// The watermark is read once into a scalar so the emptiness test and the
-	// overlap subtraction cannot disagree, and the resulting lower bound lo
-	// is shared by the source filter and the already-captured pre-filter. An
-	// empty destination yields the DateTime64 zero, which is what selects the
-	// floor below.
+	// The span is read once into a scalar so the emptiness test, the floor
+	// test and the overlap subtraction cannot disagree, and the resulting
+	// lower bound lo is shared by the source filter and the already-captured
+	// pre-filter. An empty destination yields the DateTime64 zero, which is
+	// what selects the floor below. lo is never below watermark -
+	// WatermarkOverlap, so the MV anti-join's window still covers every row
+	// served.
 	floor := "toDateTime64(0, 9, 'UTC')"
 	if !backfillFrom.IsZero() {
 		floor = fmt.Sprintf("toDateTime64(%d, 9, 'UTC')", backfillFrom.UTC().Unix())
 	}
-	sql = fmt.Sprintf(`WITH %s AS watermark,
-  if(watermark = toDateTime64(0, 9, 'UTC'), %s, watermark - %s) AS lo
+	lo := fmt.Sprintf(`if(watermark = toDateTime64(0, 9, 'UTC'), %[1]s,
+     if(tupleElement(span, 1) >= %[1]s, greatest(%[1]s, watermark - %[2]s), watermark - %[2]s))`,
+		floor, WatermarkOverlap)
+	sql = fmt.Sprintf(`WITH %s AS span,
+  tupleElement(span, 2) AS watermark,
+  %s AS lo
 SELECT
   type,
   toUnixTimestamp64Micro(event_time_microseconds) AS event_us,
@@ -175,7 +195,7 @@ ORDER BY event_time_microseconds
 LIMIT %d
 SETTINGS output_format_json_quote_64bit_integers=0, log_comment=%s
 FORMAT JSONEachRow`,
-		watermarkSql(factsTable), floor, WatermarkOverlap,
+		spanSql(factsTable), lo,
 		QueryTextCap, ExceptionTextCap,
 		quoteLiteral(ExtractTag), quoteLiteral(RefreshTag), quoteLiteral(ReconcileTag),
 		quoteLiteral(pullURL), scopePredicate,
