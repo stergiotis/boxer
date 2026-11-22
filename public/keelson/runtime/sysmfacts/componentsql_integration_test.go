@@ -29,6 +29,7 @@ func liveStore(t *testing.T) (*sysmfacts.SysmetricsStore, *chclient.Client) {
 	if err := client.Ping(context.Background()); err != nil {
 		t.Skipf("ClickHouse not reachable at %s: %v", cfg.URL, err)
 	}
+	seedSamplesIfNone(t, client)
 	exec, err := storeexec.New(client, nil)
 	require.NoError(t, err)
 	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{Keys: recordstoretest.KeyStream(recordstoretest.FactsRowTag)})
