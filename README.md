@@ -30,7 +30,7 @@ The oldest versions boxer supports. Nothing older is tested; below a floor, expe
 
 | Component | Floor | Set by |
 | --- | --- | --- |
-| Go | **1.27.3** | the `go` directive in [`go.mod`](go.mod) ([ADR-0199](doc/adr/0199-adopt-go-1-27.md)) |
+| Go | **1.27.4** | the `go` directive in [`go.mod`](go.mod) ([ADR-0199](doc/adr/0199-adopt-go-1-27.md)) |
 | Rust | **1.96** | the highest `rust-version` a crate under [`rust/`](rust) declares (`rust/imzero2-viewer`; the renderer, `rust/imzero2`, declares 1.95). The build itself uses the toolchain each crate's `rust-toolchain` file pins, patch included — 1.96.1 — because two artifacts are byte-compared against committed blobs ([ADR-0215](doc/adr/0215-retire-mimalloc-reproducible-builds.md)) |
 | ClickHouse | **26.8** | `chversion.Floor` (`public/db/clickhouse/chversion`), checked when the facts store sets up, when `storeexec.Connect` connects, and before the clickhouse-local pool starts its first worker; an older release is refused there with the floor named. It holds for a server and for `clickhouse local` alike. At 26.8 a server lets `X-ClickHouse-Format` win over a statement's own `FORMAT` clause, which `chserver` relies on ([ADR-0144](doc/adr/0144-query-engine-adapters.md)); the lightweight `UPDATE` that watchbill's claim rests on is on by default there, at tier Beta ([ADR-0223](doc/adr/0223-watchbill-durable-work-on-facts.md)) |
 
