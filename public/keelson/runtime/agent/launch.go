@@ -188,9 +188,13 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 		return
 	}
 	load, loadReason := inst.waitLoaded(key)
+	opened := inst.openedRevisions(id, key)
 	inst.mu.Lock()
 	t.entries[key] = &entry{instance: key, app: id, alias: app.AliasOf(id), mode: mode}
 	t.launched[key] = true
+	if opened != nil {
+		t.lastRead[key] = opened
+	}
 	inst.startTurnAt(t, key)
 	inst.mu.Unlock()
 	inst.attach(key)
@@ -200,6 +204,25 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 	}
 	rep.Ok, rep.Instance = true, key
 	rep.Load, rep.LoadReason = load.String(), loadReason
+	return
+}
+
+// openedRevisions is what a task knows of a window it opened as it opened:
+// the revision of every resource the app's catalog declares, as the
+// window's latest frame left it, so a first write into the window needs no
+// read before it and a change by anyone else since still conflicts. nil
+// when the window has drawn no frame or its app declares no catalog.
+func (inst *Service) openedRevisions(id app.AppIdT, key uint64) (read map[string]uint64) {
+	revs, ok := inst.cfg.Host.OpsRevisions(key)
+	m, known := inst.cfg.Registry.LookupManifest(id)
+	if !ok || revs == nil || !known || m.Operations == nil {
+		return nil
+	}
+	read = make(map[string]uint64, len(m.Operations.Resources))
+	for _, r := range m.Operations.Resources {
+		// A resource that never changed is at revision zero and absent.
+		read[r.Name] = revs[r.Name]
+	}
 	return
 }
 

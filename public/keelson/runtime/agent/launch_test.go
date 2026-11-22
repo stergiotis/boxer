@@ -3,7 +3,10 @@ package agent
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -66,4 +69,65 @@ func TestARequestThatOpensAnAppAsksForItsLaunchDestinations(t *testing.T) {
 	hostOnly := Ceiling{Mode: ModeAct, Effect: app.OperationEffectRun, Reach: ReachHost}
 	assert.Empty(t, r.svc.withLaunchDestinations(nil, launches, &hostOnly), "a destination the ceiling refuses is not asked for")
 	assert.Empty(t, r.svc.withLaunchDestinations(nil, []wireLaunchEntry{{App: string(docAppId), Count: 1}}, nil), "an app that declares none adds none")
+}
+
+// A window the task opened is known to the task as it opened: a first write
+// goes through without a read before it, and a change by the person since
+// still conflicts.
+func TestAWindowTheTaskOpenedIsReadAsItOpened(t *testing.T) {
+	r := newRig(t, true)
+	ctx := context.Background()
+	// The window host draws every window while the launch waits for it.
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			case <-time.After(time.Millisecond):
+			}
+			r.host.mu.Lock()
+			keys := slices.Collect(maps.Keys(r.host.engines))
+			r.host.mu.Unlock()
+			for _, k := range keys {
+				r.host.frame(k)
+			}
+		}
+	}()
+	g, err := r.cli.Request(ctx, GrantRequest{Plan: "write a doc", Launches: []GrantLaunch{{App: "doc", Mode: ModeAct, Count: 2}}})
+	require.NoError(t, err)
+	got, err := r.cli.Launch(ctx, g.Handle, "open", "doc", "", nil)
+	require.NoError(t, err)
+	out, err := r.cli.Call(ctx, CallRequest{Handle: g.Handle, Instance: got.Instance, Operation: "set_text", Args: `{"text":"agent"}`, Key: "w"})
+	require.NoError(t, err)
+	assert.Contains(t, []string{"accepted", "applied"}, out.Phase, out.Reason)
+	docText := func(k uint64) func() bool {
+		return func() bool {
+			// A frame writes the doc under frameMu.
+			r.host.frameMu.Lock()
+			defer r.host.frameMu.Unlock()
+			r.host.mu.Lock()
+			defer r.host.mu.Unlock()
+			return r.host.docs[k].text == "agent"
+		}
+	}
+	require.Eventually(t, docText(got.Instance), 2*time.Second, 5*time.Millisecond, "the first write went through")
+
+	other, err := r.cli.Launch(ctx, g.Handle, "open2", "doc", "", nil)
+	require.NoError(t, err)
+	r.host.person(other.Instance, func(d *doc) { d.text = "person" })
+	r.host.frame(other.Instance)
+	_, err = r.cli.Call(ctx, CallRequest{Handle: g.Handle, Instance: other.Instance, Operation: "set_text", Args: `{"text":"agent"}`, Key: "w2"})
+	require.NoError(t, err)
+	time.Sleep(50 * time.Millisecond)
+	r.host.frameMu.Lock()
+	defer r.host.frameMu.Unlock()
+	r.host.mu.Lock()
+	defer r.host.mu.Unlock()
+	assert.Equal(t, "person", r.host.docs[other.Instance].text, "the person changed it after it opened: the write conflicts")
+	log := r.host.engines[other.Instance].LogSince(0)
+	require.NotEmpty(t, log)
+	assert.Equal(t, "conflict", log[len(log)-1].Phase.String())
+	assert.Contains(t, log[len(log)-1].Reason, "moved since it was read")
 }

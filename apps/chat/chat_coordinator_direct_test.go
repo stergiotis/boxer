@@ -304,6 +304,25 @@ func TestADirectCallWidensATaskWithoutTheApp(t *testing.T) {
 	host.mu.Unlock()
 }
 
+// A direct write into the window the call itself opened needs no read
+// before it: the task knows the window as it opened.
+func TestADirectWriteIntoTheWindowItOpened(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{replies: []openaichat.CompletionResponse{
+		toolCall("d1", "notes_set_note", `{"text":"direct","reason":"write the note"}`),
+		{Content: "done", FinishReason: "stop"},
+	}}
+	host, coord, cli, req, ctx := coordRigWith(t, bus, model, false, noteOpsSet("set_note"), nil)
+	res, err := runTurn(ctx, cli, coord, req, nil)
+	require.NoError(t, err)
+	co := directOutcome(t, toolReplies(res.messages)["d1"])
+	assert.Equal(t, "rendered", co.Phase, co.Reason)
+	assert.True(t, co.Opened)
+	host.mu.Lock()
+	defer host.mu.Unlock()
+	assert.Equal(t, "direct", host.notes[100].text)
+}
+
 // A direct tool's description carries the operation's leading Follows
 // lines, in order, up to the bound; a line past it is left out with every
 // later one.
