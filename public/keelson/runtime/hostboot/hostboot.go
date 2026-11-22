@@ -61,6 +61,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/registration"
 	"github.com/stergiotis/boxer/public/keelson/runtime/schemacheck"
 	"github.com/stergiotis/boxer/public/keelson/runtime/servicehost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmscrape"
@@ -142,6 +143,11 @@ type Services struct {
 	// resolve, retract and the keelson('adhoc') catalog. Reading a dataset
 	// still needs ChLocal and Introspect, which fail visibly on their own.
 	AdhocData bool
+	// SessionData is runtime.sessiondata.*: named data sets a statement
+	// reads, held in ClickHouse sessions per task or per person (ADR-0406,
+	// proposed), and keelson('session_datasets'). It reads ad-hoc datasets
+	// through AdhocData when that is on.
+	SessionData bool
 	// LadingPublish is runtime.lading.publish.<tag>: writes into the lading store
 	// under the caller's mount tag, after the placement check (ADR-0341,
 	// proposed). It connects from the CLICKHOUSE_* variables on the first
@@ -191,7 +197,7 @@ type Services struct {
 // AllServices is every service on — the carousel's configuration.
 func AllServices() Services {
 	return Services{
-		Fs: true, Persist: true, Watchbill: true, ChLocal: true, AdhocData: true, LadingPublish: true,
+		Fs: true, Persist: true, Watchbill: true, ChLocal: true, AdhocData: true, SessionData: true, LadingPublish: true,
 		Clipboard: true, AudioOut: true, Coverage: true, Sysmetrics: true, Introspect: true,
 		AppState: true, LLM: true, HTTP: true, Agent: true, SQLSurface: true,
 	}
@@ -351,6 +357,9 @@ type Runtime struct {
 	// HTTP is the egress service (ADR-0262); nil when off or failed to
 	// start.
 	HTTP *httpegress.Service
+	// SessionData is the session data capability (ADR-0406, proposed); nil
+	// when off or failed to start.
+	SessionData *sessiondata.Service
 	// Agent is the app operations service (ADR-0269); nil when off or
 	// failed to start.
 	Agent *agent.Service
@@ -876,6 +885,23 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			})
 		}
 	}
+	if svc.SessionData {
+		cfg := sessiondata.Config{Bus: rt.Bus, Registry: rt.Introspect, Log: logger, Trail: rt.Trail}
+		if rt.Adhoc != nil {
+			cfg.Adhoc = rt.Adhoc
+		}
+		sdSvc, sdErr := sessiondata.NewService(cfg)
+		if sdErr != nil {
+			logger.Warn().Err(sdErr).Msg("sessiondata: service start failed; runtime.sessiondata.* will be unbound")
+		} else {
+			rt.SessionData = sdSvc
+			rt.OnClose(func(ctx context.Context) {
+				stopCtx, cancel := context.WithTimeout(ctx, serviceStopTimeout)
+				defer cancel()
+				_ = sdSvc.Close(stopCtx)
+			})
+		}
+	}
 	if svc.LadingPublish {
 		reg := rt.opts.Registry
 		if reg == nil {
@@ -1375,6 +1401,11 @@ func (rt *Runtime) bootAgent() {
 	// the call context the dispatcher attests (ADR-0288 §SD5).
 	if rt.Adhoc != nil {
 		rt.Adhoc.SetDispatcher(svc)
+	}
+	// The session data service attests an agent's call, checks its grant
+	// and ends a task's data session with the task (ADR-0406, proposed).
+	if rt.SessionData != nil {
+		rt.SessionData.SetDispatcher(svc)
 	}
 	if rt.Host != nil {
 		// The person's side: the badge in each window a task works in and

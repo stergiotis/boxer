@@ -2467,6 +2467,66 @@
       }
     },
     {
+      "name": "BOXER_SESSIONDATA_LEASE_TIMEOUT",
+      "type": "duration",
+      "default": "15m",
+      "description": "how long a prepared statement may hold its data session's ClickHouse session before the hold lapses for a caller that never released it",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
+      }
+    },
+    {
+      "name": "BOXER_SESSIONDATA_MAX_ATTACH_BYTES",
+      "type": "int64",
+      "default": "67108864",
+      "description": "bytes of ad-hoc datasets one statement may attach to a ClickHouse server statement as external data, together",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
+      }
+    },
+    {
+      "name": "BOXER_SESSIONDATA_MAX_BYTES",
+      "type": "int64",
+      "default": "4294967296",
+      "description": "bytes the session data sets of one data session may take on the ClickHouse server together, as the server reports a table's total_bytes; a definition past it is refused and its table dropped",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
+      }
+    },
+    {
+      "name": "BOXER_SESSIONDATA_MAX_ROWS",
+      "type": "int64",
+      "default": "50000000",
+      "description": "rows one session data set and its siblings may hold together on the ClickHouse server, per data session; a definition past it is refused and its table dropped",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
+      }
+    },
+    {
+      "name": "BOXER_SESSIONDATA_SESSION_TIMEOUT",
+      "type": "duration",
+      "default": "15m",
+      "description": "idle time after which the ClickHouse server drops a session holding session data sets (session_timeout, whole seconds; the server refuses more than its max_session_timeout); a later statement replays the definitions it reads",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
+      }
+    },
+    {
       "name": "BOXER_SQLAPPLETCREATOR_DRAFT",
       "type": "string",
       "description": "a draft for a new SQL applet creator window, as JSON with Sql and Endpoint (as the launch config carries them) and Slug, Title, Summary and Icon; a caller's launch config wins over it; for scenes and demos",

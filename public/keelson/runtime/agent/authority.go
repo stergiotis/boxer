@@ -23,7 +23,8 @@ const (
 	// ReachHost: what this host holds — its tables, keelson:<table>, and
 	// its local git repositories, git:<path>.
 	ReachHost ReachE = 0
-	// ReachData: the data endpoints the apps query, clickhouse:<host>.
+	// ReachData: the data endpoints the apps query, clickhouse:<host>, and
+	// the session tables a task keeps on one, clickhouse-session:<host>.
 	ReachData ReachE = 1
 	// ReachNetwork: egress destinations and the model service, http:<name>
 	// and llm.
@@ -53,7 +54,7 @@ func ReachOf(destination string) (r ReachE) {
 		// An ad-hoc bundle (ADR-0288 §SD4) is datasets in this
 		// process, as a keelson table is, and publishing one stays in it.
 		return ReachHost
-	case strings.HasPrefix(destination, "clickhouse:"):
+	case strings.HasPrefix(destination, "clickhouse:"), strings.HasPrefix(destination, "clickhouse-session:"):
 		return ReachData
 	}
 	return ReachNetwork

@@ -136,3 +136,11 @@ on the same host.
 
 A v1 store left named `.bxad` files under the same directory; they are
 ciphertext whose key is gone, and can be deleted by hand.
+
+## 6. Join a dataset with server tables
+
+A statement that names `keelson('alias')` and a server table is refused by
+play's dispatch: no endpoint serves both. The session data service attaches
+the dataset to a server statement as external data instead, under the same
+grant rules and the confinement wall — see
+[How to keep named data sets for a task](./session-data-sets.md) §5.

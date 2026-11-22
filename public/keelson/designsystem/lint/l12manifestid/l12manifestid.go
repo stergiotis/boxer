@@ -104,6 +104,9 @@ var AllowedSpecialIds = map[string]bool{
 	// runtime.attention — the attention service's questions (ADR-0324).
 	// Same class.
 	"runtime.attention": true,
+	// runtime.sessiondata — the session data capability (ADR-0406,
+	// proposed). Same class.
+	"runtime.sessiondata": true,
 	// runtime.audit — the host's audit service, whose subject is
 	// ADR-0026 §SD3's runtime.audit.{id} (a write verb since ADR-0327 §SD8).
 	// Same class.

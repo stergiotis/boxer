@@ -742,6 +742,8 @@ func destinationText(d string) string {
 	switch class {
 	case "clickhouse":
 		return "query the ClickHouse server at " + rest
+	case "clickhouse-session":
+		return "keep named tables for this task in a session on the ClickHouse server at " + rest
 	case "keelson":
 		return "read this host's table keelson('" + rest + "')"
 	case "keelson-bundle":

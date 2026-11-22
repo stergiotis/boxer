@@ -92,6 +92,13 @@ type Request struct {
 	// against the engine with "unknown table" and the reason being
 	// invisible.
 	Inputs map[string][]byte
+	// External attaches tables to the one statement as the engine's
+	// external data: sent with the request, read by the statement under
+	// each table's Name, gone when the statement ends. Unlike Inputs each
+	// names its own format and structure, which a server requires. An
+	// engine that cannot send them refuses the request rather than
+	// dropping them, for the reason Inputs gives.
+	External []ExternalTable
 	// Cap is the row limit the request declares on ITSELF, and is what
 	// makes a truncated result recognisable as truncated (R9). Zero
 	// declares none. A cap the engine applies by its own default, or that
@@ -155,7 +162,69 @@ func (inst Request) Validate() (err error) {
 			Errorf("queryengine: run id is not safe as a subject token or SQL literal")
 		return
 	}
+	seen := make(map[string]struct{}, len(inst.External))
+	for _, x := range inst.External {
+		if err = x.validate(); err != nil {
+			return
+		}
+		if _, dup := seen[x.Name]; dup {
+			err = eb.Build().Str("name", x.Name).Errorf("queryengine: two external tables share a name")
+			return
+		}
+		if _, clash := inst.Inputs[x.Name]; clash {
+			err = eb.Build().Str("name", x.Name).Errorf("queryengine: an external table and an input share a name")
+			return
+		}
+		seen[x.Name] = struct{}{}
+	}
 	return
+}
+
+// ExternalTable is one table of a request's external data: what a
+// ClickHouse server reads as a temporary table for the one statement it
+// arrives with.
+type ExternalTable struct {
+	// Name is the identifier the statement reads the table by,
+	// [A-Za-z_][A-Za-z0-9_]* and at most 64 bytes.
+	Name string
+	// Format is the input format Data is in, as ClickHouse names it
+	// ("ArrowStream", "TabSeparated", …).
+	Format string
+	// Structure is the table's columns, "name Type, …"; a server refuses
+	// external data without it.
+	Structure string
+	// Data is the table's rows in Format.
+	Data []byte
+}
+
+// validate reports whether the table can be named on the wire: the name
+// and the format become URL parameter names and values.
+func (inst ExternalTable) validate() (err error) {
+	switch {
+	case !externalIdentifier(inst.Name):
+		err = eb.Build().Str("name", inst.Name).Errorf("queryengine: an external table's name must be an identifier of at most 64 bytes")
+	case !externalIdentifier(inst.Format):
+		err = eb.Build().Str("name", inst.Name).Str("format", inst.Format).Errorf("queryengine: an external table's format must be a format name")
+	case inst.Structure == "":
+		err = eb.Build().Str("name", inst.Name).Errorf("queryengine: an external table needs its structure")
+	}
+	return
+}
+
+// externalIdentifier reports whether s is [A-Za-z_][A-Za-z0-9_]* of at
+// most 64 bytes.
+func externalIdentifier(s string) (ok bool) {
+	if s == "" || len(s) > 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		letter := c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+		if !letter && (i == 0 || c < '0' || c > '9') {
+			return false
+		}
+	}
+	return true
 }
 
 // SensitivityE says what a run touches, and therefore where it may execute

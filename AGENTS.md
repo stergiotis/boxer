@@ -39,6 +39,7 @@ the linked document wins.
 | Give an app or a headless binary durable work to do | [doc/howto/watchbill-jobs.md](./doc/howto/watchbill-jobs.md) |
 | Run an ingestion processor under a streaming framework, and land its items | [doc/howto/stevedore-processors.md](./doc/howto/stevedore-processors.md) |
 | Hand a table an app computed to SQL without storing it — publish, read from an applet or a play window | [doc/howto/adhoc-datasets.md](./doc/howto/adhoc-datasets.md) |
+| Let a task or the person name an intermediate result once — `session('msgs')` in a ClickHouse session, made again from its definition — and join host data with server tables | [doc/howto/session-data-sets.md](./doc/howto/session-data-sets.md) |
 | See how watchbill's pieces fit, and what it serializes | [doc/explanation/watchbill-architecture.md](./doc/explanation/watchbill-architecture.md) |
 | Snapshot a file tree into ClickHouse and query it | [doc/howto/lading-snapshot-store.md](./doc/howto/lading-snapshot-store.md) |
 | Ingest a markdown vault and query its graph, tags and properties | [doc/howto/markdown-facts-obsidian-queries.md](./doc/howto/markdown-facts-obsidian-queries.md) |

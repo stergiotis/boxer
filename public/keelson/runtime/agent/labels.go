@@ -121,6 +121,20 @@ func (inst *Service) AllowDestination(taskId string, epoch uint64, destination s
 
 var _ app.DelegationI = (*Service)(nil)
 
+// TaskLive reports whether a task is known and has not ended, at any
+// epoch: a host service that keeps state for a task until it ends asks it
+// to let that state go.
+func (inst *Service) TaskLive(taskId string) (live bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	for _, t := range inst.tasks {
+		if t.id == taskId {
+			return t.revoked == ""
+		}
+	}
+	return false
+}
+
 // CallContext answers a host service that records agent-caused work
 // (ADR-0288 §SD5): the task must be live at this epoch, and the
 // call must be one the dispatcher sent to the sender's app and window,

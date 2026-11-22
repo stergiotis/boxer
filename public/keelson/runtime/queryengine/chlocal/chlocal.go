@@ -31,6 +31,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Config parameterises an [Engine]. Bus is required.
@@ -84,6 +85,14 @@ func (inst *Engine) PoolName() (name string) {
 func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st queryengine.StreamI, res queryengine.Result, err error) {
 	err = req.Validate()
 	if err != nil {
+		return
+	}
+	if len(req.External) > 0 {
+		// The broker's wire binds Arrow inputs, not external data in a
+		// format of its own; refusing beats a statement that fails with
+		// "unknown table".
+		err = eb.Build().Int("external", len(req.External)).
+			Errorf("this engine cannot attach external tables; bind them as Inputs")
 		return
 	}
 	rep, reqErr := chlocalbroker.ExecOnPool(ctx, inst.bus, inst.poolName, chlocalbroker.ExecRequest{

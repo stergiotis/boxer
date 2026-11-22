@@ -27,8 +27,10 @@
 package chserver
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -161,6 +163,9 @@ func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st qu
 	if err != nil {
 		return
 	}
+	if err = externalParams(qs, req.External); err != nil {
+		return
+	}
 
 	httpClient := inst.http
 	if req.OnProgress != nil {
@@ -199,12 +204,17 @@ func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st qu
 	if err != nil {
 		return
 	}
-	httpReq, buildErr := http.NewRequestWithContext(ctx, "POST", reqURL, strings.NewReader(sql))
+	reqBody, contentType, buildErr := requestBody(sql, req.External)
+	if buildErr != nil {
+		err = buildErr
+		return
+	}
+	httpReq, buildErr := http.NewRequestWithContext(ctx, "POST", reqURL, reqBody)
 	if buildErr != nil {
 		err = eh.Errorf("chserver: unable to build request: %w", buildErr)
 		return
 	}
-	httpReq.Header.Set("Content-Type", "text/plain; charset=utf-8")
+	httpReq.Header.Set("Content-Type", contentType)
 	if req.Format != "" {
 		// Request.Format is the format the caller decodes, so it overrides
 		// a FORMAT clause in the statement — which a server from 26.8 on
@@ -270,6 +280,62 @@ func (inst *Engine) queryString(req queryengine.Request) (qs url.Values, err err
 		// Deliver sends over a FORMAT clause the statement carries.
 		qs.Set("default_format", req.Format)
 	}
+	return
+}
+
+// externalParams adds each external table's format and structure to the
+// URL parameters, which is where the server reads them, refusing a caller
+// setting that would name the same parameter.
+func externalParams(qs url.Values, external []queryengine.ExternalTable) (err error) {
+	for _, x := range external {
+		for _, key := range []string{x.Name + "_format", x.Name + "_structure", x.Name + "_types"} {
+			if qs.Has(key) {
+				err = eb.Build().Str("setting", key).Errorf("chserver: this setting names an external table's parameter")
+				return
+			}
+		}
+		qs.Set(x.Name+"_format", x.Format)
+		qs.Set(x.Name+"_structure", x.Structure)
+	}
+	return
+}
+
+// requestBody is the statement as the body, or — with external tables — a
+// multipart form whose `query` field is the statement and whose file parts
+// are the tables, the shape the server's external-data interface reads.
+// The statement travels in the form rather than the URL, so its length is
+// not bounded by the server's URI limit.
+func requestBody(sql string, external []queryengine.ExternalTable) (body io.Reader, contentType string, err error) {
+	if len(external) == 0 {
+		body, contentType = strings.NewReader(sql), "text/plain; charset=utf-8"
+		return
+	}
+	size := len(sql) + 512
+	for _, x := range external {
+		size += len(x.Data) + 256
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, size))
+	mw := multipart.NewWriter(buf)
+	if err = mw.WriteField("query", sql); err != nil {
+		err = eh.Errorf("chserver: write the statement field: %w", err)
+		return
+	}
+	for _, x := range external {
+		var part io.Writer
+		part, err = mw.CreateFormFile(x.Name, x.Name)
+		if err == nil {
+			_, err = part.Write(x.Data)
+		}
+		if err != nil {
+			err = eb.Build().Str("name", x.Name).Errorf("chserver: write an external table: %w", err)
+			return
+		}
+	}
+	if err = mw.Close(); err != nil {
+		err = eh.Errorf("chserver: close the form: %w", err)
+		return
+	}
+	body, contentType = bytes.NewReader(buf.Bytes()), mw.FormDataContentType()
 	return
 }
 

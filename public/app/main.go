@@ -89,6 +89,9 @@ import (
 	// KEELSON_SERVICES_WHERE (ADR-0352); read by the service host, which only
 	// the graphical host links.
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/servicehost"
+	// BOXER_SESSIONDATA_* (ADR-0406, proposed); read by the session data
+	// service, which only hostboot links.
+	_ "github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
 	_ "github.com/stergiotis/boxer/public/llm/openaichat"
 	_ "github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	// BOXER_KAFKA_*; declared by the kafka CLI, which no binary mounts. The

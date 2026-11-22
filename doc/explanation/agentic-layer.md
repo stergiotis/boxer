@@ -270,6 +270,13 @@ and past conversations are read in play over SQL
 ([ADR-0239](../adr/0239-play-chat-panel-and-chatview-widget.md),
 [ADR-0264](../adr/0264-retained-model-conversations-on-facts.md)).
 
+A task can also keep named intermediate results — a `SELECT` and a name —
+whose tables live in a ClickHouse session the host holds for the task and
+are made again from their definitions when the session is lost; every window
+working for the task reaches the same ones
+([ADR-0406](../adr/0406-session-data-sets-named-reads-a-task-keeps-in-a-clickhouse-session-and-makes-again-from-their-definitions.md),
+proposed).
+
 ### 12. Long work does not hold a turn open
 
 A command declared asynchronous stays `running` after it applies, until the app
@@ -340,6 +347,18 @@ GRANT SELECT ON analytics.* TO boxer_agent;   -- the tables agent work may read
 -- the table functions need; no CREATE TEMPORARY TABLE; no access to
 -- databases the agent should not read.
 ```
+
+A deployment that lets tasks keep named data sets in a server session
+([ADR-0406](../adr/0406-session-data-sets-named-reads-a-task-keeps-in-a-clickhouse-session-and-makes-again-from-their-definitions.md),
+proposed) grants `CREATE TEMPORARY TABLE` as well. The service composes
+those creates itself around a statement it proved a read, so they leave
+the process as the service's own text, and a grant destination of their
+own, `clickhouse-session:<host>`, admits them; but the server then no
+longer refuses a temporary table a task's own text asks for, and the
+checks in the client are what stop one. Those checks read the text as
+boxer's lexer does; the one difference from the server found so far — the
+server nests block comments — is refused by both classifiers, and others
+are not ruled out.
 
 Point the host at it with `CLICKHOUSE_USER` and `CLICKHOUSE_PASSWORD_FILE`.
 A host has one ClickHouse identity, so the person's own runs on that host
