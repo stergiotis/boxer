@@ -5,6 +5,8 @@
 // that is not mechanical is refused with a pointer to doc/migration.
 // `roundtrip` checks a deployment's facts insert transform against its read
 // relation on clickhouse-local (ADR-0402 §SD6); it reaches no server.
+// `load` sends facts rows of another table, or of an Arrow IPC capture,
+// through the insert seam, so that transform applies to them.
 package schema
 
 import (
@@ -58,6 +60,7 @@ func NewCliCommand() *cli.Command {
 				Action: runApply,
 			},
 			roundTripCommand(),
+			loadCommand(),
 		},
 	}
 }
