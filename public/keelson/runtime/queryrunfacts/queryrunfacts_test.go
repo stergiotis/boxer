@@ -143,6 +143,48 @@ func TestComposeMvSql(t *testing.T) {
 	require.Equal(t, "DROP TABLE IF EXISTS boxer.mv_queryruns", drop)
 }
 
+// Under an insert transform the view appends to the transform's target in
+// its columns and leaves the deduplication to the extract: there is no
+// anti-join, and nothing in it names a facts column.
+func TestComposeAppendMvSql(t *testing.T) {
+	structure := UrlStructureOf([][2]string{{"tenant", "String"}, {"c`0", "DateTime64(9,'UTC')"}})
+	require.Equal(t, "`tenant` String, `c\\`0` DateTime64(9,'UTC')", structure)
+	sql, err := ComposeAppendMvSql("boxer.mv_queryruns", "carrier.rows", "http://127.0.0.1:8127/pull", structure, 5)
+	require.NoError(t, err)
+	require.Contains(t, sql, "CREATE MATERIALIZED VIEW IF NOT EXISTS boxer.mv_queryruns")
+	require.Contains(t, sql, "REFRESH EVERY 5 SECOND APPEND TO carrier.rows")
+	require.Contains(t, sql, "url('http://127.0.0.1:8127/pull', 'ArrowStream', '`tenant` String, ")
+	require.Contains(t, sql, `DateTime64(9,\'UTC\')`)
+	require.NotContains(t, sql, "NOT IN")
+	require.NotContains(t, sql, ColId)
+	require.Contains(t, sql, "log_comment='queryrunsd-refresh'")
+	require.Contains(t, sql, "http_max_tries=1")
+	require.Equal(t, "http://127.0.0.1:8127/pull", ParseMvPullURL(sql), "the single-owner check reads the pull URL back")
+
+	for _, args := range [][4]string{{"", "t.t", "u", "s"}, {"m.m", "", "u", "s"}, {"m.m", "t.t", "", "s"}, {"m.m", "t.t", "u", ""}} {
+		_, err = ComposeAppendMvSql(args[0], args[1], args[2], args[3], 5)
+		require.Error(t, err)
+	}
+	_, err = ComposeAppendMvSql("m.m", "t.t", "u", "s", 0)
+	require.Error(t, err)
+}
+
+// The probe row carries every optional part, so a transform sees each
+// section a captured row can fill.
+func TestProbeRowEncodes(t *testing.T) {
+	ent := dml.NewInEntityFacts(memory.NewGoAllocator(), 1)
+	require.NoError(t, BuildEntities(ent, []Row{ProbeRow()}))
+	recs, err := ent.TransferRecords(nil)
+	require.NoError(t, err)
+	require.Len(t, recs, 1)
+	require.EqualValues(t, 1, recs[0].NumRows())
+	for _, r := range recs {
+		r.Release()
+	}
+	_, stamped := ParseStamp(ProbeRow().LogComment)
+	require.True(t, stamped)
+}
+
 // The reconciler reads the pull URL back out of the stored view to tell
 // whether another instance owns it; the parse must invert ComposeMvSql.
 func TestParseMvPullURL(t *testing.T) {

@@ -14,7 +14,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // Reconcile makes the pipeline objects match this process's
@@ -28,30 +27,15 @@ import (
 // the resolved pull URL. It is also callable on its own for a
 // dry-run-style setup against a scratch database.
 func (s *Service) Reconcile(ctx context.Context) (err error) {
-	// The view appends on the server, where no insert transform runs: with
-	// the facts stored in a deployment's own table its rows would land in a
-	// relation that does not keep them, or fail there. It is not installed
-	// (ADR-0402 §SD5; the capture under a transform is deferred).
-	//
-	// A view a binary installed before the transform was registered is
-	// still on the server, refreshing: appending by the facts table's name
-	// where a table of that name was left, failing where the name became
-	// the deployment's view. It is this service's own object, which every
-	// reconcile drops and recreates, so it is dropped here too.
+	// Under an insert transform the facts are kept in a deployment's own
+	// table: the view appends the transform's output to the transform's
+	// target, and the extract reads through the read relation (ADR-0402,
+	// ADR-0115, updates of 2026-11-22).
 	factsCfg := chstore.Config{Database: s.cfg.Database, Table: s.cfg.Table}
 	if chstore.WriteTransformed(factsCfg) {
-		dropped, derr := s.dropLeftoverView(ctx)
-		b := eb.Build().Str("table", s.FactsTable())
-		switch {
-		case derr != nil:
-			err = b.Str("leftoverView", derr.Error()).Errorf("queryrunsvc: reconcile: the query-run view is not installed, and whether an earlier binary left one behind could not be settled: %w", recordstore.ErrTransformedTable)
-		case dropped:
-			err = b.Str("dropped", s.MvName()).Errorf("queryrunsvc: reconcile: the query-run view is not installed; one an earlier binary left behind was dropped: %w", recordstore.ErrTransformedTable)
-		default:
-			err = b.Errorf("queryrunsvc: reconcile: the query-run view is not installed: %w", recordstore.ErrTransformedTable)
-		}
-		return
+		return s.reconcileTransformed(ctx)
 	}
+	s.route.Store(nil)
 	// chstore's own setup — the table and the read surface its reads need —
 	// run through this service's client so it carries the reconcile tag like
 	// everything else the service sends.
@@ -78,6 +62,18 @@ func (s *Service) Reconcile(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
+	mv, err := queryrunfacts.ComposeMvSql(s.MvName(), s.FactsTable(), s.PullURL(), s.cadenceSeconds())
+	if err != nil {
+		return
+	}
+	err = s.installView(ctx, mv)
+	return
+}
+
+// installView replaces the capture view with the one mv creates: a flush so
+// that system.query_log exists, the single-owner check, then the drop and
+// the create.
+func (s *Service) installView(ctx context.Context, mv string) (err error) {
 	// The bare form (no table argument) works across ClickHouse
 	// versions; our own reconcile queries above guarantee there is
 	// something to flush on a fresh server, so system.query_log
@@ -103,10 +99,6 @@ func (s *Service) Reconcile(ctx context.Context) (err error) {
 	err = s.cli.Exec(ctx, drop)
 	if err != nil {
 		err = eh.Errorf("queryrunsvc: reconcile: drop mv: %w", err)
-		return
-	}
-	mv, err := queryrunfacts.ComposeMvSql(s.MvName(), s.FactsTable(), s.PullURL(), s.cadenceSeconds())
-	if err != nil {
 		return
 	}
 	err = s.cli.Exec(ctx, mv)

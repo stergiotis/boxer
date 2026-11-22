@@ -244,7 +244,7 @@ func TestFactsDeployment_AHostOverACarrier(t *testing.T) {
 	assert.Equal(t, n, serverScalar(t, cli, "SELECT count() FROM boxer.facts"), "SQL typed against boxer.facts returns the facts")
 	assert.Equal(t, "1", serverScalar(t, cli, "SELECT count() FROM system.tables WHERE database = 'boxer' AND name = 'idlease'"))
 	assert.Equal(t, "0", serverScalar(t, cli, "SELECT count() FROM system.tables WHERE database = 'boxer' AND engine = 'MaterializedView'"),
-		"the query-run view is not installed under a transform")
+		"a host installs no query-run view; queryrunsd does")
 	assert.Equal(t, "1", serverScalar(t, cli, "SELECT count() FROM boxer.facts WHERE `id:id:u64:47::0:` = "+fmt.Sprint(sum.LogId)))
 
 	// A second host of the same deployment starts on what the first left.

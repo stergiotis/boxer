@@ -25,6 +25,8 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammarenv"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore/chstoretest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
@@ -494,4 +496,126 @@ func TestReconcileDropsAViewLeftFromBeforeTheTransform(t *testing.T) {
 	err = svc.Reconcile(ctx)
 	require.ErrorIs(t, err, recordstore.ErrTransformedTable)
 	assert.NotContains(t, err.Error(), "dropped")
+}
+
+// TestLivePipelineUnderATransform is TestLivePipelineEndToEnd with the facts
+// kept in a deployment's own table (ADR-0402, ADR-0115, updates of
+// 2026-11-22): the reference carrier's transform is registered for the
+// destination, and every read goes through the carrier's view. A stamped
+// query lands once, in the carrier, under the deployment's columns; the
+// history reads it back through the view; re-served rows do not land again
+// although the view no longer deduplicates; and the catch-up after the
+// endpoint was down lands once too.
+func TestLivePipelineUnderATransform(t *testing.T) {
+	ctx := context.Background()
+	cli := chclient.New(chclient.ConfigFromEnv(), nil)
+	if cli.Ping(ctx) != nil {
+		t.Skipf("no live ClickHouse at %s", env.RedactURL(chclient.ConfigFromEnv().URL))
+	}
+	const db = scratchDb + "_transform"
+	require.NoError(t, cli.Exec(ctx, "DROP DATABASE IF EXISTS "+db+" SYNC"))
+	t.Cleanup(func() { _ = cli.Exec(context.Background(), "DROP DATABASE IF EXISTS "+db+" SYNC") })
+
+	contract, err := chstore.SchemaContract(chstore.Config{Database: db, Table: "facts"})
+	require.NoError(t, err)
+	carrier := chstoretest.NewCarrier(contract.Columns, db+".carrier", db+".facts_view", "boxer")
+	for _, stmt := range carrier.SetupStatements() {
+		require.NoError(t, cli.Exec(ctx, stmt))
+	}
+	require.NoError(t, cli.Exec(ctx, carrier.ViewStatement(nil, nil)))
+	unregister := recordstore.RegisterInsertTransform(db+".facts", carrier.Transform())
+	defer unregister()
+
+	cfg := Config{
+		Listen:       "127.0.0.1:0",
+		Cadence:      time.Second,
+		Scope:        queryrunfacts.ScopeAll,
+		Database:     db,
+		ReadTable:    carrier.View,
+		BackfillFrom: time.Now(),
+	}
+	svc, err := New(cfg, zerolog.Nop())
+	require.NoError(t, err)
+	require.NoError(t, svc.Start(ctx))
+	stopped := false
+	defer func() {
+		if !stopped {
+			_ = svc.Stop(context.Background())
+		}
+	}()
+	require.Equal(t, "0", queryScalar(t, cli,
+		"SELECT count() FROM system.tables WHERE database = '"+db+"' AND name = 'facts'"),
+		"under a transform no facts table is created")
+
+	probe1 := fmt.Sprintf("it-queryruns-tx-p1-%d", time.Now().UnixNano())
+	runId := fmt.Sprintf("it-run-tx-%d", time.Now().UnixNano())
+	runTaggedQuery(t, probe1, fmt.Sprintf(
+		`{"run_id":"%s","app":"it.app","lane":"l1","authored_fp":"af1","sent_fp":"sf1","chain_fp":"cf1","env_fp":"ef1"}`, runId))
+	require.NoError(t, cli.Exec(ctx, "SYSTEM FLUSH LOGS"))
+	waitForCountIn(t, cli, carrier.View, probe1, 1)
+
+	// The row is in the carrier, under the deployment's columns and tenant.
+	nkCol := carrier.FactsColumn("id:naturalKey:y:4::0:")
+	require.NotEmpty(t, nkCol)
+	require.Equal(t, "1", queryScalar(t, cli,
+		fmt.Sprintf("SELECT count() FROM %s WHERE tenant = 'boxer' AND %s = '%s'", carrier.Table, nkCol, probe1)))
+
+	// The history reads it back through the view, identity lifted.
+	histSql, err := queryrunfacts.ComposeHistorySql(carrier.View, queryrunfacts.HistoryLimitCap)
+	require.NoError(t, err)
+	histRows, err := queryrunfacts.ParseHistoryRows([]byte(queryRaw(t, cli, histSql)))
+	require.NoError(t, err)
+	var probeRow *queryrunfacts.HistoryRow
+	for i := range histRows {
+		if histRows[i].QueryId == probe1 {
+			probeRow = &histRows[i]
+			break
+		}
+	}
+	require.NotNil(t, probeRow, "the probe must appear in the history read through the view; %d rows returned", len(histRows))
+	require.Equal(t, runId, probeRow.RunId)
+	require.Equal(t, "it.app", probeRow.App)
+	require.Contains(t, probeRow.QueryText, "SELECT 42")
+
+	// Back-to-back reads and a few refreshes over the overlap: the extract's
+	// filter of stored events is the only deduplication left, and it holds
+	// for every row captured so far, not just the probe.
+	pullRowCount(t, svc.PullURL())
+	pullRowCount(t, svc.PullURL())
+	time.Sleep(3 * time.Second)
+	require.Equal(t, "1", queryScalar(t, cli,
+		fmt.Sprintf("SELECT count() FROM %s WHERE `id:naturalKey:y:4::0:` = '%s'", carrier.View, probe1)),
+		"the extract must drop re-served rows")
+	duplicates := fmt.Sprintf("SELECT count() - uniqExact(`id:id:u64:47::0:`) FROM %s", carrier.View)
+	require.Equal(t, "0", queryScalar(t, cli, duplicates))
+
+	// Endpoint down, then a new instance on a new port catches up.
+	require.NoError(t, svc.Stop(ctx))
+	stopped = true
+	probe2 := fmt.Sprintf("it-queryruns-tx-p2-%d", time.Now().UnixNano())
+	runTaggedQuery(t, probe2, "")
+	require.NoError(t, cli.Exec(ctx, "SYSTEM FLUSH LOGS"))
+	time.Sleep(2 * time.Second)
+
+	cfg.BackfillFrom = time.Time{}
+	svc2, err := New(cfg, zerolog.Nop())
+	require.NoError(t, err)
+	require.NoError(t, svc2.Start(ctx))
+	defer func() { _ = svc2.Stop(context.Background()) }()
+	waitForCountIn(t, cli, carrier.View, probe2, 1)
+	time.Sleep(3 * time.Second)
+	require.Equal(t, "1", queryScalar(t, cli,
+		fmt.Sprintf("SELECT count() FROM %s WHERE `id:naturalKey:y:4::0:` = '%s'", carrier.View, probe2)))
+	require.Equal(t, "0", queryScalar(t, cli, duplicates))
+	require.Equal(t, "0", queryScalar(t, cli,
+		"SELECT count() FROM system.tables WHERE database = '"+db+"' AND name = 'facts'"))
+}
+
+// waitForCountIn polls until the naturalKey shows up n times in relation.
+func waitForCountIn(t *testing.T, cli *chclient.Client, relation string, naturalKey string, n int) {
+	t.Helper()
+	sql := fmt.Sprintf("SELECT count() FROM %s WHERE `id:naturalKey:y:4::0:` = '%s'", relation, naturalKey)
+	require.Eventually(t, func() bool {
+		return queryScalar(t, cli, sql) == fmt.Sprint(n)
+	}, factWaitBudget, 500*time.Millisecond, "fact for %s did not reach count %d in %s", naturalKey, n, relation)
 }

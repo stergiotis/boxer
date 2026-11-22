@@ -97,7 +97,14 @@ const DefaultBatchCap = 10000
 // drop an uncaptured event (a query has one terminal event, so the pair
 // identifies it).
 //
-// factsTable is the qualified destination ("boxer.facts"); pullURL is
+// Under an insert transform there is no backstop: the view appends what
+// it is given, and this filter is the deduplication (ADR-0115 update of
+// 2026-11-22). factsTable is then the read relation, not the table the
+// view appends to.
+//
+// factsTable is the qualified relation the stored query runs are read
+// from: the destination ("boxer.facts"), or the read relation under an
+// insert transform; pullURL is
 // the endpoint the MV reads, e.g. "http://127.0.0.1:8127/pull";
 // batchCap <= 0 applies DefaultBatchCap.
 //

@@ -153,6 +153,69 @@ SETTINGS log_comment=%s, %s, http_max_tries=1`,
 	return
 }
 
+// ComposeAppendMvSql builds the capture view for facts kept in a
+// deployment's own table (ADR-0402, ADR-0115 update of 2026-11-22): every
+// cadenceSeconds it GETs pullURL, which serves the insert transform's
+// output, and appends what it gets to target. structure is the url()
+// structure in the target's columns ("`tenant` String, `c0` UInt64, …").
+//
+// It does not deduplicate. Its left side would be the target's columns,
+// which boxer does not know, so the extract drops already-stored events
+// itself, reading the read relation (ComposeExtractSql over that relation),
+// and the view appends what it is given. The SETTINGS are the facts view's.
+func ComposeAppendMvSql(mvName string, target string, pullURL string, structure string, cadenceSeconds int) (sql string, err error) {
+	if mvName == "" || target == "" || pullURL == "" || structure == "" {
+		err = eh.Errorf("queryrunfacts: append mv needs mvName + target + pullURL + structure")
+		return
+	}
+	if cadenceSeconds < 1 {
+		err = eb.Build().Int("cadenceSeconds", cadenceSeconds).Errorf("queryrunfacts: mv cadence < 1s")
+		return
+	}
+	sql = fmt.Sprintf(`CREATE MATERIALIZED VIEW IF NOT EXISTS %s
+REFRESH EVERY %d SECOND APPEND TO %s
+AS SELECT * FROM url(%s, 'ArrowStream', %s)
+SETTINGS log_comment=%s, %s, http_max_tries=1`,
+		mvName,
+		cadenceSeconds, target,
+		quoteLiteral(pullURL), quoteLiteral(structure),
+		quoteLiteral(RefreshTag), factsddl.SettingsClause)
+	return
+}
+
+// UrlStructureOf renders the url() structure for named columns, each
+// backtick-quoted with its ClickHouse type, in the order given.
+func UrlStructureOf(cols [][2]string) (structure string) {
+	parts := make([]string, len(cols))
+	for i, col := range cols {
+		parts[i] = "`" + strings.NewReplacer("\\", "\\\\", "`", "\\`").Replace(col[0]) + "` " + col[1]
+	}
+	return strings.Join(parts, ", ")
+}
+
+// ProbeRow is a query-run event as the extract would select it, with every
+// optional part present: a stamp, ProfileEvents, an exception. The capture
+// under an insert transform encodes it and asks the transform where such a
+// batch goes and in which schema (ADR-0402 update of 2026-11-22). It is
+// never stored.
+func ProbeRow() (row Row) {
+	return Row{
+		Type:           "ExceptionWhileProcessing",
+		EventUs:        1_700_000_000_000_000,
+		QueryId:        "queryrunsd-probe",
+		Query:          "SELECT 1",
+		NormalizedHash: 1,
+		QueryKind:      "Select",
+		DurationMs:     1,
+		ReadRows:       1, ReadBytes: 1, WrittenRows: 1, WrittenBytes: 1, ResultRows: 1, ResultBytes: 1,
+		MemoryUsage:   1,
+		ExceptionCode: 1,
+		Exception:     "probe",
+		ProfileEvents: map[string]uint64{"Query": 1},
+		LogComment:    `{"run_id":"probe","app":"probe","lane":"probe","authored_fp":"a","sent_fp":"s","chain_fp":"c","env_fp":"e"}`,
+	}
+}
+
 // ExistingMvSql reads the stored definition of the capture view in
 // database, raw (FORMAT RawBLOB, so its quotes arrive unescaped); an empty
 // answer means there is no view.

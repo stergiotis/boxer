@@ -25,6 +25,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync/atomic"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/ipc"
@@ -39,6 +40,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema/dml"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // Env registry (ADR-0009): the queryrunsd coordinates.
@@ -137,6 +139,14 @@ type Config struct {
 	// so a restart after downtime still catches up over the gap. Left zero,
 	// New resolves IMZERO2_QUERYRUNS_BACKFILL against the current time.
 	BackfillFrom time.Time
+	// ReadTable is the relation the capture reads stored query runs from
+	// when an insert transform keeps the facts in a deployment's own table
+	// (ADR-0402 §SD3): the watermark, the filter of already-stored events and
+	// the check before the view is created. Database-qualified; empty takes
+	// BOXER_FACTS_READ_TABLE for boxer.facts, and the destination itself for
+	// any other table. Without a transform the capture reads the destination
+	// whatever this says.
+	ReadTable string
 }
 
 // Service is the running capture endpoint. Construct with New, then
@@ -149,6 +159,10 @@ type Service struct {
 	log zerolog.Logger
 	srv *http.Server
 	ln  net.Listener
+	// route is what the last reconcile settled under an insert transform:
+	// the transform, its target and the schema it returns. nil serves and
+	// reads the facts columns, as without a transform.
+	route atomic.Pointer[captureRoute]
 	// failed carries a serve error after Start: the endpoint is gone while
 	// the process lives on, which a supervisor cannot see unless the
 	// caller exits on it.
@@ -188,6 +202,19 @@ func New(cfg Config, log zerolog.Logger) (s *Service, err error) {
 	}
 	if cfg.BatchCap <= 0 {
 		cfg.BatchCap = queryrunfacts.DefaultBatchCap
+	}
+	if cfg.ReadTable == "" && cfg.Database+"."+cfg.Table == factsschema.QualifiedTableName {
+		cfg.ReadTable, err = factsschema.ReadTable()
+		if err != nil {
+			return
+		}
+	}
+	if cfg.ReadTable == "" {
+		cfg.ReadTable = cfg.Database + "." + cfg.Table
+	}
+	if err = recordstore.CheckTableRef(cfg.ReadTable); err != nil {
+		err = eh.Errorf("queryrunsvc: ReadTable: %w", err)
+		return
 	}
 	if cfg.BackfillFrom.IsZero() {
 		cfg.BackfillFrom, err = ParseBackfill(Backfill.Get(), time.Now())
@@ -335,8 +362,15 @@ func (s *Service) handlePull(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.servePull(w, r, rows)
+}
+
+// servePull encodes rows and answers the request with them: the facts
+// columns, or under an insert transform the transform's output in the
+// schema the reconcile settled.
+func (s *Service) servePull(w http.ResponseWriter, r *http.Request, rows []queryrunfacts.Row) {
 	ent := dml.NewInEntityFacts(memory.NewGoAllocator(), len(rows))
-	err = queryrunfacts.BuildEntities(ent, rows)
+	err := queryrunfacts.BuildEntities(ent, rows)
 	if err != nil {
 		s.log.Warn().Err(err).Msg("queryrunsvc: encode failed")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -353,6 +387,17 @@ func (s *Service) handlePull(w http.ResponseWriter, r *http.Request) {
 			rec.Release()
 		}
 	}()
+	schema := ent.GetSchema()
+	if route := s.route.Load(); route != nil {
+		out, release, tErr := route.transform(s.FactsTable(), records)
+		if tErr != nil {
+			s.log.Warn().Err(tErr).Msg("queryrunsvc: transform failed")
+			http.Error(w, tErr.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer release()
+		records, schema = out, route.schema
+	}
 	// ArrowStream = the IPC stream format (schema + batches; a zero-row
 	// response is a valid schema-only stream, which url() reads as an
 	// empty table). Encode into memory first, then answer through
@@ -362,7 +407,7 @@ func (s *Service) handlePull(w http.ResponseWriter, r *http.Request) {
 	// (ADR-0134 update 2026-08-01). Buffering also turns an encode
 	// failure into a clean 500 instead of a truncated body.
 	var buf bytes.Buffer
-	iw := ipc.NewWriter(&buf, ipc.WithSchema(ent.GetSchema()))
+	iw := ipc.NewWriter(&buf, ipc.WithSchema(schema))
 	for _, rec := range records {
 		if wErr := iw.Write(rec); wErr != nil {
 			s.log.Warn().Err(wErr).Msg("queryrunsvc: stream encode failed")
@@ -397,7 +442,14 @@ func (s *Service) extract(ctx context.Context) (rows []queryrunfacts.Row, err er
 	if s.cfg.Scope == queryrunfacts.ScopeOff {
 		return
 	}
-	sql, err := queryrunfacts.ComposeExtractSql(s.FactsTable(), s.PullURL(), s.cfg.Scope, s.cfg.BatchCap, s.cfg.BackfillFrom)
+	// Under an insert transform the stored query runs are read through the
+	// read relation: the watermark, and the filter of already-stored events
+	// that is then the only deduplication (ADR-0115 update of 2026-11-22).
+	stored := s.FactsTable()
+	if s.route.Load() != nil {
+		stored = s.cfg.ReadTable
+	}
+	sql, err := queryrunfacts.ComposeExtractSql(stored, s.PullURL(), s.cfg.Scope, s.cfg.BatchCap, s.cfg.BackfillFrom)
 	if err != nil {
 		return
 	}
