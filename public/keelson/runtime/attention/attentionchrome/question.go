@@ -43,9 +43,16 @@ func (inst *questionCards) RenderCard(key string, ids *c.WidgetIdStack) (decided
 	if q.Title != "" {
 		head += " · " + q.Title
 	}
-	if q.Kind == attention.KindExitApproval {
+	switch {
+	case attention.IsHostQuestion(from):
+		// The host's own question: no model wrote it.
+		head = "This application asks"
+		if q.Title != "" {
+			head = q.Title + " — this application asks"
+		}
+	case q.Kind == attention.KindExitApproval:
 		head += " asks you to approve an exit — the model's words follow"
-	} else {
+	default:
 		head += " asks — the model's words follow"
 	}
 	const taintedText = "This conversation has read untrusted content: what the model writes may have been steered by it."

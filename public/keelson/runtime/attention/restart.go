@@ -47,6 +47,13 @@ var RestartSnoozeEnv = env.NewDuration(env.Spec{
 // restartAskApp is the sender the restart question is posted as.
 const restartAskApp app.AppIdT = "keelson/restart"
 
+// IsHostQuestion reports whether sender is the host asking in its own
+// words, not an app asking for a model: a card then names no model.
+func IsHostQuestion(sender app.AppIdT) (ok bool) {
+	ok = sender == restartAskApp
+	return
+}
+
 // restartAskPoll is how often a running RestartAsk looks at the file and at
 // its question.
 const restartAskPoll = 5 * time.Second

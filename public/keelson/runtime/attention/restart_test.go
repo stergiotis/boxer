@@ -43,6 +43,9 @@ func TestRestartAskAsksUntilThePersonAgrees(t *testing.T) {
 	assert.True(t, q.Quick(), "answered on its card")
 	assert.Equal(t, []string{"Restart now", "Later"}, []string{q.Options[0].Label, q.Options[1].Label})
 	assert.NotContains(t, q.Text, "Without an answer", "no deadline, no promise of one")
+	_, from, _, _ := qs.Lookup(items[0].Key)
+	assert.True(t, IsHostQuestion(from), "the host asks in its own words")
+	assert.False(t, IsHostQuestion("chat"))
 
 	require.True(t, qs.Decide(items[0].Key, false, [][]int{{1}}))
 	ask.Tick(t0.Add(2 * time.Second))
