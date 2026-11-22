@@ -29,7 +29,11 @@
 // do.
 package playground
 
-import "time"
+import (
+	"time"
+
+	"github.com/stergiotis/boxer/public/functional/option"
+)
 
 // Kind is the vocabulary kind name of this config — the value a playground
 // app declares as its manifest's LaunchKind and that a caller sends as
@@ -126,4 +130,13 @@ type Launch struct {
 	// takes the window to the introspection endpoint, where datasets
 	// resolve, and supersedes Sql and Datasets.
 	Bundle string `lw:"playLaunchBundle,symbol"`
+
+	// SessionHandOver is a hand-over token of the opener's data session
+	// (sessiondata.HandOver). A destination that reads session data sets
+	// claims it at mount with sessiondata.Claim, before its first run, and
+	// then reads the same data sets as the opener; None hands nothing
+	// over, and a row written before the field existed decodes as None. The token is spent by its claim and lapses after
+	// sessiondata.HandOverTimeout, so a stored launch row holds nothing
+	// a later reader can use.
+	SessionHandOver option.Option[string] `lw:"playLaunchSessionHandOver,symbol"`
 }

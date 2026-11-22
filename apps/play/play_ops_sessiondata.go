@@ -34,6 +34,11 @@ const (
 // the call names no limit.
 const keepSampleRows = 20
 
+// sessionViewEvery is how often the Data sets tab lists the data session
+// again while it is shown; a definition or a drop of the window's own
+// lists it at once.
+const sessionViewEvery = 5 * time.Second
+
 // sessionCall is work a call started off the frame: done once it finished,
 // with what it answered or why it failed.
 type sessionCall[T any] struct {
@@ -130,6 +135,14 @@ func (inst *PlayApp) latchSessions() {
 // that listing read.
 func (inst *PlayApp) sessionsShown(ticket uint64) (yes bool) {
 	return inst.sessions.landedSince(ticket) && inst.sessionsSeen == inst.sessions.digest()
+}
+
+// refreshSessions lists the data session the window's runs read, off the
+// frame.
+func (inst *PlayApp) refreshSessions() {
+	if c := inst.client; c != nil {
+		inst.refreshSessionsFor(c.agentMark.Load())
+	}
 }
 
 // refreshSessionsFor lists obo's task's data session, or the window's own

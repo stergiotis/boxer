@@ -33,15 +33,16 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindPlayLaunchSql          uint64
-	kindPlayLaunchAutoRun      uint64
-	kindPlayLaunchLive         uint64
-	kindPlayLaunchBandsSql     uint64
-	kindPlayLaunchTab          uint64
-	kindPlayLaunchEndpoint     uint64
-	kindPlayLaunchDatasets     uint64
-	kindPlayLaunchDatasetNames uint64
-	kindPlayLaunchBundle       uint64
+	kindPlayLaunchSql             uint64
+	kindPlayLaunchAutoRun         uint64
+	kindPlayLaunchLive            uint64
+	kindPlayLaunchBandsSql        uint64
+	kindPlayLaunchTab             uint64
+	kindPlayLaunchEndpoint        uint64
+	kindPlayLaunchDatasets        uint64
+	kindPlayLaunchDatasetNames    uint64
+	kindPlayLaunchBundle          uint64
+	kindPlayLaunchSessionHandOver uint64
 )
 
 func init() {
@@ -54,6 +55,7 @@ func init() {
 	kindPlayLaunchDatasets = vdd.MembPlayLaunchDatasets.GetId().Value()
 	kindPlayLaunchDatasetNames = vdd.MembPlayLaunchDatasetNames.GetId().Value()
 	kindPlayLaunchBundle = vdd.MembPlayLaunchBundle.GetId().Value()
+	kindPlayLaunchSessionHandOver = vdd.MembPlayLaunchSessionHandOver.GetId().Value()
 	buscodec.Register[Launch](launchBusCodec)
 }
 
@@ -117,15 +119,17 @@ type LaunchColumns struct {
 	NaturalKey [][]byte
 	At         []time.Time
 
-	Sql          []string
-	AutoRun      []bool
-	Live         []bool
-	BandsSql     []string
-	Tab          []string
-	Endpoint     []string
-	Datasets     [][]string
-	DatasetNames [][]string
-	Bundle       []string
+	Sql                []string
+	AutoRun            []bool
+	Live               []bool
+	BandsSql           []string
+	Tab                []string
+	Endpoint           []string
+	Datasets           [][]string
+	DatasetNames       [][]string
+	Bundle             []string
+	SessionHandOverVal []string
+	SessionHandOverHas []bool
 }
 
 // Len returns the number of rows currently in the batch.
@@ -150,6 +154,8 @@ func (c *LaunchColumns) Append(row Launch) {
 	c.Datasets = append(c.Datasets, row.Datasets)
 	c.DatasetNames = append(c.DatasetNames, row.DatasetNames)
 	c.Bundle = append(c.Bundle, row.Bundle)
+	c.SessionHandOverVal = append(c.SessionHandOverVal, row.SessionHandOver.Val)
+	c.SessionHandOverHas = append(c.SessionHandOverHas, row.SessionHandOver.Has)
 }
 
 // Row reconstructs entity i as an AoS Launch record. Inverse of
@@ -168,6 +174,8 @@ func (c *LaunchColumns) Row(i int) (row Launch) {
 	row.Datasets = c.Datasets[i]
 	row.DatasetNames = c.DatasetNames[i]
 	row.Bundle = c.Bundle[i]
+	row.SessionHandOver.Val = c.SessionHandOverVal[i]
+	row.SessionHandOver.Has = c.SessionHandOverHas[i]
 	return
 }
 
@@ -329,6 +337,11 @@ func LaunchBuildEntities[
 		symbolSecAttr_Bundle := symbolSec.BeginAttribute(c.Bundle[i])
 		symbolSecAttr_Bundle.AddMembershipLowCardRefP(kindPlayLaunchBundle)
 		symbolSecAttr_Bundle.EndAttributeP()
+		if c.SessionHandOverHas[i] {
+			symbolSecAttr_SessionHandOver := symbolSec.BeginAttribute(c.SessionHandOverVal[i])
+			symbolSecAttr_SessionHandOver.AddMembershipLowCardRefP(kindPlayLaunchSessionHandOver)
+			symbolSecAttr_SessionHandOver.EndAttributeP()
+		}
 		symbolSec.EndSection()
 		// --- stringArray. ---
 		stringArraySec := dml.GetSectionStringArray()
@@ -412,6 +425,11 @@ func LaunchEmitSectionSymbol[
 	symbolSecAttr_Bundle := symbolSec.BeginAttribute(row.Bundle)
 	symbolSecAttr_Bundle.AddMembershipLowCardRefP(kindPlayLaunchBundle)
 	symbolSecAttr_Bundle.EndAttributeP()
+	if row.SessionHandOver.Has {
+		symbolSecAttr_SessionHandOver := symbolSec.BeginAttribute(row.SessionHandOver.Val)
+		symbolSecAttr_SessionHandOver.AddMembershipLowCardRefP(kindPlayLaunchSessionHandOver)
+		symbolSecAttr_SessionHandOver.EndAttributeP()
+	}
 	return
 }
 
@@ -677,6 +695,9 @@ func LaunchFillFromArrow[
 		var symbolBundleVal string
 		var symbolBundleCount int
 		var symbolBundleLastAttr int64
+		var symbolSessionHandOverVal string
+		var symbolSessionHandOverCount int
+		var symbolSessionHandOverLastAttr int64
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -702,6 +723,13 @@ func LaunchFillFromArrow[
 					}
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolBundleVal = val
+				case kindPlayLaunchSessionHandOver:
+					if symbolSessionHandOverLastAttr != attrJ+1 {
+						symbolSessionHandOverLastAttr = attrJ + 1
+						symbolSessionHandOverCount++
+					}
+					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					symbolSessionHandOverVal = val
 				}
 			}
 		}
@@ -720,6 +748,18 @@ func LaunchFillFromArrow[
 			return
 		}
 		c.Bundle = append(c.Bundle, symbolBundleVal)
+		if symbolSessionHandOverCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "playLaunchSessionHandOver").Int("got", symbolSessionHandOverCount).Errorf("slot symbol@playLaunchSessionHandOver (field SessionHandOver) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolSessionHandOverCount)
+			return
+		}
+		if symbolSessionHandOverCount == 1 {
+			c.SessionHandOverVal = append(c.SessionHandOverVal, symbolSessionHandOverVal)
+			c.SessionHandOverHas = append(c.SessionHandOverHas, true)
+		} else {
+			var zero string
+			c.SessionHandOverVal = append(c.SessionHandOverVal, zero)
+			c.SessionHandOverHas = append(c.SessionHandOverHas, false)
+		}
 		// --- stringArray. ---
 		var stringArrayDatasetsSlice []string
 		var stringArrayDatasetsCount int
@@ -898,6 +938,9 @@ func LaunchReadRow[
 	var symbolBundleVal string
 	var symbolBundleCount int
 	var symbolBundleLastAttr int64
+	var symbolSessionHandOverVal string
+	var symbolSessionHandOverCount int
+	var symbolSessionHandOverLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -923,6 +966,13 @@ func LaunchReadRow[
 				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolBundleVal = val
+			case kindPlayLaunchSessionHandOver:
+				if symbolSessionHandOverLastAttr != attrJ+1 {
+					symbolSessionHandOverLastAttr = attrJ + 1
+					symbolSessionHandOverCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolSessionHandOverVal = val
 			}
 		}
 	}
@@ -948,6 +998,15 @@ func LaunchReadRow[
 	}
 	if symbolBundleCount == 1 {
 		row.Bundle = symbolBundleVal
+		present = true
+	}
+	if symbolSessionHandOverCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "playLaunchSessionHandOver").Int("got", symbolSessionHandOverCount).Errorf("slot symbol@playLaunchSessionHandOver (field SessionHandOver) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolSessionHandOverCount)
+		return
+	}
+	if symbolSessionHandOverCount == 1 {
+		row.SessionHandOver.Val = symbolSessionHandOverVal
+		row.SessionHandOver.Has = true
 		present = true
 	}
 	// --- stringArray. ---

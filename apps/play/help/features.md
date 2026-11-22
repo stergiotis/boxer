@@ -1576,6 +1576,21 @@ The signal values the run shipped are re-seeded into the store alongside the
 buffer, so re-running reproduces the same inputs (signals do not otherwise
 persist across sessions; constants persist via the buffer).
 
+### Data sets
+
+The named results kept on the ClickHouse server for this window, beside the
+ad-hoc datasets it binds. Type a name and **Keep** keeps the editor's
+statement as a session data set; later statements read it as
+`session('<name>')` instead of repeating the statement, and join it with
+server tables and with `keelson('<alias>')` ad-hoc datasets. Each row shows
+the name, rows, bytes, state (*live*; *expired* or *stale*, made again from
+its definition by the next statement that reads it; *failed*), the server it
+lives on, **Definition** for the statement that made it, and **Drop**. The
+first data set opens a data session for the window; **Open in play** hands
+it to the window it opens, which then reads the same data sets. While an
+agent's task works in the window, the tab shows the task's data sets
+instead, which every window and app of the task reads.
+
 ### Snippets
 
 A small library of ready-to-run fragments (play's own `snippets` help doc). Each

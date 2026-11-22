@@ -135,6 +135,7 @@ const (
 	dockTabRiskMatrix uint64 = 35
 	dockTabTolerance  uint64 = 36
 	dockTabBowtie     uint64 = 37
+	dockTabDatasets   uint64 = 38
 )
 
 type PlayApp struct {
@@ -878,12 +879,16 @@ type PlayApp struct {
 	queryRuns map[string]queryRun
 	// sessions is the window's last reading of its data session's data
 	// sets, and dropCalls the drop_dataset calls in flight, by call key
-	// (play_ops_sessiondata.go).
+	// (play_ops_sessiondata.go). keepName is the Data sets tab's name
+	// field, bound to its text edit; keepNote its last outcome.
 	sessions sessionView
 	// sessionsSeen is sessions' digest as the last frame latched it: the
 	// session_datasets resource, which moves only inside a frame.
 	sessionsSeen string
 	dropCalls    map[string]*dropCall
+	keepName     string
+	keepNote     string
+	keepBusy     *sessionCall[keepResult]
 	// runDoneFrames counts the frames a finished run has waited for the
 	// frame to draw its result (runLanded).
 	runDoneFrames int

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/factswrapper"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
@@ -94,7 +95,7 @@ func TestWorkingsetBytesDecodeUnderTheMovedDTO(t *testing.T) {
 func TestCodecIsPlaysGoldenRenamed(t *testing.T) {
 	_, thisFile, _, _ := runtime.Caller(0)
 	dir := filepath.Dir(thisFile)
-	before, err := factswrapper.FactsWrapper{}.Generate(filepath.Join(dir, "testdata", "launchcfg_before_move.go.txt"), "")
+	before, err := factswrapper.FactsWrapper{}.Generate(withFieldsAddedSinceTheMove(t, filepath.Join(dir, "testdata", "launchcfg_before_move.go.txt")), "")
 	require.NoError(t, err)
 	after, err := factswrapper.FactsWrapper{}.Generate(filepath.Join(dir, "playground.go"), "")
 	require.NoError(t, err)
@@ -114,4 +115,40 @@ func TestCodecIsPlaysGoldenRenamed(t *testing.T) {
 	if renamed != string(after) {
 		t.Fatalf("the moved codec differs from play's golden by more than the renames; generator output length %d vs %d", len(renamed), len(after))
 	}
+}
+
+// fieldsAddedSinceTheMove are the fields the DTO gained after it moved, each
+// an Option so a row written before decodes; withFieldsAddedSinceTheMove
+// appends them to the frozen source so the rename check still compares the
+// rest of the codec.
+var fieldsAddedSinceTheMove = []string{
+	"SessionHandOver option.Option[string] `lw:\"playLaunchSessionHandOver,symbol\"`",
+}
+
+func withFieldsAddedSinceTheMove(t *testing.T, frozen string) (path string) {
+	t.Helper()
+	raw, err := os.ReadFile(frozen)
+	require.NoError(t, err)
+	src := string(raw)
+	const bundle = "Bundle string `lw:\"playLaunchBundle,symbol\"`\n"
+	require.Contains(t, src, bundle)
+	src = strings.Replace(src, bundle, bundle+"\t"+strings.Join(fieldsAddedSinceTheMove, "\n\t")+"\n", 1)
+	src = strings.Replace(src, "import \"time\"\n", "import (\n\t\"time\"\n\n\t\"github.com/stergiotis/boxer/public/functional/option\"\n)\n", 1)
+	path = filepath.Join(t.TempDir(), "launchcfg_before_move.go")
+	require.NoError(t, os.WriteFile(path, []byte(src), 0o644))
+	return
+}
+
+// TestTheSessionHandOverRoundTrips carries a hand-over token through the
+// codec, and an old row decodes without one.
+func TestTheSessionHandOverRoundTrips(t *testing.T) {
+	in := playground.Launch{Sql: "SELECT * FROM session('msgs')", SessionHandOver: option.Some("sdh_0123456789abcdef0123456789abcdef")}
+	raw, err := buscodec.Encode(in)
+	require.NoError(t, err)
+	out, err := buscodec.Decode[playground.Launch](raw)
+	require.NoError(t, err)
+	assert.Equal(t, in.SessionHandOver, out.SessionHandOver)
+	old, err := buscodec.Decode[playground.Launch](mustHex(t, launchRowHex))
+	require.NoError(t, err)
+	assert.False(t, old.SessionHandOver.Has)
 }

@@ -1,6 +1,7 @@
 package play
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"sync"
@@ -8,12 +9,17 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchrequest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // runAll runs sql through ExecuteArrowStream and drains it, as a lane does.
@@ -256,6 +262,60 @@ func TestTwoAppsOfOneTaskShareItsDataSession(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestAHandOverCarriesThePersonsDataSession: the opener's window mints a
+// token, the opened window claims it and reads the opener's data sets.
+// Neither ticket nor token reaches the log or an error.
+func TestAHandOverCarriesThePersonsDataSession(t *testing.T) {
+	var logged bytes.Buffer
+	prev := log.Logger
+	log.Logger = zerolog.New(&logged).Level(zerolog.DebugLevel)
+	t.Cleanup(func() { log.Logger = prev })
+
+	r := newSdRig(t)
+	opener := r.client("github.com/x/play", 1)
+	opened := r.client("github.com/x/play", 2)
+	_, err := opener.defineSession(t.Context(), nil, "msgs", "SELECT 1 AS x", nil)
+	require.NoError(t, err)
+	ticket := opener.windowTicket()
+
+	_, _, err = runAll(t, quickly(t), opened, "SELECT * FROM session('msgs')", nil)
+	require.ErrorContains(t, err, "holds no data session")
+	assert.NotContains(t, err.Error(), ticket)
+
+	token, err := opener.handOverToken(t.Context())
+	require.NoError(t, err)
+	require.True(t, sessiondata.IsHandOver(token))
+	require.NoError(t, opened.claimHandOver(t.Context(), token))
+	_, _, err = runAll(t, quickly(t), opened, "SELECT * FROM session('msgs')", nil)
+	require.NoError(t, err)
+	err = opened.claimHandOver(t.Context(), token)
+	require.Error(t, err, "a token is claimed once")
+	assert.NotContains(t, err.Error(), token)
+
+	assert.NotContains(t, logged.String(), ticket)
+	assert.NotContains(t, logged.String(), token)
+}
+
+func TestOpenInPlayHandsTheWindowsDataSessionOver(t *testing.T) {
+	r := newSdRig(t)
+	c := r.client("github.com/x/play", 1)
+	_, err := c.defineSession(t.Context(), nil, "msgs", "SELECT 1 AS x", nil)
+	require.NoError(t, err)
+	bus := &fakeOpenBus{}
+	inst := newOpenTestApp(t, bus)
+	inst.client = c
+	require.NoError(t, inst.openPlayground(playLaunchForTest("SELECT * FROM session('msgs')")))
+	cfg := decodeOpenedLaunch(t, bus)
+	require.True(t, cfg.SessionHandOver.Has)
+	assert.True(t, sessiondata.IsHandOver(cfg.SessionHandOver.Val))
+	assert.NotEqual(t, c.windowTicket(), cfg.SessionHandOver.Val, "the token goes, not the ticket")
+
+	// A window working for a task hands nothing over.
+	c.SetAgentMark(&app.OnBehalfOf{Task: "t1", Epoch: 1})
+	require.NoError(t, inst.openPlayground(playLaunchForTest("SELECT 1")))
+	assert.False(t, decodeOpenedLaunch(t, bus).SessionHandOver.Has)
+}
+
 func TestSessionStandInClassifiesTheMacroAsATable(t *testing.T) {
 	assert.Equal(t, "SELECT * FROM `__sd_msgs` AS m", sessionStandIn("SELECT * FROM session('msgs') AS m"))
 	assert.Equal(t, "SELECT 1", sessionStandIn("SELECT 1"))
@@ -276,6 +336,19 @@ func TestAGrantErrorBecomesAnAgentLimit(t *testing.T) {
 	var limit *AgentLimitError
 	require.True(t, errors.As(err, &limit))
 	assert.Equal(t, "clickhouse-session:h", limit.Destination)
+}
+
+// playLaunchForTest is a launch config seeded with sql.
+func playLaunchForTest(sql string) launchcfg.PlayLaunch { return launchcfg.PlayLaunch{Sql: sql} }
+
+// decodeOpenedLaunch is the launch config the last open request carried.
+func decodeOpenedLaunch(t *testing.T, bus *fakeOpenBus) (cfg launchcfg.PlayLaunch) {
+	t.Helper()
+	req, err := buscodec.Decode[launchrequest.LaunchRequest](bus.gotPayload)
+	require.NoError(t, err)
+	cfg, err = buscodec.Decode[launchcfg.PlayLaunch](req.Config)
+	require.NoError(t, err)
+	return
 }
 
 // TestACheckRestsOnAResultThatReadADataSet: a citation's check over a

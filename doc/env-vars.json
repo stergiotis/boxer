@@ -1951,6 +1951,17 @@
       }
     },
     {
+      "name": "BOXER_PLAY_FOCUS_DATASETS",
+      "type": "string",
+      "description": "non-empty makes Data sets the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
       "name": "BOXER_PLAY_FOCUS_DETAIL",
       "type": "string",
       "description": "non-empty makes Detail the default-active tab in its dock leaf (scripted screenshots)",

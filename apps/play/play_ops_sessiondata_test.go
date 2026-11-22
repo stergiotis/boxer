@@ -2,6 +2,8 @@ package play
 
 import (
 	"testing"
+
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -11,7 +13,18 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
+
+// renderHeadless draws one frame of body under the discard channel.
+func renderHeadless(t *testing.T, body func()) {
+	t.Helper()
+	assert.NotPanics(t, func() {
+		defer c.CurrentApplicationState.StateManager.ScriptReset()
+		body()
+	})
+}
 
 // settleUntil settles an asynchronous call until done says it may stop, or
 // two seconds pass.
@@ -138,6 +151,30 @@ func TestKeepFailureSettlesAsARefusalNamingTheDestination(t *testing.T) {
 	var refusal *app.OperationRefusal
 	require.ErrorAs(t, err, &refusal)
 	assert.Equal(t, []string{session}, refusal.Destinations)
+}
+
+func TestTheDataSetsTabRendersHeadless(t *testing.T) {
+	t.Cleanup(egui2test.Install())
+	r := newSdRig(t)
+	cl := r.client("github.com/x/play", 1)
+	_, err := cl.defineSession(t.Context(), nil, "msgs", "SELECT 1 AS x", nil)
+	require.NoError(t, err)
+	inst := NewPlayApp(cl, newLiveQueryGraph(cl, memory.NewGoAllocator(), 4), "SELECT 1", nil)
+	inst.refreshSessions()
+	require.Eventually(t, func() bool { infos, _, _, _ := inst.sessions.read(); return len(infos) == 1 }, 2*time.Second, 10*time.Millisecond)
+	renderHeadless(t, func() { inst.renderDatasetsTab() })
+	inst.keepName = "bad name"
+	inst.personKeep()
+	assert.Contains(t, inst.keepNote, "identifier")
+	inst.keepName = "second"
+	inst.personKeep()
+	require.NotNil(t, inst.keepBusy)
+	require.Eventually(t, func() bool { inst.takeKeepResult(); return inst.keepBusy == nil }, 2*time.Second, 10*time.Millisecond)
+	assert.Contains(t, inst.keepNote, "kept second r1")
+	renderHeadless(t, func() { inst.renderDatasetsTab() })
+
+	bare := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "SELECT 1", nil)
+	renderHeadless(t, func() { bare.renderDatasetsTab() })
 }
 
 // TestALaunchAsksForTheRightToKeepDataSets: a window opened for a task asks

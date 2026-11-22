@@ -92,6 +92,13 @@ var (
 	// under itself.
 	MembPlayLaunchDatasetNames = KeelsonHrNkRegistry.MustBegin("playLaunchDatasetNames", 240).
 					MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
+	// MembPlayLaunchSessionHandOver carries a hand-over token of the opener's
+	// data session (sessiondata.HandOver): the opened window claims it at
+	// mount and reads the same session data sets. A token, never the
+	// session's ticket, since a launch row may be stored; it is spent by
+	// its claim and lapses within minutes. Empty hands nothing over.
+	MembPlayLaunchSessionHandOver = KeelsonHrNkRegistry.MustBegin("playLaunchSessionHandOver", 280).
+					MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
 )
 
 // AppletCreate config columns (ADR-0132 Update "O4" / ADR-0135 §SD7) — the

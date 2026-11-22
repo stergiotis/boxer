@@ -256,6 +256,9 @@ it.
 - **`describe_result` and `sample_rows`** describe results, not data sets:
   `list_datasets` with the name describes a data set, and a `query` over
   `session('<name>')` reads its rows.
+- **The person** keeps and drops data sets in the *Data sets* tab, in a
+  data session of the window's own, which *Open in play* hands to the
+  window it opens.
 
 ## The two machines
 

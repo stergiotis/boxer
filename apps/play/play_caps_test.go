@@ -193,10 +193,11 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// .wait and .close for the Editor's buffer handed to the host's editor
 	// app (the window open is the applet creator's). runtime.audio.out.open for the
 	// audio/wav gloss's play button (ADR-0372). runtime.sessiondata.define,
-	// .prepare, .release, .list, .drop and .open for session data sets
-	// (ADR-0406): the client defines, reads, lists and drops them, and a
-	// window opens its own data session.
-	require.Len(t, m.Caps, 25)
+	// .prepare, .release, .list, .drop, .open, .handover and .claim for
+	// session data sets (ADR-0406): keep_as and the Data sets tab define,
+	// runs read, list_datasets lists, drop_dataset drops, a window opens its
+	// own data session and hands it to a window Open in play opens.
+	require.Len(t, m.Caps, 27)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {
 		patterns = append(patterns, cap.Pattern)

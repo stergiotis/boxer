@@ -5,6 +5,7 @@ import (
 	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
 	tallylaunch "github.com/stergiotis/boxer/apps/tally/launchcfg"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -182,6 +183,19 @@ func (inst *PlayApp) openPlayground(cfg launchcfg.PlayLaunch) (err error) {
 		}
 		if cfg.BandsSql != "" {
 			cfg.BandsSql = inst.client.rewriteDatasetAliases(cfg.BandsSql)
+		}
+	}
+	// The person's data session goes with the buffer (ADR-0406): the
+	// opened window claims the token at mount and reads the same data
+	// sets. A window working for a task reads the task's data session,
+	// which is not handed to a person's window, so it hands nothing over.
+	if inst.client != nil && !cfg.SessionHandOver.Has && inst.client.agentMark.Load() == nil {
+		token, hErr := inst.client.handOverToken(inst.ioCtx)
+		switch {
+		case hErr != nil:
+			inst.logger.Warn().Err(hErr).Msg("play: open playground: the data session is not handed over")
+		case token != "":
+			cfg.SessionHandOver = option.Some(token)
 		}
 	}
 	if _, err = playground.Open(inst.ioCtx, inst.bus, cfg); err != nil {

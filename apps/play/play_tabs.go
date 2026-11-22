@@ -303,6 +303,9 @@ type builtinTabDef struct {
 var builtinTabDefs = []builtinTabDef{
 	{id: "editor", dockID: dockTabEditor, title: "Editor", zone: TabZoneEditor},
 	{id: "history", dockID: dockTabHistory, title: "History", zone: TabZoneEditor, lazy: true},
+	// The session data sets the window's runs read and the ad-hoc datasets
+	// it binds (ADR-0406), beside the history the statements made.
+	{id: "datasets", dockID: dockTabDatasets, title: "Data sets", zone: TabZoneEditor, lazy: true},
 
 	// The tool panes, in the leaf right of the editor (ADR-0097 Update
 	// 2026-08-01). Each is chrome fed by the buffer or by what is derived
@@ -712,6 +715,8 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Render = func(f *TabFrame) { inst.renderEditorTab() }
 		case "history":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderHistoryTab) }
+		case "datasets":
+			spec.Render = func(f *TabFrame) { scrollTab(inst.renderDatasetsTab) }
 		case "preview":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderPreviewTab) }
 		case "table":

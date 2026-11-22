@@ -37,7 +37,8 @@ const sessionReleaseTimeout = 5 * time.Second
 
 // sessionState is a client's link to the session data service: the bus it
 // asks over, as the window it serves, and the ticket of the person's data
-// session the window holds, empty until its first definition.
+// session the window holds, empty until its first definition or a
+// hand-over.
 type sessionState struct {
 	mu     sync.Mutex
 	bus    app.BusI
@@ -101,6 +102,32 @@ func (inst *Client) ensureWindowTicket(ctx context.Context) (ticket string, err 
 	}
 	inst.setWindowTicket(ticket)
 	return
+}
+
+// claimHandOver attaches the window to the data session a hand-over token
+// names and records its ticket.
+func (inst *Client) claimHandOver(ctx context.Context, token string) (err error) {
+	bus := inst.sessionBus()
+	if bus == nil {
+		return errNoSessionBus
+	}
+	ticket, err := sessiondata.Claim(ctx, bus, token)
+	if err != nil {
+		return eh.Errorf("take over the opener's data session: %w", err)
+	}
+	inst.setWindowTicket(ticket)
+	return
+}
+
+// handOverToken mints a hand-over token for the person's data session the
+// window holds; empty, without error, when it holds none.
+func (inst *Client) handOverToken(ctx context.Context) (token string, err error) {
+	ticket := inst.windowTicket()
+	bus := inst.sessionBus()
+	if ticket == "" || bus == nil {
+		return "", nil
+	}
+	return sessiondata.HandOver(ctx, bus, ticket)
 }
 
 var errNoSessionBus = errors.New("this window is not wired to the session data service")
@@ -200,7 +227,7 @@ func (inst *Client) prepareSession(ctx context.Context, sql string, opts *ExecOp
 		in.Ticket = inst.windowTicket()
 		if in.Ticket == "" {
 			if datasets, _ := sessiondata.References(in.SQL); len(datasets) > 0 {
-				return nil, eb.Build().Strs("datasets", datasets).Errorf("this window holds no data session yet: keep a data set first")
+				return nil, eb.Build().Strs("datasets", datasets).Errorf("this window holds no data session yet: keep a data set first, or open the window from one that holds the session")
 			}
 		}
 	}

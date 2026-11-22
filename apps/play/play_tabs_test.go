@@ -24,10 +24,10 @@ func tabsTestApp() *PlayApp {
 func TestDefaultTabsEnumeration(t *testing.T) {
 	reg := tabsTestApp().Tabs()
 	specs := reg.all()
-	require.Len(t, specs, 35)
+	require.Len(t, specs, 36)
 
 	wantDockID := map[string]uint64{
-		"editor": dockTabEditor, "history": dockTabHistory, "preview": dockTabPreview,
+		"editor": dockTabEditor, "history": dockTabHistory, "datasets": dockTabDatasets, "preview": dockTabPreview,
 		"table": dockTabTable, "projection": dockTabProjection, "timeline": dockTabTimeline,
 		"snippets": dockTabSnippets, "map": dockTabMap, "vectorfield": dockTabVectorField, "world": dockTabWorld,
 		"kanban": dockTabKanban, "bowtie": dockTabBowtie, "riskmatrix": dockTabRiskMatrix, "tolerance": dockTabTolerance, "chat": dockTabChat, "cards": dockTabCards, "network": dockTabNetwork, "graphview": dockTabGraphview,

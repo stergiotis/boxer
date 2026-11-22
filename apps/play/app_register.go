@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
@@ -278,12 +279,14 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 			adhocdata.BundleEventsCap("and follows the bundle's republish and retract"),
 			adhocdata.BundlePublishCap("publish_result and the Publish menu publish the main result as an ad-hoc bundle (ADR-0288 §SD4)"),
 			adhocdata.ReadCap("list_bundles reads a bundle's column values as a read of the data, held to the task's grant (ADR-0288 §SD5)"),
-			sessiondata.DefineCap("the client keeps a statement's result as a session data set (ADR-0406)"),
+			sessiondata.DefineCap("query's keep_as and the Data sets tab keep a statement's result as a session data set (ADR-0406)"),
 			sessiondata.PrepareCap("a run reading session('…'), or joining an ad-hoc dataset with server tables, is bound to its data session"),
 			sessiondata.ReleaseCap("and frees the data session once the run's result is read"),
-			sessiondata.ListCap("the client lists the data session's data sets"),
-			sessiondata.DropCap("and drops one"),
+			sessiondata.ListCap("list_datasets and the Data sets tab list the data session's data sets"),
+			sessiondata.DropCap("drop_dataset and the Data sets tab drop one"),
 			sessiondata.OpenCap("a window opens the person's data session at its first definition"),
+			sessiondata.HandOverCap("Open in play hands the window's data session to the window it opens"),
+			sessiondata.ClaimCap("a window opened with a hand-over takes the opener's data session"),
 			// list_bundles reads the bundle catalog (ADR-0288 §SD4).
 			keelsonquery.ClientCaps(adhocdata.BundleCatalogTableName)[0],
 			{
@@ -342,6 +345,10 @@ func defaultEndpointDestinations() (dests []string) {
 	}
 	return
 }
+
+// sessionClaimTimeout bounds the claim of an opener's data session at
+// mount.
+const sessionClaimTimeout = 5 * time.Second
 
 func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	inst.ioCtx = app.ContextOf(ctx)
@@ -443,8 +450,19 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	client.SetTasks(task.ForApp(ctx))
 	client.SetLifetime(ctx.Lifetime())
 	// The session data service (ADR-0406): the window's runs reach its
-	// data sets over the window's own bus.
+	// data sets over the window's own bus, and a window opened with the
+	// opener's data session takes it over before its first run.
 	client.SetSessionBus(ctx.Bus())
+	if launch != nil && launch.SessionHandOver.Has && !restored && ctx.Bus() != nil {
+		claimCtx, cancel := context.WithTimeout(inst.ioCtx, sessionClaimTimeout)
+		if cErr := client.claimHandOver(claimCtx, launch.SessionHandOver.Val); cErr != nil {
+			// A degraded open, not a failed one: the window runs, and a
+			// statement reading the opener's data sets says it holds none.
+			logger := ctx.Log()
+			logger.Warn().Err(cErr).Msg("play: the opener's data session was not taken over")
+		}
+		cancel()
+	}
 	// NewLivePlayApp installs the pre-execute SQL pipeline on the client
 	// (standard passes + schema-aware leeway name resolver, ADR-0108/0116) and
 	// wires the resolver into the Diagnostics pane. The carousel-embedded play
