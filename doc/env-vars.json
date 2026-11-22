@@ -280,6 +280,18 @@
       }
     },
     {
+      "name": "BOXER_ATTENTION_RESTART_SNOOZE",
+      "type": "duration",
+      "default": "2h",
+      "description": "how long the host waits before it asks again whether to restart, after the person chose later or skipped the question; with a deadline it asks again no later than half the time that is left",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/attention"
+      }
+    },
+    {
       "name": "BOXER_AUDIO_LANE_TARGET",
       "type": "duration",
       "default": "150ms",
@@ -3562,6 +3574,28 @@
       "origin": {
         "module": "github.com/stergiotis/boxer",
         "package": "github.com/stergiotis/boxer/public/keelson/runtime/launchlimit"
+      }
+    },
+    {
+      "name": "KEELSON_RESTART_PENDING_FILE",
+      "type": "string",
+      "description": "file in which whoever deploys this host lists the services whose restart is pending: a JSON object with `units`, each naming its `service`, the time the restart became pending (`since`) and, optionally, the `deadline` it is restarted at regardless; while the host finds itself listed it asks the person whether to restart now, and restarts by ending its process; unset = the host never asks",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/attention"
+      }
+    },
+    {
+      "name": "KEELSON_RESTART_PENDING_SERVICE",
+      "type": "string",
+      "description": "the service name this host is listed under in KEELSON_RESTART_PENDING_FILE; unset = the host never asks",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/attention"
       }
     },
     {

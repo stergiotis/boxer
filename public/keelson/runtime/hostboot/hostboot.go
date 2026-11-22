@@ -1291,6 +1291,12 @@ func (rt *Runtime) bootAgent() {
 	// (ADR-0324).
 	cfg.Attention = attention.NewService()
 	rt.AttentionQueue = cfg.Attention.Queue
+	// A deployment that leaves this host's restart to the person lists it
+	// as pending; the person is asked through the queue, and the host ends
+	// its process on their word.
+	if stopAsking := attention.StartRestartAsk(rt.ctx, cfg.Attention, attention.EndProcess, logger); stopAsking != nil {
+		rt.onClose(stopAsking)
+	}
 	// The person's table of levels is kept with the host's state (ADR-0323
 	// §SD4); loaded before the trail is attached, since loading is not the
 	// person's change.
