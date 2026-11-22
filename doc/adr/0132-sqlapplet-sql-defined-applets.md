@@ -815,6 +815,31 @@ author's and an agent re-runs it rather than rewrites it. Decided by the
 maintainer on 2026-11-07; a per-applet allowance declared in the
 document's frontmatter was considered and not taken.
 
+### 2026-11-22 — a statement nesting a block comment is not a read
+
+The §SD5 class, and the statement-kind classifier beside it, judge the text
+as boxer's lexer tokenises it. ClickHouse nests block comments and the lexer
+ends one at its first `*/`, so a comment that opens another inside it ends in
+different places for the two: `/* /* */ SELECT 1 AS "x */ CREATE TEMPORARY
+TABLE t (a UInt8) ENGINE = Memory --"` was classified a plain read, and a
+26.9 server under `readonly=2` created the table; `/* /* */ SHOW */ DROP
+TABLE t` led with `SHOW` to the keyword fallback and with `DROP` to the
+server. Found while reviewing ADR-0405.
+
+The rule: a statement in which a block comment, as the lexer produced it,
+contains a further `/*` after its opening is not a read.
+`analysis.ClassifyQuerySecurity` witnesses it `mutating` (witness kind
+"nested block comment"), and `analysis.ClassifyStatementKind` answers
+`unknown`, on the parsed and the keyword path alike; both read the lexer's
+hidden-channel tokens through `analysis.NestedBlockComment`, so a `/*` inside
+a string or a quoted identifier is not a comment and is not looked at. Where
+no comment token holds an inner `/*`, the server's nesting depth never
+passes one, and both lexers end every block comment at the same `*/`.
+
+The honesty clause gains one more sentence: the class is of the text as
+boxer's lexer reads it. Other token-level differences between the two lexers
+are not ruled out; this one is closed.
+
 ## References
 
 Internal:

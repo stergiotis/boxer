@@ -71,6 +71,11 @@ const (
 	// SecurityWitnessStateChangingFunction — a scalar call that changes
 	// persistent server state from inside a SELECT (`generateSerialID`).
 	SecurityWitnessStateChangingFunction
+	// SecurityWitnessNestedComment — a block comment that opens another
+	// inside it ([NestedBlockComment]): the server ends it elsewhere than
+	// the grammar did, so what the server runs is not what was classified.
+	// Name carries the comment's opening text.
+	SecurityWitnessNestedComment
 )
 
 func (inst SecurityWitnessKindE) String() (s string) {
@@ -83,6 +88,8 @@ func (inst SecurityWitnessKindE) String() (s string) {
 		s = "insert wrapper"
 	case SecurityWitnessStateChangingFunction:
 		s = "state-changing function"
+	case SecurityWitnessNestedComment:
+		s = "nested block comment, which the server reads differently from the grammar"
 	default:
 		s = "egress function"
 	}
@@ -124,6 +131,10 @@ func (inst SecurityWitness) Describe() (s string) {
 //
 // On a parsed tree the classification is:
 //
+//   - a block comment that opens another inside it ([NestedBlockComment])
+//     witnesses [QuerySecurityMutating]: ClickHouse nests block comments and
+//     the grammar does not, so the server may run text this classification
+//     never read, and nothing weaker can be shown;
 //   - the INSERT wrapper witnesses [QuerySecurityMutating] outright — the
 //     write is the statement's whole point;
 //   - a top-level SET whose settings are all `param_*` is the parameter
@@ -149,7 +160,9 @@ func (inst SecurityWitness) Describe() (s string) {
 // The guarantee stops at what the text shows: views, dictionaries, table
 // engines, and UDFs can reach further than any static reading of the buffer
 // (the honesty clause of ADR-0132), and a scalar the vocabulary does not name
-// is presumed pure. err is non-nil only for a tree not
+// is presumed pure. It also stops at the lexer: the class is of the text as
+// boxer's lexer tokenises it, and a nested block comment is the one known
+// way to make the server tokenise it differently. err is non-nil only for a tree not
 // produced by [nanopass.Parse]; class is then the zero value (mutating).
 func ClassifyQuerySecurity(pr *nanopass.ParseResult) (class QuerySecurityClassE, witnesses []SecurityWitness, err error) {
 	if pr == nil || pr.Tree == nil {
@@ -160,6 +173,18 @@ func ClassifyQuerySecurity(pr *nanopass.ParseResult) (class QuerySecurityClassE,
 	// parses, so it must be witnessed from the tree — before the port it
 	// arrived as a parse error and classified mutating via the caller
 	// contract; a fall-through here would have flipped it to "read".
+	if src, nested := NestedBlockComment(pr); nested {
+		name := pr.Source[src.Start:src.End]
+		if len(name) > 32 {
+			name = strings.ToValidUTF8(name[:32], "") + "…"
+		}
+		witnesses = append(witnesses, SecurityWitness{
+			Class: QuerySecurityMutating,
+			Kind:  SecurityWitnessNestedComment,
+			Name:  name,
+			Src:   src,
+		})
+	}
 	if ins := pr.InsertStmt(); ins != nil {
 		name := ""
 		if tid, ok := ins.TableIdentifier().(*grammar1.TableIdentifierContext); ok {

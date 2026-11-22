@@ -99,6 +99,14 @@ var mutatingLeadingTokens = map[int]struct{}{
 //     lexer so comments and whitespace ahead of it are skipped correctly.
 //     Only the two tables above are recognised; anything else is unknown.
 //
+// Either tier holds only where the server reads the text as boxer's lexer
+// does. A statement with a block comment that opens another inside it
+// ([NestedBlockComment]) is not: ClickHouse nests block comments and the
+// lexer does not, so the comment ends in different places and the server
+// may run text the proof never read — `/* /* */ SHOW */ DROP TABLE t` leads
+// with SHOW to the lexer and with DROP to the server. Such a statement is
+// KindUnknown, however it parses.
+//
 // Total: no input errors, and no input is rejected.
 func ClassifyStatementKind(sql string) (kind KindE) {
 	pr, err := nanopass.Parse(sql)
@@ -110,6 +118,10 @@ func ClassifyStatementKind(sql string) (kind KindE) {
 // made, so a caller asking several questions of one statement parses once.
 func statementKind(sql string, pr *nanopass.ParseResult, err error) (kind KindE) {
 	if err == nil {
+		if _, nested := NestedBlockComment(pr); nested {
+			kind = KindUnknown
+			return
+		}
 		if pr.InsertStmt() != nil {
 			kind = KindMutating
 			return
@@ -122,6 +134,10 @@ func statementKind(sql string, pr *nanopass.ParseResult, err error) (kind KindE)
 	// past the guard is not worth lexing to answer "unknown".
 	guardErr := nanopass.CheckInputGuards(sql)
 	if guardErr != nil {
+		kind = KindUnknown
+		return
+	}
+	if _, nested := nestedBlockCommentIn(sql); nested {
 		kind = KindUnknown
 		return
 	}

@@ -41,6 +41,10 @@ func TestAgentLimits(t *testing.T) {
 		"inline rows, canonical":   {`SELECT * FROM "values"('a String, b String', "tuple"('x', 'y'))`, remote, grant, true},
 		"a call to an AI provider": {"SELECT aiGenerate('x')", remote, grant, false},
 		"a state-changing call":    {"SELECT generateSerialID('s')", remote, grant, false},
+		// ClickHouse nests block comments and the grammar does not, so the
+		// server would evaluate the quoted alias as code.
+		"a nested block comment":      {"SELECT 1 /* /* */ AS \"x */ , throwIf(1) AS z --\"\nFROM numbers(1)", remote, grant, false},
+		"comments read alike by both": {"SELECT '/*' AS s /* a *//* b */", remote, grant, true},
 	} {
 		err := checkAgentLimits(tc.sql, tc.dec, tc.obo, nil)
 		if tc.pass {

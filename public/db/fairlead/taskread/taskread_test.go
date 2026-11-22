@@ -32,6 +32,13 @@ func TestPassLetsATasksReadThroughAndRefusesTheRest(t *testing.T) {
 		{name: "a task's text that does not parse", sql: "SELEC 1", task: "t1", refused: true},
 		{name: "a task's script", sql: "SELECT 1; INSERT INTO t VALUES (1)", task: "t1", refused: true},
 		{name: "an empty task text", sql: "", task: "t1", refused: true},
+		// ClickHouse nests block comments and boxer's lexer does not: each of
+		// these is a read to the grammar and something else to the server.
+		{name: "a task's create hidden by a nested comment", sql: "/* /* */ SELECT 1 AS \"x */ CREATE TEMPORARY TABLE t (a UInt8) ENGINE = Memory --\"", task: "t1", refused: true},
+		{name: "a task's expression hidden by a nested comment", sql: "SELECT 1 /* /* */ AS \"x */ , throwIf(1) AS z --\"\nFROM numbers(1)", task: "t1", refused: true},
+		{name: "a task's drop behind a show and a nested comment", sql: "/* /* */ SHOW */ DROP TABLE t", task: "t1", refused: true},
+		{name: "a task's select with comments both lexers read alike", sql: "SELECT '/*' AS s /* a *//* b */ FROM t -- /*\n", task: "t1"},
+		{name: "a task's select with /* in a quoted alias", sql: "SELECT 1 AS \"a /* b\"", task: "t1"},
 		{name: "an unmarked insert", sql: "INSERT INTO t VALUES (1)"},
 		{name: "an unmarked drop", sql: "DROP TABLE t"},
 		{name: "an unmarked text that does not parse", sql: "SELEC 1"},
