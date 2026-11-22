@@ -113,11 +113,23 @@ func (inst *Presence) write(ctx context.Context, phase string, s Status) (err er
 	return
 }
 
+// presenceKeyPrefix scopes the hash a presence row is keyed by. The facts
+// table's id column is shared, and other writers key their rows by the
+// same hash of a string of their own — the trail by a model call's id. A
+// bare run id would give the row the id such a writer gives a row whose
+// key happens to be the same string.
+const presenceKeyPrefix = "watchbill-presence|"
+
+// PresenceKey is the id the presence rows of run carry.
+func PresenceKey(run string) uint64 {
+	return xxh3.HashString(presenceKeyPrefix + run)
+}
+
 // PresenceRow is the row a worker writes: keyed by the run id so a run's
 // rows form one series, the natural key the run id itself.
 func PresenceRow(phase string, s Status, host string, at time.Time) (row watchbillpresence.WorkerPresence) {
 	row = watchbillpresence.WorkerPresence{
-		Id: xxh3.HashString(s.RunId), NaturalKey: []byte(s.RunId), Ts: at.UTC(),
+		Id: PresenceKey(s.RunId), NaturalKey: []byte(s.RunId), Ts: at.UTC(),
 		Kind: kindLabel, RunId: s.RunId, Host: host, Phase: phase,
 		Kinds: append([]string(nil), s.Kinds...), Queues: append([]string(nil), s.Queues...),
 		MaxWorkers: uint32(max(s.MaxWorkers, 0)),

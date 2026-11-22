@@ -301,7 +301,7 @@ of a row. Checked against the tree on 2026-11-22.
 | the hand-written facts store (`chstore`) | an id leased from the tagged stream `factsRow`, or from `factsRowLocal` while no block can be leased (ADR-0397 §SD2) | yes for leased ids, across every process on the server; a process-local id only within its process |
 | the trail | a 64-bit hash of the row's natural-key string | usually; a key that recurs restates its id |
 | system metrics | a hash of host and domain: one id per *series* | no — every tick of a series carries it, ordered by `ts` |
-| the watchbill presence | a hash of the run id | no — a run's rows share it |
+| the watchbill presence | a hash of the run id under a prefix of its own | no — a run's rows share it |
 | the lading mount policy | the mount's tagged id, minted at random under a tag the app declares | no — one id per mount, a row per version |
 | markdown documents, dead letters, the capability map | the leading bytes of a digest of the content or the message's position | no — the same content or message restates its id, by design |
 | query runs | a digest with the top bit set (`queryrunfacts.IdBand`) | per event |
