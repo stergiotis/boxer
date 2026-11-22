@@ -70,6 +70,13 @@ func Validate(env EnvelopeV1) (err error) {
 		err = eh.Errorf("%w", ErrMissingPatch)
 		return
 	}
+	// A decoded patch can carry a change the identity form does not cover;
+	// ComputeHash treats that as a programmer error and panics, so an
+	// envelope from the wire is refused here first.
+	if _, perr := env.Patch.IdentityPreimage(); perr != nil {
+		err = eh.Errorf("patch has no identity form: %w", perr)
+		return
+	}
 	computed := env.Patch.ComputeHash()
 	if env.Patch.Hash != computed {
 		err = eb.Build().Stringer("stored", env.Patch.Hash).Stringer("computed", computed).Errorf("stored and computed hashes differ: %w", ErrTampered)
