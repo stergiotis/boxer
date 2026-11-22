@@ -23,9 +23,9 @@ itself; ADR-0389 states its tier.
 | Section | Packages |
 | --- | ---: |
 | [Stable](#stable) | 77 |
-| [Experimental](#experimental) | 287 |
+| [Experimental](#experimental) | 284 |
 | [Internal](#internal) | 16 |
-| [Test support](#test-support) | 17 |
+| [Test support](#test-support) | 18 |
 | [Tools](#tools) | 91 |
 | [Demos and examples](#demos-and-examples) | 40 |
 | [Unclassified](#unclassified) | 208 |
@@ -371,10 +371,7 @@ Public and usable, but may change in any MINOR version without a deprecation win
 - `public/science/geo/vectorfield/keelsonfield` — Package keelsonfield serves a gridded vector field held in memory as a family of keelson tables (ADR-0291): the relation itself, its options, and one table per statement purpose of sqlfield, each taking that statement's parameters as named arguments (ADR-0290) and replying in that statement's shape.
 - `public/science/geo/vectorfield/sqlfield` — Package sqlfield is a [vectorfield.SourceI] over a field held in ClickHouse (ADR-0250): every window request is one reduction query, so what crosses the wire is bounded by the request and the field may be any size.
 - `public/science/imaging` — Package imaging holds an image as measured samples, apart from any way of showing it (ADR-0373 §SD1, §SD2): one to four planes of one size and one sample kind, a colour model that says what the planes are, and the provenance of the whole.
-- `public/science/imaging/decode` — Package decode reads a PNG or a JPEG file into an [imaging.Image] without passing its samples through 8 bits or through premultiplied alpha (ADR-0373 §SD10), and is the one way in to the readers of TIFF, FITS and NPY files, which give a stack (see Stacks).
-- `public/science/imaging/decode/fits` — Package fits reads an image HDU of a FITS file into an [imaging.Stack] (ADR-0398 §SD7, milestone M4).
-- `public/science/imaging/decode/npy` — Package npy reads a NumPy NPY array, or one array of an NPZ archive, into an [imaging.Stack] (ADR-0398 §SD8, milestone M5).
-- `public/science/imaging/decode/tiff` — Package tiff reads a TIFF or BigTIFF file into an [imaging.Stack] (ADR-0398 §SD6), written from the TIFF 6.0 specification, Adobe's Technical Note 3 and PageMaker supplement, the BigTIFF description, GeoTIFF 1.1 and GDAL's documentation of its private tags.
+- `public/science/imaging/decode` — Package decode reads image files: a PNG or a JPEG into an [imaging.Image] without passing its samples through 8 bits or through premultiplied alpha (ADR-0373 §SD10), and any format a host registers a reader for into an [imaging.Stack], through the seam of ADR-0398 §SD5–§SD8 (see Readers).
 - `public/science/imaging/display` — Package display turns an image's samples into the colours a screen shows, under a recipe that is a value of its own (ADR-0373 §SD4, §SD5).
 - `public/science/imaging/levels` — Package levels reduces an image by halving, for showing it smaller than it is (ADR-0373 §SD6).
 - `public/science/imaging/ops` — Package ops computes new images from images (ADR-0400): a declared operator applied to named inputs with stated parameters, run once at full resolution into a tiled store, with a record of what it did.
@@ -559,6 +556,7 @@ Helpers and conformance suites meant to be imported by tests. Outside the promis
 - `public/science/audio/pcm/pcmtest` — Package pcmtest checks a [pcm.SourceI] implementation against the read contract.
 - `public/science/geo/vectorfield/keelsonfield/keelsonfieldtest` — Package keelsonfieldtest holds a field family to the reduction statements it stands in for (ADR-0291 §SD5): one field read through sqlfield's six statements in clickhouse-local and through its family three ways — through the same engine, through the trivial evaluator, and through it after play's canonicalization — compared purpose by purpose.
 - `public/science/geo/vectorfield/vectorfieldtest` — Package vectorfieldtest is the conformance suite of the vectorfield contract (ADR-0249 SD1): every SourceI implementation runs it against itself.
+- `public/science/imaging/decode/decodetest` — Package decodetest is the conformance kit of the reader seam (ADR-0398 §SD9): a reader's own tests run [Check] over a few valid files of its format, and it checks what ADR-0398 §SD5–§SD8 and the decode package's doc ask of every reader — that it describes itself completely, recognises its files and no others, lists entries that decode to what they announce, refuses over each limit before reading samples, stops when cancelled, wraps the seam's refusals, survives every truncation of a valid file, and does not call a failing read a malformed file.
 
 ### semistructured
 
