@@ -160,6 +160,15 @@ func TestGetIdsResolvesABatch(t *testing.T) {
 	assert.Equal(t, ids, fromB)
 	assert.Equal(t, []bool{false, false, false, false}, freshB)
 
+	// The columnar form appends after what the caller holds.
+	col := identgen.KeysColumn{}.AppendKey([]byte("y")).AppendKey([]byte("w"))
+	appended, appendedFresh, err := b.AppendIds(ctx, []identifier.TaggedId{known}, col, []bool{false})
+	require.NoError(t, err)
+	require.Len(t, appended, 3)
+	assert.Equal(t, known, appended[0])
+	assert.Equal(t, ids[2], appended[1])
+	assert.Equal(t, []bool{false, false, true}, appendedFresh)
+
 	_, _, err = a.GetIds(ctx, [][]byte{[]byte("z"), nil})
 	require.Error(t, err, "an empty key is refused before anything is resolved")
 	_, found, err := b.Lookup(ctx, []byte("z"))

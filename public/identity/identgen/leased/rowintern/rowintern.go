@@ -43,6 +43,7 @@ import (
 	"sync"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
+	"github.com/stergiotis/boxer/public/identity/identgen"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -140,7 +141,7 @@ type Internalizer struct {
 	maxCached int
 }
 
-var _ identifier.IdGeneratorI = (*Internalizer)(nil)
+var _ identgen.BatchInternalizerI = (*Internalizer)(nil)
 
 // New builds the keyed generator for scope over the directory in layout.
 //
@@ -384,6 +385,28 @@ func (inst *Internalizer) GetIds(ctx context.Context, keys [][]byte) (ids []iden
 			// Only the first mention of a key in this call is the mint.
 			delete(minted, k)
 		}
+	}
+	return
+}
+
+// AppendIds is [Internalizer.GetIds] over a columnar batch of keys
+// (identgen.BatchInternalizerI): the id of keys.At(i) is appended to dst at
+// len(dst)+i, and fresh, when not nil, grows in lockstep. On an error dst
+// and fresh come back as they were; ids drawn for keys of a chunk that
+// failed are burnt, and the mappings of the chunks before it stay.
+func (inst *Internalizer) AppendIds(ctx context.Context, dst []identifier.TaggedId, keys identgen.KeysColumn, fresh []bool) (ids []identifier.TaggedId, freshOut []bool, err error) {
+	batch := make([][]byte, keys.Len())
+	for i := range batch {
+		batch[i] = keys.At(i)
+	}
+	got, minted, err := inst.GetIds(ctx, batch)
+	if err != nil {
+		return dst, fresh, err
+	}
+	ids = append(dst, got...)
+	freshOut = fresh
+	if fresh != nil {
+		freshOut = append(fresh, minted...)
 	}
 	return
 }
