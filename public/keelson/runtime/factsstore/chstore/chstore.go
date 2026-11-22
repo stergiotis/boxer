@@ -26,6 +26,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chversion"
 	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowalloc"
+	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowintern"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
@@ -229,6 +230,7 @@ func ComposeSetupSQL(cfg Config, engineClause string) (sql string, err error) {
 
 // SetupTable applies the boxer.facts DDL idempotently against the live CH
 // connection, provisions the id lease table the store mints row ids through
+// and the id directory the keyed generators resolve natural keys in
 // (ADR-0397 §SD2; not when the configuration brings an allocator of its
 // own) and, when that table holds no row for the store's stream while the
 // facts carry ids of it, starts the stream after the largest of them — a
@@ -293,6 +295,12 @@ func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err err
 			log.Warn().Str("leaseTable", inst.leaseLayout().Table()).Str("facts", inst.readTable()).Uint64("continuesAt", seededAt).
 				Msg("chstore: the id lease table had no row for the facts row stream while the facts hold ids of it; the stream continues after the largest")
 		}
+	}
+	// The id directory, beside the lease table: where the keyed generators
+	// keep which natural key has which id (ADR-0405 §SD3).
+	if err = rowintern.ProvisionIn(ctx, inst.exec, rowintern.Layout{Database: inst.cfg.Database}); err != nil {
+		err = eh.Errorf("chstore: setup: %w", err)
+		return
 	}
 	err = inst.EnsureReadSurface(ctx)
 	return
@@ -434,6 +442,7 @@ func SetupStatements(cfg Config, engineClause string) (stmts []string, err error
 	if cfg.RowIds.Allocator == nil {
 		stmts = append(stmts, rowalloc.ProvisionSQL(rowalloc.Layout{Database: cfg.Database})...)
 	}
+	stmts = append(stmts, rowintern.ProvisionSQL(rowintern.Layout{Database: cfg.Database})...)
 	stmts = append(stmts, lwsqlsurface.AllStatements("")...)
 	return
 }

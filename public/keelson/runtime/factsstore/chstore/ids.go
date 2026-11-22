@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identgen/leased"
 	"github.com/stergiotis/boxer/public/identity/identgen/leased/memalloc"
 	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowalloc"
+	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowintern"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/identity/tagmint"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
@@ -78,9 +79,62 @@ type RowIdGenerator struct {
 	// retryAt is the time, in Unix nanoseconds, before which no lease is
 	// attempted after one failed.
 	retryAt atomic.Int64
+	// exec and database reach the id directory beside the lease table, for
+	// the keyed generators ([RowIdGenerator.Keyed]).
+	exec     recordstore.ExecutorI
+	database string
 }
 
 var _ identifier.IdGeneratorI = (*RowIdGenerator)(nil)
+
+// Keyed is the facts table's keyed id generator for scope (ADR-0405 §SD2,
+// §SD3): the same natural key resolves to the same id of the facts row
+// stream, from every process and across restarts, through the id directory
+// beside the lease table. It is what a writer whose rows belong to an
+// entity that recurs — a metric series, a worker's run — mints from; a
+// writer whose every row is its own thing mints from the generator itself.
+//
+// scope keeps the natural keys of two writers apart. New keys take ids
+// from the leased stream only, never the process-local one: a key first
+// seen while no block can be leased fails to resolve, as the insert of its
+// row would on the same server.
+func (inst *RowIdGenerator) Keyed(scope string) (keyed *rowintern.Internalizer, err error) {
+	if inst.exec == nil {
+		return nil, eh.Errorf("chstore: keyed id generator: the row id generator reaches no server")
+	}
+	keyed, err = rowintern.New(inst.exec, rowintern.Layout{Database: inst.database}, scope, inst.leased)
+	if err != nil {
+		err = eh.Errorf("chstore: keyed id generator: %w", err)
+	}
+	return
+}
+
+// KeyedIdsOf is the facts table's keyed generator for scope beside a facts
+// store, as [RowIdsOf] is the sequential one: nil when store is not the
+// ClickHouse-backed one. A scope that is not a name is the caller's
+// mistake and panics.
+func KeyedIdsOf(store factsstore.FactsStoreI, scope string) identifier.IdGeneratorI {
+	st, ok := store.(*Store)
+	if !ok || st == nil {
+		return nil
+	}
+	keyed, err := st.RowIds().Keyed(scope)
+	if err != nil {
+		panic("chstore.KeyedIdsOf: " + err.Error())
+	}
+	return keyed
+}
+
+// NewKeyedIdGenerator is the facts table's keyed generator for scope over
+// exec, for a process that holds no [Store]: [NewRowIdGenerator] and
+// [RowIdGenerator.Keyed] in one.
+func NewKeyedIdGenerator(exec recordstore.ExecutorI, cfg Config, scope string) (keyed *rowintern.Internalizer, err error) {
+	rows, err := NewRowIdGenerator(exec, cfg)
+	if err != nil {
+		return
+	}
+	return rows.Keyed(scope)
+}
 
 // NewRowIdGenerator is the facts table's id generator for cfg, over exec:
 // for a process that writes facts through a generated store and holds no
@@ -176,6 +230,7 @@ func (inst RowIds) stream() (stream tagmint.ClaimedTagValue) {
 }
 
 func (inst *RowIdGenerator) init(exec recordstore.ExecutorI, layout rowalloc.Layout, cfg RowIds) (err error) {
+	inst.exec, inst.database = exec, layout.DatabaseName()
 	stream := cfg.stream()
 	if stream.Value() == vocab.IdStreamFactsRowLocal.Value() {
 		return eb.Build().Str("stream", stream.Name()).Errorf("row id stream: the process-local stream cannot be the leased one; leased ids need a tag of their own")
