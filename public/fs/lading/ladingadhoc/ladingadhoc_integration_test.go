@@ -22,6 +22,8 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
@@ -58,6 +60,15 @@ func purge(t *testing.T, exec recordstore.ExecutorI, mount identifier.TaggedId) 
 // same mount and see a second snapshot rather than a second mount.
 func TestPublishThenBrowseThenRepublish(t *testing.T) {
 	exec := liveExec(t)
+	// What lading writes and reads beside its own tables — the policy record
+	// in the facts table, the LW_ read surface its operations expand into —
+	// is set up here, so the test does not depend on another package having
+	// run first on the server.
+	factsSetup, err := chstore.SetupStatements(chstore.Config{Database: factsschema.DatabaseName, Table: factsschema.TableName}, "")
+	require.NoError(t, err)
+	for _, stmt := range factsSetup {
+		require.NoError(t, exec.Exec(context.Background(), stmt))
+	}
 	require.NoError(t, lading.Provision(context.Background(), exec, ladingschema.ProfileCorpus))
 
 	first, err := ladingadhoc.Publish(context.Background(), exec, ladingadhoc.PublishInput{

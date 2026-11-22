@@ -18,6 +18,8 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingvocab"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,6 +35,15 @@ func liveHarness(t *testing.T) *harness {
 	exec, err := storeexec.New(client, nil)
 	require.NoError(t, err)
 	ctx := context.Background()
+	// What lading writes and reads beside its own tables — the policy record
+	// in the facts table, the LW_ read surface its operations expand into —
+	// is set up here, so the test does not depend on another package having
+	// run first on the server.
+	factsSetup, err := chstore.SetupStatements(chstore.Config{Database: factsschema.DatabaseName, Table: factsschema.TableName}, "")
+	require.NoError(t, err)
+	for _, stmt := range factsSetup {
+		require.NoError(t, exec.Exec(ctx, stmt))
+	}
 	require.NoError(t, lading.Provision(ctx, exec, ladingschema.ProfileCorpus))
 
 	h := &harness{
