@@ -1,0 +1,68 @@
+package play
+
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
+)
+
+// query binds an ad-hoc alias its SQL reads and the window has not bound,
+// then judges the run under the agent limits once the dataset is bound, and
+// runs it.
+func TestQueryBindsTheAdHocAliasItReads(t *testing.T) {
+	l, h, publisher := bindLauncher(t)
+	publishInts(t, publisher, "ints")
+	const sql = "SELECT sum(v) FROM keelson('ints')"
+	assert.Equal(t, []string{"ints"}, l.inner.unboundDatasets(sql))
+
+	settle := func(call app.OperationCall) (settled bool, err error) {
+		settled, _, err = l.Operations().(app.OperationsAsyncI).SettleAsync(call, opQuery, nil)
+		return
+	}
+	args, err := buscodec.Encode(QueryArgs{Sql: sql})
+	require.NoError(t, err)
+
+	// Without the dataset's destination the run is refused once bound,
+	// naming it.
+	refused := app.OperationCall{Writer: "task:t", Key: "q1", OnBehalfOf: &app.OnBehalfOf{Task: "t"}}
+	_, err = h.ApplyCommand(refused, opQuery, args)
+	require.NoError(t, err, "the call is accepted while the alias binds")
+	require.NotNil(t, l.follower)
+	waitBound(t, l, "ints")
+	settled, err := settle(refused)
+	require.True(t, settled)
+	var refusal *app.OperationRefusal
+	require.ErrorAs(t, err, &refusal)
+	assert.Contains(t, refusal.Destinations, "keelson:ints")
+	assert.Empty(t, l.inner.unboundDatasets(sql), "bound now")
+
+	// Covered, the run starts: the buffer holds the SQL and a run is asked.
+	covered := app.OperationCall{Writer: "task:t", Key: "q2", OnBehalfOf: &app.OnBehalfOf{Task: "t", Destinations: []string{"keelson:ints", "clickhouse:ch.example:8123"}}}
+	_, err = h.ApplyCommand(covered, opQuery, args)
+	require.NoError(t, err)
+	assert.Equal(t, sql, l.inner.sql)
+	assert.True(t, l.inner.requestRun)
+}
+
+// query refuses, once its wait ends, an alias nothing is published under.
+func TestQueryRefusesAnAliasThatStaysUnbound(t *testing.T) {
+	l, h, _ := bindLauncher(t)
+	args, err := buscodec.Encode(QueryArgs{Sql: "SELECT * FROM keelson('nothing_here')"})
+	require.NoError(t, err)
+	call := app.OperationCall{Writer: "task:t", Key: "q", OnBehalfOf: &app.OnBehalfOf{Task: "t"}}
+	_, err = h.ApplyCommand(call, opQuery, args)
+	require.NoError(t, err)
+	q := l.inner.queryRuns["q"]
+	require.Equal(t, []string{"nothing_here"}, q.binding)
+	q.bindBy = time.Now().Add(-time.Second)
+	l.inner.queryRuns["q"] = q
+	settled, _, err := h.(app.OperationsAsyncI).SettleAsync(call, opQuery, nil)
+	require.True(t, settled)
+	require.ErrorContains(t, err, "no live dataset under nothing_here")
+	assert.False(t, l.inner.requestRun, "nothing ran")
+}

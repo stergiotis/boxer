@@ -281,9 +281,11 @@ The reasons recur across operations, so they are listed once:
 - **The result is not leeway-shaped** — `get_canonical` and the leeway
   display options need leeway columns; `describe_result` says whether
   they are.
-- **A dataset is not bound** — a run naming an alias the window does not
-  hold waits or fails; `list_datasets` says which aliases wait and why,
-  `bind_dataset` adds one, and the grant must list it.
+- **A dataset is not bound** — `query` binds an ad-hoc alias its SQL
+  reads that the window does not hold, and runs once it is bound, or
+  refuses when nothing is live under it within ten seconds; `run` fails
+  on one. `list_datasets` says which aliases wait and why, `bind_dataset`
+  adds one, and the grant must list it unless the task published it.
 - **The revision moved** — a command made over a base revision another
   writer has moved since is a conflict: read the resource again and
   repeat the call.
