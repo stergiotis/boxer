@@ -29,7 +29,9 @@ ways.
 
 `ratio` is stored over raw, so low is good. `tables` says how far an aspect's
 evidence is spread: a ratio drawn from one table is that table's data, not the
-aspect's.
+aspect's. Only columns with stored bytes count, and `system.columns` sizes
+columns from wide parts only, so a table small enough to hold only compact
+parts is not in the corpus at all.
 
 Use aspects attach to sections rather than to columns, so under `use` every
 column of a section carries its section's set — the counts are column counts

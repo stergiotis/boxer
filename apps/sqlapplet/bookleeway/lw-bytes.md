@@ -29,7 +29,10 @@ present — which is what a ratio needs and what surveying the result would get
 wrong. Low is good: `0.02` is fifty-to-one.
 
 Columns with nothing stored are dropped rather than drawn at zero area. An
-empty table contributes no rectangle, not an invisible one.
+empty table contributes no rectangle, not an invisible one. Neither does a
+small one: `system.columns` sizes columns from wide parts only, and a part
+below the table's `min_bytes_for_wide_part` is compact, so a table holding
+only compact parts reads as storing nothing here.
 
 ```sql
 WITH
