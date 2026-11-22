@@ -415,4 +415,4 @@ withdrawn, deferred — is described in the
 | [0401](./0401-showing-bands-together-a-recipe-per-band-an-additive-composite-and-limits-by-zscale.md) | Showing bands together — a recipe per band, an additive composite, and limits by zscale | proposed | 2026-11-21 |  |
 | [0402](./0402-facts-stored-in-a-deployments-own-table-a-write-transform-at-the-insert-seam-and-one-read-table-setting.md) | Facts stored in a deployment's own table — a write transform at the insert seam, and one read-table setting | accepted | 2026-11-21 |  |
 | [0403](./0403-a-statement-a-task-wrote-leaves-only-as-a-read.md) | A statement a task wrote leaves only as a read — the task rides to the fairlead | proposed | 2026-11-22 |  |
-| [0405](./0405-every-row-of-the-facts-table-carries-a-minted-id-and-an-entity-is-named-by-its-natural-key.md) | Every row of the facts table carries a minted id, and an entity is named by its natural key | proposed | 2026-11-22 |  |
+| [0405](./0405-every-id-in-the-facts-table-is-minted-and-a-natural-key-resolves-to-one-id-on-the-server.md) | Every id in the facts table is minted, and a natural key resolves to one id on the server | proposed | 2026-11-22 |  |

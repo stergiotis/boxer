@@ -140,6 +140,9 @@ exercised.
    not notice a lease table restored from an older backup than the facts.
    A deployment with an id authority of its own configures it instead
    (`chstore.RowIds`, `hostboot.Options.FactsRowIds`).
+   `boxer.idkey` beside it is state in the same way: it holds which
+   natural key has which id, for the writers whose rows share an entity
+   (ADR-0405 §SD3, §SD7). Back the two up with your table.
 7. **Start the deployment's binaries.** Setup creates no facts table and
    still creates the `boxer` database, the lease table and the SQL read
    surface. The schema check judges the view by its columns and by one

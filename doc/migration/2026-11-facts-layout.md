@@ -108,7 +108,9 @@ refreshable view over the table at start.
 
 Leave `boxer.idlease` as it is throughout. It keeps the next unleased row
 id of each stream and nothing else does. Setup recovers a lost one from
-the largest id in the table, at the cost of reading the id column.
+the largest id in the table, at the cost of reading the id column. Leave
+`boxer.idkey` too, where there is one: it maps natural keys to ids, and
+nothing recovers it.
 
 ## Checking the result
 

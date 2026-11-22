@@ -292,8 +292,9 @@ reconciled.
 ## What the `id` column holds
 
 Every row of the facts table is meant to carry an id minted from the
-table's stream, with its natural key naming what the row is about
-([ADR-0405](../adr/0405-every-row-of-the-facts-table-carries-a-minted-id-and-an-entity-is-named-by-its-natural-key.md),
+table's stream: one per entity where the writer's rows share an entity,
+one per row where they do not
+([ADR-0405](../adr/0405-every-id-in-the-facts-table-is-minted-and-a-natural-key-resolves-to-one-id-on-the-server.md),
 proposed). That is built for most writers and not yet for all, and rows
 written before it keep what they had. Read this before you choose a key
 for a new store, and before you treat an `id` as the name of a row.
@@ -301,29 +302,40 @@ Checked against the tree on 2026-11-22.
 
 | Writer | What it puts in `id` now | Before ADR-0405 |
 | --- | --- | --- |
-| the hand-written facts store (`chstore`) | a minted id: leased from `factsRow`, or from `factsRowLocal` while no block can be leased (ADR-0397 §SD2) | the same |
-| the trail, system metrics, the watchbill presence, markdown documents, dead letters | a minted id, from the same generator, handed to the store as its `Keys` | a hash of the natural key, or of a series' or a run's name, shared by its rows |
+| the hand-written facts store (`chstore`) | an id per row: leased from `factsRow`, or from `factsRowLocal` while no block can be leased (ADR-0397 §SD2) | the same |
+| system metrics | an id per (host, domain) series, resolved from the series' natural key | xxh3 of host and domain |
+| the watchbill presence | an id per run, resolved from the run id | a hash of the run id |
+| dead letters | an id per message position, resolved from the position's digest | a digest of the position |
+| the trail, markdown documents | an id per row, the next of the stream | a hash of the row's key, or of content and ingest time |
 | the capability map | the leading bytes of a digest of the natural key | the same |
 | query runs | a digest with the top bit set (`queryrunfacts.IdBand`) | the same |
 | the lading mount policy | the mount's tagged id, minted elsewhere under a tag the app declares; one per mount, a row per version | the same |
 
 What follows from it:
 
-- **A minted id names one row.** What ties rows together — a metric
-  series, a run, a document across ingests — is the natural key, and a
-  read of an entity goes by it and names the kind.
-- **A store over the facts table mints its key.** Regenerated, it has
-  `Keys` in its configuration and `MintKey`; whoever builds it hands it
-  the facts table's generator (`chstore.RowIdsOf`, or
-  `chstore.NewRowIdGenerator` for a process without a facts store). A
-  store built without one refuses to mint.
-- **A generated store's point reads select by `id` alone.** `Latest` and
-  `Replay` by a minted id reach one row; an entity's history is a scan by
-  natural key (`ScanOpts.ExtraPredicate`), as the metrics replay does.
-- **Rows from before are still there.** Their ids are hashes that
-  several rows may share and that can, by the odds of 64 bits, equal
-  another id. Their natural keys are what new rows' are, so a read by
-  natural key spans both.
+- **"Resolved from the natural key" is a lookup, not arithmetic.** The id
+  directory, a table beside the lease table, holds which key has which id;
+  the same key gives the same id from every process. A writer is handed
+  the keyed generator for its scope (`chstore.KeyedIdsOf`, or
+  `chstore.NewKeyedIdGenerator` for a process without a facts store), a
+  reader the lookup (`chstore.NewKeyedIdLookup`), which gives no key an
+  id.
+- **A store over the facts table is handed its generator.** Regenerated,
+  it has `Keys` in its configuration, and `MintKeyFor` resolves a row's id
+  from the row's natural key through it. Hand it the keyed generator and
+  the rows of an entity share an id; hand it the sequential one
+  (`chstore.RowIdsOf`, `chstore.NewRowIdGenerator`) and every row has its
+  own. A store built without one refuses to write.
+- **Choose by what a row is.** If two rows can be about the same thing and
+  a reader will want them together, the store is keyed and needs a scope
+  of its own. If every row is an event, it is sequential, and costs the
+  directory nothing.
+- **The directory is state.** It is backed up and moved with the facts
+  table. Without it the facts are all there and no key resolves to the id
+  its older rows carry.
+- **Rows from before are still there.** Their ids are hashes that can, by
+  the odds of 64 bits, equal another id. A reader of an entity takes the
+  hash beside the resolved id, as the metrics replay does.
 - **The tag of an id means something only for a minted one.** A hash
   parses as *some* tag too. Tell rows apart by kind first.
 
