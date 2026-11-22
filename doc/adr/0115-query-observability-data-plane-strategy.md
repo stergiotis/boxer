@@ -632,6 +632,26 @@ that test stores a re-served event several times, while the test without a
 transform still passes behind its anti-join. Agreed with the code owner on
 2026-11-22.
 
+## Update — 2026-11-22: the backfill floor holds past the first batch
+
+The update of 2026-07-25 applied the floor only while the destination was
+empty. After the first batch the extract's lower bound became
+`watermark - WatermarkOverlap`, which reaches back past a floor set within
+that overlap of the first captured event — with `none`, always. The minute
+before the floor was then captured after all, oldest first and ahead of the
+newer events, so with a small batch cap a busy minute held capture behind it
+(`TestLiveDenseOverlapDoesNotStall` waited out its budget on a server whose
+previous minute had been a test lane).
+
+The floor now applies while the destination holds nothing older than it:
+the lower bound is the later of the floor and `watermark - WatermarkOverlap`.
+A destination holding facts older than the floor — a restart after downtime,
+which resolves the floor at the restart — is bounded by the watermark alone,
+so the catch-up over the gap is unchanged, which is the property the earlier
+update kept the floor away from. The lower bound is never below
+`watermark - WatermarkOverlap`, so the MV anti-join window still covers every
+row served (`TestLiveBackfillFloorHoldsPastTheFirstBatch`).
+
 ## References
 
 - [doc/explanation/query-observability.md](../explanation/query-observability.md)
