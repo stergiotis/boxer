@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
@@ -19,14 +20,17 @@ import (
 	"github.com/stergiotis/boxer/public/storage/recordstore/recordstoretest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"slices"
 )
 
 // recordingExec is a recordstore.ExecutorI that accepts inserts and remembers
 // them. It keeps this test in the default lane: the store's SQL and Arrow
 // encoding are exercised, the server is not.
 type recordingExec struct {
-	mu      sync.Mutex
-	tables  []string
+	mu     sync.Mutex
+	tables []string
+	// ids counts the rows written under each id.
+	ids     map[uint64]int
 	batches int
 	rows    int64
 }
@@ -46,8 +50,26 @@ func (e *recordingExec) InsertArrow(_ context.Context, table string, records []a
 	e.batches += len(records)
 	for _, r := range records {
 		e.rows += r.NumRows()
+		if idx := r.Schema().FieldIndices("id:id:u64:47::0:"); len(idx) == 1 {
+			if e.ids == nil {
+				e.ids = map[uint64]int{}
+			}
+			for _, id := range r.Column(idx[0]).(*array.Uint64).Uint64Values() {
+				e.ids[id]++
+			}
+		}
 	}
 	return nil
+}
+
+func (e *recordingExec) idCounts() (counts []int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, n := range e.ids {
+		counts = append(counts, n)
+	}
+	slices.Sort(counts)
+	return
 }
 
 func (e *recordingExec) snapshot() (tables []string, batches int, rows int64) {
@@ -80,7 +102,7 @@ func startTee(t *testing.T, opts sysmtee.Options) (*sysmtee.Tee, *recordingExec,
 	pubCap := []app.SubjectFilter{{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionPub}}
 
 	exec := &recordingExec{}
-	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{Keys: recordstoretest.KeyStream(recordstoretest.FactsRowTag)})
+	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{Keys: recordstoretest.KeyedStream(recordstoretest.FactsRowTag)})
 
 	opts.Bus = bus.NewClient("tee", subCap)
 	opts.Store = store
@@ -125,6 +147,11 @@ func TestTee_WritesWhatThePlaneCarries(t *testing.T) {
 	for _, tbl := range tables {
 		assert.Equal(t, "boxer.facts", tbl, "the tee writes the facts table, qualified")
 	}
+
+	// A series' rows share the series' id, resolved from its natural key
+	// (ADR-0405 §SD2): three ids, for the descriptor, the cpu samples and
+	// the mem samples.
+	assert.Equal(t, []int{1, 3, 3}, exec.idCounts())
 
 	st := tee.Stats()
 	assert.EqualValues(t, 3, st.Bundles)
@@ -353,7 +380,7 @@ func TestTee_StopIsIdempotent(t *testing.T) {
 func TestStart_RequiresBusStoreAndHost(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
 	client := bus.NewClient("tee", []app.SubjectFilter{{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionSub}})
-	store := sysmfacts.NewSysmetricsStore(&recordingExec{}, nil, sysmfacts.SysmetricsStoreConfig{Keys: recordstoretest.KeyStream(recordstoretest.FactsRowTag)})
+	store := sysmfacts.NewSysmetricsStore(&recordingExec{}, nil, sysmfacts.SysmetricsStoreConfig{Keys: recordstoretest.KeyedStream(recordstoretest.FactsRowTag)})
 	t.Cleanup(store.Close)
 
 	_, err := sysmtee.Start(t.Context(), sysmtee.Options{Store: store, Host: "box1"})

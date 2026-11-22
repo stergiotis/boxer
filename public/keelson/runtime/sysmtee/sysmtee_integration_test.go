@@ -9,18 +9,19 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
-	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmtee"
+	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
-	"github.com/stergiotis/boxer/public/storage/recordstore/recordstoretest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"strconv"
 )
 
 // liveStore binds the generated store to the CLICKHOUSE_* server, skipping when
@@ -34,7 +35,10 @@ func liveStore(t *testing.T) (*sysmfacts.SysmetricsStore, *chclient.Client) {
 	}
 	exec, err := storeexec.New(client, nil)
 	require.NoError(t, err)
-	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{Keys: recordstoretest.KeyStream(recordstoretest.FactsRowTag)})
+	// The facts table's keyed generator, as sysmetricsd gives the store.
+	keys, err := chstore.NewKeyedIdGenerator(exec, chstore.ConfigFromEnv(), sysmtee.IdScope)
+	require.NoError(t, err)
+	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{Keys: keys})
 	t.Cleanup(store.Close)
 	return store, client
 }
@@ -58,7 +62,7 @@ func TestVerifySchema_AgreesWithTheProvisionedTable(t *testing.T) {
 // reads them back with the store's own Scan verb: the whole M3 path, against
 // the table the runtime actually uses.
 func TestTee_RoundTripsThroughTheLiveTable(t *testing.T) {
-	store, _ := liveStore(t)
+	store, client := liveStore(t)
 	ctx := context.Background()
 	require.NoError(t, store.VerifySchema(ctx))
 
@@ -106,23 +110,28 @@ func TestTee_RoundTripsThroughTheLiveTable(t *testing.T) {
 	// Read back through the store's own Scan verb, which resolves the baked
 	// membership ids — so this exercises the read direction of the same id
 	// snapshot the write used.
-	// The series is found by its natural key, written out here rather than
-	// taken from the tee, so the assertion is an independent oracle for the
-	// encoding, not a restatement of it. Each row's id is its own, minted
-	// from the store's key stream (ADR-0405).
+	// The series' id is looked up by its natural key, written out here
+	// rather than taken from the tee, so the assertion is an independent
+	// oracle for the encoding, not a restatement of it; every sample of the
+	// series carries that id (ADR-0405 §SD2).
 	naturalKey := `["` + host + `","` + string(sysmsnap.DomainCPU) + `"]`
+	lookupExec, err := storeexec.New(client, nil)
+	require.NoError(t, err)
+	lookup, err := chstore.NewKeyedIdLookup(lookupExec, chstore.ConfigFromEnv(), sysmtee.IdScope)
+	require.NoError(t, err)
+	seriesId, found, err := lookup.Lookup(ctx, []byte(naturalKey))
+	require.NoError(t, err)
+	require.True(t, found, "the tee resolved the series' id")
+	assert.Equal(t, vocab.IdStreamFactsRow.Value(), seriesId.GetTag().GetValue(), "an id of the facts row stream")
 	seen := 0
-	ids := map[uint64]struct{}{}
 	for ent, scanErr := range store.ScanSysCpu(ctx, recordstore.ScanOpts{
-		ExtraPredicate: "`id:naturalKey:y:4::0:` = '" + naturalKey + "'",
+		ExtraPredicate: "`id:id:u64:47::0:` = " + strconv.FormatUint(seriesId.Value(), 10),
 		Limit:          32,
 	}) {
 		require.NoError(t, scanErr)
 		require.NotNil(t, ent)
-		assert.Equal(t, recordstoretest.FactsRowTag, identifier.TaggedId(ent.ID).GetTag().GetValue(), "a minted id")
-		ids[ent.ID] = struct{}{}
+		assert.Equal(t, naturalKey, string(ent.NaturalKey))
 		seen++
 	}
-	assert.Len(t, ids, samples, "one id per row, not one per series")
-	assert.Equal(t, samples, seen, "every cpu sample written must read back")
+	assert.Equal(t, samples, seen, "every cpu sample written reads back under the series' id")
 }

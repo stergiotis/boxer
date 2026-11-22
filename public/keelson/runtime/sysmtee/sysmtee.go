@@ -278,6 +278,7 @@ func (inst *Tee) ingest(ctx context.Context, snap *sysmsnap.BundleSnapshot) {
 	if snap.Topology != nil && !inst.seenTopology {
 		if ingestKind(ctx, inst, "topology",
 			func() (sysmfacts.SysTopology, error) { return topologyRow(host, snap.Topology, ts) },
+			func(r sysmfacts.SysTopology) []byte { return r.NaturalKey },
 			func(r sysmfacts.SysTopology, id uint64) error {
 				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysTopology(r).Commit()
 			}) {
@@ -289,6 +290,7 @@ func (inst *Tee) ingest(ctx context.Context, snap *sysmsnap.BundleSnapshot) {
 		if _, seen := inst.seenHosts[host]; !seen {
 			if ingestKind(ctx, inst, "cpuInfo",
 				func() (sysmfacts.SysCpuInfo, error) { return cpuInfoRow(host, snap.CPU, ts) },
+				func(r sysmfacts.SysCpuInfo) []byte { return r.NaturalKey },
 				func(r sysmfacts.SysCpuInfo, id uint64) error {
 					return inst.begin(ctx, id, ts, r.NaturalKey).AddSysCpuInfo(r).Commit()
 				}) {
@@ -297,6 +299,7 @@ func (inst *Tee) ingest(ctx context.Context, snap *sysmsnap.BundleSnapshot) {
 		}
 		ingestKind(ctx, inst, "cpu",
 			func() (sysmfacts.SysCpu, error) { return cpuRow(host, snap.CPU, ts) },
+			func(r sysmfacts.SysCpu) []byte { return r.NaturalKey },
 			func(r sysmfacts.SysCpu, id uint64) error {
 				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysCpu(r).Commit()
 			})
@@ -304,6 +307,7 @@ func (inst *Tee) ingest(ctx context.Context, snap *sysmsnap.BundleSnapshot) {
 	if snap.Mem != nil {
 		ingestKind(ctx, inst, "mem",
 			func() (sysmfacts.SysMem, error) { return memRow(host, snap.Mem, ts) },
+			func(r sysmfacts.SysMem) []byte { return r.NaturalKey },
 			func(r sysmfacts.SysMem, id uint64) error {
 				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysMem(r).Commit()
 			})
@@ -311,6 +315,7 @@ func (inst *Tee) ingest(ctx context.Context, snap *sysmsnap.BundleSnapshot) {
 	if snap.PSI != nil {
 		ingestKind(ctx, inst, "psi",
 			func() (sysmfacts.SysPsi, error) { return psiRow(host, snap.PSI, ts) },
+			func(r sysmfacts.SysPsi) []byte { return r.NaturalKey },
 			func(r sysmfacts.SysPsi, id uint64) error {
 				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysPsi(r).Commit()
 			})
@@ -318,6 +323,7 @@ func (inst *Tee) ingest(ctx context.Context, snap *sysmsnap.BundleSnapshot) {
 	if snap.Net != nil {
 		ingestKind(ctx, inst, "net",
 			func() (sysmfacts.SysNet, error) { return netRow(host, snap.Net, ts) },
+			func(r sysmfacts.SysNet) []byte { return r.NaturalKey },
 			func(r sysmfacts.SysNet, id uint64) error {
 				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysNet(r).Commit()
 			})
@@ -327,11 +333,13 @@ func (inst *Tee) ingest(ctx context.Context, snap *sysmsnap.BundleSnapshot) {
 		// independent lengths, so they cannot share an entity's arrays.
 		ingestKind(ctx, inst, "diskMount",
 			func() (sysmfacts.SysDiskMount, error) { return diskMountRow(host, snap.Disk, ts) },
+			func(r sysmfacts.SysDiskMount) []byte { return r.NaturalKey },
 			func(r sysmfacts.SysDiskMount, id uint64) error {
 				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysDiskMount(r).Commit()
 			})
 		ingestKind(ctx, inst, "diskIo",
 			func() (sysmfacts.SysDiskIo, error) { return diskIoRow(host, snap.Disk, ts) },
+			func(r sysmfacts.SysDiskIo) []byte { return r.NaturalKey },
 			func(r sysmfacts.SysDiskIo, id uint64) error {
 				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysDiskIo(r).Commit()
 			})
@@ -339,6 +347,7 @@ func (inst *Tee) ingest(ctx context.Context, snap *sysmsnap.BundleSnapshot) {
 	if snap.Battery != nil {
 		ingestKind(ctx, inst, "battery",
 			func() (sysmfacts.SysBattery, error) { return batteryRow(host, snap.Battery, ts) },
+			func(r sysmfacts.SysBattery) []byte { return r.NaturalKey },
 			func(r sysmfacts.SysBattery, id uint64) error {
 				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysBattery(r).Commit()
 			})
@@ -346,6 +355,7 @@ func (inst *Tee) ingest(ctx context.Context, snap *sysmsnap.BundleSnapshot) {
 	if snap.GPU != nil {
 		ingestKind(ctx, inst, "gpu",
 			func() (sysmfacts.SysGpu, error) { return gpuRow(host, snap.GPU, ts) },
+			func(r sysmfacts.SysGpu) []byte { return r.NaturalKey },
 			func(r sysmfacts.SysGpu, id uint64) error {
 				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysGpu(r).Commit()
 			})
@@ -353,6 +363,7 @@ func (inst *Tee) ingest(ctx context.Context, snap *sysmsnap.BundleSnapshot) {
 	if len(snap.Procs) > 0 {
 		ingestKind(ctx, inst, "proc",
 			func() (sysmfacts.SysProc, error) { return procRow(host, snap.Procs, ts) },
+			func(r sysmfacts.SysProc) []byte { return r.NaturalKey },
 			func(r sysmfacts.SysProc, id uint64) error {
 				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysProc(r).Commit()
 			})
@@ -362,6 +373,7 @@ func (inst *Tee) ingest(ctx context.Context, snap *sysmsnap.BundleSnapshot) {
 		if inst.opts.PersistProcCmd {
 			ingestKind(ctx, inst, "procCmd",
 				func() (sysmfacts.SysProcCmd, error) { return procCmdRow(host, snap.Procs, ts) },
+				func(r sysmfacts.SysProcCmd) []byte { return r.NaturalKey },
 				func(r sysmfacts.SysProcCmd, id uint64) error {
 					return inst.begin(ctx, id, ts, r.NaturalKey).AddSysProcCmd(r).Commit()
 				})
@@ -374,6 +386,7 @@ func (inst *Tee) ingest(ctx context.Context, snap *sysmsnap.BundleSnapshot) {
 	if snap.Sockets != nil && snap.Sockets.CollectedAtUnixMs != inst.lastSocketsStamp {
 		if ingestKind(ctx, inst, "sockets",
 			func() (sysmfacts.SysSocket, error) { return socketRow(host, snap.Sockets) },
+			func(r sysmfacts.SysSocket) []byte { return r.NaturalKey },
 			func(r sysmfacts.SysSocket, id uint64) error {
 				return inst.begin(ctx, id, ts, r.NaturalKey).AddSysSocket(r).Commit()
 			}) {
@@ -395,19 +408,21 @@ func (inst *Tee) begin(ctx context.Context, id uint64, ts time.Time, naturalKey 
 // Add verb; write is typed by the row, so pairing one domain's builder with
 // another's verb does not compile.
 //
-// The row's id is minted here, from the store's key stream (ADR-0405 §SD1):
-// it names the row, and the series the row belongs to is its natural key.
+// The row's id is resolved here, from the series' natural key, by the store's
+// keyed generator (ADR-0405 §SD2): every row of a (host, domain) series
+// carries the series' id, the same from every process that writes it.
 func ingestKind[T any](
 	ctx context.Context,
 	inst *Tee,
 	domain string,
 	build func() (T, error),
+	key func(T) []byte,
 	write func(T, uint64) error,
 ) (ok bool) {
 	row, err := build()
 	if err == nil {
 		var id uint64
-		if id, err = inst.opts.Store.MintKey(ctx); err == nil {
+		if id, err = inst.opts.Store.MintKeyFor(ctx, key(row)); err == nil {
 			err = write(row, id)
 		}
 	}

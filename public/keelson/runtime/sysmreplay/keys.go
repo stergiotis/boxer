@@ -1,16 +1,19 @@
 package sysmreplay
 
 import (
+	"strconv"
 	"strings"
+
+	"github.com/zeebo/xxh3"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/naturalkey"
 )
 
-// One (host, domain) pair is one series, named by its natural key, so the
-// tokens below are the read side of the tee's storage layout (ADR-0184 §SD3,
-// ADR-0405 §SD2). Ten name a per-tick kind;
+// One (host, domain) pair is one series under one id, so the tokens below
+// are the read side of the tee's storage layout (ADR-0184 §SD3, ADR-0405
+// §SD2). Ten name a per-tick kind;
 // DomainCPUInfo, DomainSockets and DomainTopology name the three that are
 // written sparsely and carried forward instead (see the package doc).
 const (
@@ -45,22 +48,14 @@ const (
 	DomainTopology = "topology"
 )
 
-// colNaturalKey is the physical name of the facts envelope's natural key.
-const colNaturalKey = `"id:naturalKey:y:4::0:"`
-
-// kindOf names the component a domain's rows carry, which is how a read of
-// a series names its kind beside its natural key (ADR-0405 §SD2).
-var kindOf = map[string]string{
-	DomainCPU: "SysCpu", DomainCPUInfo: "SysCpuInfo", DomainMem: "SysMem", DomainPSI: "SysPsi",
-	DomainNet: "SysNet", DomainDiskMnt: "SysDiskMount", DomainDiskIO: "SysDiskIo", DomainBattery: "SysBattery",
-	DomainGPU: "SysGpu", DomainProc: "SysProc", DomainProcCmd: "SysProcCmd", DomainSockets: "SysSocket",
-	DomainTopology: "SysTopology",
-}
+// IdScope is the scope a series' natural key is resolved in: the tee's,
+// restated here as the natural keys are.
+const IdScope = "sysmetrics"
 
 // EntityNaturalKey is the natural key of one (host, domain) series: the
-// pair, in the vocabulary's JSON form. It is what a series is found by —
-// a row's id names the row (ADR-0405) — and it is the same for rows written
-// before ids were minted, so a read by it spans both.
+// pair, in the vocabulary's JSON form. The series' id is resolved from it —
+// by the tee through the facts table's keyed generator, by this reader
+// through a lookup in the same directory (ADR-0405 §SD2).
 //
 // This restates the tee's own unexported derivation rather than importing
 // it: a reader that depends on the writer inverts the dependency for an
@@ -79,31 +74,19 @@ func EntityNaturalKey(host, domain string) (nk []byte) {
 	return
 }
 
-// naturalKeyLiteral renders a natural key as a ClickHouse string literal.
-func naturalKeyLiteral(nk []byte) string {
-	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(string(nk)) + "'"
+// LegacyEntityKey is the id a series' rows carried before ids were resolved
+// through the directory (ADR-0184 §SD3 as it stood): xxh3 over host and
+// domain joined by "/". Rows written then keep it (ADR-0405 §SD5), so a
+// read of a series takes it beside the series' id.
+func LegacyEntityKey(host, domain string) (key uint64) {
+	return xxh3.HashString(host + "/" + domain)
 }
 
-// naturalKeyPredicate restricts a read to the rows whose natural key is
-// domain's series on host. The CPU descriptor's rows written before
-// 2026-11-22 carry the CPU sample series' pair, so its read takes both;
-// the kind, which the caller names, tells the two apart.
-func naturalKeyPredicate(host, domain string) (pred string) {
-	lit := naturalKeyLiteral(EntityNaturalKey(host, domain))
-	if domain == DomainCPUInfo {
-		return colNaturalKey + " IN (" + lit + ", " + naturalKeyLiteral(EntityNaturalKey(host, DomainCPU)) + ")"
+// idPredicate restricts a read to rows whose id is one of ids.
+func idPredicate(ids []uint64) (pred string) {
+	lits := make([]string, len(ids))
+	for i, id := range ids {
+		lits[i] = strconv.FormatUint(id, 10)
 	}
-	return colNaturalKey + " = " + lit
-}
-
-// seriesPredicate is naturalKeyPredicate with the kind named: for SQL the
-// reader composes itself, where no generated scan adds the component's
-// filter. A natural key is unique within a writer's kinds, not across the
-// table.
-func seriesPredicate(host, domain string) (pred string) {
-	pred = naturalKeyPredicate(host, domain)
-	if kind, ok := kindOf[domain]; ok {
-		pred = "(" + sysmfacts.SysmetricsComponentSQL.Kinds[kind].Filter + ") AND " + pred
-	}
-	return
+	return sysmfacts.SysmetricsColKey + " IN (" + strings.Join(lits, ", ") + ")"
 }

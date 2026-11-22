@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmreplay"
@@ -104,7 +105,15 @@ func NewStoreSource(ctx context.Context, opts StoreSourceOptions) (inst *StoreSo
 	}
 	// The same executor the store was built on, so coverage and replay cannot
 	// end up answering about different servers (ADR-0197 §SD10).
-	reader, err := sysmreplay.New(sysmreplay.Options{Store: store, Exec: exec, Host: host, Log: opts.Log})
+	// A series is read by its id, which the tee resolved from the series'
+	// natural key; the reader looks it up in the same directory.
+	ids, err := chstore.NewKeyedIdLookup(exec, chstore.Config{Database: factsschema.DatabaseName}, sysmreplay.IdScope)
+	if err != nil {
+		store.Close()
+		err = eh.Errorf("imztop: %w", err)
+		return
+	}
+	reader, err := sysmreplay.New(sysmreplay.Options{Store: store, Exec: exec, Host: host, Ids: ids, Log: opts.Log})
 	if err != nil {
 		store.Close()
 		return

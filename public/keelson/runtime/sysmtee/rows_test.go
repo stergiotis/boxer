@@ -52,7 +52,7 @@ func TestCpuRow_CarriesTheSampleThrough(t *testing.T) {
 	row, err := cpuRow("box1", snap, testTs)
 	require.NoError(t, err)
 
-	assert.Zero(t, row.Id, "the id is minted when the row is written")
+	assert.Zero(t, row.Id, "the id is resolved from the natural key when the row is written")
 	assert.Equal(t, nkOf(t, "box1", "cpu"), row.NaturalKey)
 	assert.Equal(t, testTs, row.Ts)
 	assert.Equal(t, "box1", row.Host)

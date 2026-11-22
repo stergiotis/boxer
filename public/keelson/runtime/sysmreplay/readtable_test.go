@@ -19,7 +19,7 @@ func TestReaderSQL_FollowsTheStoresReadTable(t *testing.T) {
 	w := Window{From: now.Add(-time.Hour), To: now}
 	for name, sql := range map[string]string{
 		"coverage": inst.coverageSQL(w, time.Minute),
-		"as-of":    asOfPredicate(inst.table(), "some-host", DomainCPUInfo, now),
+		"as-of":    asOfPredicate(inst.table(), inst.seriesPredicate(DomainCPUInfo), now),
 	} {
 		assert.Contains(t, sql, "carrier.facts_view", name)
 		assert.NotContains(t, sql, sysmfacts.SysmetricsTableName, name)

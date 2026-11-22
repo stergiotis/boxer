@@ -9,16 +9,18 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
+	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowintern"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmreplay"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmtee"
+	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
-	"github.com/stergiotis/boxer/public/storage/recordstore/recordstoretest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zeebo/xxh3"
@@ -27,6 +29,9 @@ import (
 // liveExec is the executor liveStore built its store on — coverage needs the
 // same one (ADR-0197 §SD10).
 var liveExec recordstore.ExecutorI
+
+// liveIds is the reader's lookup over the id directory, set by liveStore.
+var liveIds sysmreplay.IdLookupI
 
 // liveStore binds the generated store to the CLICKHOUSE_* server, skipping when
 // it is unreachable.
@@ -40,7 +45,13 @@ func liveStore(t *testing.T) *sysmfacts.SysmetricsStore {
 	exec, err := storeexec.New(client, nil)
 	require.NoError(t, err)
 	liveExec = exec
-	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{Keys: recordstoretest.KeyStream(recordstoretest.FactsRowTag)})
+	// The facts table's keyed generator, as sysmetricsd gives the tee's
+	// store, and the lookup a reader is given over the same directory.
+	keys, err := chstore.NewKeyedIdGenerator(exec, chstore.ConfigFromEnv(), sysmreplay.IdScope)
+	require.NoError(t, err)
+	liveIds, err = chstore.NewKeyedIdLookup(exec, chstore.ConfigFromEnv(), sysmreplay.IdScope)
+	require.NoError(t, err)
+	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{Keys: keys})
 	t.Cleanup(store.Close)
 	return store
 }
@@ -123,7 +134,7 @@ func TestReplay_RoundTripsThroughTheLiveTable(t *testing.T) {
 	}
 	publishBundles(t, store, host, sent, false)
 
-	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Host: host})
+	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Host: host, Ids: liveIds})
 	require.NoError(t, err)
 
 	got := make([]*sysmsnap.BundleSnapshot, 0, ticks)
@@ -199,7 +210,7 @@ func TestReplay_CarriesTheDescriptorAndTopologyForward(t *testing.T) {
 	}
 	publishBundles(t, store, host, sent, false)
 
-	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Host: host})
+	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Host: host, Ids: liveIds})
 	require.NoError(t, err)
 
 	seen := 0
@@ -241,7 +252,7 @@ func TestReplay_SeedsCarriedKindsFromBeforeTheWindow(t *testing.T) {
 	}
 	publishBundles(t, store, host, sent, false)
 
-	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Host: host})
+	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Host: host, Ids: liveIds})
 	require.NoError(t, err)
 
 	// Open the window after the first tick, so the once-written kinds are
@@ -278,7 +289,7 @@ func TestReplay_PartialBundlesLeaveDomainsNil(t *testing.T) {
 	}
 	publishBundles(t, store, host, sent, false)
 
-	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Host: host})
+	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Host: host, Ids: liveIds})
 	require.NoError(t, err)
 
 	got := make([]*sysmsnap.BundleSnapshot, 0, 2)
@@ -312,7 +323,7 @@ func TestReplay_LimitCapsBundles(t *testing.T) {
 	}
 	publishBundles(t, store, host, sent, false)
 
-	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Host: host})
+	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Host: host, Ids: liveIds})
 	require.NoError(t, err)
 
 	seen := 0
@@ -346,7 +357,7 @@ func TestReplay_ProcCommandLinesAreOptIn(t *testing.T) {
 			Procs:           procs,
 		}}, procCmd)
 
-		r, err := sysmreplay.New(sysmreplay.Options{Store: store, Host: host})
+		r, err := sysmreplay.New(sysmreplay.Options{Store: store, Host: host, Ids: liveIds})
 		require.NoError(t, err)
 		for b, rerr := range r.All(ctx, sysmreplay.Window{From: base.Add(-time.Second), To: base.Add(time.Hour)}) {
 			require.NoError(t, rerr)
@@ -401,7 +412,7 @@ func TestCoverage_FindsWhatTheTeeWrote(t *testing.T) {
 	}
 	publishBundles(t, store, host, sent, false)
 
-	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Exec: liveExec, Host: host})
+	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Exec: liveExec, Host: host, Ids: liveIds})
 	require.NoError(t, err)
 
 	w := sysmreplay.Window{From: base.Add(-time.Minute), To: base.Add(30 * time.Minute)}
@@ -430,7 +441,7 @@ func TestCoverage_EmptyForAHostWithNoHistory(t *testing.T) {
 	require.NoError(t, store.VerifySchema(ctx))
 
 	r, err := sysmreplay.New(sysmreplay.Options{
-		Store: store, Exec: liveExec, Host: itHost(t) + "-never-scraped",
+		Store: store, Exec: liveExec, Host: itHost(t) + "-never-scraped", Ids: liveIds,
 	})
 	require.NoError(t, err)
 
@@ -464,7 +475,7 @@ func TestDecimation_ReplaysALongRangeWithoutARowPerTick(t *testing.T) {
 	}
 	publishBundles(t, store, host, sent, false)
 
-	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Exec: liveExec, Host: host})
+	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Exec: liveExec, Host: host, Ids: liveIds})
 	require.NoError(t, err)
 	w := sysmreplay.Window{From: base.Add(-time.Second), To: base.Add(time.Duration(ticks) * time.Second)}
 
@@ -539,7 +550,7 @@ func TestPreview_AggregatesThroughTheGeneratedProjection(t *testing.T) {
 	}
 	publishBundles(t, store, host, sent, false)
 
-	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Exec: liveExec, Host: host})
+	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Exec: liveExec, Host: host, Ids: liveIds})
 	require.NoError(t, err)
 
 	points, err := r.Preview(ctx,
@@ -553,11 +564,11 @@ func TestPreview_AggregatesThroughTheGeneratedProjection(t *testing.T) {
 }
 
 // TestReplay_SpansRowsFromBeforeIdsWereMinted writes a host's history the way
-// a build before ADR-0405 did — every row of a series under one id, the hash
-// of host and domain, and the CPU descriptor under the sample series' natural
-// key — then a tick the way the tee writes it now, and replays across both:
-// the series is found by its natural key, which did not change, and the old
-// descriptor is still the descriptor.
+// a build before ADR-0405 did — every row of a series under the hash of host
+// and domain, and the CPU descriptor under the sample series' natural key —
+// then a tick the way the tee writes it now, under the id the directory gives
+// the series, and replays across both: a series is read by both ids, and the
+// old descriptor is still the descriptor (ADR-0405 §SD5).
 func TestReplay_SpansRowsFromBeforeIdsWereMinted(t *testing.T) {
 	store := liveStore(t)
 	ctx := context.Background()
@@ -585,7 +596,7 @@ func TestReplay_SpansRowsFromBeforeIdsWereMinted(t *testing.T) {
 		CPU:             &sysmsnap.CPUSnapshot{SampledAtUnixMs: now, TotalPercent: 12, ModelName: "New CPU", LogicalCores: 2},
 	}}, false)
 
-	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Host: host})
+	r, err := sysmreplay.New(sysmreplay.Options{Store: store, Host: host, Ids: liveIds})
 	require.NoError(t, err)
 	var totals []uint8
 	var models []string
@@ -595,7 +606,35 @@ func TestReplay_SpansRowsFromBeforeIdsWereMinted(t *testing.T) {
 		totals = append(totals, b.CPU.TotalPercent)
 		models = append(models, b.CPU.ModelName)
 	}
-	assert.Equal(t, []uint8{10, 11, 12}, totals, "two rows under the hashed series id and one under a minted id are one series")
+	assert.Equal(t, []uint8{10, 11, 12}, totals, "two rows under the hashed series id and one under the resolved id are one series")
 	assert.Equal(t, []string{"Old CPU", "Old CPU", "New CPU"}, models,
-		"the descriptor written under the sample's natural key is found, and the one written since carries on from it")
+		"the descriptor written under its hashed id is found, and the one written since carries on from it")
+
+	// The new rows are under the series' resolved id, not the hash.
+	id, found, err := liveIds.(*rowintern.Internalizer).Lookup(ctx, cpuKey)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.NotEqual(t, oldSeriesId, id.Value())
+	assert.Equal(t, vocab.IdStreamFactsRow.Value(), id.GetTag().GetValue())
+
+	// A reader that has read a host before anything was written under
+	// resolved ids finds them on its next read.
+	fresh := itHost(t) + "-late"
+	late, err := sysmreplay.New(sysmreplay.Options{Store: store, Host: fresh, Ids: liveIds})
+	require.NoError(t, err)
+	w := sysmreplay.Window{From: base.Add(-time.Second), To: base.Add(time.Hour)}
+	for range late.All(ctx, w) {
+		t.Fatal("nothing was written for the host yet")
+	}
+	publishBundles(t, store, fresh, []*sysmsnap.BundleSnapshot{{
+		SampledAtUnixMs: now,
+		CPU:             &sysmsnap.CPUSnapshot{SampledAtUnixMs: now, TotalPercent: 33, ModelName: "CPU", LogicalCores: 2},
+	}}, false)
+	n := 0
+	for b, rerr := range late.All(ctx, w) {
+		require.NoError(t, rerr)
+		assert.EqualValues(t, 33, b.CPU.TotalPercent)
+		n++
+	}
+	assert.Equal(t, 1, n, "the series' id was looked up again")
 }

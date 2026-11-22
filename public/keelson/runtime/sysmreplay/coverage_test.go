@@ -1,6 +1,7 @@
 package sysmreplay
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -118,13 +119,16 @@ func TestCoverageSQL_TouchesOnlyEnvelopeColumns(t *testing.T) {
 // rather than about one kind: a window where only the topology was written is
 // still a window the tee was alive for.
 func TestCoverageSQL_SpansEveryDomain(t *testing.T) {
-	inst := &Reader{host: "some-host"}
+	// One series has an id resolved from its natural key; its rows from
+	// before keep the id they had, so the filter names both.
+	inst := &Reader{host: "some-host", minted: map[string]uint64{DomainCPU: 4242424242}}
 	now := time.Now().UTC()
 	sql := inst.coverageSQL(Window{From: now.Add(-time.Hour), To: now}, time.Minute)
 
 	assert.Len(t, allDomains, 13, "every stored series should be covered")
 	for _, d := range allDomains {
-		assert.Contains(t, sql, naturalKeyLiteral(EntityNaturalKey("some-host", d)),
+		assert.Contains(t, sql, strconv.FormatUint(LegacyEntityKey("some-host", d), 10),
 			"domain %s missing from the key filter", d)
 	}
+	assert.Contains(t, sql, "4242424242", "the resolved id is read beside the older one")
 }

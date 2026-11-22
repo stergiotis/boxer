@@ -92,8 +92,9 @@ func startTee(ctx context.Context, bus app.BusI, host string, flushInterval time
 		err = eh.Errorf("sysmetricsd: %w", err)
 		return
 	}
-	// Every row's id is minted from the facts table's stream (ADR-0405).
-	keys, err := chstore.NewRowIdGenerator(exec, chstore.Config{Database: factsschema.DatabaseName})
+	// A series' id is resolved from its natural key through the facts
+	// table's id directory (ADR-0405 §SD2).
+	keys, err := chstore.NewKeyedIdGenerator(exec, chstore.Config{Database: factsschema.DatabaseName}, sysmtee.IdScope)
 	if err != nil {
 		err = eh.Errorf("sysmetricsd: %w", err)
 		return

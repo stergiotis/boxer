@@ -29,11 +29,14 @@ const (
 	domainMem     = string(sysmsnap.DomainMem)
 )
 
+// IdScope is the scope a series' natural key is resolved in.
+const IdScope = "sysmetrics"
+
 // entityNaturalKey names one (host, domain) series: every sample of the
-// series carries it, so a reader finds the series by it (ADR-0405 §SD2). A
-// row's id is not derived from it; the tee mints one per row. JSON is the
-// vocabulary's natural-key format, and the two tokens stay apart in it, so no
-// pair can be taken for another by concatenation.
+// series carries it, and the series' id is resolved from it by the facts
+// table's keyed generator (ADR-0405 §SD2), so the samples of a series share
+// an id. JSON is the vocabulary's natural-key format, and the two tokens stay
+// apart in it, so no pair can be taken for another by concatenation.
 func entityNaturalKey(host, domain string) (nk []byte, err error) {
 	enc := naturalkey.NewEncoder()
 	enc.Begin().AddStr(host).AddStr(domain)

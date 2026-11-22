@@ -17,7 +17,8 @@ import (
 // and the inverse is what needs checking against them. sysmreplay does not
 // import sysmtee — it restates the thirteen domain tokens instead — so this
 // test is also where that duplication is held honest: TestRoundTrip_EntityKeys
-// compares the keys the reader derives with the ids the writers stamp. Were
+// compares the keys the reader derives with the natural keys the writers
+// stamp, which are what a series' id is resolved from. Were
 // sysmreplay to import sysmtee for those tokens, this test could not exist:
 // the import would close a cycle through the test binary.
 
@@ -30,6 +31,9 @@ var rtTs = time.UnixMilli(1_700_000_000_123).UTC()
 // domain tokens in two packages, and it would otherwise surface as a replay
 // that silently finds no rows.
 func TestRoundTrip_EntityKeys(t *testing.T) {
+	// The reader looks a series' id up in the scope the tee resolved it in.
+	assert.Equal(t, IdScope, sysmreplay.IdScope)
+
 	cpu, err := cpuRow(rtHost, &sysmsnap.CPUSnapshot{}, rtTs)
 	require.NoError(t, err)
 	assert.Equal(t, sysmreplay.EntityNaturalKey(rtHost, sysmreplay.DomainCPU), cpu.NaturalKey, "cpu")

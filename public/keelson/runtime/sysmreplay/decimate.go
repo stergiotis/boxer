@@ -66,6 +66,9 @@ func (inst *Reader) CountBundles(ctx context.Context, w Window) (n int64, err er
 		err = eh.Errorf("sysmreplay: counting needs Options.Exec")
 		return
 	}
+	if err = inst.resolve(ctx); err != nil {
+		return
+	}
 	sql := "SELECT toInt64(count()) AS c FROM " + inst.table() +
 		" WHERE " + inst.windowPredicate(w, DomainCPU)
 	var cols struct {
@@ -110,6 +113,9 @@ func (inst *Reader) PlanDecimation(ctx context.Context, w Window, slots int) (pl
 		err = eh.Errorf("sysmreplay: decimation needs Options.Exec")
 		return
 	}
+	if err = inst.resolve(ctx); err != nil {
+		return
+	}
 	bucket := max(w.To.Sub(w.From)/time.Duration(slots), time.Second)
 	plan.Bucket = bucket
 
@@ -146,10 +152,7 @@ func (inst *Reader) PlanDecimation(ctx context.Context, w Window, slots int) (pl
 func (inst *Reader) windowPredicate(w Window, domain string) (pred string) {
 	col := sysmfacts.SysmetricsColOrder
 	var b strings.Builder
-	// By natural key alone: these stay envelope-only queries. The kind is
-	// not named — the pair is the tee's — which counts a host's CPU
-	// descriptors written before 2026-11-22 with its CPU samples.
-	b.WriteString(naturalKeyPredicate(inst.host, domain))
+	b.WriteString(inst.seriesPredicate(domain))
 	b.WriteString(" AND ")
 	b.WriteString(col)
 	b.WriteString(" >= fromUnixTimestamp64Nano(")
@@ -173,10 +176,7 @@ func (inst *Reader) windowPredicate(w Window, domain string) (pred string) {
 func (inst *Reader) decimatedPredicate(domain string, timesMS []int64) (pred string) {
 	col := sysmfacts.SysmetricsColOrder
 	var b strings.Builder
-	// By natural key alone: these stay envelope-only queries. The kind is
-	// not named — the pair is the tee's — which counts a host's CPU
-	// descriptors written before 2026-11-22 with its CPU samples.
-	b.WriteString(naturalKeyPredicate(inst.host, domain))
+	b.WriteString(inst.seriesPredicate(domain))
 	b.WriteString(" AND ")
 	b.WriteString(col)
 	b.WriteString(" IN (")

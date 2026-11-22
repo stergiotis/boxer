@@ -59,6 +59,9 @@ func (inst *Reader) Preview(ctx context.Context, w Window, bucket time.Duration)
 		err = eh.Errorf("sysmreplay: preview needs Options.Exec — the reader was built without one")
 		return
 	}
+	if err = inst.resolve(ctx); err != nil {
+		return
+	}
 	bucket = previewBucket(w, bucket)
 
 	var cols struct {
@@ -118,7 +121,7 @@ func (inst *Reader) previewSQL(w Window, bucket time.Duration) (sql string) {
 	b.WriteString(" WHERE (")
 	b.WriteString(a.Filter)
 	b.WriteString(") AND ")
-	b.WriteString(naturalKeyPredicate(inst.host, DomainCPU))
+	b.WriteString(inst.seriesPredicate(DomainCPU))
 	b.WriteString(" AND ")
 	b.WriteString(col)
 	b.WriteString(" >= fromUnixTimestamp64Nano(")

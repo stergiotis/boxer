@@ -61,6 +61,9 @@ func (inst *Reader) Coverage(ctx context.Context, w Window, bucket time.Duration
 		err = eh.Errorf("sysmreplay: coverage needs Options.Exec — the reader was built without one")
 		return
 	}
+	if err = inst.resolve(ctx); err != nil {
+		return
+	}
 	bucket = coverageBucket(w, bucket)
 
 	var cols struct {
@@ -126,15 +129,19 @@ func (inst *Reader) coverageSQL(w Window, bucket time.Duration) (sql string) {
 	b.WriteString(" SECOND))) * 1000 AS b, toUInt64(count()) AS c FROM ")
 	b.WriteString(inst.table())
 	b.WriteString(" WHERE ")
-	// Every series of the host, by natural key (ADR-0405 §SD2): the pairs
-	// are the tee's and no other writer's.
-	b.WriteString(colNaturalKey)
+	// Every series of the host: each one's id, and the one its rows
+	// carried before ids were resolved (ADR-0405 §SD5).
+	b.WriteString(sysmfacts.SysmetricsColKey)
 	b.WriteString(" IN (")
-	for i, domain := range allDomains {
-		if i > 0 {
-			b.WriteString(",")
+	first := true
+	for _, domain := range allDomains {
+		for _, id := range inst.seriesIds(domain) {
+			if !first {
+				b.WriteString(",")
+			}
+			first = false
+			b.WriteString(strconv.FormatUint(id, 10))
 		}
-		b.WriteString(naturalKeyLiteral(EntityNaturalKey(inst.host, domain)))
 	}
 	b.WriteString(") AND ")
 	b.WriteString(col)

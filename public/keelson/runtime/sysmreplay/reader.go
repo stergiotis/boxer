@@ -7,11 +7,13 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
+	"sync"
 )
 
 // Options configures a [Reader]. Store and Host are required.
@@ -29,7 +31,18 @@ type Options struct {
 	//
 	// Optional. Without it [Reader.All] works and [Reader.Coverage] refuses.
 	Exec recordstore.ExecutorI
-	Log  zerolog.Logger
+	// Ids looks a series' id up by its natural key: the facts table's keyed
+	// generator for [IdScope] (chstore.NewKeyedIdGenerator), which the tee
+	// resolves the same keys through. The reader only looks up; it never
+	// gives a series an id.
+	Ids IdLookupI
+	Log zerolog.Logger
+}
+
+// IdLookupI is the reader's half of a keyed id generator: the ids natural
+// keys resolve to, without giving any key one.
+type IdLookupI interface {
+	Lookups(ctx context.Context, keys [][]byte) (ids []identifier.TaggedId, found []bool, err error)
 }
 
 // Window selects a replay range on the order column.
@@ -63,6 +76,13 @@ type Reader struct {
 	exec  recordstore.ExecutorI
 	host  string
 	log   zerolog.Logger
+	ids   IdLookupI
+
+	// minted holds the ids the directory resolved, by domain. A series that
+	// has none yet — nothing was written for it since ids were resolved
+	// there — is looked up again by the next read.
+	mu     sync.Mutex
+	minted map[string]uint64
 }
 
 // New validates opts and returns a Reader.
@@ -75,14 +95,76 @@ func New(opts Options) (inst *Reader, err error) {
 		err = eh.Errorf("sysmreplay: reader needs a Host")
 		return
 	}
-	inst = &Reader{store: opts.Store, exec: opts.Exec, host: opts.Host, log: opts.Log}
+	if opts.Ids == nil {
+		err = eh.Errorf("sysmreplay: reader needs Ids: a series' id is resolved from its natural key, and without the lookup only rows from before that would be found")
+		return
+	}
+	inst = &Reader{store: opts.Store, exec: opts.Exec, host: opts.Host, log: opts.Log, ids: opts.Ids}
 	return
 }
 
-// NaturalKey is the natural key this reader reads for one domain — exposed
-// so a caller can check what a replay would look at without running one.
+// NaturalKey is the natural key of one domain's series on this reader's
+// host — exposed so a caller can check what a replay would look at without
+// running one.
 func (inst *Reader) NaturalKey(domain string) (nk []byte) {
 	return EntityNaturalKey(inst.host, domain)
+}
+
+// resolve looks up the ids of the series the reader has none for yet. Every
+// read calls it first; a reader built without a lookup, as the SQL-shape
+// tests build one, reads the rows from before ids were resolved.
+func (inst *Reader) resolve(ctx context.Context) (err error) {
+	if inst.ids == nil {
+		return
+	}
+	inst.mu.Lock()
+	var missing []string
+	for _, d := range allDomains {
+		if _, ok := inst.minted[d]; !ok {
+			missing = append(missing, d)
+		}
+	}
+	inst.mu.Unlock()
+	if len(missing) == 0 {
+		return
+	}
+	keys := make([][]byte, len(missing))
+	for i, d := range missing {
+		keys[i] = EntityNaturalKey(inst.host, d)
+	}
+	ids, found, err := inst.ids.Lookups(ctx, keys)
+	if err != nil {
+		return eb.Build().Str("host", inst.host).Errorf("sysmreplay: resolve the series' ids: %w", err)
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.minted == nil {
+		inst.minted = make(map[string]uint64, len(allDomains))
+	}
+	for i, d := range missing {
+		if found[i] {
+			inst.minted[d] = ids[i].Value()
+		}
+	}
+	return
+}
+
+// seriesIds are the ids domain's rows carry: the one resolved from the
+// series' natural key, when there is one, and the one its rows carried
+// before ids were resolved (ADR-0405 §SD5).
+func (inst *Reader) seriesIds(domain string) (ids []uint64) {
+	ids = []uint64{LegacyEntityKey(inst.host, domain)}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if id, ok := inst.minted[domain]; ok {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// seriesPredicate restricts a read to domain's series.
+func (inst *Reader) seriesPredicate(domain string) string {
+	return idPredicate(inst.seriesIds(domain))
 }
 
 // table is the relation the reader's own SQL reads: the store's read table,
@@ -162,6 +244,10 @@ var perTickDomains = []string{
 func (inst *Reader) All(ctx context.Context, w Window) iter.Seq2[*sysmsnap.BundleSnapshot, error] {
 	return func(yield func(*sysmsnap.BundleSnapshot, error) bool) {
 		cursors := make([]*cursor, 0, len(perTickDomains))
+		if err := inst.resolve(ctx); err != nil {
+			yield(nil, err)
+			return
+		}
 		defer func() {
 			for _, c := range cursors {
 				c.stop()
@@ -237,8 +323,8 @@ func (inst *Reader) All(ctx context.Context, w Window) iter.Seq2[*sysmsnap.Bundl
 // neither invents a second read path beside them.
 func (inst *Reader) perTickSeq(ctx context.Context, domain string, w Window) (seq iter.Seq2[*sysmfacts.SysmetricsEntity, error]) {
 	if len(w.Decimate) == 0 {
-		// The series by its natural key, oldest first: a scan of the
-		// domain's kind, which is the store's verb that takes a predicate.
+		// The series by its ids, oldest first: a scan of the domain's
+		// kind, which is the store's verb that takes a predicate.
 		seq = inst.scanFor(ctx, domain, recordstore.ScanOpts{ExtraPredicate: inst.rangePredicate(domain, w.From, w.To), Limit: w.Limit})
 		return
 	}
@@ -250,7 +336,7 @@ func (inst *Reader) perTickSeq(ctx context.Context, domain string, w Window) (se
 // rangePredicate restricts a scan to domain's series within [from, to),
 // either bound left out when zero.
 func (inst *Reader) rangePredicate(domain string, from time.Time, to time.Time) (pred string) {
-	pred = naturalKeyPredicate(inst.host, domain)
+	pred = inst.seriesPredicate(domain)
 	if !from.IsZero() {
 		pred += " AND " + sysmfacts.SysmetricsColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(from.UnixNano(), 10) + ")"
 	}
@@ -440,13 +526,12 @@ func (inst *Reader) fetchCarry(ctx context.Context, domain string, w Window) (c 
 // fetchAsOf returns the newest row of domain's series strictly before bound,
 // or nil.
 //
-// The generated verbs cannot express it directly: a scan's Limit with its
-// order reversed would do, but the carried kinds are sparse and the bound
-// is exclusive, so the predicate below names the one row — trusted SQL over
-// the envelope columns and the kind's own filter, which is what
-// ScanOpts.ExtraPredicate is for; no leeway section is touched by hand, so
-// this is not the hand-written array arithmetic the read-surface page warns
-// against.
+// The generated verbs cannot express it directly: Replay is ascending, so
+// its Limit takes the earliest rows rather than the latest, and Latest has
+// no upper bound. The predicate below is the one-row equivalent — trusted
+// SQL over the envelope columns, which is what ScanOpts.ExtraPredicate is
+// for; no leeway section is touched, so this is not the hand-written array
+// arithmetic the read-surface page warns against.
 func (inst *Reader) fetchAsOf(ctx context.Context, domain string, bound time.Time) (ent *sysmfacts.SysmetricsEntity, err error) {
 	switch domain {
 	case DomainCPUInfo, DomainSockets, DomainTopology:
@@ -454,7 +539,7 @@ func (inst *Reader) fetchAsOf(ctx context.Context, domain string, bound time.Tim
 		err = eb.Build().Str("domain", domain).Errorf("sysmreplay: domain is not a carried kind")
 		return
 	}
-	opts := recordstore.ScanOpts{ExtraPredicate: asOfPredicate(inst.table(), inst.host, domain, bound), Limit: 1}
+	opts := recordstore.ScanOpts{ExtraPredicate: asOfPredicate(inst.table(), inst.seriesPredicate(domain), bound), Limit: 1}
 	for got, serr := range inst.scanFor(ctx, domain, opts) {
 		if serr != nil {
 			ent = nil
@@ -467,14 +552,14 @@ func (inst *Reader) fetchAsOf(ctx context.Context, domain string, bound time.Tim
 	return
 }
 
-// asOfPredicate restricts a scan to the single newest row of domain's series
-// on host before bound.
-func asOfPredicate(table string, host string, domain string, bound time.Time) (pred string) {
+// asOfPredicate restricts a scan to the single newest row before bound among
+// the rows series selects.
+func asOfPredicate(table string, series string, bound time.Time) (pred string) {
 	lit := "fromUnixTimestamp64Nano(" + strconv.FormatInt(bound.UnixNano(), 10) + ")"
-	pred = naturalKeyPredicate(host, domain) +
+	pred = series +
 		" AND " + sysmfacts.SysmetricsColOrder + " = (SELECT max(" + sysmfacts.SysmetricsColOrder + ")" +
 		" FROM " + table +
-		" WHERE " + seriesPredicate(host, domain) +
+		" WHERE " + series +
 		" AND " + sysmfacts.SysmetricsColOrder + " < " + lit + ")"
 	return
 }
