@@ -88,6 +88,23 @@ func List(ctx context.Context, bus app.BusI, ticket string, obo *app.OnBehalfOf)
 	return rep.Datasets, rep.Ticket, err
 }
 
+// HandOver mints a token another window claims with Claim to hold the
+// person's data session ticket names; see [Service.HandOver]. The token,
+// not the ticket, is what a launch configuration carries.
+func HandOver(ctx context.Context, bus app.BusI, ticket string) (token string, err error) {
+	rep, err := request(ctx, bus, SubjectHandOver, wireRequest{Ticket: ticket}, 0)
+	return rep.Token, err
+}
+
+// Claim makes the calling window a holder of the data session a hand-over
+// token names and returns the session's ticket; see [Service.Claim]. A
+// window opened with a launch configuration carrying a token calls it at
+// mount, before its first statement reads a data set.
+func Claim(ctx context.Context, bus app.BusI, token string) (ticket string, err error) {
+	rep, err := request(ctx, bus, SubjectClaim, wireRequest{Token: token}, 0)
+	return rep.Ticket, err
+}
+
 func withCaller(req wireRequest, c Caller) (out wireRequest) {
 	out = req
 	if c.OnBehalfOf != nil {

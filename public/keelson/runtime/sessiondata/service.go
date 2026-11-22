@@ -133,7 +133,9 @@ type Service struct {
 	byTicket map[string]*session
 	byTask   map[string]*session
 	leases   map[string]*lease
-	closed   bool
+	// handOvers are the hand-over tokens not yet claimed (handover.go).
+	handOvers map[string]handOver
+	closed    bool
 
 	stopSweep chan struct{}
 	swept     sync.WaitGroup

@@ -35,6 +35,11 @@ const (
 	SubjectRelease = SubjectPrefix + "release"
 	// SubjectList lists a data session's data sets.
 	SubjectList = SubjectPrefix + "list"
+	// SubjectHandOver mints a hand-over token for a person's data session
+	// the sending window holds.
+	SubjectHandOver = SubjectPrefix + "handover"
+	// SubjectClaim attaches the sending window by a hand-over token.
+	SubjectClaim = SubjectPrefix + "claim"
 )
 
 // wireVersion is the version of the request and reply below.
@@ -60,6 +65,7 @@ type wireRequest struct {
 	OrderBy        []string `json:"orderBy,omitempty"`
 	Cascade        bool     `json:"cascade,omitempty"`
 	Lease          string   `json:"lease,omitempty"`
+	Token          string   `json:"token,omitempty"`
 	OboTask        string   `json:"oboTask,omitempty"`
 	OboEpoch       uint64   `json:"oboEpoch,omitempty"`
 	OboCall        string   `json:"oboCall,omitempty"`
@@ -72,6 +78,7 @@ type wireReply struct {
 	Reason      string        `json:"reason,omitempty"`
 	Destination string        `json:"destination,omitempty"`
 	Ticket      string        `json:"ticket,omitempty"`
+	Token       string        `json:"token,omitempty"`
 	Dataset     *DatasetInfo  `json:"dataset,omitempty"`
 	Datasets    []DatasetInfo `json:"datasets,omitempty"`
 	Names       []string      `json:"names,omitempty"`
@@ -92,7 +99,8 @@ func (inst wireRequest) endpoint() (e Endpoint) {
 
 // subscribe binds the subjects and hears windows close.
 func (inst *Service) subscribe(bus *inprocbus.Inst) (err error) {
-	subjects := []string{SubjectOpen, SubjectAttach, SubjectClose, SubjectDefine, SubjectDrop, SubjectPrepare, SubjectRelease, SubjectList}
+	subjects := []string{SubjectOpen, SubjectAttach, SubjectClose, SubjectDefine, SubjectDrop, SubjectPrepare, SubjectRelease, SubjectList,
+		SubjectHandOver, SubjectClaim}
 	caps := make([]app.SubjectFilter, 0, len(subjects)+2)
 	for _, s := range subjects {
 		caps = append(caps, app.SubjectFilter{Pattern: s, Direction: app.CapDirectionSub, Reason: "session data: serve " + s})
@@ -152,7 +160,8 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	ctx := msg.Context()
 	c := req.caller(msg)
 	rep := wireReply{V: wireVersion, Ok: true}
-	personal := msg.Subject == SubjectOpen || msg.Subject == SubjectAttach || msg.Subject == SubjectClose
+	personal := msg.Subject == SubjectOpen || msg.Subject == SubjectAttach || msg.Subject == SubjectClose ||
+		msg.Subject == SubjectHandOver || msg.Subject == SubjectClaim
 	if personal && c.OnBehalfOf != nil {
 		inst.reply(msg.Reply, refusal(eh.Errorf("an agent's work uses its task's data session; opening, attaching and closing one is the person's")))
 		return
@@ -184,6 +193,10 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		err = inst.Release(c.By, req.Lease)
 	case SubjectList:
 		rep.Datasets, rep.Ticket, err = inst.List(ctx, c, req.Ticket)
+	case SubjectHandOver:
+		rep.Token, err = inst.HandOver(ctx, c.By, req.Ticket)
+	case SubjectClaim:
+		rep.Ticket, err = inst.Claim(ctx, c.By, req.Token)
 	default:
 		err = eb.Build().Str("subject", msg.Subject).Errorf("unknown subject")
 	}

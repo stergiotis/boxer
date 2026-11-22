@@ -44,3 +44,14 @@ func ReleaseCap(reason string) (c app.SubjectFilter) {
 func ListCap(reason string) (c app.SubjectFilter) {
 	return app.SubjectFilter{Pattern: SubjectList, Direction: app.CapDirectionPub, Reason: reason}
 }
+
+// HandOverCap mints hand-over tokens for a person's data session a window
+// holds, to hand it to a window it opens.
+func HandOverCap(reason string) (c app.SubjectFilter) {
+	return app.SubjectFilter{Pattern: SubjectHandOver, Direction: app.CapDirectionPub, Reason: reason}
+}
+
+// ClaimCap attaches a window by a hand-over token.
+func ClaimCap(reason string) (c app.SubjectFilter) {
+	return app.SubjectFilter{Pattern: SubjectClaim, Direction: app.CapDirectionPub, Reason: reason}
+}
