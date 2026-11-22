@@ -510,6 +510,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 	addRewriteOps(s)
 	addDatasetOps(s)
 	addSessionDatasetOps(s)
+	addExposeOps(s)
 	addBundleOps(s)
 	addPublishResultOps(s)
 	addProjectionOps(s)

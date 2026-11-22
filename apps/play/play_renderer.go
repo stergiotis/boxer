@@ -27,6 +27,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
@@ -886,9 +887,17 @@ type PlayApp struct {
 	// session_datasets resource, which moves only inside a frame.
 	sessionsSeen string
 	dropCalls    map[string]*dropCall
-	keepName     string
-	keepNote     string
-	keepBusy     *sessionCall[keepResult]
+	// exposures is the window's last reading of the live exposures and the
+	// answers to those it made; exposuresSeen its digest as the last frame
+	// latched it, the exposures resource; exposeCalls and revokeCalls the
+	// calls in flight, by call key (play_ops_expose.go).
+	exposures     exposureView
+	exposuresSeen string
+	exposeCalls   map[string]*sessionCall[adhocdata.ExposeResult]
+	revokeCalls   map[string]*sessionCall[string]
+	keepName      string
+	keepNote      string
+	keepBusy      *sessionCall[keepResult]
 	// runDoneFrames counts the frames a finished run has waited for the
 	// frame to draw its result (runLanded).
 	runDoneFrames int

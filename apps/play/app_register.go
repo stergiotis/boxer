@@ -279,6 +279,9 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 			adhocdata.BundleEventsCap("and follows the bundle's republish and retract"),
 			adhocdata.BundlePublishCap("publish_result and the Publish menu publish the main result as an ad-hoc bundle (ADR-0288 §SD4)"),
 			adhocdata.ReadCap("list_bundles reads a bundle's column values as a read of the data, held to the task's grant (ADR-0288 §SD5)"),
+			adhocdata.ExposeCap("expose_dataset and the Data sets tab make an ad-hoc dataset readable by programs on this machine, by a token (ADR-0407)"),
+			adhocdata.ExposeRevokeCap("revoke_exposure and the Data sets tab end an exposure"),
+			adhocdata.ExposeListCap("list_datasets and the Data sets tab list the live exposures"),
 			sessiondata.DefineCap("query's keep_as and the Data sets tab keep a statement's result as a session data set (ADR-0406)"),
 			sessiondata.PrepareCap("a run reading session('…'), or joining an ad-hoc dataset with server tables, is bound to its data session"),
 			sessiondata.ReleaseCap("and frees the data session once the run's result is read"),
@@ -617,6 +620,7 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 	// settled once the frame's own changes are in.
 	inst.inner.checkAgentMark()
 	inst.inner.latchSessions()
+	inst.inner.latchExposures()
 	inst.inner.gestureCtx = ctx
 	err = inst.inner.Frame(ctx)
 	inst.inner.gestureCtx = nil

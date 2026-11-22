@@ -96,6 +96,7 @@ type DatasetInfo struct {
 	Endpoint   string   `json:",omitzero" desc:"the server a session data set lives on, as a grant names it"`
 	Reads      []string `json:",omitzero" desc:"the session data sets and ad-hoc datasets a session data set's definition reads"`
 	Definition string   `json:",omitzero" desc:"a session data set's defining statement, when it is asked for by name"`
+	Exposed    bool     `json:",omitzero" desc:"true for an ad-hoc dataset exposed to programs on this machine; Exposures says by which exposure"`
 }
 
 // DatasetList is list_datasets' result.
@@ -104,6 +105,9 @@ type DatasetList struct {
 	Truncated bool          `desc:"true when more are bound than are listed"`
 	// SessionError says why the session data sets could not be listed.
 	SessionError string `json:",omitzero" desc:"why the session data sets could not be listed; the ad-hoc datasets are listed all the same"`
+	// Exposures are the live exposures of ad-hoc datasets.
+	Exposures      []DatasetExposure `json:",omitzero" desc:"the live exposures of ad-hoc datasets to programs on this machine, by alias; never their tokens, which only expose_dataset's answer carries"`
+	ExposuresError string            `json:",omitzero" desc:"why the exposures could not be listed"`
 	// sealedShown is set when a sealed dataset's columns are in the result.
 	sealedShown bool
 }
@@ -136,10 +140,11 @@ func addDatasetOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		})
 	appops.ExternalRead(s, app.OperationSpec{Name: opListDatasets, Version: 2,
 		Summary: "list the ad-hoc datasets bound in this window and the session data sets of the task's data session: what to read each with, the destination a run needs, and their columns",
-		Reads:   []string{opsResSessionDatasets}, Agents: true, Untrusted: true,
+		Reads:   []string{opsResSessionDatasets, opsResExposures}, Agents: true, Untrusted: true,
 		Follows: []string{"request_access with a dataset's destination lets a run read it",
 			"a session data set comes with its rows, bytes, revision and state; asked for by name, with its defining statement",
-			"query with keep_as defines a session data set, drop_dataset drops one"}},
+			"query with keep_as defines a session data set, drop_dataset drops one",
+			"expose_dataset makes an ad-hoc dataset readable by a program on this machine — a grader, a script, a ClickHouse server's url() — and the listing names the live exposures"}},
 		func(sn opsSnap, call app.OperationCall, in DatasetArgs) (DatasetList, error) {
 			switch {
 			case !sn.mounted:
@@ -163,6 +168,18 @@ func addDatasetOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			}
 			out.Datasets = append(out.Datasets, sessions...)
 			out.sealedShown = out.sealedShown || sealed
+			exps, xErr := datasetExposures(ctx, sn.client, call.OnBehalfOf)
+			if xErr != nil {
+				out.ExposuresError = xErr.Error()
+			}
+			out.Exposures = exps
+			for i, d := range out.Datasets {
+				if d.Home != datasetHomeWindow {
+					continue
+				}
+				alias := sn.client.exposeAlias(d.Name)
+				out.Datasets[i].Exposed = slices.ContainsFunc(exps, func(e DatasetExposure) bool { return e.Alias == alias })
+			}
 			if in.Name != "" && len(out.Datasets) == 0 {
 				return out, app.RefuseOperation("no dataset or session data set " + in.Name + " is here; list_datasets without a name lists them, bind_dataset binds an ad-hoc dataset, query with keep_as keeps a data set")
 			}

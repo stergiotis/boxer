@@ -8,6 +8,7 @@ import (
 
 	humanize "github.com/dustin/go-humanize"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -65,13 +66,101 @@ func (inst *PlayApp) renderDatasetsTab() {
 		if aliases := inst.client.DatasetAliases(); len(aliases) > 0 {
 			c.Separator().Horizontal().Send()
 			c.Label("Ad-hoc datasets bound in this window, held by the host:").Send()
+			_, _, _, exposedAt := inst.exposures.read()
+			if time.Since(exposedAt) > sessionViewEvery {
+				inst.refreshExposures()
+			}
 			for _, a := range aliases {
-				for rt := range c.RichTextLabel("keelson('" + a + "')") {
-					rt.Monospace()
+				for range c.IdScope(ids.PrepareStr("adhoc-" + a)) {
+					inst.renderAdhocDataset(a)
 				}
 			}
 		}
 	}
+}
+
+// The texts of an ad-hoc dataset's row.
+const (
+	datasetsExposeTooltip = "Makes this dataset readable by programs on this machine for an hour: the host serves it on its loopback port to whoever presents the token shown here, until it lapses or you revoke it. A ClickHouse server on this machine reads it with the url() line."
+	datasetsExposedNote   = "Readable on this machine with the token below, until it lapses or is revoked:"
+)
+
+// renderAdhocDataset draws one ad-hoc dataset the window binds under local:
+// its name, Expose, and each live exposure of it with Revoke, and, for one
+// this window made, the lines a reader pastes.
+func (inst *PlayApp) renderAdhocDataset(local string) {
+	ids := inst.ids
+	alias := inst.client.exposeAlias(local)
+	list, made, _, _ := inst.exposures.read()
+	for range c.HorizontalTop().KeepIter() {
+		for rt := range c.RichTextLabel("keelson('" + local + "')") {
+			rt.Monospace()
+		}
+		for range c.HoverText(datasetsExposeTooltip).KeepIter() {
+			if c.Button(ids.PrepareStr("expose"), c.Atoms().Text("Expose").Keep()).Kind(c.ButtonKindGhost).
+				SendResp().HasPrimaryClicked() {
+				inst.personExpose(local)
+			}
+		}
+	}
+	for _, e := range list {
+		if e.Alias != alias {
+			continue
+		}
+		for range c.IdScope(ids.PrepareStr("exp-" + e.Id)) {
+			for range c.HorizontalTop().KeepIter() {
+				c.Label(exposureLine(e)).Send()
+				if c.Button(ids.PrepareStr("revoke"), c.Atoms().Text("Revoke").Keep()).Kind(c.ButtonKindDanger).
+					SendResp().HasPrimaryClicked() {
+					inst.personRevoke(e.Id)
+				}
+			}
+			if res, ok := made[e.Id]; ok {
+				c.Label(datasetsExposedNote).Send()
+				inst.renderReaderLine("curl", res.Curl)
+				inst.renderReaderLine("url", res.ClickHouse)
+			}
+		}
+	}
+}
+
+// exposureLine is one live exposure in a word line.
+func exposureLine(e adhocdata.ExposureInfo) (line string) {
+	line = "exposed " + e.Id + " · r" + strconv.FormatUint(e.Revision, 10) + " · until " + e.ExpiresAt.Local().Format("15:04") +
+		" · " + strconv.FormatUint(e.Reads, 10) + " reads"
+	if e.Task != "" {
+		line += " · by a task"
+	}
+	return
+}
+
+// renderReaderLine draws a line a reader pastes, monospace, with Copy where
+// the window reaches the clipboard.
+func (inst *PlayApp) renderReaderLine(what string, line string) {
+	ids := inst.ids
+	for range c.HorizontalTop().KeepIter() {
+		for rt := range c.RichTextLabel(line) {
+			rt.Monospace().Small()
+		}
+		if inst.CanCopy() && c.Button(ids.PrepareStr("copy-"+what), c.Atoms().Text("Copy").Keep()).Kind(c.ButtonKindGhost).
+			SendResp().HasPrimaryClicked() {
+			inst.copyToClipboard("the "+what+" line", line)
+		}
+	}
+}
+
+// personExpose is the person's Expose of the dataset bound under local,
+// through the catalog where a host serves it and directly otherwise; a
+// refusal lands in the status line.
+func (inst *PlayApp) personExpose(local string) {
+	playGesture(inst, opExposeDataset, ExposeDatasetArgs{Name: local}, func() {
+		inst.startExpose(nil, inst.client.exposeAlias(local), 0)
+	})
+}
+
+// personRevoke is the person's Revoke of the exposure id.
+func (inst *PlayApp) personRevoke(id string) {
+	playGesture(inst, opRevokeExposure, RevokeExposureArgs{Exposure: id}, func() { inst.startRevoke(nil, id) })
 }
 
 // renderKeepRow draws the name field and Keep, and the last outcome.

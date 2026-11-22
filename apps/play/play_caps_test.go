@@ -197,7 +197,10 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// session data sets (ADR-0406): keep_as and the Data sets tab define,
 	// runs read, list_datasets lists, drop_dataset drops, a window opens its
 	// own data session and hands it to a window Open in play opens.
-	require.Len(t, m.Caps, 27)
+	// runtime.adhoc.expose, .expose.revoke and .expose.list for exposing an
+	// ad-hoc dataset to programs on this machine (ADR-0407):
+	// expose_dataset, revoke_exposure, list_datasets and the Data sets tab.
+	require.Len(t, m.Caps, 30)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {
 		patterns = append(patterns, cap.Pattern)
