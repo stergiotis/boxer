@@ -28,15 +28,15 @@ the function results. The explorer asks ClickHouse through its own query
 lanes, as it does for a person; the agent only reads what they hold.
 
 ```jsonl trace
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","valueContains":"extractAll returns the user names","role":"label","settleMs":1500}
 {"do":"wait","valueContains":"⚙ opened regex_explorer as window 2","role":"label"}
-{"do":"wait","valueContains":"⚙ Reading the explorer · get_state in window 2 · completed","role":"label"}
-{"do":"wait","valueContains":"⚙ set_inputs in window 2 · rendered","role":"label"}
-{"do":"wait","valueContains":"⚙ show_tab in window 2 · rendered","role":"label"}
-{"do":"wait","valueContains":"⚙ get_matches in window 2 · completed","role":"label"}
-{"do":"wait","valueContains":"⚙ get_functions in window 2 · completed","role":"label"}
+{"do":"wait","valueContains":"⚙ Reading the explorer · get state in window 2 · done","role":"label"}
+{"do":"wait","valueContains":"⚙ set inputs in window 2 · done","role":"label"}
+{"do":"wait","valueContains":"⚙ show tab in window 2 · done","role":"label"}
+{"do":"wait","valueContains":"⚙ get matches in window 2 · done","role":"label"}
+{"do":"wait","valueContains":"⚙ get functions in window 2 · done","role":"label"}
 {"do":"wait","value":"(\\w+)@([\\w.]+)","role":"text_input","comment":"the agent's pattern, in the explorer"}
 {"do":"wait","valueContains":"✓ same","role":"label","nth":5,"comment":"the functions tab, on screen and answered"}
 {"do":"capture","text":"chat-regex-explorer"}
