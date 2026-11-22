@@ -7,6 +7,7 @@ package pcmtest
 import (
 	"context"
 	"io"
+	"math"
 
 	"github.com/stretchr/testify/require"
 
@@ -91,7 +92,9 @@ func CheckSourceContract(t TestingI, src pcm.SourceI, maxFrames int64) {
 				got = append(got, buf[:n*ch]...)
 				off += int64(n)
 			}
-			require.Equal(t, reference, got, "chunking by %d frames from %d changed the samples", chunk, start)
+			// Compared bit for bit: a float source may hold NaN, which no
+			// value equals, and "the same samples" means the same bits.
+			require.Equal(t, sampleBits(reference), sampleBits(got), "chunking by %d frames from %d changed the samples", chunk, start)
 		}
 	}
 
@@ -114,4 +117,14 @@ func readWindow(t TestingI, src pcm.SourceI, start, frames int64) (out []float32
 	require.NoError(t, err)
 	require.Equal(t, int(frames), n)
 	return out
+}
+
+// sampleBits is the samples' IEEE 754 bit patterns, so that two reads of a
+// NaN sample compare equal.
+func sampleBits(samples []float32) (bits []uint32) {
+	bits = make([]uint32, len(samples))
+	for i, s := range samples {
+		bits[i] = math.Float32bits(s)
+	}
+	return
 }
