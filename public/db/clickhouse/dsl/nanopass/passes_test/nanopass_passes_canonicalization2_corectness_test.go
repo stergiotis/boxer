@@ -68,6 +68,18 @@ func TestNormalizeJoinExplicitPairs(t *testing.T) {
 			input:    "SELECT a FROM t1 JOIN t2 ON t1.id = t2.id",
 			expected: "SELECT a FROM t1 JOIN t2 ON t1.id = t2.id",
 		},
+		{
+			// A strictness with no direction names the inner join; the
+			// canonical grammar has no strictness on its own.
+			name:     "bare_strictness_gets_inner",
+			input:    "SELECT a FROM t1 ALL JOIN t2 ON t1.id = t2.id",
+			expected: "SELECT a FROM t1 ALL INNER JOIN t2 ON t1.id = t2.id",
+		},
+		{
+			name:     "bare_asof_gets_inner",
+			input:    "SELECT a FROM t1 asof JOIN t2 ON t1.id = t2.id",
+			expected: "SELECT a FROM t1 asof INNER JOIN t2 ON t1.id = t2.id",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

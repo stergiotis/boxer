@@ -9,7 +9,9 @@ import (
 
 // CanonicalizeJoin canonicalizes JOIN syntax.
 //
-//  1. Strictness precedes direction (LEFT ALL JOIN → ALL LEFT JOIN).
+//  1. Strictness precedes direction (LEFT ALL JOIN → ALL LEFT JOIN), and a
+//     strictness written without a direction gets the one it implies
+//     (ALL JOIN → ALL INNER JOIN), as ClickHouse formats it.
 //  2. OUTER keyword removed (LEFT OUTER JOIN → LEFT JOIN).
 //  3. Comma join → CROSS JOIN.
 //  4. USING without parens → USING with parens.
@@ -81,6 +83,12 @@ func normalizeJoinOpInner(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResul
 		}
 	}
 
+	if strictnessTok != nil && innerTok == nil {
+		// `ALL JOIN`: the canonical grammar has no strictness without a
+		// direction, and the join it names is the inner one.
+		nanopass.ReplaceToken(rw, strictnessTok.GetTokenIndex(), strictnessTok.GetText()+" INNER")
+		return
+	}
 	if strictnessTok == nil || innerTok == nil {
 		return
 	}

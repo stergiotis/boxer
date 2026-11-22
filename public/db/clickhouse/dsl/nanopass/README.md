@@ -158,7 +158,7 @@ state, structural reordering, or a node-conditional token rename
 
 | Pass | Description | Properties |
 |------|-------------|-----------|
-| `CanonicalizeJoin` | Strictness-before-direction, removes OUTER, comma→CROSS, parenthesises USING | Idempotent |
+| `CanonicalizeJoin` | Strictness-before-direction, a bare strictness gets INNER, removes OUTER, comma→CROSS, parenthesises USING | Idempotent |
 | `CanonicalizeSugar` | DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM → function-call form; sugar nests, outermost first | NeedsFixedPoint |
 | `CanonicalizeCasts` | `expr::Type` and `CAST(expr AS Type)` → `CAST(expr, 'Type')` | NeedsFixedPoint |
 | `CanonicalizeCaseConditionals` | CASE → `if`/`multiIf`/`caseWithExpression`; leaf-level | NeedsFixedPoint |

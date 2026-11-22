@@ -455,7 +455,7 @@ FixedPoint(CanonicalizeConstructors(ConstructorFormFunction), maxIter)  // [..]/
 FixedPoint(CanonicalizeCaseConditionals, maxIter)                       // CASE → if()/multiIf()/caseWithExpression()
 CanonicalizeMultiIf                  // 3-arg multiIf(c,r,d) → if(c,r,d)
 FixedPoint(CanonicalizeCasts, maxIter)        // x::T and CAST(x AS T) → CAST(x, 'T')
-CanonicalizeJoin                     // strictness-before-direction, drop OUTER, comma→CROSS, parenthesise USING
+CanonicalizeJoin                     // strictness-before-direction, bare strictness→INNER, drop OUTER, comma→CROSS, parenthesise USING
 FixedPoint(CanonicalizeTernary, maxIter)      // c ? a : b → if(c, a, b)
 CanonicalizeKeywordCase              // uppercase keywords (must be 2nd-to-last)
 CanonicalizeIdentifiers              // double-quote identifiers (must be last)
@@ -665,7 +665,7 @@ the connection default; there is no ambient inheritance from sibling tables.
 | `CanonicalizeCaseConditionals` | CASE → `if`/`multiIf`/`caseWithExpression` | NeedsFixedPoint |
 | `CanonicalizeMultiIf` | 3-arg `multiIf` → `if` | Idempotent |
 | `CanonicalizeCasts` | `x::T`, `CAST(x AS T)` → `CAST(x, 'T')` | NeedsFixedPoint |
-| `CanonicalizeJoin` | strictness-before-direction, drop OUTER, comma→CROSS, parenthesise USING | Idempotent |
+| `CanonicalizeJoin` | strictness-before-direction, bare strictness→INNER, drop OUTER, comma→CROSS, parenthesise USING | Idempotent |
 | `CanonicalizeTernary` | `c ? a : b` → `if(c, a, b)` | NeedsFixedPoint |
 | `RemoveRedundantParens` | drop parens unneeded given operator precedence | Idempotent |
 | `CanonicalizeFull(maxIter)` | the full canonicalisation `Sequence` (see above) | — |
