@@ -77,6 +77,9 @@ public/thestack/fffi2/ir TestNewConcreteType_InvalidName_PanicsUnderExtraChecks
 apps/imzrt TestSampler_SteadyStateHeapBounded
 apps/imztop TestSampler_SteadyStateHeapBounded
 apps/play TestMapRasterLive
+doc/trials/facts-read-through-a-view/harness TestLoad
+doc/trials/facts-read-through-a-view/harness TestReadCost
+doc/trials/facts-read-through-a-view/harness TestTables
 doc/trials/map-tile-addressing/harness TestBrightness
 doc/trials/map-tile-addressing/harness TestFirstPixels
 doc/trials/map-tile-addressing/harness TestOverscan
@@ -148,3 +151,4 @@ apps/sqlapplet TestLadingBookQueries_LiveServer
 apps/tally TestComponentsOnARealEntry_LiveServer
 apps/tally TestPathSetOverAPublishedTree_LiveServer
 apps/tally TestPathSetOverAnotherLayout_LiveServer
+public/keelson/runtime/ladingpublish TestPublishWritesASnapshotReadersOpen
