@@ -23,7 +23,7 @@ itself; ADR-0389 states its tier.
 | Section | Packages |
 | --- | ---: |
 | [Stable](#stable) | 77 |
-| [Experimental](#experimental) | 284 |
+| [Experimental](#experimental) | 285 |
 | [Internal](#internal) | 16 |
 | [Test support](#test-support) | 18 |
 | [Tools](#tools) | 91 |
@@ -221,6 +221,7 @@ Public and usable, but may change in any MINOR version without a deprecation win
 - `public/db/clickhouse/dsl/sqlcomplete` — Package sqlcomplete answers "what may stand where the caret is" for a ClickHouse buffer (ADR-0190).
 - `public/db/clickhouse/jackstay` — Package jackstay is the engine of the guided ClickHouse-to-ClickHouse sync of ADR-0259.
 - `public/db/fairlead` — Package fairlead is the one opening every SQL statement passes on its way out of the process (ADR-0367 §SD1).
+- `public/db/fairlead/taskread` — Package taskread is the fairlead pass that lets a statement a task supplied leave the process only as a read (ADR-0403).
 
 ### fec
 
