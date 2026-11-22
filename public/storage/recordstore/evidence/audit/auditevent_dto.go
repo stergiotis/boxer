@@ -122,13 +122,15 @@ const (
 // recorder writes about itself, in the retention class RetentionTrail.
 // Config is the audit-relevant settings a host's recorder started under,
 // and ditch the removal of kept message text (ADR-0264 §SD6), both from
-// the Update of 2026-10-31.
+// the Update of 2026-10-31. Held is the span a recorder held its rows for
+// a store it had not reached, written once they landed (ADR-0408 §SD4).
 const (
 	TrailDomain        = "trail"
 	ActionAuditGap     = "audit-gap"
 	ActionAuditInvalid = "audit-invalid"
 	ActionAuditConfig  = "config"
 	ActionAuditDitch   = "ditch"
+	ActionAuditHeld    = "held"
 	RetentionTrail     = "trail"
 )
 

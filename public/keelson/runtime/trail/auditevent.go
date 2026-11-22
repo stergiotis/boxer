@@ -39,6 +39,7 @@ const (
 	ActionAuditInvalid = audit.ActionAuditInvalid
 	ActionAuditConfig  = audit.ActionAuditConfig
 	ActionAuditDitch   = audit.ActionAuditDitch
+	ActionAuditHeld    = audit.ActionAuditHeld
 	RetentionTrail     = audit.RetentionTrail
 
 	ReviewDomain          = audit.ReviewDomain

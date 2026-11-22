@@ -6,6 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"iter"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -79,6 +80,14 @@ type Recorder struct {
 	st  *auditStore
 	// seq makes the unique part of a natural key.
 	seq atomic.Uint64
+	// refused counts the work WriteAhead and Admit refused.
+	refused atomic.Uint64
+
+	// heldSince is when a recorder built WithHeld began holding; heldWhy,
+	// under heldMu, is what NotDurable says while it holds.
+	heldSince time.Time
+	heldMu    sync.Mutex
+	heldWhy   string
 }
 
 // recorderConfig is what the options set before the writer is built.
@@ -92,6 +101,11 @@ type recorderConfig struct {
 	// ids mints row ids from the facts table's stream; nil derives them.
 	ids        identifier.IdGeneratorI
 	maxBacklog int
+	// held starts the writer held, heldWhy what NotDurable says meanwhile.
+	held    bool
+	heldWhy string
+	// noBackend is why a recorder without an executor has none.
+	noBackend string
 }
 
 // Counts are the recorder's counters (ADR-0296 §SD4), over every verb:
@@ -110,6 +124,9 @@ type Counts struct {
 	// Seals is the durable flushes, each sealed (ADR-0327 §SD5); a seal is
 	// not among the rows Written counts.
 	Seals uint64
+	// Refused is the work WriteAhead and Admit refused under
+	// BOXER_TRAIL_REQUIRED because the trail was not durable.
+	Refused uint64
 }
 
 // Counts reads the counters. Zero for a nil recorder.
@@ -119,7 +136,7 @@ func (inst *Recorder) Counts() (c Counts) {
 	}
 	a := inst.rec.Counts()
 	return Counts{Buffered: a.Buffered, Written: a.Written, Dropped: a.Dropped, Invalid: a.Invalid,
-		Forwarded: a.Forwarded, ForwardDropped: a.ForwardDropped, Seals: a.Seals}
+		Forwarded: a.Forwarded, ForwardDropped: a.ForwardDropped, Seals: a.Seals, Refused: inst.refused.Load()}
 }
 
 // RecorderOption configures NewRecorder.
@@ -186,6 +203,22 @@ func WithAnchors(st anchor.StoreI) RecorderOption {
 	return func(inst *Recorder) { inst.cfg.anchors = st }
 }
 
+// WithHeld builds the recorder over its executor held (ADR-0408 §SD2): it
+// keeps its rows in memory, within the backlog cap, sends nothing, and is
+// not durable until Release lands what it holds. why is what NotDurable
+// says meanwhile; SetHeldWhy replaces it. It is for a host whose store did
+// not open at boot; a recorder without an executor ignores it.
+func WithHeld(why string) RecorderOption {
+	return func(inst *Recorder) { inst.cfg.held, inst.cfg.heldWhy = true, why }
+}
+
+// WithNoBackendReason is what NotDurable says of a recorder built without
+// an executor, in place of the generic reason: why the host has no
+// backend, for the person and the agent who read it.
+func WithNoBackendReason(why string) RecorderOption {
+	return func(inst *Recorder) { inst.cfg.noBackend = why }
+}
+
 // DefaultForwardQueue bounds the batches the prompt path holds for a
 // forwarder that has not taken them yet; past it a batch is dropped from
 // the prompt path, counted, and left to the backstop.
@@ -229,6 +262,9 @@ func NewRecorder(exec recordstore.ExecutorI, run string, log zerolog.Logger, opt
 	var st auditrec.StoreI[*auditBatch]
 	if exec == nil {
 		inst.notDurable = notDurableNoBackend
+		if inst.cfg.noBackend != "" {
+			inst.notDurable = inst.cfg.noBackend
+		}
 	} else {
 		readTable := inst.cfg.readTable
 		var err error
@@ -245,6 +281,13 @@ func NewRecorder(exec recordstore.ExecutorI, run string, log zerolog.Logger, opt
 			return
 		}
 		st = inst.st
+		if inst.cfg.held {
+			ropts = append(ropts, auditrec.WithHeld())
+			inst.heldSince, inst.heldWhy = time.Now().UTC(), inst.cfg.heldWhy
+			if inst.heldWhy == "" {
+				inst.heldWhy = notDurableHeld
+			}
+		}
 	}
 	rec, err := auditrec.New(st, run, TrailSealScheme, log, ropts...)
 	if err != nil {
@@ -274,13 +317,15 @@ const (
 	notDurableNoRun     = "the host has no run id, so the trail has no seal stream"
 	notDurableClosed    = "the recorder is closed"
 	notDurableNil       = "the host has no audit trail"
+	notDurableHeld      = "the trail holds its rows until the host's store opens"
 )
 
 // NotDurable says why rows written through the recorder do not land on
 // boxer.facts, "" when they do: no backend (a host without ClickHouse), no
 // run id (a host whose run identity did not start), a store that could not
-// be built, or a closed recorder. It is the state Durable reports false
-// for, with its reason, for a host to show the person and an agent.
+// be built, a recorder held until its store opens, or a closed recorder.
+// It is the state Durable reports false for, with its reason, for a host
+// to show the person and an agent.
 func (inst *Recorder) NotDurable() (why string) {
 	if inst == nil {
 		return notDurableNil
@@ -288,10 +333,66 @@ func (inst *Recorder) NotDurable() (why string) {
 	if inst.notDurable != "" {
 		return inst.notDurable
 	}
+	if inst.rec.Held() {
+		return inst.HeldWhy()
+	}
 	if !inst.rec.Durable() {
 		return notDurableClosed
 	}
 	return ""
+}
+
+// Held says the recorder keeps its rows for a store it has not reached:
+// built WithHeld, not yet released, not closed.
+func (inst *Recorder) Held() (held bool) {
+	if inst == nil {
+		return false
+	}
+	return inst.rec.Held()
+}
+
+// HeldSince is when the recorder began holding; zero for one not built
+// WithHeld.
+func (inst *Recorder) HeldSince() (since time.Time) {
+	if inst == nil {
+		return
+	}
+	return inst.heldSince
+}
+
+// HeldWhy is what NotDurable says while the recorder holds.
+func (inst *Recorder) HeldWhy() (why string) {
+	if inst == nil {
+		return ""
+	}
+	inst.heldMu.Lock()
+	defer inst.heldMu.Unlock()
+	return inst.heldWhy
+}
+
+// SetHeldWhy replaces what NotDurable, and so a refusal, says while the
+// recorder holds: the host's account of the store it is still opening.
+func (inst *Recorder) SetHeldWhy(why string) {
+	if inst == nil || why == "" {
+		return
+	}
+	inst.heldMu.Lock()
+	inst.heldWhy = why
+	inst.heldMu.Unlock()
+}
+
+// Release lands what a held recorder holds, oldest first and sealed, within
+// ctx; once all of it has landed the recorder is durable (ADR-0408 §SD3).
+// On failure it stays held and Release may be called again. Nil on a
+// recorder that is not held.
+func (inst *Recorder) Release(ctx context.Context) (err error) {
+	if inst == nil || inst.rec == nil {
+		return eb.Build().Str("why", inst.NotDurable()).Errorf("the trail has no writer to release")
+	}
+	if err = inst.rec.Release(ctx); err != nil {
+		return eh.Errorf("release the held trail: %w", err)
+	}
+	return nil
 }
 
 // Close flushes what is buffered, within the flush's bound, and releases
@@ -525,6 +626,7 @@ func (inst *Recorder) Flush(ctx context.Context) (err error) {
 func (inst *Recorder) WriteAhead(ctx context.Context) (durable bool, refuse error) {
 	if !inst.Durable() {
 		if inst != nil && inst.required {
+			inst.refused.Add(1)
 			why := inst.NotDurable()
 			return false, eb.Build().Str("env", RequiredEnv.Spec().Name).Str("why", why).Errorf("the audit trail could not be written and %s is set: %s", RequiredEnv.Spec().Name, why) //boxer:lint disable=CS013 reason="shape 1 and 3: the services send this refusal across the bus as text, and the variable's name is what the reader changes"
 		}
@@ -532,6 +634,7 @@ func (inst *Recorder) WriteAhead(ctx context.Context) (durable bool, refuse erro
 	}
 	durable, err := inst.rec.WriteAhead(ctx)
 	if err != nil {
+		inst.refused.Add(1)
 		return false, eb.Build().Str("env", RequiredEnv.Spec().Name).Errorf("the audit trail could not be written and %s is set: %w", RequiredEnv.Spec().Name, err) //boxer:lint disable=CS013 reason="shape 1 and 3: the services send this refusal across the bus as text, and the variable's name is what the reader changes"
 	}
 	return durable, nil
@@ -539,10 +642,14 @@ func (inst *Recorder) WriteAhead(ctx context.Context) (durable bool, refuse erro
 
 // Admit says whether work that leaves the machine without a write-ahead —
 // an egress fetch, whose rows are flushed behind it — may proceed: it may
-// not where BOXER_TRAIL_REQUIRED is set and the host has no durable backend.
+// not where BOXER_TRAIL_REQUIRED is set and the trail is not durable, which
+// includes a trail held until the host's store opens. The refusal ends
+// with NotDurable's reason.
 func (inst *Recorder) Admit() (refuse error) {
 	if inst != nil && inst.required && !inst.Durable() {
-		return eb.Build().Str("env", RequiredEnv.Spec().Name).Errorf("the audit trail is not durable on this host and %s is set", RequiredEnv.Spec().Name) //boxer:lint disable=CS013 reason="shape 1 and 3: the services send this refusal across the bus as text, and the variable's name is what the reader changes"
+		inst.refused.Add(1)
+		why := inst.NotDurable()
+		return eb.Build().Str("env", RequiredEnv.Spec().Name).Str("why", why).Errorf("the audit trail is not durable on this host and %s is set: %s", RequiredEnv.Spec().Name, why) //boxer:lint disable=CS013 reason="shape 1 and 3: the services send this refusal across the bus as text, and the variable's name is what the reader changes"
 	}
 	return nil
 }
