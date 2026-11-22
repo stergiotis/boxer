@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -339,4 +340,9 @@ func TestDefaultClientUsesAReplacedDefaultTransport(t *testing.T) {
 	require.NoError(t, err)
 	_ = resp.Body.Close()
 	assert.True(t, used)
+}
+
+func TestArrowInsertTargetNamesTheColumns(t *testing.T) {
+	schema := arrow.NewSchema([]arrow.Field{{Name: "id:id:u64:47::0:", Type: arrow.PrimitiveTypes.Uint64}, {Name: "a`b\\c", Type: arrow.PrimitiveTypes.Uint8}}, nil)
+	assert.Equal(t, "db.t (`id:id:u64:47::0:`, `a\\`b\\\\c`)", ArrowInsertTarget("db.t", schema))
 }

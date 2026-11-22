@@ -21,6 +21,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -229,6 +230,6 @@ func (inst *LocalExecutor) insert(ctx context.Context, table string, records []a
 		err = eh.Errorf("close arrow writer: %w", err)
 		return
 	}
-	_, err = inst.run(ctx, "INSERT INTO "+table+settings.SQL()+" FORMAT Arrow", "", buf.Bytes())
+	_, err = inst.run(ctx, "INSERT INTO "+chclient.ArrowInsertTarget(table, records[0].Schema())+settings.SQL()+" FORMAT Arrow", "", buf.Bytes())
 	return
 }

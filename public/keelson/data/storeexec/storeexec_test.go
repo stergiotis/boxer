@@ -290,9 +290,9 @@ func TestExecutor_AppliesTheRegisteredTransform(t *testing.T) {
 	require.NoError(t, exec.InsertArrow(context.Background(), "scratch_storeexec.other", []arrow.RecordBatch{rec}))
 
 	require.Len(t, got, 3)
-	assert.Equal(t, sent{query: "INSERT INTO scratch_storeexec.carrier FORMAT Arrow", token: "tok-7", cols: []string{"carried"}}, got[0])
-	assert.Equal(t, sent{query: "INSERT INTO scratch_storeexec.carrier FORMAT Arrow", cols: []string{"carried"}}, got[1])
-	assert.Equal(t, sent{query: "INSERT INTO scratch_storeexec.other FORMAT Arrow", cols: []string{"v"}}, got[2])
+	assert.Equal(t, sent{query: "INSERT INTO scratch_storeexec.carrier (`carried`) FORMAT Arrow", token: "tok-7", cols: []string{"carried"}}, got[0])
+	assert.Equal(t, sent{query: "INSERT INTO scratch_storeexec.carrier (`carried`) FORMAT Arrow", cols: []string{"carried"}}, got[1])
+	assert.Equal(t, sent{query: "INSERT INTO scratch_storeexec.other (`v`) FORMAT Arrow", cols: []string{"v"}}, got[2])
 
 	// Another spelling of the table is the same table; a bare name that
 	// could be it sends nothing; an insert a transform already rewrote is
@@ -303,6 +303,6 @@ func TestExecutor_AppliesTheRegisteredTransform(t *testing.T) {
 	require.ErrorIs(t, err, recordstore.ErrUnqualifiedTransformedTable)
 	require.NoError(t, exec.InsertArrow(recordstore.WithTransformApplied(context.Background()), "scratch_storeexec.facts", []arrow.RecordBatch{rec}))
 	require.Len(t, got, 2)
-	assert.Equal(t, sent{query: "INSERT INTO scratch_storeexec.carrier FORMAT Arrow", cols: []string{"carried"}}, got[0])
-	assert.Equal(t, sent{query: "INSERT INTO scratch_storeexec.facts FORMAT Arrow", cols: []string{"v"}}, got[1])
+	assert.Equal(t, sent{query: "INSERT INTO scratch_storeexec.carrier (`carried`) FORMAT Arrow", cols: []string{"carried"}}, got[0])
+	assert.Equal(t, sent{query: "INSERT INTO scratch_storeexec.facts (`v`) FORMAT Arrow", cols: []string{"v"}}, got[1])
 }

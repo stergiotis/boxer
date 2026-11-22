@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -110,7 +111,7 @@ func TestWrites_GoThroughTheRegisteredTransform(t *testing.T) {
 	got := srv.requests()
 	require.Len(t, got, 2)
 	for _, s := range got {
-		assert.Equal(t, "INSERT INTO scratch_chstore_tr.carrier FORMAT Arrow", s.query)
+		assert.Equal(t, "INSERT INTO scratch_chstore_tr.carrier (`rows`) FORMAT Arrow", s.query)
 		assert.Equal(t, []string{"rows"}, s.cols)
 	}
 	assert.Greater(t, seenCols, 20, "the transform receives the batches in the facts columns")
@@ -120,7 +121,7 @@ func TestWrites_GoThroughTheRegisteredTransform(t *testing.T) {
 	require.NoError(t, err)
 	got = srv.requests()
 	require.Len(t, got, 1)
-	assert.Equal(t, "INSERT INTO scratch_chstore_tr.facts FORMAT Arrow", got[0].query, "with nothing registered the facts table is written")
+	assert.True(t, strings.HasPrefix(got[0].query, "INSERT INTO scratch_chstore_tr.facts (`"), "with nothing registered the facts table is written, its columns named: %s", got[0].query)
 }
 
 // storeMethodsThatDoNotRead are the exported methods of Store that are not
@@ -189,7 +190,7 @@ func TestReaders_NameTheReadTableAndNeverTheWrittenOne(t *testing.T) {
 	require.NoError(t, err)
 	got := srv.requests()
 	require.Len(t, got, 1)
-	assert.Equal(t, "INSERT INTO "+written+" FORMAT Arrow", got[0].query, "writes still name the table written to")
+	assert.True(t, strings.HasPrefix(got[0].query, "INSERT INTO "+written+" (`"), "writes still name the table written to: %s", got[0].query)
 }
 
 // A malformed read table is refused when the store is built, not spliced

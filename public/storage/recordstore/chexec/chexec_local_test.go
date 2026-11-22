@@ -122,3 +122,49 @@ func TestLocalExecutor_AViewWhoseReadIsRefusedIsIncompatible(t *testing.T) {
 		Columns: []recordstore.ColumnSpec{{Name: "x", Type: "UInt64"}}})
 	require.Equal(t, recordstore.SchemaVerdictOk, table.Verdict, table.Summary())
 }
+
+// An insert names its batch's columns (ADR-0387): a column the table lacks
+// is refused rather than dropped, which is what a newer build writing to an
+// older table would otherwise lose without an error; a column the batch
+// lacks takes the table's default, so an older build keeps writing to a
+// migrated table.
+func TestLocalExecutor_AnInsertNamesItsColumns(t *testing.T) {
+	exec, err := NewLocalExecutor(t.TempDir(), nil)
+	if err != nil {
+		t.Skipf("clickhouse unavailable: %v", err)
+	}
+	ctx := context.Background()
+	require.NoError(t, exec.Exec(ctx, "CREATE TABLE default.t (a UInt64, c UInt64 DEFAULT 7) ENGINE = MergeTree ORDER BY a"))
+	batch := func(names ...string) arrow.RecordBatch {
+		fields := make([]arrow.Field, 0, len(names))
+		cols := make([]arrow.Array, 0, len(names))
+		for _, n := range names {
+			b := array.NewUint64Builder(memory.NewGoAllocator())
+			b.Append(1)
+			fields = append(fields, arrow.Field{Name: n, Type: arrow.PrimitiveTypes.Uint64})
+			cols = append(cols, b.NewArray())
+			b.Release()
+		}
+		rec := array.NewRecordBatch(arrow.NewSchema(fields, nil), cols, 1)
+		for _, c := range cols {
+			c.Release()
+		}
+		return rec
+	}
+	newer := batch("a", "c", "b")
+	defer newer.Release()
+	err = exec.InsertArrow(ctx, "default.t", []arrow.RecordBatch{newer})
+	require.Error(t, err, "a column the table lacks is refused, not dropped")
+	assert.Contains(t, err.Error(), "NO_SUCH_COLUMN_IN_TABLE")
+
+	older := batch("a")
+	defer older.Release()
+	require.NoError(t, exec.InsertArrow(ctx, "default.t", []arrow.RecordBatch{older}))
+	var got []uint64
+	for rec, qerr := range exec.QueryArrow(ctx, "SELECT c FROM default.t") {
+		require.NoError(t, qerr)
+		got = append(got, rec.Column(0).(*array.Uint64).Value(0))
+		rec.Release()
+	}
+	assert.Equal(t, []uint64{7}, got, "a column the batch lacks takes its default")
+}

@@ -262,7 +262,30 @@ func (inst *Client) QueryParamsSettings(ctx context.Context, sql string, params 
 	return
 }
 
-// InsertArrow POSTs Arrow IPC records to INSERT INTO {table} FORMAT Arrow.
+// ArrowInsertTarget is "{table} (`col`, …)": the table an Arrow insert
+// names, followed by the columns of schema, so the server matches the
+// batch's columns by name and refuses one the table lacks. Without the list
+// it inserts the columns the table has and drops the others without an
+// error, which loses a newer build's columns on an older table (ADR-0387).
+// A table column the list leaves out takes its default, as before.
+func ArrowInsertTarget(table string, schema *arrow.Schema) string {
+	var b strings.Builder
+	b.WriteString(table)
+	b.WriteString(" (")
+	for i, f := range schema.Fields() {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteByte('`')
+		b.WriteString(strings.NewReplacer("\\", "\\\\", "`", "\\`").Replace(f.Name))
+		b.WriteByte('`')
+	}
+	b.WriteByte(')')
+	return b.String()
+}
+
+// InsertArrow POSTs Arrow IPC records to INSERT INTO {table} ({columns})
+// FORMAT Arrow, the columns being the records' own ([ArrowInsertTarget]).
 // The records slice may be empty (no-op). Caller is responsible for
 // releasing the records after the call returns.
 func (inst *Client) InsertArrow(ctx context.Context, table string, records []arrow.RecordBatch) (err error) {
@@ -295,7 +318,7 @@ func (inst *Client) InsertArrowSettings(ctx context.Context, table string, recor
 		return
 	}
 	var insertSQL string
-	insertSQL, err = fairlead.Lead(ctx, fairlead.ExitServer, siteInsertArrow, "INSERT INTO "+table+" FORMAT Arrow")
+	insertSQL, err = fairlead.Lead(ctx, fairlead.ExitServer, siteInsertArrow, "INSERT INTO "+ArrowInsertTarget(table, records[0].Schema())+" FORMAT Arrow")
 	if err != nil {
 		return
 	}
