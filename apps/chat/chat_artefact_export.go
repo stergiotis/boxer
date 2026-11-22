@@ -17,6 +17,7 @@ import (
 	"errors"
 	"io/fs"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -28,6 +29,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/identity/tagmint"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
@@ -36,6 +38,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/decision"
 )
 
 // exportMountTag is the tag of the chat's artefact mounts (ADR-0198 §SD3):
@@ -76,16 +79,14 @@ const (
 	exportStageCheck        = "check"
 	exportStagePublish      = "publish"
 
-	tipArtExport  = "Write this revision and its screenshots to the lading store, where anyone who can read the store can read them until the retention ends. You confirm first."
-	tipExportDo   = "Export now. If no endorsement covers this revision, confirming also endorses it for publishing."
-	tipExportStop = "Close this without exporting."
+	tipArtExport   = "Write this revision and its screenshots to the shared file store (lading), where anyone who can read the store can read them until the retention ends. You confirm first."
+	tipExportDo    = "Export now. If no endorsement covers this revision, confirming also endorses it for publishing."
+	tipExportStop  = "Close this without exporting."
+	tipExportLabel = "The traffic-light label the export carries (TLP), from the conversation's own: who the store lets read it."
 )
 
 var (
 	atomsArtExport = c.Atoms().Text(icons.PhExport + " Export").Keep()
-	atomsExportDo  = c.Atoms().Text(icons.PhCheck + " Export").Keep()
-	atomsExportOpn = c.Atoms().Text(icons.PhCheck + " Export and open").Keep()
-	atomsExportNo  = c.Atoms().Text(icons.PhX + " Cancel").Keep()
 )
 
 // exportRecord is the body of an export's journal entry.
@@ -299,45 +300,85 @@ func (inst *App) planExport(thenMdedit bool) {
 	inst.artView.export = p
 }
 
-// renderExportAsk is the confirmation: what goes where, for how long, who
-// can read it, and whether confirming also endorses.
+// renderExportAsk is the confirmation of an export the person asked for
+// (ADR-0404 §SD3, §SD4: their own act, so Export is the primary): what goes
+// where, for how long, who can read it, and whether confirming also
+// endorses. An export that cannot go ahead keeps Export, disabled, with the
+// reason beside it.
 func (inst *App) renderExportAsk(p *exportPlan, head int) {
-	section("Export to the lading store")
 	files := plural(1+len(p.images), "file")
-	c.Label("revision " + strconv.Itoa(p.rev) + " · " + files + " · " + humanBytes(p.bytes) + " · " + p.label.Tier.String()).Selectable(false).Send()
-	weak(exportDocPath + " and " + plural(len(p.images), "screenshot") + ", as one snapshot of this conversation's mount.")
-	weak("Kept for " + strconv.Itoa(exportTtlDays) + " days. Anyone who can read the lading store can read these files until then.")
+	what := exportDocPath
+	if len(p.images) > 0 {
+		what += " and " + plural(len(p.images), "screenshot")
+	}
+	follows := []string{
+		"Export writes " + what + " to the shared file store, as one snapshot of this conversation's export.",
+		"It is kept for " + strconv.Itoa(exportTtlDays) + " days. Anyone who can read the shared file store can read these files until then.",
+	}
 	if p.thenMdedit {
-		weak("Then mdedit opens the export, with its screenshots.")
+		follows = append(follows, "Then mdedit opens the export, with its screenshots.")
 	}
 	if p.endorse {
-		weak("No endorsement covers this revision: confirming also endorses it for publishing.")
+		follows = append(follows, "No endorsement covers this revision: exporting also records that you reviewed it and stand behind it for publishing.")
 	}
-	if p.rev != head {
-		weak("The artefact moved since you asked; close this and export again.")
+	follows = append(follows, "Cancel closes this; nothing is written.")
+	label := "Export"
+	if p.thenMdedit {
+		label = "Export and open"
 	}
-	if p.confined {
-		weak(exportRefusal(p.confinedBy))
+	do := decision.Option{Key: "export", Label: label, Icon: icons.PhCheck, Role: decision.RoleAffirm, Tooltip: tipExportDo}
+	var notes []decision.Note
+	switch {
+	case p.confined:
+		// The journal keeps exportRefusal's words; the window says the
+		// store's name in the reader's.
+		why := strings.Replace(exportRefusal(p.confinedBy), "the lading store", "the shared file store", 1)
+		notes = append(notes, decision.Note{Text: why, Tone: styletokens.ToneError})
+		do.Disabled, do.Why = true, "Export is off: this conversation holds sealed data."
+	case p.rev != head:
+		notes = append(notes, decision.Note{Text: "The document changed since you asked; Cancel and export again.", Tone: styletokens.ToneWarning})
+		do.Disabled, do.Why = true, "Export is off: it would write revision "+strconv.Itoa(p.rev)+", which is no longer the current one."
 	}
-	for range c.HorizontalTop().KeepIter() {
-		if !p.confined && p.rev == head {
-			atoms := atomsExportDo
-			if p.thenMdedit {
-				atoms = atomsExportOpn
+	in := decision.Input{
+		Ids: inst.ids, ScopeKey: "export", Origin: decision.OriginConfirm,
+		Title:   "Export this document?",
+		Subject: "revision " + strconv.Itoa(p.rev) + " · " + files + " · " + humanBytes(p.bytes),
+		Follows: follows,
+		Notes:   notes,
+		Options: []decision.Option{do,
+			{Key: "cancel", Label: "Cancel", Icon: icons.PhX, Role: decision.RoleDecline, Tooltip: tipExportStop}},
+		Detail: func() {
+			// Who may read the export, in the reader's words; the label's
+			// own name (TLP) is in the hover.
+			for range c.HoverText(tipExportLabel + " TLP:" + p.label.Tier.String() + ".").KeepIter() {
+				weak(exportTierWords(p.label.Tier))
 			}
-			for range c.HoverText(tipExportDo).KeepIter() {
-				if c.Button(inst.ids.PrepareStr("export-do"), atoms).SendResp().HasPrimaryClicked() {
-					inst.artView.export = nil
-					inst.export(p)
-				}
-			}
-		}
-		for range c.HoverText(tipExportStop).KeepIter() {
-			if c.Button(inst.ids.PrepareStr("export-no"), atomsExportNo).SendResp().HasPrimaryClicked() {
-				inst.artView.export = nil
-			}
-		}
+		},
 	}
+	switch decision.Render(in).Chosen {
+	case "export":
+		inst.artView.export = nil
+		inst.export(p)
+	case "cancel":
+		inst.artView.export = nil
+	}
+}
+
+// exportTierWords says who the export's label lets read it.
+func exportTierWords(t agentrun.TierE) string {
+	switch t {
+	case agentrun.TierClear:
+		return "Its label lets it be shared with anyone."
+	case agentrun.TierGreen:
+		return "Its label lets it be shared within your community, not published."
+	case agentrun.TierAmber:
+		return "Its label keeps it to your organisation and those it works with, as they need it."
+	case agentrun.TierAmberStrict:
+		return "Its label keeps it to your organisation."
+	case agentrun.TierRed:
+		return "Its label keeps it to the people it is given to."
+	}
+	return "Its label is not one the chat knows: " + t.String() + "."
 }
 
 // export runs exportNow off the frame goroutine.
@@ -399,7 +440,7 @@ func (inst *App) exportNow(ctx context.Context, p *exportPlan, name string) (not
 			return "", eh.Errorf("the export was written but not journaled: %w", err)
 		}
 	}
-	note = "exported revision " + strconv.Itoa(p.rev) + " to the lading store, kept until " + res.Expires().Format("2006-01-02")
+	note = "exported revision " + strconv.Itoa(p.rev) + " to the shared file store, kept until " + res.Expires().Format("2006-01-02")
 	if !p.thenMdedit {
 		return
 	}

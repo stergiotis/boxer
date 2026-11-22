@@ -24,9 +24,9 @@ lands, the transcript holds the reply.
 
 ```jsonl trace
 {"do":"note","text":"chat: a streamed answer, growing and then landed"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button"}
-{"do":"wait","valueContains":"writing the answer","role":"label","nth":1,"comment":"the running model step, streaming; the roster repeats this window's turn line, first in the tree"}
+{"do":"wait","valueContains":"writing the answer","role":"label","comment":"the running model step, streaming"}
 {"do":"wait","valueContains":"Streaming shows the answer","role":"label","comment":"the answer so far, under the trail"}
 {"do":"capture","text":"chat-stream-growing"}
 {"do":"wait","contains":"Regenerate","role":"button","comment":"the turn landed"}

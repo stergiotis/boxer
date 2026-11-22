@@ -26,15 +26,17 @@ once.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0323 SD4: Urgent, confirmed in host chrome"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button","comment":"the seeded draft"}
 {"do":"wait","valueContains":"needs a speed","role":"label"}
 {"do":"click","contains":"Chat","role":"window","pointer":true,"comment":"the chat in front: the gallery opened over it"}
-{"do":"click","contains":"Urgent","role":"button","comment":"the window asks the host"}
+{"do":"click","name":"Conversation","role":"button","comment":"the window's Conversation menu"}
+{"do":"click","pointer":true,"contains":"Urgent","role":"check_box","comment":"the window asks the host"}
 {"do":"wait","name":"Make urgent","role":"button","comment":"the host's card, opened at once: the request came from the active window"}
 {"do":"capture","text":"chat-urgent-card"}
 {"do":"click","name":"Make urgent","role":"button"}
-{"do":"wait","contains":"Urgent ✓","role":"button","comment":"the window reads the host's table again"}
+{"do":"click","name":"Conversation","role":"button","comment":"the window's Conversation menu"}
+{"do":"wait","contains":"Urgent ✓","role":"check_box","comment":"the window reads the host's table again"}
 {"do":"click","contains":"nothing waits on you","role":"button"}
 {"do":"click","contains":"Busy"}
 {"do":"click","name":"Close","role":"button"}

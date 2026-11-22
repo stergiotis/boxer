@@ -21,8 +21,8 @@ heading; it needs no model, no grant and no ClickHouse.
 {"do":"note","text":"--- the turn chip without a model ---"}
 {"do":"wait","contains":"New conversation","role":"button","settleMs":1000}
 {"do":"wait","value":"No model to talk to","role":"label"}
-{"do":"read","value":"idle","role":"label","pattern":"^(?P<turn>\\w+)$","comment":"the turn chip in the bar"}
-{"do":"expect","of":"turn","is":"idle"}
+{"do":"read","value":"ready","role":"label","pattern":"^(?P<turn>\\w+)$","comment":"the turn chip in the bar, in the reader's word; turn_state still reports idle"}
+{"do":"expect","of":"turn","is":"ready"}
 {"do":"capture","text":"chat-turn-idle"}
 
 {"do":"note","text":"--- F1 opens the window's help ---"}

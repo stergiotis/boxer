@@ -13,7 +13,7 @@ A stop is a condition you, or the chatlet you opened, put on a conversation:
 a time box, a size the artefact may reach, a phrase that marks the work as
 done, a tool call you want a look at first (ADR-0370). When it
 holds, the stop holds the turn, ends it, ends the conversation or closes the
-window. The **Stops** tab lists the stops in force, takes one of your own, and
+window. **Stops**, opened from the **View** menu, lists the stops in force, takes one of your own, and
 shows what fired.
 
 A stop is not a safeguard. The model is not shown the stops, but a model that
@@ -26,14 +26,15 @@ Every stop is one `SELECT` over the conversation's own record. No rows means
 it is quiet. Any row means it fired, and the rows are what you are shown as
 the reason, each as its columns and values, a long value cut short.
 
-The tab shows the query each stop runs. For a stop of your own it is an SQL
+The view shows the query each stop runs. For a stop of your own it is an SQL
 editor: change the statement there and press **Apply**. Until then the
 statement in force is the one before your edit, and a statement that is not
-admitted cannot be applied; the tab says why while you type. **Revert** puts
+admitted cannot be applied; the view says why while you type. **Revert** puts
 the statement in force back. An edited stop keeps its name and what it does,
 and is from then on its statement, whatever kind you declared it as. A
-chatlet's statement is shown and cannot be edited. In the Simple view the
-statement is folded text under **Statement**.
+chatlet's statement is shown and cannot be edited. In the frame the view
+first opens, before the editors are built, a statement is folded text under
+**Statement**.
 
 The named kinds are spellings of such a query:
 
@@ -106,14 +107,14 @@ A stop is checked before each request to the model and after each reply,
 before the reply's tool calls run. Nothing is checked while a call is in
 flight, so a time box is overshot by at most one model call or one tool call.
 With the turn's answer there is nothing left to hold or stop: only `end` and
-`close` act there, and the others are noted in the tab.
+`close` act there, and the others are noted in the view.
 
 A stop that cannot be checked stops the turn and says why. That includes a
 host that runs no local SQL worker.
 
 ## Whose stops
 
-A chatlet's stops are fixed: the tab shows them as "fixed by" the chatlet and
+A chatlet's stops are fixed: the view shows them as "fixed by" the chatlet and
 offers no Remove. Stops you add are yours, kept for the window across its
 conversations, and in force from the next turn. A resumed conversation brings
 back the stops it last ran under.

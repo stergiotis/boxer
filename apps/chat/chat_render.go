@@ -124,8 +124,7 @@ var escMask = keycodes.MaskOf(keycodes.Escape)
 func (inst *App) render() {
 	inst.syncLevels()
 	inst.syncLooked()
-	inst.syncSimpleView()
-	inst.syncArtefactTab()
+	inst.syncSide()
 	inst.storeTitle()
 	inst.publishTurn()
 	inst.syncRoster()
@@ -134,6 +133,7 @@ func (inst *App) render() {
 		return
 	}
 	for range c.PanelTopInside(inst.ids.PrepareStr("bar")).Resizable(false).KeepIter() {
+		inst.renderMenuBar()
 		inst.renderBar()
 	}
 	for range c.PanelCentralInside().KeepIter() {
@@ -141,79 +141,10 @@ func (inst *App) render() {
 	}
 }
 
-// renderBar is a row of controls — New conversation, Settings with the scale
-// of what the model may do (ADR-0280), Analytics — and a row of what the
-// conversation is: what it was started with, the context used and the model
-// (ADR-0265 §SD4). Then the task while Apps is on, then at most one notice.
-// The options themselves are in the Settings tab.
-func (inst *App) renderBar() {
-	if inst.simple {
-		inst.renderSimpleBar()
-	} else {
-		if inst.conv.started {
-			inst.renderTitle()
-		}
-		for range c.HorizontalTop().KeepIter() {
-			inst.renderNewButton()
-			inst.renderScale()
-			inst.renderTurnState()
-		}
-		inst.renderConversationRow()
-	}
-	inst.renderTask()
-	inst.renderBarNotice()
-}
-
 // renderNewButton is New conversation.
 func (inst *App) renderNewButton() {
-	if c.Button(inst.ids.PrepareStr("new"), atomsNew).SendResp().HasPrimaryClicked() {
+	if c.Button(inst.ids.PrepareStr("new"), atomsNew).Extend().SendResp().HasPrimaryClicked() {
 		inst.newConversation()
-	}
-}
-
-// renderConversationRow is a row of its own for what the conversation is:
-// the controls above it already fill a narrow window.
-func (inst *App) renderConversationRow() {
-	conv := inst.conv
-	for range c.HorizontalTop().KeepIter() {
-		inst.renderConvId("conv-id-bar")
-		if conv.started {
-			label, tone := keepBadge(conv)
-			tip := tipKeep
-			if conv.notKept != "" {
-				tip = "Not kept: " + conv.notKept + "\n\n" + tipKeep
-			}
-			badge.New(inst.ids.PrepareStr("keep-state"), label).Tone(tone).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tip).Send()
-			if conv.apps {
-				badge.New(inst.ids.PrepareStr("apps-state"), "apps").Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipApps).Send()
-			} else if inst.coord != nil {
-				badge.New(inst.ids.PrepareStr("apps-state"), "no apps").Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipNoApps).Send()
-			}
-			if conv.questions {
-				badge.New(inst.ids.PrepareStr("questions-state"), "questions").Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipQuestions).Send()
-			}
-			if conv.artefact {
-				badge.New(inst.ids.PrepareStr("artefact-state"), "artefact").Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipArtefact).Send()
-			}
-		}
-		inst.renderContext()
-		switch {
-		case !inst.answered:
-			c.Label("asking the host for a model…").Selectable(false).Send()
-		case inst.model.Configured:
-			tip := "The host's model, and the endpoint it is reached at."
-			if inst.model.Trusted {
-				// Not loopback: the deployment trusts it with sealed data.
-				tip += " The host trusts this endpoint with sealed data (BOXER_LLM_TRUSTED_HOSTS)."
-			}
-			for range c.HoverText(tip).KeepIter() {
-				label := "→ " + inst.model.Model + " · " + inst.model.EndpointHost
-				if inst.model.Trusted {
-					label += " · trusted"
-				}
-				c.Label(label).Selectable(false).Send()
-			}
-		}
 	}
 }
 
@@ -271,15 +202,6 @@ func (inst *App) renderConvId(scope string) {
 	}
 }
 
-// renderTitle is the conversation's title — click to rename — Open in
-// mdedit, Watch and Urgent.
-func (inst *App) renderTitle() {
-	for range c.HorizontalTop().KeepIter() {
-		inst.renderTitleText()
-		inst.renderTitleActions()
-	}
-}
-
 // renderTitleText is the title, or its editor while it is renamed.
 func (inst *App) renderTitleText() {
 	conv := inst.conv
@@ -291,26 +213,38 @@ func (inst *App) renderTitleText() {
 	if title == "" {
 		title = "Untitled"
 	}
-	for range c.HoverText(titleTip(conv)).KeepIter() {
-		if c.Button(inst.ids.PrepareStr("title"), c.Atoms().BeginRichText(title).Strong().End().Keep()).Frame(false).SendResp().HasPrimaryClicked() {
-			inst.renaming, inst.renameDraft = true, conv.title
-			c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.renameDraft)
-		}
+	tip := titleTip(conv)
+	if short := barTitle(title); short != title {
+		tip = title + "\n\n" + tip
+		title = short
+	}
+	if c.Button(inst.ids.PrepareStr("title"), c.Atoms().BeginRichText(title).Strong().End().Keep()).Frame(false).Extend().HoverText(tip).SendResp().HasPrimaryClicked() {
+		inst.renaming, inst.renameDraft = true, conv.title
+		c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.renameDraft)
 	}
 	if conv.titleAsked && conv.titleSource == titleFirstLine && conv.titleNote == "" {
 		c.Spinner().Send()
 	}
 }
 
-// renderTitleActions is Open in mdedit, Watch and Urgent.
-func (inst *App) renderTitleActions() {
-	for range c.HoverText(tipMdedit).KeepIter() {
-		if c.Button(inst.ids.PrepareStr("open-mdedit"), atomsMdedit).Small().SendResp().HasPrimaryClicked() {
-			inst.openInMdedit()
-		}
+// barTitleRunes is the most of a title the bar shows: the bar's buttons
+// keep their labels on one line (ButtonFluid.Extend) and move to the next
+// line of the row when they do not fit, so a title longer than a narrow
+// window would run past its edge.
+const barTitleRunes = 32
+
+// barTitle is a title as the bar shows it, cut at a word with "…" past
+// barTitleRunes; the whole title is in its hover.
+func barTitle(title string) string {
+	r := []rune(title)
+	if len(r) <= barTitleRunes {
+		return title
 	}
-	inst.renderWatchToggle()
-	inst.renderUrgentToggle()
+	cut := string(r[:barTitleRunes])
+	if i := strings.LastIndexByte(cut, ' '); i > barTitleRunes/2 {
+		cut = cut[:i]
+	}
+	return strings.TrimRight(cut, " ,.;:") + "…"
 }
 
 // renderRename is the title's inline editor: Enter or the check keeps the
@@ -456,11 +390,13 @@ func (inst *App) renderEmpty() {
 			}
 			c.LabelAtoms(c.Atoms().BeginRichText(inst.model.Reason).Weak().End().Keep()).Wrap().Selectable(true).Send()
 		default:
-			first := "at " + inst.model.EndpointHost
+			// Where the model runs, in words; its endpoint is in the state
+			// chip's inspector (ADR-0404 §SD7).
+			first := "The model runs " + modelWhere(inst.model.Local, inst.model.Trusted) + "."
 			preset := inst.preset != nil
 			if preset {
 				inst.renderPresetEmpty()
-				first = "with " + inst.model.Model + " " + first
+				first = "The model, " + inst.model.Model + ", runs " + modelWhere(inst.model.Local, inst.model.Trusted) + "."
 			} else {
 				for rt := range c.RichTextLabel("Chat with " + inst.model.Model) {
 					rt.Heading()
@@ -484,24 +420,24 @@ func (inst *App) renderEmpty() {
 			lines := []string{first}
 			switch {
 			case keep:
-				lines = append(lines, "kept on boxer.facts where the host allows; read afterwards in play")
+				lines = append(lines, "Kept where the host allows, to read later in play.")
 			case conv.started && conv.notKept != "":
-				lines = append(lines, "not kept: "+conv.notKept)
+				lines = append(lines, "Not kept: "+conv.notKept+".")
 			default:
-				lines = append(lines, "not kept: only the call counts are recorded")
+				lines = append(lines, "Not kept: only the number of calls is recorded.")
 			}
 			switch {
 			case preset:
 				// renderPresetEmpty said what the model can do, in words.
 			case inst.appsOn():
-				lines = append(lines, "Apps on: the model may ask you to share windows with it")
+				lines = append(lines, "Apps on: the model may ask you to share windows with it.")
 			case inst.coord != nil && conv.started:
-				lines = append(lines, "Apps off for this conversation: the model gets no tools — New conversation starts one with the settings in Settings")
+				lines = append(lines, "Apps off for this conversation: the model cannot work in windows. New conversation starts one with the settings in Settings.")
 			case inst.coord != nil:
-				lines = append(lines, "Apps off: the model gets no tools and cannot open or drive windows — turn Apps on in Settings before the first message")
+				lines = append(lines, "Apps off: the model cannot open or work in windows. Turn Apps on in Settings before the first message.")
 			}
 			if !preset && questions && inst.coord != nil {
-				lines = append(lines, "Questions on: the model may ask you with a form of options")
+				lines = append(lines, "Questions on: the model may ask you with a form of options.")
 			}
 			if !preset {
 				// A preset's composer hint says the first, and this has to fit.
@@ -536,7 +472,7 @@ func (inst *App) renderFirstSendChoices(where string) {
 				c.Checkbox(inst.ids.PrepareStr("questions"), inst.questions, "Questions — the model may ask you with a form").SendRespVal(&inst.questions)
 			}
 			for range c.HoverText(tipArtefact).KeepIter() {
-				c.Checkbox(inst.ids.PrepareStr("artefact"), inst.artefact, "Artefact — a document the model writes beside the chat").SendRespVal(&inst.artefact)
+				c.Checkbox(inst.ids.PrepareStr("artefact"), inst.artefact, "Document — a document the model writes beside the chat").SendRespVal(&inst.artefact)
 			}
 		}
 		for range c.HoverText(tipKeep).KeepIter() {
@@ -598,15 +534,12 @@ func (inst *App) renderComposer() {
 			}
 		}
 	}
-	if !inst.simple || inst.detailsOpen {
-		inst.renderTransformPicker()
-	}
+	inst.renderTransformPicker()
 	inst.renderSendRow()
 	// The draft handed to the host's editor app, each save taking its place
 	// unless it was edited here meanwhile; drawn only where the host
-	// registers one editor app, and in the simple view only while an edit
-	// runs.
-	if _, ok := externaledit.Editor(); ok && inst.bus != nil && (!inst.simple || inst.detailsOpen || inst.externalEdit.Active()) {
+	// registers one editor app.
+	if _, ok := externaledit.Editor(); ok && inst.bus != nil {
 		for range c.HorizontalTop().KeepIter() {
 			if r := editexternally.Render(editexternally.Input{
 				Ids: inst.ids, ScopeKey: "draft-external", Editing: &inst.externalEdit, Bus: inst.bus, BusCtx: inst.ioCtx,
@@ -666,7 +599,8 @@ func (inst *App) renderComposer() {
 			b := c.TextEdit(inst.ids.PrepareStr("draft"), inst.draft, true).
 				DesiredWidth(max(w-btnW-buttonGap, 120)).
 				DesiredRows(rows).
-				HintText(hintDraft)
+				HintText(hintDraft).
+				AccessibleName("Message")
 			if busy {
 				b = b.CaptureKeys(uint64(escMask))
 			}
@@ -780,10 +714,7 @@ func (inst *App) renderWaiting() {
 	}
 	for range c.HorizontalTop().KeepIter() {
 		c.Spinner().Send()
-		line := "thinking… " + elapsed(p.started)
-		if inst.guided() {
-			line = "working… " + elapsed(p.started)
-		}
+		line := "working… " + elapsed(p.started)
 		if note := inst.turn.Snapshot().Note; note != "" {
 			// The tool loop's round, so a long turn reads as working.
 			line += " · " + note
@@ -1028,47 +959,54 @@ func (inst *App) openAsk() (o *openAsk) {
 }
 
 // renderTask is the coordinator's row (ADR-0269) while it holds a task:
-// the task, whether its conversation read untrusted content and holds
-// confined content, and Stop. A conversation that read untrusted content
-// without a task — an image the person sent (ADR-0385 §SD5) — says so too.
+// whether its conversation read untrusted content and holds confined
+// content, and Stop task. The task's id is in the state chip's inspector
+// (ADR-0404 §SD7). A conversation that read untrusted content without a
+// task — an image the person sent (ADR-0385 §SD5) — says so too.
 func (inst *App) renderTask() {
 	if inst.coord == nil {
 		return
 	}
 	task, tainted, confined := inst.coord.state()
-	if task == "" {
-		if tainted {
-			badge.New(inst.ids.PrepareStr("tainted"), "read untrusted content").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipTainted).Send()
-		}
+	if task == "" && !tainted {
 		return
 	}
-	for range c.HorizontalTop().KeepIter() {
-		for range c.HoverText("The task the model works in your windows under: " + task).KeepIter() {
-			c.Label("task " + strings.TrimPrefix(task, "task-")).Selectable(false).Send()
-		}
+	for range inst.barRow() {
 		if tainted {
 			badge.New(inst.ids.PrepareStr("tainted"), "read untrusted content").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipTainted).Send()
+		}
+		if task == "" {
+			continue
 		}
 		if confined {
 			badge.New(inst.ids.PrepareStr("confined"), "holds confined content").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipConfined).Send()
 		}
-		if c.Button(inst.ids.PrepareStr("stop-task"), c.Atoms().Text("Stop task").Keep()).SendResp().HasPrimaryClicked() {
-			coord, cli := inst.coord, inst.agentCli
-			h := coord.handle()
-			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), agent.DefaultTimeout)
-				defer cancel()
-				_ = cli.StopWith(ctx, h, agent.StopRequest{ByPerson: true, Reason: "the person stopped it in the chat"})
-			}()
-			coord.mu.Lock()
-			coord.grant = agent.Grant{}
-			coord.mu.Unlock()
-			// The person stopped the work, not only the grant: a turn left
-			// running reads the task's end as a refusal and asks for a new one.
-			if inst.pending != nil {
-				inst.cancelTurn()
+		for range c.HoverText(tipStopTask).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("stop-task"), c.Atoms().Text(icons.PhStop+" Stop task").Keep()).SendResp().HasPrimaryClicked() {
+				inst.stopTask()
 			}
 		}
+	}
+}
+
+const tipStopTask = "End the model's work in your windows: what it was granted is taken back, and a running turn stops. The conversation stays; your next message can ask again."
+
+// stopTask ends the conversation's task, as the person's act.
+func (inst *App) stopTask() {
+	coord, cli := inst.coord, inst.agentCli
+	h := coord.handle()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), agent.DefaultTimeout)
+		defer cancel()
+		_ = cli.StopWith(ctx, h, agent.StopRequest{ByPerson: true, Reason: "the person stopped it in the chat"})
+	}()
+	coord.mu.Lock()
+	coord.grant = agent.Grant{}
+	coord.mu.Unlock()
+	// The person stopped the work, not only the grant: a turn left
+	// running reads the task's end as a refusal and asks for a new one.
+	if inst.pending != nil {
+		inst.cancelTurn()
 	}
 }
 

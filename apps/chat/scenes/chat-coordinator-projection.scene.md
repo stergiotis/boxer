@@ -28,15 +28,15 @@ Needs a ClickHouse server on the default endpoint holding `boxer.facts`.
 
 ```jsonl trace
 {"do":"note","text":"chat: the coordinator computes and reads the Projection pane"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","valueContains":"The projection is computed","role":"label","settleMs":1500}
-{"do":"wait","valueContains":"⚙ Clustering the rows · compute_projection in window 2","role":"label"}
+{"do":"wait","valueContains":"⚙ Clustering the rows · compute projection in window 2","role":"label"}
 {"do":"capture","text":"chat-coordinator-projection-calls","comment":"before the outcome is asserted, so a refusal shows its reason"}
-{"do":"wait","valueContains":"⚙ Clustering the rows · compute_projection in window 2 · rendered","role":"label"}
-{"do":"wait","valueContains":"⚙ Reading the clusters · get_projection in window 2 · completed","role":"label"}
-{"do":"wait","valueContains":"⚙ Reading why the clusters · explain_clusters in window 2","role":"label"}
-{"do":"wait","valueContains":"⚙ Reading why the clusters · explain_clusters in window 2 · completed","role":"label"}
+{"do":"wait","valueContains":"⚙ Clustering the rows · compute projection in window 2 · done","role":"label"}
+{"do":"wait","valueContains":"⚙ Reading the clusters · get projection in window 2 · done","role":"label"}
+{"do":"wait","valueContains":"⚙ Reading why the clusters · explain clusters in window 2","role":"label"}
+{"do":"wait","valueContains":"⚙ Reading why the clusters · explain clusters in window 2 · done","role":"label"}
 {"do":"wait","valueContains":"cluster(s)","role":"label","settleMs":2000,"comment":"the Projection pane's status line: the run landed"}
 {"do":"capture","text":"chat-coordinator-projection"}
 ```

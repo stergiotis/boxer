@@ -28,7 +28,7 @@ button by role and name.
 
 ```jsonl trace
 {"do":"note","text":"chat: the coordinator reads a window tree"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","valueContains":"I read the demo window","role":"label","settleMs":1500,"comment":"short of the apostrophe, which the reply draws typographic"}
 {"do":"wait","valueContains":"⚙ Reading the demo's window · read the window tree of windows","role":"label"}

@@ -13,7 +13,6 @@ reach: data
 launch: true
 desktop: false
 thinking: hidden
-view: simple
 watch: true
 purpose: "Answers questions about this host's audit trail by querying it in a play window."
 greeting: "Ask what happened on this host. Every number comes with its time range and the SQL behind it."

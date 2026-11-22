@@ -22,26 +22,27 @@ call takes eight seconds. While it waits, the waiting bubble lists the
 turn's steps — two model calls, two tool calls, and the running model call
 — and a finished step opens to its arguments and what came back. Once the
 turn lands, each tool line in the transcript keeps its steps under
-Details. Settings holds the chat's limit on a turn's rounds, which the
-waiting line counts against.
+Details. Settings holds the chat's limit on a turn's rounds; the waiting
+line counts steps without it.
 
 ```jsonl trace
 {"do":"note","text":"chat: the trail of a turn, live and afterwards"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button"}
-{"do":"wait","valueContains":"waiting for the answer","role":"label","nth":1,"comment":"the slow third model call; the roster repeats this window's turn line, first in the tree"}
-{"do":"wait","valueContains":"model calls · 2 tool calls","role":"label","comment":"the trail's summary line"}
-{"do":"wait","valueContains":"round 3 of 24","role":"label","comment":"the chat's round limit, at its default"}
+{"do":"wait","valueContains":"waiting for the answer","role":"label","comment":"the slow third model call"}
+{"do":"wait","value":"What the model has done this turn:","role":"label","comment":"the trail's heading; the counts of calls are in its hover"}
+{"do":"wait","valueContains":"step 3","role":"label","comment":"the step the turn is on, with no limit beside it"}
 {"do":"click","contains":"routine step","settleMs":500,"comment":"the finished reads fold as routine steps (ADR-0323)"}
-{"do":"click","contains":"Reading the desktop (query_windows)","settleMs":500,"comment":"open a finished step"}
+{"do":"click","contains":"Reading the desktop · ","settleMs":500,"comment":"open a finished step, named by what it did; its tool is inside"}
+{"do":"wait","valueContains":"query_windows","role":"label","comment":"the step as recorded, under it"}
 {"do":"wait","valueContains":"came back","role":"label"}
 {"do":"capture","text":"chat-trail-running"}
 {"do":"wait","valueContains":"One window is open","role":"label","settleMs":500}
-{"do":"wait","valueContains":"⚙ Reading the work area · read 1 row(s) of keelson('desktop')","role":"label"}
+{"do":"wait","valueContains":"⚙ Reading the work area · read 1 rows of the host's desktop table","role":"label"}
 {"do":"click","name":"Details","nth":2,"settleMs":500,"comment":"the third tool line's steps"}
 {"do":"wait","valueContains":"SELECT work_w, work_h","role":"label"}
 {"do":"capture","text":"chat-trail-details"}
-{"do":"click","name":"Settings","role":"button","settleMs":500}
+{"do":"click","contains":"Model:","role":"button","settleMs":500,"comment":"the bar's words open Settings"}
 {"do":"click","name":"Harness","settleMs":500,"comment":"the harness tuning is folded"}
 {"do":"scroll_into_view","name":"rounds per turn","role":"slider","settleMs":500}
 {"do":"capture","text":"chat-trail-rounds"}

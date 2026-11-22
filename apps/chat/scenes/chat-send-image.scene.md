@@ -35,7 +35,7 @@ carries the image, and the next turn's a placeholder, is checked in
 
 ```jsonl trace
 {"do":"note","text":"ADR-0385: an image of the artefact's set goes with the person's next message, as the Pixels setting allows"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Images (1)","role":"button"}
 {"do":"wait","valueContains":"upload-1.png · 320×200","role":"label"}
 {"do":"wait","valueContains":"a file you added: sample.png","role":"label"}

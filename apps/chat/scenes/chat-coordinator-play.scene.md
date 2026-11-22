@@ -39,13 +39,13 @@ the second, and an id is a function of the window and the widget's path.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0269 M6: the chat as coordinator, against a scripted model"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button","comment":"turn 1, the seeded draft"}
 {"do":"wait","valueContains":"Play runs the query","role":"label","settleMs":1500}
 {"do":"wait","valueContains":"⚙ opened play as window 2","role":"label"}
-{"do":"wait","valueContains":"⚙ Reading play's buffer · get_state in window 2 · completed","role":"label","comment":"the call's title, before its own line"}
-{"do":"wait","valueContains":"⚙ set_sql in window 2 · rendered","role":"label"}
-{"do":"wait","valueContains":"⚙ run in window 2 · completed","role":"label"}
+{"do":"wait","valueContains":"⚙ Reading play's buffer · get state in window 2 · done","role":"label","comment":"the call's title, before its own line"}
+{"do":"wait","valueContains":"⚙ set sql in window 2 · done","role":"label"}
+{"do":"wait","valueContains":"⚙ run in window 2 · done","role":"label"}
 {"do":"wait","valueContains":"3 rows ·","role":"label","comment":"play's own summary of the agent's run"}
 {"do":"wait","name":" agent · act","role":"button","comment":"the badge: the task works here and is not paused"}
 {"do":"capture","text":"chat-coordinator-play"}
@@ -53,11 +53,11 @@ the second, and an id is a function of the window and the widget's path.
 {"do":"key","text":"A","modifiers":16}
 {"do":"type","id":8428115019067692845,"text":"SELECT name FROM keelson('apps') LIMIT 2"}
 {"do":"wait","name":" agent · act · paused","role":"button","comment":"the task had read the buffer"}
-{"do":"focus","id":12790625040306265328,"comment":"the chat's composer"}
-{"do":"type","id":12790625040306265328,"text":"Now the last three instead."}
+{"do":"focus","name":"Message","role":"multiline_text_input","comment":"the chat's composer"}
+{"do":"type","name":"Message","role":"multiline_text_input","text":"Now the last three instead."}
 {"do":"click","contains":"Send","role":"button","comment":"turn 2"}
 {"do":"wait","valueContains":"The buffer changed since I read it","role":"label","settleMs":1000}
-{"do":"wait","valueContains":"⚙ set_sql in window 2 · conflict","role":"label","comment":"a write that expects the revision the task last saw"}
+{"do":"wait","valueContains":"⚙ set sql in window 2 · conflict","role":"label","comment":"a write that expects the revision the task last saw"}
 {"do":"wait","value":"SELECT name FROM keelson('apps') LIMIT 2","role":"multiline_text_input","comment":"the person's text stands"}
 {"do":"capture","text":"chat-coordinator-play-conflict"}
 ```

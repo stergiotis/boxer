@@ -152,23 +152,25 @@ func cloneLevels(m map[attention.Key]attention.LevelE) (out map[attention.Key]at
 }
 
 const tipWatch = "Watch: tell me when this conversation's turn ends. Its finished turns are raised to highlight (ADR-0323), " +
-	"and one that ends while you are in another window shows in the host's control, beside what waits on you. Click again to stop."
+	"and one that ends while you are in another window shows in the host's control, beside what waits on you. Untick to stop."
 
-// renderWatchToggle is the Watch button, in the title's row; absent without
-// a host to tell.
+// renderWatchToggle is Watch, a check box in the Conversation menu; absent
+// without a host to tell. The box shows the host's state; a click asks for
+// the other.
 func (inst *App) renderWatchToggle() {
 	if inst.bus == nil || !inst.levels.fetched {
 		return
 	}
 	on := inst.watching()
+	inst.watchBox = on
+	// The word changes with the box: the tree a driver reads carries a
+	// check box's name and not its state.
 	label := icons.PhBellSimple + " Watch"
 	if on {
-		// The word changes too: a selected small button reads much like an
-		// unselected one.
-		label = icons.PhBellRinging + " Watching"
+		label = icons.PhBellSimple + " Watching"
 	}
 	for range c.HoverText(tipWatch).KeepIter() {
-		if c.Button(inst.ids.PrepareStr("watch-toggle"), c.Atoms().Text(label).Keep()).Small().Selected(on).SendResp().HasPrimaryClicked() {
+		if c.Checkbox(inst.ids.PrepareStr("watch-toggle"), on, label).SendRespVal(&inst.watchBox).HasPrimaryClicked() {
 			inst.setWatch(!on)
 		}
 	}
@@ -196,24 +198,26 @@ func (inst *App) turnEnded(text string) {
 }
 
 const tipUrgent = "Urgent: what this conversation asks of you opens at once, as critical — also while you are Busy (ADR-0328). " +
-	"The host asks you to confirm in a card of its own: an app cannot make itself urgent. Click again to ask the host to stop."
+	"The host asks you to confirm in a card of its own: an app cannot make itself urgent. Untick to ask the host to stop."
 
 // renderUrgentToggle asks the host to make the conversation urgent, or to
-// stop (ADR-0323 §SD4, update of 2026-10-12). The window does not set the
-// levels: the waiting scale is the host's, and the person confirms in the
-// host's card. Absent without a host; it sits in the title's row, which a
-// conversation has once it has started.
+// stop (ADR-0323 §SD4, update of 2026-10-12): a check box in the
+// Conversation menu. The window does not set the levels: the waiting scale is the
+// host's, and the person confirms in the host's card, so the box shows the
+// host's state, not the click. Absent without a host.
 func (inst *App) renderUrgentToggle() {
 	if inst.bus == nil || !inst.levels.fetched {
 		return
 	}
 	on := inst.urgent()
+	inst.urgentBox = on
 	label := icons.PhSiren + " Urgent"
 	if on {
-		label = icons.PhSiren + " Urgent ✓"
+		// As Watch's: the tree carries the name, not the box's state.
+		label += " ✓"
 	}
 	for range c.HoverText(tipUrgent).KeepIter() {
-		if c.Button(inst.ids.PrepareStr("urgent-toggle"), c.Atoms().Text(label).Keep()).Small().Selected(on).SendResp().HasPrimaryClicked() {
+		if c.Checkbox(inst.ids.PrepareStr("urgent-toggle"), on, label).SendRespVal(&inst.urgentBox).HasPrimaryClicked() {
 			inst.askUrgent(!on)
 		}
 	}

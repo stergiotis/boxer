@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
-	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
@@ -104,50 +103,6 @@ func wordList(items []string, conj string) string {
 	return strings.Join(items, "")
 }
 
-const tipDetails = "The conversation's id, what the model may do, its context and model, Watch and Urgent. What holds a task and Stop stay in view."
-
-// renderSimpleBar is the bar of a simple window: New conversation,
-// the title and Details, which unfolds the rest. It is a toggle in the row
-// rather than a collapsing header, which would take a row of its own in the
-// bar it exists to shorten.
-func (inst *App) renderSimpleBar() {
-	// A compact pane gives the title a row of its own: wrapped beside the
-	// buttons, a long one would push Details out of the row.
-	titleOwnRow := inst.compact()
-	for range inst.barRow() {
-		inst.renderNewButton()
-		if inst.conv.started && !titleOwnRow {
-			inst.renderTitleText()
-		}
-		caret := icons.PhCaretRight
-		if inst.detailsOpen {
-			caret = icons.PhCaretDown
-		}
-		for range c.HoverText(tipDetails).KeepIter() {
-			if c.Button(inst.ids.PrepareStr("bar-details"), c.Atoms().Text(caret+" Details").Keep()).Kind(c.ButtonKindGhost).Small().SendResp().HasPrimaryClicked() {
-				inst.detailsOpen = !inst.detailsOpen
-			}
-		}
-	}
-	if titleOwnRow && inst.conv.started {
-		for range c.HorizontalTop().KeepIter() {
-			inst.renderTitleText()
-		}
-	}
-	if !inst.detailsOpen {
-		return
-	}
-	// Not wrapped: the turn chip in a wrapped row takes a tall line.
-	for range c.HorizontalTop().KeepIter() {
-		inst.renderScale()
-		inst.renderTurnState()
-		if inst.conv.started {
-			inst.renderTitleActions()
-		}
-	}
-	inst.renderConversationRow()
-}
-
 // renderFollowups offers a preset's next messages under the latest answer,
 // while nothing is running. A click fills the composer; the person sends.
 func (inst *App) renderFollowups(i int, e *entry) {
@@ -167,53 +122,15 @@ func (inst *App) renderFollowups(i int, e *entry) {
 	}
 }
 
-// turnNote is the running turn's progress line. A guided window's says which
-// step it is on: "round 3 of 48" reads as a bar that is nearly empty, and 48
-// is only a limit.
-func turnNote(guided bool, round int, limit int, doing string) (note string) {
-	note = "round " + strconv.Itoa(round+1) + " of " + strconv.Itoa(limit)
-	if guided {
-		note = "step " + strconv.Itoa(round+1)
-	}
+// turnNote is the running turn's progress line: which step it is on.
+// "round 3 of 48" reads as a bar that is nearly empty, and 48 is only a
+// limit.
+func turnNote(round int, doing string) (note string) {
+	note = "step " + strconv.Itoa(round+1)
 	if doing != "" {
 		note += " · " + doing
 	}
 	return
-}
-
-// artefactShown is whether a conversation's artefact was brought forward.
-type artefactShown struct {
-	conv  string
-	shown bool
-}
-
-// advance says whether to bring the artefact forward now: the first time a
-// conversation has something in it. One that opens with something in it, a
-// resumed one, stays where the person left it.
-func (inst *artefactShown) advance(conv string, written bool) (bring bool) {
-	if inst.conv != conv {
-		inst.conv, inst.shown = conv, written
-		return false
-	}
-	if written && !inst.shown {
-		inst.shown = true
-		return true
-	}
-	return false
-}
-
-// syncArtefactTab brings a guided window's artefact forward when the model
-// first writes it or proposes to: the result of the conversation should not
-// wait in a tab the person has to know about. The render goroutine calls it
-// once per frame.
-func (inst *App) syncArtefactTab() {
-	if !inst.guided() || !inst.artefactOn() {
-		return
-	}
-	n, _ := inst.conv.art.head()
-	if inst.artShown.advance(inst.conv.id, n > 0 || inst.conv.art.pending() != nil) {
-		inst.showTab(tabArtefact)
-	}
 }
 
 // tipDefinition says what the tab is, above the document.

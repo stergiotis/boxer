@@ -25,12 +25,13 @@ of its own.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0324 background 3.1: the other windows' turns in the roster"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button","comment":"the seeded draft, in the first chat window"}
 {"do":"type","role":"text_input","nth":0,"text":"chat","settleMs":500,"comment":"the launcher's search field"}
 {"do":"click","contains":"New window","role":"button","comment":"a second chat window"}
-{"do":"wait","contains":"Conversations","role":"button","nth":1}
-{"do":"click","contains":"Conversations","role":"button","nth":1,"comment":"the second window's roster"}
+{"do":"wait","name":"View","role":"button","nth":1}
+{"do":"click","pointer":true,"name":"View","role":"button","nth":1,"comment":"the second window's View menu"}
+{"do":"click","pointer":true,"contains":"Conversations","role":"check_box","comment":"the second window's roster"}
 {"do":"read","valueContains":"chat window 1 ·","role":"label","pattern":"(?P<waiting>waiting for the answer)","comment":"the first window's turn waits on the model"}
 {"do":"capture","text":"chat-roster-peers-running"}
 {"do":"read","valueContains":"chat window 1 ·","role":"label","pattern":"(?P<done>· answered)","comment":"then it is answered"}

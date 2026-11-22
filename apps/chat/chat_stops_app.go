@@ -367,8 +367,8 @@ func (inst *App) renderStopsTab() {
 	}
 	form := stopKindForms[int(v.kind)%len(stopKindForms)]
 	weak(form.hint)
-	// A statement is written in the SQL editor, at the column's width; the
-	// simple view keeps the plain field.
+	// A statement is written in the SQL editor, at the pane's width, while
+	// the view is shown.
 	inEditor := v.kind == stopKindSQL && inst.stopEditorsShown()
 	for range c.Grid(inst.ids.PrepareStr("form")).NumColumns(2).KeepIter() {
 		c.Label("name").Selectable(false).Send()
@@ -456,16 +456,15 @@ func (inst *App) renderStopsTab() {
 	}
 }
 
-// stopEditorsShown says the statements are drawn in SQL editors: outside the
-// Simple view, and while the tab is in front. A tab behind another is built
-// every frame and drawn on none, and an editor colours its buffer when it is
-// built, so a hidden tab gets the plain text.
+// stopEditorsShown says the statements are drawn in SQL editors: while the
+// view was in front last frame. An editor colours its buffer when it is
+// built, so a view drawn for the first time gets the plain text for a frame.
 func (inst *App) stopEditorsShown() bool {
-	return !inst.simple && inst.tabShown(tabStops)
+	return inst.tabShown(tabStops)
 }
 
-// renderStopStatement draws a stop's statement. In the Simple view it is
-// folded text. Otherwise a stop of the person's own is an SQL editor over a
+// renderStopStatement draws a stop's statement. Before the view is shown
+// it is folded text. Otherwise a stop of the person's own is an SQL editor over a
 // draft: an edit is not in force until Apply takes it, which a statement
 // that is not admitted cannot be. A preset's stop is not the person's to
 // change (ADR-0370 §SD6), so its statement is coloured and read-only.

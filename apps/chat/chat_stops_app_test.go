@@ -179,8 +179,8 @@ func TestEditingAStopsStatement(t *testing.T) {
 	assert.Equal(t, uint32(stopEditorRowsMax), stopEditorRows(strings.Repeat("x\n", 40)))
 }
 
-// The Stops tab draws under the discard channel in each of its shapes: the
-// Simple view's folded text, a preset's read-only statement, the person's
+// The Stops view draws under the discard channel in each of its shapes: the
+// folded text before the view was shown, a preset's read-only statement, the person's
 // statement editors with an edit pending, and the form with its editor. A
 // mismatched id stack compiles and vets clean and panics here.
 func TestTheStopsTabRendersInEveryShape(t *testing.T) {
@@ -204,13 +204,8 @@ func TestTheStopsTabRendersInEveryShape(t *testing.T) {
 		c.CurrentApplicationState.StateManager.ScriptReset()
 	}
 
-	inst.simple = true
 	frame()
-	assert.Empty(t, inst.stops.editors, "the Simple view draws no editor")
-
-	inst.simple = false
-	frame()
-	assert.Empty(t, inst.stops.editors, "nor does a tab that is not in front")
+	assert.Empty(t, inst.stops.editors, "a view not shown last frame draws no editor")
 
 	inst.tabSeen[tabStops] = true
 	frame()

@@ -128,8 +128,8 @@ type App struct {
 	// draftId is the composer's widget id: the Escape it captures while a
 	// turn runs cancels the turn.
 	draftId uint64
-	// dockActivate is the tab to bring to the front next frame, zero for
-	// none; tabSeen is which tabs were drawn last frame (chat_dock.go).
+	// dockActivate is the view to bring to the front next frame, zero for
+	// none; tabSeen is which views were drawn last frame (chat_dock.go).
 	dockActivate chatTabE
 	tabSeen      [tabEnd]bool
 	// composerH is the room the composer's panel leaves for the input, the
@@ -195,21 +195,13 @@ type App struct {
 	// written. Off, the step still says it is reasoning, and the text is
 	// under the step's details once it ends.
 	thinking bool
-	// simple is the Simple view (chat_simple.go): a preset's from its
-	// document, the plain chat's from Settings. simpleKept is what the store
-	// holds as far as this window knows, simpleRead whether the store has
-	// answered, and simpleWriting whether a write is on its way. simpleStore
-	// is nil for a window that does not keep the choice.
-	simple        bool
-	simpleStore   app.StorageI
-	simpleKept    bool
-	simpleRead    bool
-	simpleWriting atomic.Bool
-	simpleJob     bgjob.Runner[bool]
-	// detailsOpen unfolds the bar of a simple window.
-	detailsOpen bool
-	// artShown is whether this conversation's artefact was brought forward.
-	artShown     artefactShown
+	// side is the pane beside the transcript: the views open in it, drawn
+	// only while one is (chat_dock.go, ADR-0404 §SD7).
+	side sideState
+	// watchBox and urgentBox take the menu's check boxes' values back; the
+	// state they show is the host's (chat_watch.go).
+	watchBox     bool
+	urgentBox    bool
 	stats        chatStats
 	bus          app.BusI
 	pubs         statsPublishers
@@ -285,11 +277,6 @@ func newApp() (inst *App) {
 			inst.note = status{text: "the sample image was not added: " + err.Error(), failed: true, at: time.Now()}
 		}
 	}
-	if inst.artefact {
-		// A window seeded with the artefact opens on its tab, as it opened
-		// on its panel.
-		inst.dockActivate = tabArtefact
-	}
 	inst.seedStops(StopsSeed.Get())
 	return
 }
@@ -323,8 +310,6 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.cli, inst.bus = cli, bus
 	inst.storage = ctx.Storage()
 	inst.ioCtx = app.ContextOf(ctx)
-	inst.simpleStore = simpleStoreFor(inst.storage, inst.preset != nil)
-	inst.loadSimpleView()
 	inst.startLevels()
 	inst.tasks = task.ForApp(ctx)
 	for i := range inst.bandKeys {
@@ -363,7 +348,6 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.stopLevels()
 	inst.unpublishTurn()
 	inst.rosterJob.Cancel()
-	inst.simpleJob.Cancel()
 	inst.handover.Cancel()
 	inst.runsJob.Cancel()
 	inst.resumeJob.Cancel()
@@ -627,7 +611,6 @@ func (inst *App) launchTurn(req llm.Request, coord *coordinator) (started bool) 
 	coord.setRounds(limit)
 	coord.setStops(inst.stopsInForce())
 	logProfile()
-	guided := inst.guided()
 	// A conversation that offers the model no tools answers in one call: a
 	// round count says nothing there.
 	oneCall := !conv.apps && !conv.questions && !conv.artefact
@@ -638,7 +621,7 @@ func (inst *App) launchTurn(req llm.Request, coord *coordinator) (started bool) 
 					report(uint64(round+1), uint64(limit), doing)
 					return
 				}
-				report(uint64(round+1), uint64(limit), turnNote(guided, round, limit, doing))
+				report(uint64(round+1), uint64(limit), turnNote(round, doing))
 			})
 		})
 	return ok

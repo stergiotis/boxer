@@ -62,7 +62,7 @@ func TestEmbedded_isTheHostsAppUnderAComposedIdentity(t *testing.T) {
 	assert.Equal(t, inst.identity(), string(inst.preset.Manifest.Id), "the preset is pinned under the composed identity")
 	assert.Equal(t, "notes", inst.paneKey())
 	assert.True(t, inst.compact())
-	assert.True(t, inst.guided(), "a pane is a preset's")
+	assert.NotNil(t, inst.preset, "a pane is a preset's")
 
 	plain, err := NewPreset(notesPreset())
 	require.NoError(t, err)
@@ -192,7 +192,6 @@ func TestPane_mountsOnTheHostsContext(t *testing.T) {
 	require.NoError(t, inst.storage.Set(t.Context(), "k", []byte("v")))
 	_, found, _ := inner.Get(t.Context(), storagePrefixOf("notes")+"k")
 	assert.True(t, found)
-	assert.Nil(t, inst.simpleStore, "a pane's look is its document's")
 	assert.Equal(t, string(embedHost)+"#notes", pane.Identity())
 	require.NoError(t, pane.Unmount(ctx))
 }

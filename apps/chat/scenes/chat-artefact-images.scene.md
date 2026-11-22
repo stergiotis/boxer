@@ -27,10 +27,10 @@ from and the budget's use; the text of the artefact is untouched.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0284: screenshots collected beside the artefact, sealed on disk"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","valueContains":"Captured the demo window","role":"label","settleMs":500}
-{"do":"wait","valueContains":"artefact_crop_image · revision 2 · corner.png 240×120","role":"label","comment":"the transcript's tool line"}
+{"do":"wait","valueContains":"cut an image · revision 2 · corner.png 240×120","role":"label","comment":"the transcript's tool line"}
 {"do":"click","contains":"Images (2)","role":"button"}
 {"do":"wait","valueContains":"corner.png · 240×120","role":"label"}
 {"do":"wait","valueContains":"cut from screenshot-1.png at 0,0 · 240×120","role":"label"}

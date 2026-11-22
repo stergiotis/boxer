@@ -23,9 +23,10 @@ host opens "While you were away" with the highlight, and Dismiss closes it.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0328: Away and the away log"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button","comment":"the seeded draft"}
-{"do":"click","name":"\ue0d0 Watch","role":"button","comment":"tell me when this turn ends; by name, since the launcher lists Watchbill"}
+{"do":"click","name":"Conversation","role":"button","comment":"the window's Conversation menu"}
+{"do":"click","pointer":true,"name":"\ue0d0 Watch","role":"check_box","comment":"tell me when this turn ends; by name, since the launcher lists Watchbill"}
 {"do":"click","contains":"Widget gallery","role":"window","pointer":true,"comment":"look elsewhere while the model answers"}
 {"do":"click","contains":"nothing waits on you","role":"button"}
 {"do":"click","contains":"Away","comment":"the status selector in the list"}

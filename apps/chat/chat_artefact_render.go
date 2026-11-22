@@ -22,16 +22,22 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/decision"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imagedecode"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
-// artTabE is what the panel shows.
-type artTabE uint8
+// artTabE names a view of the document: a tab of the document's own dock,
+// whose stable tab id it is.
+type artTabE uint64
+
+// artTabReadTitle names the rendered document: Read, the word mdedit's and
+// the notebook's switches use for the view that shows a document as it reads
+// (keelson-ux N2); the outer tab is the Document.
+const artTabReadTitle = "Read"
 
 const (
-	artTabDocument artTabE = iota
+	artTabDocument artTabE = iota + 1
 	artTabSource
 	artTabRevisions
 	artTabLint
@@ -51,8 +57,6 @@ const (
 )
 
 var (
-	atomsAccept     = c.Atoms().Text(icons.PhCheck + " Accept").Keep()
-	atomsReject     = c.Atoms().Text(icons.PhX + " Reject").Keep()
 	atomsRevert     = c.Atoms().Text(icons.PhArrowCounterClockwise + " Revert to this").Keep()
 	atomsArtCopy    = c.Atoms().Text(icons.PhCopy + " Copy").Keep()
 	atomsArtEndorse = c.Atoms().Text(icons.PhSealCheck + " Endorse").Keep()
@@ -62,7 +66,9 @@ var (
 // artefactView is the panel's state, all of it the render goroutine's. The
 // parsed document, source job and findings are built once per revision.
 type artefactView struct {
-	tab artTabE
+	// raised is the question the Read tab was last brought forward
+	// for (artefactQuestion).
+	raised string
 	// selected is the revision the Revisions tab shows the diff of, 0 for
 	// none.
 	selected int
@@ -129,7 +135,7 @@ func (inst *artefactView) diffOf(key string, old string, new string) []diffLine 
 // conversation has none.
 func (inst *App) renderArtefactTab() {
 	if !inst.artefactOn() {
-		c.Label("This conversation has no artefact. Turn Artefact on in Settings before the first message.").Wrap().Send()
+		c.Label("This conversation has no document. Turn Document on in Settings before the first message.").Wrap().Send()
 		return
 	}
 	for range c.IdScope(inst.ids.PrepareStr("artefact-body")) {
@@ -142,28 +148,37 @@ func (inst *App) renderArtefact() {
 	v := &inst.artView
 	n, text, set := art.headWithImages()
 	v.ensure(n, text, set, art.store)
-	heading("Artefact")
-	for range c.HorizontalTop().KeepIter() {
-		c.Label("revision " + strconv.Itoa(n) + " · " + plural(lineCount(text), "line")).Selectable(false).Send()
-		if text != "" {
-			if c.Button(inst.ids.PrepareStr("art-copy"), atomsArtCopy).Small().SendResp().HasPrimaryClicked() {
-				inst.copyCited("the artefact", text, text+citationFoot(text, inst.conv.citationIndex()))
-			}
-			inst.renderEndorse(n, text)
-			exportable := inst.exportable()
-			if exportable {
-				for range c.HoverText(tipArtExport).KeepIter() {
-					if c.Button(inst.ids.PrepareStr("art-export"), atomsArtExport).Small().SendResp().HasPrimaryClicked() {
+	// The buttons keep their labels on one line (Extend) and carry their
+	// tooltips themselves, so in a narrow column the row wraps between them
+	// rather than inside a label or past the edge. Before the first revision
+	// there is nothing to count or act on, and the row is not drawn: a first
+	// proposal heads the view on its own.
+	//
+	// While the export question is open, the command that raised it is not
+	// offered beside it (keelson-ux C8): Export, and Open in mdedit when it
+	// asked to export first. The answer is in the question.
+	asking := inst.artView.export
+	if n > 0 || text != "" {
+		for range c.HorizontalWrapped().KeepIter() {
+			c.Label("revision " + strconv.Itoa(n) + " · " + plural(lineCount(text), "line")).Selectable(false).Send()
+			if text != "" {
+				if c.Button(inst.ids.PrepareStr("art-copy"), atomsArtCopy).Small().Extend().SendResp().HasPrimaryClicked() {
+					inst.copyCited("the artefact", text, text+citationFoot(text, inst.conv.citationIndex()))
+				}
+				inst.renderEndorse(n, text)
+				exportable := inst.exportable()
+				if exportable && asking == nil {
+					if c.Button(inst.ids.PrepareStr("art-export"), atomsArtExport).Small().Extend().HoverText(tipArtExport).SendResp().HasPrimaryClicked() {
 						inst.planExport(false)
 					}
 				}
-			}
-			for range c.HoverText(tipArtMdedit).KeepIter() {
-				if c.Button(inst.ids.PrepareStr("art-mdedit"), atomsArtMdedit).Small().SendResp().HasPrimaryClicked() {
-					if hasLiveImages(set) && exportable {
-						inst.planExport(true)
-					} else {
-						inst.openArtefactInMdedit(text)
+				if asking == nil || !asking.thenMdedit {
+					if c.Button(inst.ids.PrepareStr("art-mdedit"), atomsArtMdedit).Small().Extend().HoverText(tipArtMdedit).SendResp().HasPrimaryClicked() {
+						if hasLiveImages(set) && exportable {
+							inst.planExport(true)
+						} else {
+							inst.openArtefactInMdedit(text)
+						}
 					}
 				}
 			}
@@ -178,20 +193,32 @@ func (inst *App) renderArtefact() {
 		}
 	}
 	if text != "" && !inst.exportable() {
-		weak("This window's artefact does not export: the store's mount tag is the plain chat's alone (ADR-0341 §SD2). Open in mdedit takes the text without its screenshots.")
+		weak("A document of this window does not export; Open in mdedit takes its text without its screenshots.")
 	}
+	// A question open in the document says what its answers do; the line
+	// on how changes arrive would say it again and push the answers down.
 	switch p := art.policyNow(); {
+	case inst.artefactQuestion() != "":
 	case !p.write:
-		weak("The model may read the artefact, not change it: At most is below Edit.")
+		weak("The model may read the document, not change it: At most in Settings is below Edit.")
 	case p.ask:
 		weak("Each change the model makes waits for you here.")
 	default:
-		weak("The model's changes apply directly; Revisions can take any back.")
+		weak("The model's changes apply at once; the Revisions tab can undo any of them.")
 	}
+	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
+	inst.renderArtefactViews(art, n, text)
+}
+
+// renderArtefactDecisions are the questions that wait in the document: a
+// proposed change, the export the person asked for, a screenshot the model
+// asks to see. They head the Read tab, so the tab strip stays in place
+// above however tall they are.
+func (inst *App) renderArtefactDecisions(art *artefact, n int, text string) {
 	if p := art.pending(); p != nil {
 		inst.renderProposal(p, n, text)
 	}
-	if p := v.export; p != nil {
+	if p := inst.artView.export; p != nil {
 		for range c.IdScope(inst.ids.PrepareStr("export-ask")) {
 			inst.renderExportAsk(p, n)
 		}
@@ -201,7 +228,28 @@ func (inst *App) renderArtefact() {
 			inst.renderPixelAsk(a)
 		}
 	}
-	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
+}
+
+// artefactQuestion names the question waiting in the document, "" for
+// none: the model's, or the export the person asked for.
+func (inst *App) artefactQuestion() string {
+	if a := inst.artefactAsks(); a != "" {
+		return a
+	}
+	if p := inst.artView.export; p != nil {
+		return "export-" + strconv.Itoa(p.rev) + "-" + strconv.FormatBool(p.thenMdedit)
+	}
+	return ""
+}
+
+// renderArtefactViews are the document's own views, as tabs of a dock of
+// their own (ADR-0404 §SD7): one way to switch views in the window, and
+// Source can be dragged beside Read. Each tab's body scrolls in its
+// leaf. A question that arrives brings the Read tab, where it is
+// drawn, to the front, once.
+func (inst *App) renderArtefactViews(art *artefact, n int, text string) {
+	v := &inst.artView
+	q := inst.artefactQuestion()
 	lintLabel := "Lint"
 	if len(v.findings) > 0 {
 		lintLabel += " (" + strconv.Itoa(len(v.findings)) + ")"
@@ -210,13 +258,14 @@ func (inst *App) renderArtefact() {
 	if k := len(art.headImages()); k > 0 {
 		imagesLabel += " (" + strconv.Itoa(k) + ")"
 	}
-	selector.Segmented(inst.ids, "art-tab", &v.tab).
-		Option(artTabDocument, "Document").Option(artTabSource, "Source").
-		Option(artTabRevisions, "Revisions").Option(artTabLint, lintLabel).Option(artTabImages, imagesLabel).Send()
-	c.Separator().Horizontal().Send()
-	for range c.ScrollArea().Vscroll(true).Hscroll(false).AutoShrink(false, false).KeepIter() {
-		switch v.tab {
-		case artTabDocument:
+	for dock := range c.DockArea(inst.ids.PrepareStr("art-dock")) {
+		dock.InitRoot(uint64(artTabDocument), uint64(artTabSource), uint64(artTabRevisions), uint64(artTabLint), uint64(artTabImages))
+		if q != "" && q != v.raised {
+			dock.ActivateTab(uint64(artTabDocument))
+		}
+		v.raised = q
+		for range dock.Tab(uint64(artTabDocument), artTabReadTitle) {
+			inst.renderArtefactDecisions(art, n, text)
 			if text == "" {
 				weak("Empty. The model writes here once it is asked to.")
 				break
@@ -225,54 +274,81 @@ func (inst *App) renderArtefact() {
 			for _, line := range citationLines(text, inst.conv.citationIndex()) {
 				weak(line)
 			}
-		case artTabSource:
+		}
+		for range dock.Tab(uint64(artTabSource), "Source") {
 			if !v.srcOk {
 				weak("Empty.")
 				break
 			}
 			c.CodeView(inst.ids.PrepareStr("art-src"), v.srcJob).Send()
-		case artTabRevisions:
+		}
+		for range dock.Tab(uint64(artTabRevisions), "Revisions") {
 			inst.renderRevisions(art, n)
-		case artTabLint:
+		}
+		for range dock.Tab(uint64(artTabLint), lintLabel) {
 			inst.renderFindings(v.findings)
-		case artTabImages:
+		}
+		for range dock.Tab(uint64(artTabImages), imagesLabel) {
 			inst.renderImages(art)
 		}
 	}
 }
 
-// renderProposal is a change waiting for the person: its diff against the
-// head, Accept and Reject.
+// renderProposal is a change waiting for the person, drawn as a decision
+// (ADR-0404 §SD3): the model asks, so neither answer is primary (§SD4). The
+// diff against the head follows the options.
 func (inst *App) renderProposal(p *artProposal, head int, text string) {
-	section("Proposed change")
-	what := p.tool
-	if p.title != "" {
-		what = p.title + " · " + p.tool
-	}
 	if p.ownImages {
-		inst.renderImageProposal(p, what, head)
+		inst.renderImageProposal(p, head)
 		return
 	}
 	d := inst.artView.diffOf("proposal-"+strconv.FormatUint(p.seq, 10), text, p.text)
 	add, del := diffCounts(d)
-	c.Label(what + " · +" + strconv.Itoa(add) + " −" + strconv.Itoa(del)).Selectable(false).Send()
+	subject := plural(add, "line") + " added, " + strconv.Itoa(del) + " removed"
+	if p.title != "" {
+		subject = p.title + " · " + subject
+	}
+	in := decision.Input{
+		Ids: inst.ids, ScopeKey: "proposal", Origin: decision.OriginRequest,
+		Title:   "The model proposes a change to the document",
+		Subject: subject,
+		Follows: []string{
+			"Accept writes this change into the document as revision " + strconv.Itoa(head+1) + "; the model goes on with its turn.",
+			"Reject discards it, and the model is told you turned it down and not to propose it again.",
+		},
+		Options: proposalOptions(p.tool),
+		Detail: func() {
+			for range c.ScrollArea().Vscroll(true).Hscroll(true).MaxHeight(240).KeepIter() {
+				renderDiff(d)
+			}
+		},
+	}
 	if p.base != head {
-		weak("The artefact moved since this was computed; accepting it will be refused as stale.")
+		in.Notes = []decision.Note{{Text: noteStaleProposal, Tone: styletokens.ToneWarning}}
 	}
-	for range c.HorizontalTop().KeepIter() {
-		for range c.HoverText(tipAccept).KeepIter() {
-			if c.Button(inst.ids.PrepareStr("art-accept"), atomsAccept).SendResp().HasPrimaryClicked() {
-				p.decide(true)
-			}
-		}
-		for range c.HoverText(tipReject).KeepIter() {
-			if c.Button(inst.ids.PrepareStr("art-reject"), atomsReject).SendResp().HasPrimaryClicked() {
-				p.decide(false)
-			}
-		}
+	inst.decideProposal(p, decision.Render(in))
+}
+
+// noteStaleProposal is the note on a proposal made against an earlier
+// revision.
+const noteStaleProposal = "The document changed since the model proposed this; Accept will be refused as out of date."
+
+// proposalOptions are Accept and Reject; the tool the model called is in
+// their hover, for whoever reads the call record.
+func proposalOptions(tool string) []decision.Option {
+	return []decision.Option{
+		{Key: "accept", Label: "Accept", Icon: icons.PhCheck, Role: decision.RoleAffirm, Tooltip: tipAccept + " (" + tool + ")"},
+		{Key: "reject", Label: "Reject", Icon: icons.PhX, Role: decision.RoleDecline, Tooltip: tipReject},
 	}
-	for range c.ScrollArea().Vscroll(true).Hscroll(true).MaxHeight(240).KeepIter() {
-		renderDiff(d)
+}
+
+// decideProposal hands the person's answer to the waiting tool call.
+func (inst *App) decideProposal(p *artProposal, res decision.Result) {
+	switch res.Chosen {
+	case "accept":
+		p.decide(true)
+	case "reject":
+		p.decide(false)
 	}
 }
 
@@ -467,15 +543,13 @@ func (inst *App) renderEndorse(n int, text string) {
 		c.Label(icons.PhSealCheck + " endorsed").Selectable(false).Send()
 		return
 	}
-	for range c.HoverText(tipEndorse).KeepIter() {
-		if c.Button(inst.ids.PrepareStr("art-endorse"), atomsArtEndorse).Small().SendResp().HasPrimaryClicked() {
-			inst.runAction("chat-endorse", "endorse the artefact", func(ctx context.Context) (note string, err error) {
-				if err = coord.endorseArtefact(ctx, n, text); err != nil {
-					return
-				}
-				return "endorsed revision " + strconv.Itoa(n), nil
-			}, nil)
-		}
+	if c.Button(inst.ids.PrepareStr("art-endorse"), atomsArtEndorse).Small().Extend().HoverText(tipEndorse).SendResp().HasPrimaryClicked() {
+		inst.runAction("chat-endorse", "endorse the artefact", func(ctx context.Context) (note string, err error) {
+			if err = coord.endorseArtefact(ctx, n, text); err != nil {
+				return
+			}
+			return "endorsed revision " + strconv.Itoa(n), nil
+		}, nil)
 	}
 }
 

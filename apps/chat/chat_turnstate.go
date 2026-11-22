@@ -225,19 +225,40 @@ func turnTone(s turnStateE) badge.ToneE {
 	return badge.ToneNeutral
 }
 
-// newTurnChip builds the state chip; it opens the inspector with the graph
-// and the history of the turn's steps.
+// newTurnChip builds the state chip; it opens the inspector with the
+// conversation's facts, the graph and the history of the turn's steps
+// (ADR-0404 §SD7).
 func (inst *App) newTurnChip() (v *fsmview.View[turnStateE]) {
 	return fsmview.New(inst.ids, "turn-state", inst.turnMachine, fsmview.Options[turnStateE]{
-		Title:      "Turn",
-		Tethered:   true,
-		BadgeTone:  turnTone,
-		AutoAnchor: true,
+		Title:       "Conversation",
+		Tethered:    true,
+		Inline:      true,
+		BadgeTone:   turnTone,
+		AutoAnchor:  true,
+		ChipLabel:   turnChipLabel,
+		ChipTooltip: tipTurnChip,
 	})
 }
 
-// renderTurnState draws the state chip. It carries no line beside it: the
-// state's name says what the turn waits on, and the bar's row is full.
+const tipTurnChip = "Where the conversation stands. Click for its id, the model and its endpoint, the context used, what its first message fixed and the task, each with a copy; and for how a turn moves."
+
+// turnChipLabel is the chip's word for a state. The machine's labels are
+// what its operations report to an agent, and stay; the chip says the
+// state in the reader's words.
+func turnChipLabel(s turnStateE) string {
+	switch s {
+	case turnIdle:
+		return "ready"
+	case turnModel:
+		return "thinking"
+	case turnTool:
+		return "working"
+	}
+	return s.String()
+}
+
+// renderTurnState draws the state chip, its inspector holding the
+// conversation's facts.
 func (inst *App) renderTurnState() {
 	if inst.turnChip == nil {
 		return
@@ -246,6 +267,7 @@ func (inst *App) renderTurnState() {
 		Subject:   "app.chat.turn.state",
 		SourceApp: inst.identity(),
 	}
+	inst.turnChip.Opts.Details = inst.renderConversationFacts
 	inst.turnChip.Render()
 }
 

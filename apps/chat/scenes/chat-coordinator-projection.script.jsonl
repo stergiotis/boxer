@@ -1,8 +1,10 @@
 # The scripted model of chat-coordinator-projection.scene.md: open play,
 # ask for the endpoint, run a leeway-shaped query, compute the Projection
 # pane and read it — the pane is read before it is computed, as a write
-# expects. Calls between the steps give the query and the run their time;
-# a scripted model cannot poll.
+# expects. Calls between the steps give the query its time; a scripted
+# model cannot poll. compute_projection only starts the run, which lands on
+# its own goroutine, and explain_clusters refuses until it has; the reply
+# that reads the clusters is held back (delayMs) so the run lands first.
 {"tool":"request_access","args":{"plan":"cluster a sample of boxer.facts in play","open":[{"app":"play"}]}}
 {"tool":"open_window","args":{"app":"play"}}
 {"tool":"call_operation","args":{"window":"$window","operation":"get_state","args":{}}}
@@ -17,6 +19,6 @@
 {"tool":"call_operation","args":{"window":"$window","operation":"get_state","args":{}}}
 {"tool":"call_operation","args":{"window":"$window","operation":"list_panes","args":{}}}
 {"tool":"call_operation","args":{"window":"$window","operation":"describe_result","args":{}}}
-{"tool":"call_operation","args":{"window":"$window","operation":"get_projection","args":{"points":5},"title":"Reading the clusters"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"get_projection","args":{"points":5},"title":"Reading the clusters"},"delayMs":5000}
 {"tool":"call_operation","args":{"window":"$window","operation":"explain_clusters","args":{},"title":"Reading why the clusters"}}
 {"content":"The projection is computed; get_projection and explain_clusters read its clusters and their rules."}

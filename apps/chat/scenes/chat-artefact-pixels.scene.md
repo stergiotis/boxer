@@ -23,20 +23,20 @@ ADR-0287 on the headless host, against the scripted model in
 [chat-artefact-pixels.script.jsonl](./chat-artefact-pixels.script.jsonl),
 with Pixels at Ask each time. The model captures the operations demo's
 window into the artefact's screenshots, then asks to see it. The view waits
-in the Artefact panel, showing the image, its size and source, and the model
+in the document beside the transcript, showing the image, its size and source, and the model
 it would go to; Allow lets it through, and the transcript's tool line says
 it was shown.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0287: a screenshot's pixels reach the model only as the Pixels setting allows"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","valueContains":"The model asks to see a screenshot","role":"label","settleMs":500}
 {"do":"wait","valueContains":"screenshot-1.png ·","role":"label"}
-{"do":"wait","valueContains":"It would go to","role":"label"}
+{"do":"wait","valueContains":"Allow sends every pixel of it to","role":"label","comment":"what each answer does, as body text"}
 {"do":"capture","text":"chat-artefact-pixels-consent","settleMs":500}
 {"do":"click","contains":"Allow","role":"button"}
 {"do":"wait","valueContains":"I looked at the demo window","role":"label","settleMs":500,"comment":"short of the apostrophe, which the reply draws typographic"}
-{"do":"wait","valueContains":"artefact_view_image · shown · screenshot-1.png","role":"label","comment":"the transcript's tool line"}
+{"do":"wait","valueContains":"looked at an image · shown · screenshot-1.png","role":"label","comment":"the transcript's tool line"}
 {"do":"capture","text":"chat-artefact-pixels","settleMs":500}
 ```

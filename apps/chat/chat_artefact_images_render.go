@@ -13,10 +13,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/decision"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imagedecode"
 )
 
@@ -24,6 +26,7 @@ const (
 	// imageThumbBox bounds a thumbnail as drawn, in logical points.
 	imageThumbBox uint32 = 160
 
+	tipImageBudget  = "The images are held for this conversation in sealed files on this machine, which the window removes when the conversation ends; the limits are the host's."
 	tipImageRemove  = "Remove this name from the set, as a new revision. The bytes stay while an earlier revision names them, so a revert brings it back."
 	tipImagePurge   = "Remove it and free its bytes for good: earlier revisions keep the name, marked purged, and a revert cannot bring the image back."
 	tipPixelAllow   = "Send this screenshot to the model with the turn. It stays in the model's context for this turn only; what was sent cannot be called back."
@@ -39,17 +42,17 @@ const (
 )
 
 var (
-	atomsImageRemove  = c.Atoms().Text(icons.PhTrash + " Remove").Keep()
-	atomsImagePurge   = c.Atoms().Text(icons.PhTrash + " Purge").Keep()
-	atomsPixelAllow   = c.Atoms().Text(icons.PhCheck + " Allow").Keep()
-	atomsPixelDecline = c.Atoms().Text(icons.PhX + " Decline").Keep()
+	atomsImageRemove = c.Atoms().Text(icons.PhTrash + " Remove").Keep()
+	atomsImagePurge  = c.Atoms().Text(icons.PhTrash + " Purge").Keep()
 )
 
 // renderImages is the Images tab.
 func (inst *App) renderImages(art *artefact) {
 	b := art.budget()
-	weak("images " + strconv.Itoa(b.Names) + " of " + strconv.Itoa(b.NamesLimit) + " · " +
-		humanBytes(b.Bytes) + " of " + humanBytes(b.BytesLimit) + " sealed on disk")
+	for range c.HoverText(tipImageBudget).KeepIter() {
+		weak(strconv.Itoa(b.Names) + " of " + strconv.Itoa(b.NamesLimit) + " images · " +
+			humanBytes(b.Bytes) + " of " + humanBytes(b.BytesLimit) + " held for this conversation")
+	}
 	for range c.HoverText(tipImageAdd).KeepIter() {
 		if c.Button(inst.ids.PrepareStr("add-image"), atomsImageAdd).Small().SendResp().HasPrimaryClicked() {
 			inst.addImage(art)
@@ -57,7 +60,7 @@ func (inst *App) renderImages(art *artefact) {
 	}
 	set := art.headImages()
 	if len(set) == 0 {
-		weak("None. Add an image file here; with Apps, the model adds screenshots of its windows with artefact_capture.")
+		weak("None. Add an image file here; with Apps, the model can add screenshots of the windows you share.")
 		return
 	}
 	// Any image of the set can go with the next message, where the Pixels
@@ -109,72 +112,87 @@ func (inst *App) removeImage(art *artefact, name string, purge bool) {
 	}
 }
 
-// renderImageProposal is an image change waiting for the person.
-func (inst *App) renderImageProposal(p *artProposal, what string, head int) {
-	verb := "adds"
+// renderImageProposal is an image change waiting for the person, drawn as
+// a decision the model asks for (ADR-0404 §SD3, §SD4); the image follows
+// the options.
+func (inst *App) renderImageProposal(p *artProposal, head int) {
+	verb, title := "adds", "The model proposes to add an image to the document"
 	if p.removes {
-		verb = "removes"
+		verb, title = "removes", "The model proposes to remove an image from the document"
 	}
+	subject := ""
 	if p.image != nil {
-		c.Label(what + " · " + verb + " " + p.image.name + " · " + strconv.Itoa(p.image.w) + "×" + strconv.Itoa(p.image.h)).Selectable(false).Send()
+		subject = p.image.name + " · " + strconv.Itoa(p.image.w) + "×" + strconv.Itoa(p.image.h) + " px"
+	}
+	if p.title != "" {
+		subject = strings.TrimPrefix(p.title+" · "+subject, " · ")
+	}
+	in := decision.Input{
+		Ids: inst.ids, ScopeKey: "image-proposal", Origin: decision.OriginRequest,
+		Title: title, Subject: subject,
+		Follows: []string{
+			"Accept " + verb + " it as revision " + strconv.Itoa(head+1) + "; the model goes on with its turn.",
+			"Reject leaves the document's images as they are, and the model is told you turned it down.",
+		},
+		Options: proposalOptions(p.tool),
 	}
 	if p.base != head {
-		weak("The artefact moved since this was computed; accepting it will be refused as stale.")
-	}
-	for range c.HorizontalTop().KeepIter() {
-		for range c.HoverText(tipAccept).KeepIter() {
-			if c.Button(inst.ids.PrepareStr("art-accept"), atomsAccept).SendResp().HasPrimaryClicked() {
-				p.decide(true)
-			}
-		}
-		for range c.HoverText(tipReject).KeepIter() {
-			if c.Button(inst.ids.PrepareStr("art-reject"), atomsReject).SendResp().HasPrimaryClicked() {
-				p.decide(false)
-			}
-		}
+		in.Notes = []decision.Note{{Text: noteStaleProposal, Tone: styletokens.ToneWarning}}
 	}
 	if p.image != nil {
-		for range c.IdScope(inst.ids.PrepareStr("proposal-image")) {
-			inst.renderImageThumb(inst.conv.art, *p.image)
-			weak(imageOrigin(*p.image))
+		img := *p.image
+		in.Detail = func() {
+			inst.renderImageThumb(inst.conv.art, img)
+			c.Label(imageOrigin(img)).Wrap().Send()
 		}
 	}
+	inst.decideProposal(p, decision.Render(in))
 }
 
 // renderPixelAsk is a view of a screenshot waiting for the person: what
-// would be sent, where it would go, Allow and Decline.
+// would be sent and where, as a decision the model asks for (ADR-0404
+// §SD3, §SD4). The preview follows the options.
 func (inst *App) renderPixelAsk(a *pixelAsk) {
-	section("The model asks to see a screenshot")
-	c.Label(a.name + " · sent at " + strconv.Itoa(a.w) + "×" + strconv.Itoa(a.h) + " px").Selectable(false).Send()
-	weak(a.origin)
-	weak("The preview below is fitted to the tab; the model gets every pixel.")
 	to := "the host's model"
 	if a.endpoint != "" {
 		to = a.endpoint
 	}
-	weak("It would go to " + to + ".")
+	again := "Allowed, it is shown for this turn only; the next view asks again."
 	if a.level == agent.PixelsAskOnce {
-		weak("Allowed, this image is not asked for again while its content is unchanged.")
-	} else {
-		weak("Allowed, it is shown for this turn; the next view asks again.")
+		again = "Allowed, it is not asked for again while its content is unchanged."
 	}
-	for range c.HorizontalTop().KeepIter() {
-		for range c.HoverText(tipPixelAllow).KeepIter() {
-			if c.Button(inst.ids.PrepareStr("pixel-allow"), atomsPixelAllow).SendResp().HasPrimaryClicked() {
-				a.decide(pixelAllowed)
-			}
-		}
-		for range c.HoverText(tipPixelDecline).KeepIter() {
-			if c.Button(inst.ids.PrepareStr("pixel-decline"), atomsPixelDecline).SendResp().HasPrimaryClicked() {
-				a.decide(pixelDeclined)
-			}
-		}
+	in := decision.Input{
+		Ids: inst.ids, ScopeKey: "pixel-ask", Origin: decision.OriginRequest,
+		Title:   "The model asks to see a screenshot",
+		Subject: a.name + " · " + strconv.Itoa(a.w) + "×" + strconv.Itoa(a.h) + " px · " + a.origin,
+		Follows: []string{
+			"Allow sends every pixel of it to " + to + " with this turn. What was sent cannot be called back.",
+			again,
+			"Decline keeps it from the model, which is told you declined and asked not to ask again.",
+		},
+		Options: []decision.Option{
+			{Key: "allow", Label: "Allow", Icon: icons.PhCheck, Role: decision.RoleAffirm, Tooltip: tipPixelAllow},
+			{Key: "decline", Label: "Decline", Icon: icons.PhX, Role: decision.RoleDecline, Tooltip: tipPixelDecline},
+		},
+		Detail: func() { inst.renderPixelPreview(a) },
 	}
+	switch decision.Render(in).Chosen {
+	case "allow":
+		a.decide(pixelAllowed)
+	case "decline":
+		a.decide(pixelDeclined)
+	}
+}
+
+// renderPixelPreview is the screenshot a view would send, fitted to the
+// pane.
+func (inst *App) renderPixelPreview(a *pixelAsk) {
 	t := a.preview
 	if len(t.Pixels) == 0 {
-		weak("no preview")
+		c.Label("No preview of it could be made.").Wrap().Send()
 		return
 	}
+	weak("The preview is fitted to the pane; the model would get every pixel.")
 	id := inst.ids.PrepareStr("pixel-ask-" + a.hash).Derive()
 	if inst.artView.thumbs == nil {
 		inst.artView.thumbs = c.NewImageVersionTracker[uint64]()

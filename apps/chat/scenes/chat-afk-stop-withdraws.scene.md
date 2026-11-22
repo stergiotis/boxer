@@ -29,7 +29,7 @@ Tagged slow with the other scenes of the person being away.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0269: cancel withdraws a held call"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","contains":"your turn","role":"button","comment":"the request waits in the person's queue (ADR-0324)"}
 {"do":"click","contains":"your turn","role":"button"}
@@ -44,10 +44,11 @@ Tagged slow with the other scenes of the person being away.
 {"do":"click","contains":"your turn","role":"button"}
 {"do":"click","contains":"Next","role":"button","comment":"its card, non-modal"}
 {"do":"wait","valueContains":"asks to call set_sql","role":"label","nth":0}
-{"do":"wait","valueContains":"waiting for you","role":"label","nth":1}
+{"do":"wait","valueContains":"waiting for you","role":"label"}
 {"do":"click","contains":"Cancel","role":"button","comment":"the person stops the turn"}
 {"do":"wait","contains":"Send","role":"button"}
-{"do":"click","name":"Analytics","role":"button","settleMs":800}
+{"do":"click","name":"View","role":"button","comment":"the window's View menu"}
+{"do":"click","pointer":true,"name":"Analytics","role":"check_box","settleMs":800}
 {"do":"wait","valueContains":"window 2 · SQL playground","role":"label"}
 {"do":"wait","valueContains":"1 call: 1 failed","role":"label","comment":"set_sql, withdrawn"}
 {"do":"capture","text":"chat-afk-stop-withdraws"}

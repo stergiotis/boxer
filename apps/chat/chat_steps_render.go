@@ -73,8 +73,15 @@ func (inst *App) renderSteps() {
 		return
 	}
 	for range c.IdScope(inst.ids.PrepareStr("steps")) {
-		for range c.HoverText(tipSteps).KeepIter() {
-			weak(stepsSummary(steps))
+		summary, tokensUsed := stepsSummary(steps)
+		tip := tipSteps
+		if tokensUsed != "" {
+			tip += "\n\nTokens so far: " + tokensUsed + "."
+		}
+		// The counts of calls are the harness's; the line says what follows
+		// in the reader's words and keeps them in its hover.
+		for range c.HoverText(tip + "\n\n" + summary + ".").KeepIter() {
+			weak("What the model has done this turn:")
 		}
 		first := max(0, len(steps)-stepsShown)
 		if first > 0 {
@@ -144,13 +151,15 @@ func (inst *App) routineRun(steps []turnStep, i int) (n int) {
 	return
 }
 
-// markedLine is a step's line behind its level's mark.
+// markedLine is a step's line behind its level's mark, in the reader's
+// words (readerStepLine); a copy of the step keeps stepLine's.
 func (inst *App) markedLine(s *turnStep) string {
-	return levelMark(inst.stepLevel(s)) + " " + stepLine(s)
+	return levelMark(inst.stepLevel(s)) + " " + readerStepLine(s)
 }
 
-// stepsSummary is the steps in a line: calls by kind, refusals, tokens.
-func stepsSummary(steps []turnStep) (s string) {
+// stepsSummary is the steps in a line: calls by kind and refusals; and the
+// tokens they used, for the line's hover.
+func stepsSummary(steps []turnStep) (s string, tokensUsed string) {
 	var models, tools, refused int
 	var in, out int64
 	for i := range steps {
@@ -170,7 +179,7 @@ func stepsSummary(steps []turnStep) (s string) {
 		s += " · " + strconv.Itoa(refused) + " refused"
 	}
 	if in+out > 0 {
-		s += " · " + tokens(in) + " in, " + tokens(out) + " out"
+		tokensUsed = tokens(in) + " in, " + tokens(out) + " out"
 	}
 	return
 }
@@ -293,10 +302,66 @@ func stepLine(s *turnStep) (line string) {
 	return
 }
 
+// readerStepLine is a step in a line as the window draws it: what was
+// done, how long it took or has run, and how it ended. The round, the
+// tokens and the tool's name are in the step's details and its copy
+// (stepLine).
+func readerStepLine(s *turnStep) (line string) {
+	took := s.took
+	if !s.done {
+		took = time.Since(s.started)
+	}
+	switch s.kind {
+	case stepCompact:
+		return stepLine(s)
+	case stepModel:
+		// What the model did, and how long it took once that is long
+		// enough to matter; the calls it asked for follow as steps of
+		// their own, and the count is in the step's details (stepLine).
+		line = icons.PhRobot + " the model"
+		if took >= waitShown {
+			line += " · " + duration(took)
+		}
+		switch {
+		case !s.done:
+			line += " · " + modelPhase(s)
+		case s.failed:
+			line += " · failed"
+		case s.tools == 1:
+			line += " · chose the next step"
+		case s.tools > 1:
+			line += " · chose the next " + strconv.Itoa(s.tools) + " steps"
+		default:
+			line += " · answered"
+		}
+		return
+	}
+	name := s.title
+	if name == "" {
+		name = readerLine(s.name)
+	}
+	if s.waitingOnPerson() {
+		return icons.PhHourglassMedium + " " + name + " · waiting for you · " + duration(time.Since(s.waitSince))
+	}
+	line = icons.PhGear + " " + name + " · " + duration(took)
+	switch {
+	case !s.done:
+		line += " · running"
+	case s.refused:
+		line += " · refused"
+	}
+	if s.waited >= waitShown {
+		line += " · waited " + duration(s.waited) + " for you"
+	}
+	return
+}
+
 // renderStepDetail is what a step sent and got: a model call's text and
 // reasoning, a tool call's arguments and result, each bounded and
 // selectable, and Copy for the whole step.
 func (inst *App) renderStepDetail(s *turnStep) {
+	// The step as recorded: the tool's name, the round and the tokens.
+	weak(stepLine(s))
 	if s.activity != "" {
 		weak(s.activity)
 	}
@@ -352,7 +417,7 @@ func stepCopy(s *turnStep) string {
 // left edge as the thread's messages are, and its steps folded under
 // Details.
 func (inst *App) renderToolEntry(e *entry) {
-	line := "⚙ " + e.text
+	line := "⚙ " + readerLine(e.text)
 	level := attention.LevelData
 	for i := len(e.steps) - 1; i >= 0; i-- {
 		if e.steps[i].kind == stepTool {
@@ -367,7 +432,7 @@ func (inst *App) renderToolEntry(e *entry) {
 	for i := range e.steps {
 		refused = refused || (e.steps[i].kind == stepTool && (e.steps[i].refused || e.steps[i].failed))
 	}
-	for range c.HoverText(levelTip(level)).KeepIter() {
+	for range c.HoverText(levelTip(level) + "\n\nAs recorded: " + e.text).KeepIter() {
 		switch {
 		case refused:
 			// A refusal usually names a setting to change: the line the

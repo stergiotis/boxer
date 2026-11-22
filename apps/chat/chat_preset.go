@@ -74,9 +74,6 @@ type Preset struct {
 	// Watch starts a conversation watched, so a turn that ends while the
 	// person is elsewhere is reported; they can stop watching.
 	Watch bool
-	// Simple folds what a person only sometimes needs under Details. What
-	// holds a task, what it read and Stop stay in view.
-	Simple bool
 	// HideThinking starts the window without the reasoning drawn while the
 	// model writes it. It is a start and no limit: only the window's look
 	// changes, and the person can show it from Settings.
@@ -145,7 +142,6 @@ func NewPreset(p Preset) (a app.AppI, err error) {
 	inst.apps, inst.questions, inst.artefact, inst.perms = p.Apps, p.Questions, p.Artefact, limit
 	inst.rounds = float64(clampRounds(p.Rounds))
 	inst.thinking = !p.HideThinking
-	inst.simple = p.Simple
 	if p.Source != "" {
 		inst.definition = markdown.Parse([]byte(p.Source))
 	}

@@ -37,14 +37,15 @@ used, with one call each.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0283: what the chat's model could reach, was granted and used"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button","comment":"turn 1, the seeded draft"}
 {"do":"wait","valueContains":"Play runs the query","role":"label","settleMs":1500}
-{"do":"wait","valueContains":"⚙ run in window 2 · completed","role":"label"}
+{"do":"wait","valueContains":"⚙ run in window 2 · done","role":"label"}
 {"do":"click","name":"Window","comment":"play opened over the chat: lay the two side by side"}
 {"do":"click","contains":"Side by side"}
 {"do":"key","text":"Escape","comment":"close the menu"}
-{"do":"click","name":"Analytics","role":"button"}
+{"do":"click","name":"View","role":"button","comment":"the window's View menu"}
+{"do":"click","pointer":true,"name":"Analytics","role":"check_box"}
 {"do":"wait","valueContains":"is running","role":"label","comment":"the test grant's task: the surface was read"}
 {"do":"read","valueContains":"granted used","role":"label","pattern":"(?P<used>\\d+) of (?P<granted>\\d+) granted used · (?P<calls>\\d+) calls"}
 {"do":"expect","of":"used","eq":4,"comment":"get_state, set_sql, run, and opening play"}

@@ -221,22 +221,9 @@ func TestPlainAbilities_followTheSettings(t *testing.T) {
 	assert.Equal(t, []string{"It can talk with you.", "It cannot open or work in windows."}, limit.plainAbilities(false, false, false))
 }
 
-func TestTurnNote_aPresetCountsStepsNotAgainstItsLimit(t *testing.T) {
-	assert.Equal(t, "round 3 of 48 · asking", turnNote(false, 2, 48, "asking"))
-	assert.Equal(t, "step 3 · asking", turnNote(true, 2, 48, "asking"))
-	assert.Equal(t, "step 1", turnNote(true, 0, 48, ""))
-}
-
-func TestArtefactShown_comesForwardOncePerConversation(t *testing.T) {
-	var a artefactShown
-	assert.False(t, a.advance("one", false))
-	assert.False(t, a.advance("one", false))
-	assert.True(t, a.advance("one", true), "the first write")
-	assert.False(t, a.advance("one", true), "once")
-	assert.False(t, a.advance("two", true), "a resumed conversation stays where it was left")
-	assert.False(t, a.advance("two", true))
-	assert.False(t, a.advance("three", false))
-	assert.True(t, a.advance("three", true), "the next conversation's own first write")
+func TestTurnNote_countsStepsNotAgainstTheLimit(t *testing.T) {
+	assert.Equal(t, "step 3 · asking", turnNote(2, "asking"))
+	assert.Equal(t, "step 1", turnNote(0, ""))
 }
 
 func TestPreset_followupsAndPurposeAreBounded(t *testing.T) {

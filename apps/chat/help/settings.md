@@ -9,11 +9,15 @@ title: Settings and ceilings
 
 # Settings and ceilings
 
-The **Settings** tab holds every option of a chat window and the scale of
-what the model may do (ADR-0280). The scale is one ladder with two
-markers: **may** is the ceiling, the most the settings here let the model
-ask for, which the host enforces; **now** is what the running task was
-granted, by you in the host's dialog, under that ceiling. The chat computes
+**Settings** holds every option of a chat window and the scale of what the
+model may do (ADR-0280). It opens beside the transcript from the bar's words
+("Model: may edit and run in your windows") or from **View**. The scale is
+one ladder with two markers: the hollow one is the ceiling, the most the
+settings here let the model ask for, which the host enforces; the filled one
+is what the running task was granted, by you in the host's dialog, under that
+ceiling. Under the scale both are said in sentences, and their places on a
+scale of 0 to 100 are in the hover. The bar says the ceiling in words; the
+state chip's inspector says what the task was granted. The chat computes
 neither bound's effect: it relays the settings and draws what the host
 reports.
 
@@ -22,10 +26,10 @@ under a running model step, from the moment you tick it. Off, the step only
 says it is reasoning, and the text is under the step's details once the call
 ends.
 
-**Simple view** folds the bar under **Details**, brings **Artefact** to the
-front when the model first writes it, and describes a running turn as
-"working…" with a count of steps. The next chat window opens the way you left
-this. A chatlet's document sets its view, so its Settings do not offer this.
+The **Simple view** setting is retired (ADR-0404 §SD7, proposed): the chat
+has one bar, the one it had under that setting, with the conversation's facts
+in the state chip's inspector. A value kept for it stays in the app-state
+manager until deleted there.
 
 ## What the model may do
 
@@ -54,8 +58,8 @@ The **Harness** header, folded, holds the tuning a person rarely moves:
   typed tool beside `call_operation`.
 - **rounds per turn** — a slider within the host's range.
 
-Under the scale a line says why *now* is where it is: no task yet, Apps
-off, or the task the grant belongs to.
+Under the scale a line says why the filled marker is where it is: no task
+yet, Apps off, or a running task's grant.
 
 ## What the harness reads from the environment
 
@@ -86,7 +90,7 @@ dispatcher refuses anything above it — before you are asked, and on every
 later call, launch and destination — whatever the grant says (ADR-0280).
 The grant is the authority (ADR-0269 §SD6): the chat presents its handle
 and the dispatcher checks, stamps and records each call. So the settings in
-this tab are declarations the chat hands to the host; the chat adds no
+Settings are declarations the chat hands to the host; the chat adds no
 allowlist, approval prompt or budget of its own, and a line of enforcement
 in the window would be one nobody else could check.
 
@@ -97,7 +101,7 @@ refuses a call that does not name the journal entry written before it, so
 a second harness would still journal; the approvals, ceilings and labels
 remain this harness's to apply.
 
-Two things are the chat's own to apply, and the tab says so where they
+Two things are the chat's own to apply, and Settings say so where they
 show. The artefact's policy — whether the model may write it, and whether
 a write waits as a proposal — follows **At most** and **Changes**, and the
 chat applies it, because the host never sees an artefact call. **Pixels**

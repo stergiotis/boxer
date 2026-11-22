@@ -23,7 +23,7 @@ with two stops of the person's own: one that pauses the turn when the model
 calls `ask_user`, and a two-hour time box that stays quiet. The model's
 first reply asks for `ask_user`. The stop fires after that reply and before
 the call runs: the turn waits on the person with the stop's name and the row
-it returned, and the Stops tab lists the firing as waiting. Continue lets the
+it returned, and the Stops view lists the firing as waiting. Continue lets the
 same turn go on, so the model's question appears next, and its answer ends
 the turn. The firing then reads as continued.
 
@@ -40,8 +40,9 @@ refused statement and an edit.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0370: a stop holds the turn"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
-{"do":"click","contains":"Stops","role":"button","comment":"the tab, before anything fired"}
+{"do":"wait","contains":"Send","role":"button"}
+{"do":"click","name":"View","role":"button","comment":"the window's View menu"}
+{"do":"click","pointer":true,"contains":"Stops","role":"check_box","comment":"the view, before anything fired"}
 {"do":"wait","valueContains":"In force · 2","role":"label"}
 {"do":"wait","valueContains":"each tool call of the turn named like ^ask_user$","role":"label"}
 {"do":"capture","text":"chat-stops-in-force","sidecars":["tree"]}
@@ -59,7 +60,7 @@ refused statement and an edit.
 {"do":"wait","valueContains":"waiting for you","role":"label","comment":"the tab lists the firing"}
 {"do":"capture","text":"chat-stops-held"}
 {"do":"click","name":"Continue","role":"button","comment":"a held turn asks yes or no: a click answers"}
-{"do":"wait","valueContains":"Which format?","role":"label","comment":"the same turn went on: the model's own question"}
+{"do":"wait","value":"Which format?","role":"label","comment":"the same turn went on: the model's own question; the whole value, since the Stops view's row for the held call quotes its arguments"}
 {"do":"wait","valueContains":"you continued","role":"label"}
 {"do":"click","name":"Markdown","role":"radio_button"}
 {"do":"click","contains":"Answer","role":"button"}

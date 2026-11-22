@@ -14,33 +14,31 @@ scene:
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
 
-# chat — the Simple view of the plain chat
+# chat — one rendering: the bar is one row, and the document comes forward
 
 The headless host, against the scripted model in
-[chat-simple-view.script.jsonl](./chat-simple-view.script.jsonl). The window
-starts with the full bar. Ticking **Simple view** in Settings folds it under
-**Details**. The running turn then reads "working…" and counts steps, and the
-model's first write brings the Artefact tab forward. A scene's window neither
-reads nor writes the kept choice, since it shares the store of the machine it
-runs on: that the choice outlives the window is
-`TestTheSimpleViewIsRememberedForTheNextWindow`.
+[chat-simple-view.script.jsonl](./chat-simple-view.script.jsonl). This scene
+held the Simple view until ADR-0404 §SD7 (proposed) retired it; the window it
+showed is now the only one. The bar is one row: New conversation, the state
+chip, and what the model may do in words; the rest is in the menu bar above.
+The transcript has the window until the model's first write brings the
+document forward beside it.
+The running turn reads "working…" and counts steps. Settings, opened from the
+bar's words, has no Simple view.
 
 ```jsonl trace
-{"do":"note","text":"the plain chat's Simple view, from Settings"}
-{"do":"wait","valueContains":"→ scripted","role":"label","comment":"the full bar's model line"}
-{"do":"click","name":"Settings","role":"button"}
-{"do":"wait","contains":"Simple view","role":"check_box"}
+{"do":"note","text":"the chat's one rendering"}
+{"do":"wait","contains":"Send","role":"button"}
+{"do":"wait","contains":"Model:","role":"button","comment":"what the model may do, in words, in the bar"}
 {"do":"capture","text":"chat-simple-view-full","sidecars":["svg","tree"]}
-{"do":"click","contains":"Simple view","role":"check_box"}
-{"do":"wait","contains":" Details","role":"button","comment":"the bar folded"}
-{"do":"capture","text":"chat-simple-view-folded","sidecars":["svg","tree"]}
+{"do":"click","contains":"Model:","role":"button","comment":"the words open Settings beside the transcript"}
+{"do":"wait","valueContains":"What the model may do","role":"label"}
+{"do":"click","name":"View","role":"button","comment":"the window's View menu"}
+{"do":"click","pointer":true,"name":"Settings","role":"check_box","comment":"and it closes again"}
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","valueContains":"working…","role":"label","comment":"plain words for a running turn"}
 {"do":"wait","valueContains":"step 2","role":"label"}
-{"do":"wait","valueContains":"The scripted model wrote this note","role":"label","comment":"the Artefact tab came forward: a hidden tab is not laid out"}
+{"do":"wait","valueContains":"The scripted model wrote this note","role":"label","comment":"the document came forward: a view not shown is not laid out"}
 {"do":"capture","text":"chat-simple-view-artefact","sidecars":["svg","tree"]}
-{"do":"wait","valueContains":"The note is in the Artefact tab.","role":"label","settleMs":500,"comment":"the turn landed"}
-{"do":"click","contains":" Details","role":"button"}
-{"do":"wait","valueContains":"→ scripted","role":"label","comment":"Details unfolds what was folded"}
-{"do":"capture","text":"chat-simple-view-details","sidecars":["svg","tree"]}
+{"do":"wait","valueContains":"The note is in the Artefact tab.","role":"label","settleMs":500,"comment":"the turn landed; the model's words are its own"}
 ```

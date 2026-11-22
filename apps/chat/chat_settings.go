@@ -199,17 +199,13 @@ type authorityAsk struct {
 const (
 	// settingsPanelW is the width the Settings tab draws its scale at.
 	settingsPanelW float32 = 380
-	// barScaleW is the width of the scale in the bar.
-	barScaleW float32 = 132
-
-	tipScale = "What the model may do. The hollow pointer is the most these settings let it ask for; the filled one is what the running task was granted. Click to open Settings, which has the detail."
-	tipAllow = "The most the model may do in a window you share. The host refuses anything above it, whatever a task was granted.\n" +
+	tipAllow               = "The most the model may do in a window you share. The host refuses anything above it, whatever a task was granted.\n" +
 		"Read: read what windows hold and show.\n" +
 		"View: also change what a window shows — a selection, a camera.\n" +
 		"Edit: also change what it holds — text, parameters — and write the artefact.\n" +
 		"Run: also run against a data source.\n" +
 		"Outside: also act outside the app — publish, export — confirmed by you each time."
-	tipChanges = "Ask first: every change waits as a proposal you accept or reject — in the window it changes, or in the Artefact tab. Apply directly: changes land as the model makes them. Reads never wait — except a screenshot's pixels under Pixels' Ask levels — and a change outside the app is confirmed each time either way."
+	tipChanges = "Ask first: every change waits as a proposal you accept or reject — in the window it changes, or beside the chat in Document. Apply directly: changes land as the model makes them. Reads never wait — except a screenshot's pixels under Pixels' Ask levels — and a change outside the app is confirmed each time either way."
 	tipLaunch  = "Let the model ask to open windows of apps. You still decide which, in the host's dialog."
 	tipDesktop = "Let the model ask to arrange every window on the desktop."
 	tipReach   = "How far the model's work may reach beyond the windows. The task's grant names each place, and you approve the list.\n" +
@@ -217,18 +213,17 @@ const (
 		"Data endpoints: also the ClickHouse servers the apps query; At most decides whether the work only reads them.\n" +
 		"Network: also HTTP fetches to the destinations this host declares, and calls to a model service. Anything the host does not recognise counts as network."
 	tipPace     = "At a pace I can follow: the host spaces the model's changes — an edit, a run, a window opened or moved — so you can see each one and stop the task. As fast as it can: they land as the model makes them, faster than you can read or intervene."
-	tipArtefact = "Give this conversation one markdown document the model reads and edits through tools, shown in the Artefact tab. At most and Changes above decide whether it may write and whether each change waits for you."
-	tipScore    = "may is what these settings allow, now what the running task was granted, each 0–100: the level picks the band, and what else is allowed — listed below — moves it within the band."
+	tipArtefact = "Give this conversation one markdown document the model reads and edits through tools, shown beside the chat as Document. At most and Changes above decide whether it may write and whether each change waits for you."
+	tipScore    = "The hollow marker is what these settings allow, the filled one what the running task was granted, each on a scale of 0–100: the level picks the band, and what else is allowed — listed below — moves it within the band."
 	tipRounds   = "How many model calls one turn may make before it must answer: each round is a model call and the tool calls it asks for, and the last round offers no tools. A change applies from the next turn."
 	tipPixels   = "Which of the artefact's images the model may see as pixels, sent to the model with the turn.\n" +
 		"Metadata only: names, sizes and where each came from; you see the pixels, the model does not.\n" +
-		"Ask each time: each view waits in the Artefact tab, showing the image and the model it would go to, until you allow or decline it.\n" +
+		"Ask each time: each view waits beside the chat in Document, showing the image and the model it would go to, until you allow or decline it.\n" +
 		"Ask once per image: as above, and an image you allowed is shown again without asking; a crop or a new capture asks.\n" +
 		"This chat's captures: any screenshot the model captured in this conversation, without asking — the windows were shared with the task. A file you added asks once, as above.\n" +
-		"Above Metadata only you can also send any image with your next message, from the Artefact tab's Images.\n" +
+		"Above Metadata only you can also send any image with your next message, from Document's Images.\n" +
 		"A shown image stays in the model's context for its turn only. What was sent cannot be called back; lowering this binds from the next request on."
 	tipPixelsLocal = "Send screenshots only to a model on this machine, or one this host trusts with sealed data: every request carrying pixels is labelled confined, and the host refuses it elsewhere."
-	tipSimple      = "Fold the bar under Details, bring the artefact forward when the model first writes it, and describe a running turn in plain words. Remembered for the next window."
 	tipThinking    = "While a model call reasons, draw what it writes under the step. Off, the step only says it is reasoning. Either way the text is kept under the step's details once the call ends."
 	tipTyped       = "Offer each operation of the task's windows to the model as a tool of its own, instead of one call_operation tool. More tools in every request; some models call them more reliably."
 )
@@ -354,24 +349,8 @@ func (inst *App) scores() (may agent.Score, now agent.Score) {
 
 func markers(may agent.Score, now agent.Score) (ms []bandscale.Marker) {
 	return []bandscale.Marker{
-		{Position: may.Position, Label: "may: " + may.Level.String(), Hollow: true},
-		{Position: now.Position, Label: "now: " + now.Level.String()},
-	}
-}
-
-// renderScale is the bar's scale of what the model may do; its line brings
-// the Settings tab, where the scale is set, to the front.
-func (inst *App) renderScale() {
-	may, now := inst.scores()
-	for range c.HoverText(tipScale).KeepIter() {
-		for range c.HorizontalTop().KeepIter() {
-			bandscale.Render(bandscale.Input{Ids: inst.ids, ScopeKey: "bar-scale", Bands: ladder, Markers: markers(may, now),
-				Width: barScaleW, Compact: true})
-			line := c.Atoms().Text("now " + now.Level.String() + " · may " + may.Level.String()).Keep()
-			if c.Button(inst.ids.PrepareStr("scale-settings"), line).Frame(false).SendResp().HasPrimaryClicked() {
-				inst.showTab(tabSettings)
-			}
-		}
+		{Position: may.Position, Label: "settings: " + may.Level.String(), Hollow: true},
+		{Position: now.Position, Label: "granted: " + now.Level.String()},
 	}
 }
 
@@ -404,12 +383,6 @@ func (inst *App) renderSettings() {
 			c.Checkbox(inst.ids.PrepareStr("thinking"), inst.thinking, "Show the model's reasoning as it writes").SendRespVal(&inst.thinking)
 		}
 	}
-	if inst.preset == nil {
-		// A preset's document sets its view, and Details unfolds it.
-		for range c.HoverText(tipSimple).KeepIter() {
-			c.Checkbox(inst.ids.PrepareStr("simple"), inst.simple, "Simple view").SendRespVal(&inst.simple)
-		}
-	}
 	inst.renderMaySection()
 	inst.renderConversationSection()
 	inst.renderModelSection()
@@ -422,12 +395,16 @@ func (inst *App) renderMaySection() {
 	may, now := inst.scores()
 	bandscale.Render(bandscale.Input{Ids: inst.ids, ScopeKey: "scale", Bands: ladder, Markers: markers(may, now),
 		Width: settingsPanelW - 36})
-	for range c.HoverText(tipScore).KeepIter() {
-		c.Label("may " + strconv.Itoa(may.Value()) + " · " + may.Level.String() + "   now " + strconv.Itoa(now.Value()) + " · " + now.Level.String()).
-			Selectable(false).Send()
+	// The scale's two markers in sentences; their places on the 0–100 scale
+	// are in the hover.
+	for range c.HoverText(tipScore + " Settings: " + strconv.Itoa(may.Value()) + "; granted: " + strconv.Itoa(now.Value()) + ".").KeepIter() {
+		c.Label("These settings let the model " + mayLevelWords[may.Level] + ".").Wrap().Send()
+		if task, _, _ := inst.coord.stateOrNone(); task != "" {
+			c.Label("Its task was granted: " + mayLevelWords[now.Level] + ".").Wrap().Send()
+		}
 	}
 	if len(may.Factors) > 0 {
-		weak("may, within its level: " + strings.Join(may.Factors, " · "))
+		weak("Also, within that: " + strings.Join(may.Factors, " · "))
 	}
 	switch task, _, _ := inst.coord.stateOrNone(); {
 	case inst.coord == nil:
@@ -439,7 +416,7 @@ func (inst *App) renderMaySection() {
 	case task == "":
 		weak("No task yet: nothing is shared until the model asks and you decide.")
 	default:
-		weak("now is what task " + strings.TrimPrefix(task, "task-") + " was granted, under may.")
+		weak("The filled marker is what the running task was granted, under these settings.")
 	}
 	if inst.coord == nil {
 		return
@@ -584,10 +561,10 @@ func (inst *App) renderConversationSection() {
 		}
 		if conv.artefact {
 			for range c.HoverText(tipArtefact).KeepIter() {
-				c.Label("Artefact: on for this conversation").Selectable(false).Send()
+				c.Label("Document: on for this conversation").Selectable(false).Send()
 			}
 		}
-		weak("Keep, Apps, Questions and Artefact are fixed at a conversation's first message; New conversation takes the settings above.")
+		weak("Keep, Apps, Questions and Document are fixed at a conversation's first message; New conversation takes the settings above.")
 		return
 	}
 	for range c.HoverText(tipKeep).KeepIter() {
@@ -598,7 +575,7 @@ func (inst *App) renderConversationSection() {
 			c.Checkbox(inst.ids.PrepareStr("questions"), inst.questions, "Questions — let the model ask you with a form").SendRespVal(&inst.questions)
 		}
 		for range c.HoverText(tipArtefact).KeepIter() {
-			c.Checkbox(inst.ids.PrepareStr("artefact"), inst.artefact, "Artefact — a markdown document the model edits").SendRespVal(&inst.artefact)
+			c.Checkbox(inst.ids.PrepareStr("artefact"), inst.artefact, "Document — a markdown document the model edits").SendRespVal(&inst.artefact)
 		}
 	}
 }

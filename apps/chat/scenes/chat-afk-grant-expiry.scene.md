@@ -29,7 +29,7 @@ Tagged slow, since it waits out the timeout.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0265: an expired grant request does not block asking again"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","contains":"your turn","role":"button","comment":"the request waits in the person's queue (ADR-0324)"}
 {"do":"click","contains":"your turn","role":"button"}

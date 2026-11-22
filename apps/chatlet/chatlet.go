@@ -69,8 +69,12 @@ func ParseDocSource(bookID string, path string, src []byte, topics []app.TopicT)
 		Apps: r.flag("apps"), Questions: r.flag("questions"), Artefact: r.flag("artefact"), Launch: r.flag("launch"), Desktop: r.flag("desktop"),
 		Rounds: r.number("rounds"), Allow: r.required("allow"), Changes: r.required("changes"), Reach: r.required("reach"),
 		Greeting: r.text("greeting"), Starters: r.starters("starters"), Followups: r.starters("followups"), Purpose: r.text("purpose"), Watch: r.flag("watch"),
-		Simple: r.oneOf("view", "full", "simple"), HideThinking: r.oneOf("thinking", "shown", "hidden"), Source: string(src),
+		HideThinking: r.oneOf("thinking", "shown", "hidden"), Source: string(src),
 		Stops: r.stops("stops")}
+	// view chose between a full and a folded bar; the chat has one bar now
+	// (ADR-0404 §SD7). The key is still read, so a document that names it
+	// opens, and a misspelt value is still refused.
+	_ = r.oneOf("view", "full", "simple")
 	if err = r.err; err != nil {
 		return
 	}

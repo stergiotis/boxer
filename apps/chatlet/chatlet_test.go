@@ -156,7 +156,6 @@ func TestParse_thinking(t *testing.T) {
 func TestParse_easeOfUseKeys(t *testing.T) {
 	p, err := ParseDocSource("b", "example.md", []byte(validDoc), testTopics)
 	require.NoError(t, err)
-	assert.False(t, p.Simple, "absent is the full bar")
 	assert.False(t, p.Watch)
 	assert.Empty(t, p.Purpose)
 
@@ -167,8 +166,7 @@ purpose: "It does the example thing."
 followups:
   - {label: "Again", text: "Do it again"}`, 1)
 	p, err = ParseDocSource("b", "example.md", []byte(doc), testTopics)
-	require.NoError(t, err)
-	assert.True(t, p.Simple)
+	require.NoError(t, err, "view is still read, with no effect: the chat has one bar (ADR-0404 §SD7)")
 	assert.True(t, p.Watch)
 	assert.Equal(t, "It does the example thing.", p.Purpose)
 	assert.Equal(t, []chat.Starter{{Label: "Again", Text: "Do it again"}}, p.Followups)

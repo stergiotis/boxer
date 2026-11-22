@@ -26,9 +26,10 @@ its colour, with the steps it wrote per minute (ADR-0324 background §3.4,
 
 ```jsonl trace
 {"do":"note","text":"ADR-0323 SD4: watch a conversation"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button","comment":"the seeded draft"}
-{"do":"click","name":"\ue0d0 Watch","role":"button","comment":"tell me when this turn ends; by name, since the launcher lists Watchbill"}
+{"do":"click","name":"Conversation","role":"button","comment":"the window's Conversation menu"}
+{"do":"click","pointer":true,"name":"\ue0d0 Watch","role":"check_box","comment":"tell me when this turn ends; by name, since the launcher lists Watchbill"}
 {"do":"click","contains":"Widget gallery","role":"window","pointer":true,"comment":"look elsewhere while the model answers"}
 {"do":"read","contains":"nothing waits on you","role":"button","on":"name","pattern":"(?P<highlights>\\d+)$","comment":"one highlight, after what waits"}
 {"do":"expect","of":"highlights","eq":1}
@@ -40,7 +41,8 @@ its colour, with the steps it wrote per minute (ADR-0324 background §3.4,
 {"do":"read","valueContains":" of 2 messages","role":"label","pattern":"(?P<count>2 of 2) messages","comment":"the marker is a row, not a message"}
 {"do":"read","contains":"nothing waits on you","role":"button","on":"name","pattern":"(?P<cleared>on you)$","comment":"looking cleared the highlight"}
 {"do":"capture","text":"chat-watch-looked"}
-{"do":"click","contains":"Conversations","role":"button","settleMs":4000,"comment":"the roster samples the runs every three seconds; two samples give a pace"}
+{"do":"click","name":"View","role":"button","comment":"the window's View menu"}
+{"do":"click","pointer":true,"contains":"Conversations","role":"check_box","settleMs":4000,"comment":"the roster samples the runs every three seconds; two samples give a pace"}
 {"do":"wait","valueContains":"/min","role":"label","nth":0,"comment":"the pace gauge on the open conversation, whose row comes first; a run another host writes to the same store has one too"}
 {"do":"capture","text":"chat-watch-roster"}
 ```

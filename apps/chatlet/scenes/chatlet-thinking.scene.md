@@ -24,8 +24,8 @@ at once, in the same turn.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0364: a chatlet that starts with the reasoning hidden"}
-{"do":"wait","valueContains":"with scripted at","role":"label"}
-{"do":"click","name":"Settings","role":"button","comment":"before the turn: the Conversations tab repeats the step's line"}
+{"do":"wait","valueContains":"The model, scripted, runs","role":"label"}
+{"do":"click","contains":"Model:","role":"button","comment":"the bar's words open Settings"}
 {"do":"wait","contains":"Show the model's reasoning","role":"check_box"}
 {"do":"capture","text":"chatlet-thinking-settings","sidecars":["svg","tree"]}
 {"do":"click","name":"The last 24 hours","role":"button"}

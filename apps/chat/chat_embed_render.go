@@ -8,8 +8,8 @@ import (
 )
 
 // The compact layout (ADR-0368) is for a pane with little room:
-// the bar, then a row naming the tabs, then the transcript over the
-// composer, or the one tab picked in their place. No divider drags and
+// the bar, then a row naming the tabs and ending in the window's menus, then
+// the transcript over the composer, or the one tab picked in their place. No divider drags and
 // nothing docks, so the pane fits whatever region the host gives it.
 
 // compactTabs are the row's tabs after the transcript, in the dock
@@ -69,7 +69,7 @@ func (inst *App) renderCompact() {
 		return
 	}
 	for range c.PanelCentralInside().KeepIter() {
-		inst.markTabShown(e.shown)
+		w := inst.markTabShown(e.shown)
 		switch e.shown {
 		case tabArtefact:
 			// The artefact scrolls itself, as in its dock tab.
@@ -77,7 +77,11 @@ func (inst *App) renderCompact() {
 		default:
 			for range c.PushId(inst.ids.PrepareStr("compact-tab")).KeepIter() {
 				for range c.ScrollArea().Vscroll(true).Hscroll(false).KeepIter() {
-					inst.renderCompactTab(e.shown)
+					if e.shown == tabAnalytics {
+						inst.renderStatsTab(w)
+					} else {
+						inst.renderViewBody(e.shown)
+					}
 				}
 			}
 		}
@@ -100,28 +104,14 @@ func (inst *App) renderCompactRow() {
 				e.shown = tab
 			}
 		}
+		// The window's menus end the row: a pane has little height, and a
+		// menu bar of its own would take a row for two words (ADR-0404 §SD8).
+		inst.renderMenus()
 	}
 }
 
-// renderCompactTab is a tab's body in the transcript's place.
-func (inst *App) renderCompactTab(tab chatTabE) {
-	switch tab {
-	case tabConversations:
-		inst.renderRunsTab()
-	case tabSettings:
-		for range c.IdScope(inst.ids.PrepareStr("settings-body")) {
-			inst.renderSettings()
-		}
-	case tabDefinition:
-		inst.renderDefinitionTab()
-	}
-}
-
-// barRow is a row of the bar: in the compact layout it wraps, since a pane
-// may be narrower than the row.
+// barRow is a row of the bar. It wraps: a window or a pane narrower than
+// the row gets a second line rather than controls past its edge.
 func (inst *App) barRow() iter.Seq[functional.NilIteratorValueType] {
-	if inst.compact() {
-		return c.HorizontalWrapped().KeepIter()
-	}
-	return c.HorizontalTop().KeepIter()
+	return c.HorizontalWrapped().KeepIter()
 }

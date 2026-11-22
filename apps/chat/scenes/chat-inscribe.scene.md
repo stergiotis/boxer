@@ -34,7 +34,7 @@ the first capture shows.
 
 ```jsonl trace
 {"do":"note","text":"chat: the coordinator points out the demo's Clear button"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","valueContains":"I marked the Clear button","role":"label","settleMs":1500}
 {"do":"read","valueContains":"Pointing at Clear","role":"label","pattern":"(?P<call>callout \"clear\")$","comment":"the callout completed: a refusal would add its phase"}

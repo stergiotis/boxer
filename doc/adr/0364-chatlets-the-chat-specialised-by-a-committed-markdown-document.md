@@ -283,6 +283,19 @@ without its screenshots. Deferred: a mount tag a chatlet owns, which needs
 either a tag per minted app or a rule that lets a family of apps share one.
 Trigger: a chatlet whose report someone wants kept in the lading store.
 
+### 2026-11-22 — The Simple view setting is retired
+
+[ADR-0404](./0404-what-a-person-reads-in-a-window-a-stated-reader-one-way-to-draw-a-decision-and-the-chat-window-as-the-first-case.md)
+§SD7 (proposed) gives the chat one rendering, close to the one this ADR's
+fourth milestone drew under `view: simple`: one bar row, the conversation's
+facts in the state chip's inspector instead of a Details fold, the artefact
+brought forward when it has content or a decision, and a running turn
+described in steps. The plain chat's Simple view setting is gone, and its
+persisted key, `simple-view`, is no longer declared; a value kept under it
+stays in the app-state manager until deleted there. A document's `view`
+key is still read, so a document that names it opens, and it changes
+nothing.
+
 ## Status
 
 Accepted 2026-11-09.

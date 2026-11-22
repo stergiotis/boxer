@@ -24,7 +24,7 @@ continues with the answer.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0324 SD5: quick reply"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button","comment":"the seeded draft"}
 {"do":"wait","valueContains":"Threshold on which speed?","role":"label"}
 {"do":"click","contains":"Widget gallery","role":"window","pointer":true,"comment":"look elsewhere: a question goes to the queue once the chat loses focus (ADR-0379 §SD1)"}

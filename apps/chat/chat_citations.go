@@ -11,12 +11,9 @@ package chat
 import (
 	"strings"
 
-	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
-	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/decision"
 )
 
 // citationMark is one verdict as the readers show it.
@@ -209,25 +206,21 @@ type citeHeldNote struct {
 	key, why string
 }
 
-var atomsAnyway = c.Atoms().Text("Anyway").Keep()
-
 // renderCiteHold draws, under the control that made it, why the gesture
-// what on raw was held, and a button that makes it again; again says it was
-// clicked. Nothing is drawn while no gesture of this kind is held, and a
-// digest is taken only when one is.
+// what on raw was held, as a decision on the person's own act (ADR-0404
+// §SD3, §SD4): Anyway makes it again. again says it was clicked. Nothing is
+// drawn while no gesture of this kind is held, and a digest is taken only
+// when one is.
 func (inst *App) renderCiteHold(key string, what string, raw string) (again bool) {
 	h := inst.citeHeld
 	if h.key == "" || !strings.HasPrefix(h.key, what+"\x00") || h.key != what+"\x00"+agentrun.ContentDigest(raw) {
 		return false
 	}
-	for range c.IdScope(inst.ids.PrepareStr("cite-hold-" + key)) {
-		for range c.HorizontalWrapped().KeepIter() {
-			for rt := range c.RichTextLabelColored(color.Hex(styletokens.WarningDefault.AsHex()), color.Transparent, icons.PhWarning) {
-				rt.Small()
-			}
-			c.LabelAtoms(c.Atoms().BeginRichText("Held: " + h.why + ".").Small().End().Keep()).Wrap().Selectable(true).Send()
-			again = c.Button(inst.ids.PrepareStr("anyway"), atomsAnyway).Small().SendResp().HasPrimaryClicked()
-		}
-	}
-	return
+	res := decision.Render(decision.Input{
+		Ids: inst.ids, ScopeKey: "cite-hold-" + key, Origin: decision.OriginConfirm,
+		Title:   "Held: " + h.why + ".",
+		Follows: []string{"Anyway goes ahead and does it: " + what + ", as it is."},
+		Options: []decision.Option{{Key: "anyway", Label: "Anyway", Role: decision.RoleAffirm}},
+	})
+	return res.Chosen == "anyway"
 }

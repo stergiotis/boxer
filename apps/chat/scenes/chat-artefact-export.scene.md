@@ -25,9 +25,10 @@ and the host's publish service of ADR-0341. The model captures the
 operations demo into the artefact's screenshots and writes a document that
 embeds the capture.
 
-- **Export** opens the confirmation: the revision, its two files, the tier,
-  the 30 days, who can read them, and that confirming also endorses the
-  revision, since a model wrote it and nothing endorsed it.
+- **Export** opens the confirmation: the revision, its two files, the 30
+  days, who can read them, and that exporting also records the person's
+  endorsement of the revision, since a model wrote it and nothing endorsed
+  it. The person started it, so Export is the filled answer (ADR-0404 §SD4).
 - Confirming exports; the status line names the retention.
 - **Open in mdedit** asks again, as the artefact has a screenshot.
   Confirming exports once more and opens mdedit, which reads the document
@@ -39,18 +40,18 @@ chat's mount tag; they expire with their 30-day class.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0342: the artefact exported to lading, and handed to mdedit by snapshot"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","valueContains":"Wrote up the demo with its screenshot","role":"label","settleMs":500}
-{"do":"click","id":3933177562590578425,"role":"button","comment":"the panel's Export"}
-{"do":"wait","valueContains":"Export to the lading store","role":"label"}
+{"do":"click","contains":"Export","role":"button","comment":"the document's Export"}
+{"do":"wait","valueContains":"Export this document?","role":"label"}
 {"do":"wait","valueContains":"revision 2 · 2 files","role":"label"}
-{"do":"wait","valueContains":"Kept for 30 days","role":"label"}
-{"do":"wait","valueContains":"confirming also endorses it","role":"label"}
+{"do":"wait","valueContains":"It is kept for 30 days","role":"label"}
+{"do":"wait","valueContains":"exporting also records that you reviewed it","role":"label"}
 {"do":"capture","text":"chat-artefact-export-ask","settleMs":500}
-{"do":"click","id":14219373063081942059,"role":"button","comment":"the confirmation's Export"}
-{"do":"wait","valueContains":"exported revision 2 to the lading store, kept until","role":"label","settleMs":500}
-{"do":"click","id":13314171069534489069,"role":"button","comment":"the panel's Open in mdedit"}
+{"do":"click","name":"\ue182 Export","role":"button","comment":"the confirmation's Export, the filled answer: the person started it"}
+{"do":"wait","valueContains":"exported revision 2 to the shared file store, kept until","role":"label","settleMs":500}
+{"do":"click","contains":"Open in mdedit","role":"button","comment":"the document's Open in mdedit"}
 {"do":"wait","contains":"Export and open","role":"button"}
 {"do":"click","contains":"Export and open","role":"button"}
 {"do":"wait","valueContains":"and opened it in mdedit","role":"label","settleMs":500}

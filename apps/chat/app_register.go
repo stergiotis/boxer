@@ -57,10 +57,12 @@ var manifest = app.Manifest{
 	Operations: ops.Catalog(),
 	Help:       help.MustSub(helpFS, "help"),
 	// The roster's titles, one key per conversation under the prefix
-	// (chat_roster.go), and the Simple view setting (chat_simple.go).
-	// Declared here so the host injects the persist cap; without it every
-	// write the window makes is refused at the bus.
-	PersistedKeys: []string{titleStorePrefix, simpleViewKey},
+	// (chat_roster.go). Declared here so the host injects the persist cap;
+	// without it every write the window makes is refused at the bus. The
+	// Simple view's key, "simple-view", is retired (ADR-0404 §SD7): nothing
+	// reads or writes it, and a value kept under it stays in the app-state
+	// manager until deleted there (ADR-0185).
+	PersistedKeys: []string{titleStorePrefix},
 	Caps: slices.Concat(
 		llm.ClientCaps("chat: send the conversation to the host's model"),
 		llm.RetainCaps("chat: keep the conversation on boxer.facts where the host's BOXER_LLM_RETAIN allows (ADR-0264)"),

@@ -10,37 +10,49 @@ title: The artefact and its export
 # The artefact and its export
 
 A conversation may hold an **artefact**: one markdown document the model
-reads and edits through tools, under the ceiling, which you review in the
-**Artefact** tab (ADR-0282). It is on when the Artefact option was on at
-the conversation's first message (`BOXER_CHAT_ARTEFACT` seeds it); the tab
-says how to turn it on otherwise. The document lives in memory with the
+reads and edits through tools, under the ceiling, which you review beside
+the transcript as **Document** (ADR-0282). It is on when the Document option
+was on at the conversation's first message (`BOXER_CHAT_ARTEFACT` seeds it);
+**View** › **Document** opens the view, which says how to turn it on otherwise. The view
+comes forward by itself when the model first writes the document and when a
+decision waits in it. The document lives in memory with the
 conversation. A resume reads its revisions back from the journal, one per
 turn that moved it, the last as the head; the writes inside a turn do not
 come back (ADR-0379 §SD4). Screenshots come back only with an export.
 
 ## Revisions
 
-The tab's first line is `revision N · M lines`, with **Copy**, **Export**
-and **Open in mdedit**. Revision 0 is the empty document every artefact
-starts as. Every change is a new revision: the model's, named by the turn,
+Once the document has a revision, the view's first line is
+`revision N · M lines`, with **Copy**, **Export** and **Open in mdedit**.
+Revision 0 is the empty document every artefact starts as; before the first
+change there is no such line, and a first proposal heads the view on its
+own. While the export question is open, **Export** is not offered beside it,
+nor **Open in mdedit** when that is what asked to export first: the answer
+is in the question. Every change is a new revision: the model's, named by the turn,
 the tool and the call's title; a **Revert to this** from the list, which
 makes an earlier revision current as a new one; your removal of a
-screenshot. The **Revisions** sub-tab lists them with the lines each
-changed; **Lint** shows what renders differently from what was meant
+screenshot. Under the first lines, the document's own views are tabs:
+**Read**, the document as it reads, and **Source**, the **Revisions** tab, which lists them with
+the lines each changed; **Lint**, which shows what renders differently from what was meant
 (links to missing headings, skipped levels, unclosed fences, invalid
-frontmatter, footnotes without definitions); **Images** is the screenshot
-set.
+frontmatter, footnotes without definitions); and **Images**, the screenshot
+set. A tab can be dragged beside another, Source beside Read say.
 
-The policy line under the first says what the model may do: "The model may
-read the artefact, not change it" when **At most** is below Edit; "Each
+The policy line under the first says what the model may do, unless a
+question waits in the document, which says it for itself: "The model may
+read the document, not change it" when **At most** is below Edit; "Each
 change the model makes waits for you here" under **Ask first**, where a
-write is a proposal with **Accept** and **Reject**; "The model's changes
-apply directly; Revisions can take any back" under **Apply directly**.
+write is a proposal; "The model's changes apply at once; the Revisions tab
+can undo any of them" under **Apply directly**. A proposal says what **Accept**
+does (writes the change as the next revision, and the model's turn goes on)
+and what **Reject** does (discards it, and the model is told), with its diff
+after the answers. A screenshot the model asks to see is drawn the same way,
+with **Allow** and **Decline** and the preview after them.
 
 The document carries the conversation's properties in its frontmatter,
 stamped by the chat: `chat_conversation`, `chat_title`, `chat_started`,
 `chat_model`, `chat_endpoint`, `chat_run`, `chat_app`, `chat_window`,
-`chat_task` and `chat_keep`. The **Document** view, a proposal's diff and
+`chat_task` and `chat_keep`. The **Read** view, a proposal's diff and
 a revision's diff leave them out, since the model neither wrote them nor
 can change them; **Source**, **Copy**, **Export** and **Open in mdedit**
 keep them.
@@ -71,16 +83,16 @@ conversation they are bounded by `BOXER_CHAT_IMAGE_BYTES` and
 `BOXER_CHAT_IMAGE_COUNT`, and an image whose pixel count passes
 `BOXER_CHAT_IMAGE_PIXELS` is refused before it is decoded (§SD4). A tool
 that would pass a ceiling is refused with the use and the ceiling. Removing
-and purging in the **Images** sub-tab is the way out of a full budget, and
+and purging in the **Images** tab is the way out of a full budget, and
 is a revision like the model's.
 
 ## Adding an image, and sending one
 
-**Add image**, in the **Images** sub-tab, opens the host's file dialog and
+**Add image**, in the **Images** tab, opens the host's file dialog and
 reads the one PNG or JPEG file you choose into the set (ADR-0385). The set
 keeps the file's pixels, turned upright, and nothing else of it: no
 location, time or device, no comment, and not its name, which only the
-sub-tab shows you. The chat names the image `upload-<n>`. Adding is a
+tab shows you. The chat names the image `upload-<n>`. Adding is a
 revision of yours, under the same budget; a file that is neither format, or
 past a ceiling, is refused and changes nothing. The dialog lists the files
 of the machine the host runs on.
@@ -109,21 +121,25 @@ The line reads `endorsed` while the head is covered.
 
 **Export** writes the head revision's text, as `artefact.md`, and the
 screenshots it names, as one snapshot of this conversation's mount in the
-lading store, through the host's publish service (ADR-0342). You confirm
-first; the confirmation says the revision, how many files and bytes, the
-label's tier, that the snapshot is kept for 30 days and readable by anyone
-who can read the store, and — when no endorsement covers the revision —
-that confirming also endorses it for publishing. If the artefact moved
-since you asked, the confirmation says so and offers no Export.
+lading store — the window calls it the shared file store — through the
+host's publish service (ADR-0342). You confirm first. The confirmation is a
+decision you started, so **Export** is the filled answer and **Cancel** the
+other. It says the revision, how many files and bytes, that the snapshot is
+kept for 30 days and readable by anyone who can read the store, and — when
+no endorsement covers the revision — that exporting also records that you
+reviewed it and stand behind it for publishing. After the answers, a line
+says who the export's label lets read it ("Its label lets it be shared with
+anyone."); its hover names the label's TLP tier, the conversation's own. If the artefact moved since you asked, the confirmation says so, and
+Export stays greyed with the reason under it.
 
 A conversation that **holds confined content** cannot export: the
-confirmation refuses, names the call that confined it, and offers no
-Export. The service may refuse too, before anything is endorsed. Each
+confirmation refuses, names the call that confined it, and keeps Export
+greyed with the reason. The service may refuse too, before anything is endorsed. Each
 refusal leaves a journal entry of its own, named `export-refused`, with the
 stage — confirmation, check or publish — the reason, and the confining call
 where that is the reason; a successful export leaves an `artefact` entry
 with the mount, the snapshot time, the text's digest and the images'
-hashes. The status line reads `exported revision N to the lading store, kept
+hashes. The status line reads `exported revision N to the shared file store, kept
 until <date>`.
 
 **Open in mdedit** opens the artefact as a new, unsaved document in

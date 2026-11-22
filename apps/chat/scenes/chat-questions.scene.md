@@ -30,7 +30,7 @@ default-lane test `TestAskUserWaitsForTheFormInsideTheTurn` covers both.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0265 SD7: ask_user as an inline form"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button","comment":"the seeded draft"}
 {"do":"wait","valueContains":"Which sections should","role":"label"}
 {"do":"capture","text":"chat-questions-open"}

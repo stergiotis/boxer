@@ -32,7 +32,7 @@ cut to one second, and play's query sleeps for three.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0358: a pending call, and a turn its completion starts"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button","comment":"turn 1, the seeded draft"}
 {"do":"wait","value":"1 operation running in the background","role":"label","comment":"the wait ended with the run going; the status line says so during the turn"}
 {"do":"wait","valueContains":"The query is still running","role":"label","comment":"the model answered; turn 1 ended"}

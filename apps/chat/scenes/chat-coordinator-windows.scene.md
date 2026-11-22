@@ -25,10 +25,10 @@ three windows in columns; the chat's transcript lists the calls.
 
 ```jsonl trace
 {"do":"note","text":"chat: the coordinator arranges the desktop"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","valueContains":"The windows are side by side","role":"label","settleMs":1500}
-{"do":"wait","valueContains":"⚙ Reading the desktop · read 3 row(s) of keelson('windows')","role":"label"}
+{"do":"wait","valueContains":"⚙ Reading the desktop · read 3 rows of the host's windows table","role":"label"}
 {"do":"wait","valueContains":"⚙ Laying the windows side by side · columns every window","role":"label"}
 {"do":"capture","text":"chat-coordinator-windows","settleMs":1000}
 ```

@@ -2,10 +2,13 @@ package chat
 
 import (
 	"strconv"
+	"strings"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/decision"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
@@ -18,19 +21,16 @@ const (
 	askIncomplete = "Each question needs a choice or an answer of your own — or Skip."
 )
 
-var (
-	atomsAnswer = c.Atoms().Text(icons.PhCheck + " Answer").Keep()
-	atomsSkip   = c.Atoms().Text("Skip").Keep()
-)
-
-// renderAsk draws an open ask_user in the pending bubble: each question with
-// its header, options as radio buttons or checkboxes, a note under each
-// chosen option and a line for an answer of the person's own; then Answer
-// and Skip. Ids are scoped by the question's sequence, so a second question
-// in one turn starts from clean widget state. Each level is keyed by a
-// string of its own: the id stack combines scopes by XOR, under which
-// nested PrepareSeq indices commute and cancel — question 0's option 0 and
-// question 1's option 1 would be one widget.
+// renderAsk draws an open ask_user in the pending bubble as a decision the
+// turn waits on (ADR-0404 §SD3; asked of the person, so neither answer is
+// primary, §SD4): each question with its header, options as radio buttons
+// or checkboxes, a note under each chosen option and a line for an answer
+// of the person's own, before Answer and Skip. Ids are scoped by the
+// question's sequence, so a second question in one turn starts from clean
+// widget state. Each level is keyed by a string of its own: the id stack
+// combines scopes by XOR, under which nested PrepareSeq indices commute and
+// cancel — question 0's option 0 and question 1's option 1 would be one
+// widget.
 func (inst *App) renderAsk(o *openAsk) {
 	f := &o.form
 	if len(o.questions) == 1 && o.questions[0].Buttons && !o.questions[0].MultiSelect {
@@ -39,71 +39,93 @@ func (inst *App) renderAsk(o *openAsk) {
 	}
 	for range c.IdScope(inst.ids.PrepareStr("ask")) {
 		for range c.IdScope(inst.ids.PrepareStr("ask-" + strconv.FormatUint(o.seq, 10))) {
-			for i := range o.questions {
-				if i > 0 {
-					c.Separator().Send()
-				}
-				for range c.IdScope(inst.ids.PrepareStr("question-" + strconv.Itoa(i))) {
-					inst.renderAskQuestion(f, i, &o.questions[i])
+			questions := func() {
+				for i := range o.questions {
+					if i > 0 {
+						c.Separator().Send()
+					}
+					for range c.IdScope(inst.ids.PrepareStr("question-" + strconv.Itoa(i))) {
+						inst.renderAskQuestion(f, i, &o.questions[i])
+					}
 				}
 			}
 			if f.sent {
-				for range c.HorizontalTop().KeepIter() {
-					c.Spinner().Send()
-					c.Label("Answered").Selectable(false).Send()
-				}
+				questions()
+				askAnswered()
 				return
 			}
-			if f.incomplete {
-				for rt := range c.RichTextLabel(askIncomplete) {
-					rt.Small().Weak()
-				}
+			title := "The turn waits for your answer"
+			if n := len(o.questions); n > 1 {
+				title = "The turn waits for your answers to " + strconv.Itoa(n) + " questions"
 			}
-			// Right-aligned, Answer at the edge and Skip beside it: a
-			// right-to-left row places its first child rightmost.
-			for range c.UiWithLayout().MainDirRightToLeft().CrossAlignMin().KeepIter() {
-				if c.Button(inst.ids.PrepareStr("answer"), atomsAnswer).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
-					o.submit()
-				}
-				if c.Button(inst.ids.PrepareStr("skip"), atomsSkip).SendResp().HasPrimaryClicked() {
-					o.skip()
-				}
+			in := decision.Input{
+				Ids: inst.ids, ScopeKey: "ask-decision", Origin: decision.OriginRequest,
+				Title: title,
+				Follows: []string{
+					"Answer sends your choices, notes and own words; the turn goes on with them.",
+					"Skip goes on without an answer, and the model is told you skipped.",
+				},
+				Form: questions,
+				Options: []decision.Option{
+					{Key: "answer", Label: "Answer", Icon: icons.PhCheck, Role: decision.RoleAffirm},
+					{Key: "skip", Label: "Skip", Role: decision.RoleDecline},
+				},
+			}
+			if f.incomplete {
+				in.Notes = []decision.Note{{Text: askIncomplete, Tone: styletokens.ToneWarning}}
+			}
+			switch decision.Render(in).Chosen {
+			case "answer":
+				o.submit()
+			case "skip":
+				o.skip()
 			}
 		}
 	}
 }
 
-// renderAskButtons draws a harness question as its question and one button
-// per option, the first the primary; a click answers. Each option's
-// description is its button's hover.
+// askAnswered is the line an answered question shows until the turn takes it.
+func askAnswered() {
+	for range c.HorizontalTop().KeepIter() {
+		c.Spinner().Send()
+		c.Label("Answered").Selectable(false).Send()
+	}
+}
+
+// renderAskButtons draws a harness question — a stop that fired, asking
+// whether the turn goes on — as a decision answered on the click (ADR-0404
+// §SD3, §SD4: the harness asks, so no option is primary). Each option's
+// description says what it does, as a sentence of its own.
 func (inst *App) renderAskButtons(o *openAsk) {
 	q := &o.questions[0]
 	for range c.IdScope(inst.ids.PrepareStr("ask-buttons-" + strconv.FormatUint(o.seq, 10))) {
-		for range c.HorizontalWrapped().KeepIter() {
-			if q.Header != "" {
-				badge.New(inst.ids.PrepareStr("header"), q.Header).Tone(badge.ToneInfo).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
-			}
-			c.LabelAtoms(c.Atoms().BeginRichText(q.Question).Strong().End().Keep()).Wrap().Selectable(true).Send()
+		title := q.Question
+		if q.Header != "" {
+			title = q.Header + ": " + q.Question
 		}
 		if o.form.sent {
-			for range c.HorizontalTop().KeepIter() {
-				c.Spinner().Send()
-				c.Label("Answered").Selectable(false).Send()
-			}
+			c.LabelAtoms(c.Atoms().BeginRichText(title).Strong().End().Keep()).Wrap().Selectable(true).Send()
+			askAnswered()
 			return
 		}
-		for range c.HorizontalWrapped().KeepIter() {
-			for j := range q.Options {
-				opt := &q.Options[j]
-				b := c.Button(inst.ids.PrepareStr("option-"+strconv.Itoa(j)), c.Atoms().Text(opt.Label).Keep())
-				if j == 0 {
-					b = b.Kind(c.ButtonKindPrimary)
-				}
-				for range c.HoverText(opt.Description).KeepIter() {
-					if b.SendResp().HasPrimaryClicked() {
-						o.choose(0, j)
-					}
-				}
+		in := decision.Input{Ids: inst.ids, ScopeKey: "ask-buttons", Origin: decision.OriginRequest, Title: title}
+		for j := range q.Options {
+			opt := &q.Options[j]
+			role := decision.RoleOther
+			switch j {
+			case 0:
+				role = decision.RoleAffirm
+			case 1:
+				role = decision.RoleDecline
+			}
+			in.Options = append(in.Options, decision.Option{Key: "option-" + strconv.Itoa(j), Label: opt.Label, Tooltip: opt.Description, Role: role})
+			if opt.Description != "" {
+				in.Follows = append(in.Follows, opt.Label+": "+opt.Description+".")
+			}
+		}
+		if res := decision.Render(in); res.Has {
+			if j, err := strconv.Atoi(strings.TrimPrefix(res.Chosen, "option-")); err == nil {
+				o.choose(0, j)
 			}
 		}
 	}

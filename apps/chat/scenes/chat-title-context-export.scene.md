@@ -35,7 +35,8 @@ to a new mdedit window, which holds it unsaved and does not autosave it.
 {"do":"click","contains":"Calls by model, last hour","role":"button","comment":"rename"}
 {"do":"wait","valueContains":"Calls by model, last hour","role":"text_input"}
 {"do":"click","name":"\ue182","role":"button","comment":"the check keeps the title, now named by the person"}
-{"do":"click","contains":"Open in mdedit","role":"button"}
+{"do":"click","name":"Conversation","role":"button","comment":"the window's Conversation menu"}
+{"do":"click","pointer":true,"contains":"Open in mdedit","role":"button"}
 {"do":"wait","valueContains":"opened the conversation in mdedit","role":"label"}
 {"do":"wait","valueContains":"not autosaved","role":"label","settleMs":1500,"comment":"mdedit holds it as a document of its own"}
 {"do":"capture","text":"chat-title-context-mdedit"}
