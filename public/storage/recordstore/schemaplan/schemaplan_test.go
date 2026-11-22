@@ -97,9 +97,24 @@ func TestAspectRenameOfAPlainColumnIsMechanical(t *testing.T) {
 	p := Derive(c, recordstore.TableFacts{Exists: true, Engine: "MergeTree", Comment: c.Stamp, CreateQuery: oldDDL + " SETTINGS non_replicated_deduplication_window = 1000", Columns: live(old)})
 	require.False(t, p.IsRefused(), p.Refused)
 	assert.Equal(t, []string{
+		"ALTER TABLE `device` MODIFY COLUMN `" + v1[at].Name + "` Array(UInt64) CODEC(Delta,ZSTD(3))",
 		"ALTER TABLE `device` RENAME COLUMN `" + v1[at].Name + "` TO `" + v2[at].Name + "`",
-		"ALTER TABLE `device` MODIFY COLUMN `" + v2[at].Name + "` Array(UInt64) CODEC(Delta,ZSTD(3))",
-	}, p.Statements)
+	}, p.Statements, "the codec goes first, under the old name, so a failed rename is proposed again")
+}
+
+// An older build over a table a newer build migrated judges it ok with
+// extra columns, and leaves the newer stamp: restamping would claim the
+// older schema wrote the table.
+func TestAnOlderBuildDoesNotRestampANewerTable(t *testing.T) {
+	_, cols := fixture(t, "persiststate_after.sql")
+	c := contract("boxer.persiststate", cols)
+	newer := contract("boxer.persiststate", append(append([]recordstore.ColumnSpec(nil), cols...), recordstore.ColumnSpec{Name: "added", Type: "UInt64"}))
+	p := Derive(c, recordstore.TableFacts{Exists: true, Engine: "MergeTree", Comment: newer.Stamp, CreateQuery: "… non_replicated_deduplication_window = 1000",
+		Columns: live(newer.Columns)})
+	require.False(t, p.IsRefused(), p.Refused)
+	assert.Equal(t, recordstore.SchemaVerdictOk, p.Verdict.Verdict)
+	assert.Empty(t, p.Statements, "no MODIFY COMMENT back to the older stamp")
+	assert.Contains(t, strings.Join(p.Verdict.Notes, "\n"), "stamp is left as it is")
 }
 
 func TestIncompatibleAndAbsentAreRefused(t *testing.T) {

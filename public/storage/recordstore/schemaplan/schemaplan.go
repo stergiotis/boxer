@@ -75,11 +75,16 @@ func Derive(c recordstore.TableContract, facts recordstore.TableFacts) (p Plan) 
 			p.Refused = append(p.Refused, "column "+r.From+" would be renamed to "+r.To+", but a key, index, TTL or another column's expression names it, and ClickHouse renames no such column; see "+MigrationDocs)
 			continue
 		}
+		// The codec first, under the old name, then the rename: the server
+		// refuses both on one column in one ALTER, and a failure between two
+		// statements in the other order leaves a table that judges ok — codecs
+		// are not compared — and would never get its codec. In this order a
+		// rerun still sees the rename and proposes both again.
 		col := byName[r.To]
-		p.Statements = append(p.Statements, "ALTER TABLE "+ref+" RENAME COLUMN "+jackstay.QuoteIdent(r.From)+" TO "+jackstay.QuoteIdent(r.To))
 		if col.Codec != "" {
-			p.Statements = append(p.Statements, "ALTER TABLE "+ref+" MODIFY COLUMN "+jackstay.QuoteIdent(r.To)+" "+col.Type+" CODEC("+col.Codec+")"+typeSettings(col.Type))
+			p.Statements = append(p.Statements, "ALTER TABLE "+ref+" MODIFY COLUMN "+jackstay.QuoteIdent(r.From)+" "+col.Type+" CODEC("+col.Codec+")"+typeSettings(col.Type))
 		}
+		p.Statements = append(p.Statements, "ALTER TABLE "+ref+" RENAME COLUMN "+jackstay.QuoteIdent(r.From)+" TO "+jackstay.QuoteIdent(r.To))
 	}
 	if p.IsRefused() {
 		p.Statements = nil
@@ -99,7 +104,11 @@ func Derive(c recordstore.TableContract, facts recordstore.TableFacts) (p Plan) 
 	if recordstore.IsPlainMergeTree(facts.Engine) && !v.DedupWindow {
 		p.Statements = append(p.Statements, "ALTER TABLE "+ref+" MODIFY SETTING "+recordstore.DedupWindowSetting+" = "+strconv.Itoa(recordstore.DedupWindowBlocks))
 	}
-	if c.Stamp != "" && facts.Comment != c.Stamp && v.LayoutDiffers {
+	if c.Stamp != "" && facts.Comment != c.Stamp && len(v.Extra) > 0 {
+		// Columns this build does not know: a newer build may have written
+		// the table, and this build's stamp would claim an older schema did.
+		p.Verdict.Notes = append(p.Verdict.Notes, "the table has columns this build does not know, so its stamp is left as it is")
+	} else if c.Stamp != "" && facts.Comment != c.Stamp && v.LayoutDiffers {
 		// The build's stamp records the build's layout, which this table
 		// does not have (ADR-0397).
 		p.Verdict.Notes = append(p.Verdict.Notes, "the table is not stamped: the stamp would record a layout the table does not have")
