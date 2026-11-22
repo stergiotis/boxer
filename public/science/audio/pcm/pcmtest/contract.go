@@ -105,7 +105,7 @@ func CheckSourceContract(t TestingI, src pcm.SourceI, maxFrames int64) {
 		require.NoError(t, err)
 		require.Equal(t, 2, n, "a read crossing the end returns the frames that exist")
 		expect := readWindow(t, src, frames-2, 2)
-		require.Equal(t, expect, buf[:2*ch])
+		require.Equal(t, sampleBits(expect), sampleBits(buf[:2*ch]))
 	}
 }
 
