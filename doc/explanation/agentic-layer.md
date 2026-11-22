@@ -275,7 +275,8 @@ whose tables live in a ClickHouse session the host holds for the task and
 are made again from their definitions when the session is lost; every window
 working for the task reaches the same ones
 ([ADR-0406](../adr/0406-session-data-sets-named-reads-a-task-keeps-in-a-clickhouse-session-and-makes-again-from-their-definitions.md),
-proposed).
+proposed). In play the model keeps one with `query`'s `keep_as` and reads
+it in later statements as `session('<name>')`.
 
 ### 12. Long work does not hold a turn open
 

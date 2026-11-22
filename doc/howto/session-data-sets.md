@@ -44,8 +44,15 @@ Caps: []app.SubjectFilter{
     sessiondata.ListCap("show the data sets"),
     // for the person's own work:
     sessiondata.OpenCap("…"), sessiondata.AttachCap("…"), sessiondata.CloseCap("…"),
+    // to hand the person's data session to a window it opens, and take one:
+    sessiondata.HandOverCap("…"), sessiondata.ClaimCap("…"),
 },
 ```
+
+An app that runs its statements through a `play.Client` needs only the caps
+of what it does: `PrepareCap` and `ReleaseCap` to read data sets,
+`DefineCap`, `ListCap` and `DropCap` to manage them, `ClaimCap` to take a
+hand-over.
 
 ## 2. Know whose data session it is
 
@@ -59,10 +66,33 @@ Caps: []app.SubjectFilter{
   ticket, err := sessiondata.Open(ctx, bus)
   ```
 
-  Hand the ticket to another window — a launch argument, a hand-over
-  payload — and that window calls `sessiondata.Attach(ctx, bus, ticket)`.
   The session lives while a window holds it. The ticket is a bearer
-  capability: show it to nobody you would not let read the data.
+  capability: show it to nobody you would not let read the data, and keep
+  it out of logs and of anything the host stores.
+- **Handing it to a window you open.** Do not put the ticket in a launch
+  configuration: the host may store a launch row. Mint a hand-over token
+  instead, which is spent by its claim and lapses after
+  `sessiondata.HandOverTimeout`:
+
+  ```go
+  token, err := sessiondata.HandOver(ctx, bus, ticket)
+  cfg := playground.Launch{Sql: sql, SessionHandOver: option.Some(token)}
+  ```
+
+  The opened window claims it at mount, before its first statement, and
+  keeps the ticket it gets back:
+
+  ```go
+  if cfg.SessionHandOver.Has {
+      ticket, err = sessiondata.Claim(ctx, bus, cfg.SessionHandOver.Val)
+  }
+  ```
+
+  A launch configuration of your own carries the token the same way, as a
+  string field. A task's data session is not handed over: the task's
+  windows reach it through the task, and `HandOver` refuses its ticket.
+  `sessiondata.Attach(ctx, bus, ticket)` attaches by the ticket itself,
+  for a window that was given it in memory.
 
 A define, a list and a binding carry the data session's ticket, so a window
 can let the person attach to the session a task built. A window attached
@@ -94,7 +124,10 @@ revision and leaves the data sets that read it stale; they are rebuilt from
 it when next read. To move a data set to another endpoint, drop it first.
 
 For an agent's call the grant must list `clickhouse:<host>` and
-`clickhouse-session:<host>`. A refusal for a missing one is a
+`clickhouse-session:<host>`, where `<host>` is
+`sessiondata.EndpointHost(url)` — host and port — for both; play's agent
+limits, its launch destinations and the chat's note to the model spell it
+with the same function. A refusal for a missing one is a
 `*sessiondata.GrantError`; pass its `Destination` to
 `app.RefuseForDestinations` so the coordinator can ask the person.
 
@@ -123,6 +156,14 @@ _ = sessiondata.Release(ctx, bus, b.Lease)
   `Prepare` in the same data session and endpoint waits; a lease not
   released lapses after `BOXER_SESSIONDATA_LEASE_TIMEOUT`, and one a window
   has out is released when the window closes.
+- A statement you stopped or abandoned may still run on the server after
+  you release, and the server refuses the next statement in its session
+  (code 373). The service's own statements — the probe that starts every
+  `Prepare`, a create, a replay, a drop — wait that out with backoff under
+  your context, for up to `BOXER_SESSIONDATA_BUSY_WAIT`; past it the error
+  satisfies `sessiondata.IsSessionBusy`. Do not retry yourself: your own
+  statement follows the probe inside the same lease, so the session is
+  free when it is sent.
 - `b.Replayed` names the data sets made again first. A run that fails with
   `sessiondata.IsSessionLost(err)` met a session the server dropped after the
   prepare; prepare again.
@@ -157,3 +198,80 @@ one row per define, replay, expiry, drop, attach and close (domain
 `Cascade` is set. A task's data session ends with the task; a person's when
 its last window closes or one calls `sessiondata.CloseSession`. Ending drops
 the tables; the server would drop them at the session timeout anyway.
+
+## 8. Through play
+
+Play is wired to the service; an app that sends SQL through a `play.Client`
+gets the same path without calling the service itself.
+
+- **Wire the client.** `client.SetSessionBus(bus)` with the bus of the
+  window the client runs for: the service attests an agent's call against
+  that window, and a person's data session is held by it. Play's own
+  windows do this at mount. Without it a statement that reads a data set,
+  or joins an ad-hoc dataset with server tables, is refused at dispatch.
+- **Run.** `client.Dispatch(sql, "")` places a statement that reads
+  `session('…')`, or names `keelson('alias')` with a server table, in the
+  data session on the pinned server endpoint (class *session*); a statement
+  naming only `keelson('…')` tables still goes to the introspection plane,
+  and one naming a `keelson('…')` table of the host's own plane together
+  with a server table is refused with the reason. `ExecuteArrowStream`
+  then prepares the statement as written, runs play's rewrites and agent
+  limits on the bound statement, applies the binding and sends it; the
+  returned stream's `Close` releases the lease, and a run that fails
+  releases it at once. A run that met a session the server lost is
+  prepared and sent once more. `rs.Confined()` says whether the run read
+  sealed data, which the decision could not know.
+- **Whose session.** `ExecOptions.Agent` is the agent's call: its task's
+  data session, with nothing else passed. For a person's call,
+  `ExecOptions.SessionTicket` names a data session the client's window
+  holds — one it claimed by a hand-over — and empty takes the one the
+  window opened itself.
+- **Sealed data.** The client declares an endpoint may see an ad-hoc
+  dataset only once it passed play's reach proof (ADR-0145 §SD5), the
+  declaration its server engine takes; until then such a run is refused.
+- **Refusals.** A missing grant destination is an `*play.AgentLimitError`
+  whose `Destination` names it — `clickhouse:<host>` for a run,
+  `clickhouse-session:<host>` for a definition, `keelson:<alias>` for an
+  ad-hoc dataset — as for any run.
+
+### A downstream client
+
+An app in another repository that runs statements through a `play.Client`
+gets play's whole path from these, and need not copy any of it:
+
+- **A person's statement under the limits.** Pass an `app.OnBehalfOf`
+  without a task as `ExecOptions.Agent` to hold text your code composed to
+  play's agent limits and `readonly=2`. `ExecOptions.SessionTicket` names
+  the person's data session whenever `Agent` names no task — nil or such a
+  gate — and is never used with a task, whose data session comes from its
+  attested call.
+- **Keep and drop.**
+
+  ```go
+  res, err := client.DefineSessionDataset(ctx, play.SessionDefineInput{
+      Agent: obo, SessionTicket: ticket, Name: "msgs", SQL: sql, OrderBy: []string{"msg_id"}})
+  dropped, err := client.DropSessionDataset(ctx, play.SessionDropInput{
+      Agent: obo, SessionTicket: ticket, Name: "msgs", Cascade: false})
+  ```
+
+  `DefineSessionDataset` is what `keep_as` does: window-local dataset names
+  go out as global aliases, the endpoint sees sealed data only after the
+  reach proof, and for an `Agent` the agent limits judge the definition and
+  the grant must list `clickhouse-session:<host>`. A refusal is an
+  `*play.AgentLimitError` with its `Destination`, or a
+  `*play.NotDispatchedError` when the dispatch would not place it.
+- **Why a statement was not sent.** The decision `Dispatch` returns
+  answers `Class()` (`manual`, `introspection`, `session`, `refused`,
+  `unresolved`), `Reason()`, `Refused()` and `Confined()`; the error a run
+  returns for a refused decision wraps a `*play.NotDispatchedError` with
+  the class and reason, and keeps the `dispatchReason` fact. Do not
+  predict the outcome from table names.
+- **What a task published.** A task reads an ad-hoc dataset it published
+  without a grant entry. Play asks the dataset service who published a
+  dataset the grant does not cover, so do not add `keelson:<alias>` to a
+  gate for that.
+
+For the model, play offers `query` with `keep_as` (and `order_by`) to keep a
+result, `list_datasets` listing session data sets beside the ad-hoc
+datasets of the window, and `drop_dataset`; the person has the *Data sets*
+tab. Play's help reference describes them.

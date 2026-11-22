@@ -139,8 +139,11 @@ ciphertext whose key is gone, and can be deleted by hand.
 
 ## 6. Join a dataset with server tables
 
-A statement that names `keelson('alias')` and a server table is refused by
-play's dispatch: no endpoint serves both. The session data service attaches
-the dataset to a server statement as external data instead, under the same
+A statement that names `keelson('alias')` and a server table runs on the
+server: play's dispatch places it in the session data service, which
+attaches the dataset to the statement as external data under the same
 grant rules and the confinement wall — see
-[How to keep named data sets for a task](./session-data-sets.md) §5.
+[How to keep named data sets for a task](./session-data-sets.md) §5. A
+window not wired to the service, or a `keelson('…')` table of the host's
+own plane rather than an ad-hoc dataset, is still refused there: no
+endpoint serves both.

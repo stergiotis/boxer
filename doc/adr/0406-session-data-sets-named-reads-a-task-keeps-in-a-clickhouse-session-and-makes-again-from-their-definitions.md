@@ -6,7 +6,7 @@ date: 2026-11-22
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted. SD1–SD9 are built (2026-11-22) in [`public/keelson/runtime/sessiondata`](../../public/keelson/runtime/sessiondata) with the seams the sections below name; no app calls the service yet. It has run against one ClickHouse 26.9 server on loopback and against an HTTP stub; nothing has run on a cluster or behind a load balancer.
+> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted. SD1–SD9 are built (2026-11-22) in [`public/keelson/runtime/sessiondata`](../../public/keelson/runtime/sessiondata) with the seams the sections below name; SD10–SD13 wire play to it (2026-11-22): its run path, its operations for an agent, its window, and the hand-over of a person's data session. It has run against one ClickHouse 26.9 server on loopback and against an HTTP stub; nothing has run on a cluster or behind a load balancer. One turn of the chat agent has used the operations (2026-11-22); the defects it showed are fixed with tests (Verification plan), and no model has used them since.
 
 # ADR-0406: Session data sets — named reads a task keeps in a ClickHouse session, made again from their definitions
 
@@ -79,7 +79,7 @@ binding for the statement they send.
 
 - **SD1 — A runtime service, beside `adhocdata`.** ✓ Package `sessiondata`,
   bus identity `runtime.sessiondata`, subjects
-  `runtime.sessiondata.{open,attach,close,define,drop,prepare,release,list}`,
+  `runtime.sessiondata.{open,attach,close,define,drop,prepare,release,list,handover,claim}`,
   one `…Cap(reason)` helper per subject and free functions over `app.BusI`
   ([ADR-0396](./0396-the-app-contract-a-host-promises.md) §6, §9). Apps are
   its clients; an agent reaches it only through an app's operations, and no
@@ -132,8 +132,9 @@ binding for the statement they send.
   table that reaches the limit is over the bound; rows and the server's
   `total_bytes` are read back after the create, and a table over either bound
   is dropped and its definition refused. The count and both sums are taken
-  again when a build is recorded, since builds on two server sessions of one
-  data session run at once. `BOXER_SESSIONDATA_SESSION_TIMEOUT` is the
+  again when a build is recorded and when the definition joins the data
+  session, since builds on two server sessions of one data session run at
+  once. `BOXER_SESSIONDATA_SESSION_TIMEOUT` is the
   `session_timeout` sent.
 - **SD5 — The create is the capability's statement around a checked read.**
   ✓ A definition's macros are replaced by the tables and external tables it
@@ -171,7 +172,14 @@ binding for the statement they send.
 - **SD6 — The right to keep session tables is a grant destination.** ✓
   `clickhouse-session:<host>` (`DestinationSession`), at the data reach, in
   words "keep named tables for this task in a session on the ClickHouse
-  server at <host>". A definition and a replay need it and
+  server at <host>". `<host>` is `EndpointHost` of the endpoint URL — host
+  and port — for both destinations, and every producer and check spells
+  it with that one function: the service, play's agent limits and launch
+  destinations, and the chat's note naming the server to the model, which
+  takes the endpoint `chclient.ConfigFromEnv` gives (`CLICKHOUSE_ENDPOINT`
+  before `CLICKHOUSE_URL`) and names both destinations. A destination of
+  either class without a host covers nothing: no check accepts it, no
+  refusal asks for it, and the dispatcher refuses a request naming it. A definition and a replay need it and
   `clickhouse:<host>`; a task without either is refused with a
   `GrantError` naming the first missing, which an app surfaces with
   `app.RefuseForDestinations`. An unattended host allows it through its
@@ -201,7 +209,14 @@ binding for the statement they send.
   response is drained or abandoned — or until `BOXER_SESSIONDATA_LEASE_TIMEOUT`
   lapses, and a second `Prepare` waits under its caller's context. The
   leases a window has out are released when it closes, and every lease when
-  the host stops. A
+  the host stops. A statement released while the server still runs it —
+  stopped at a time bound, cancelled, its window closed — leaves the server
+  refusing the session's next statement as locked (code 373); the service
+  sends each of its own statements (probe, create, replay, drop) again with
+  backoff, under the caller's context, for up to
+  `BOXER_SESSIONDATA_BUSY_WAIT`, and past it returns the server's refusal,
+  which `IsSessionBusy` recognises. A caller's own statement is not
+  retried: it follows the probe inside the same lease. A
   statement naming no data set holds nothing; one naming neither macro comes
   back unchanged. `Binding.Apply` adds settings, external tables and label to
   a `queryengine.Request`. The request gained `External`, which the server
@@ -215,6 +230,95 @@ binding for the statement they send.
   session's data sets with definitions, sizes, endpoint, table and state;
   `keelson('session_datasets')` gives the operator every session's, without
   definitions or tickets.
+
+- **SD10 — Play's run path prepares, binds and releases.** ✓ Play's
+  dispatch places a statement that reads `session('…')`, or names an
+  ad-hoc dataset together with a server table, in a class of its own,
+  *session*: the pinned server endpoint, inside the data session, whatever
+  the resolver would say, since a session lives on one server. The
+  "no endpoint serves both" refusal remains where the service cannot
+  serve — a `keelson('…')` table of the host's plane rather than an ad-hoc
+  dataset, a client not wired to the service (`Client.SetSessionBus`), a
+  window pinned to the introspection plane — and says which. A statement
+  naming only `keelson('…')` tables goes to the plane as before.
+  `ExecuteArrowStream` prepares the statement as written (a window-local
+  dataset name mapped to its global alias), runs play's rewrites, agent
+  limits, stamp and task mark on the bound statement, applies the binding
+  and sends it; the result stream's `Close` releases the lease, and a run
+  that fails — refused, cancelled or broken — releases it before it
+  returns. A run that met a lost session is prepared and sent once more.
+  The binding's label reaches the result (`resultStream.Confined`) and the
+  window's label, and `Endpoint.ServesConfined` is play's reach proof of
+  the target (ADR-0145 §SD5). Play's classifiers judge a statement before
+  the binding with each `session('name')` as a table; a check (`check`,
+  the citation's) runs in the data session too, and its scope admits the
+  data sets its source read; a check naming a table outside that scope is
+  refused with the tables the source read, as an assertion names them. A
+  refusal of the service for a grant comes back as `play.AgentLimitError`
+  naming the destination. A statement the dispatch refuses — sealed data
+  on an endpoint without the reach proof — is refused with that reason by
+  the agent limits too, never with a destination; the error is a
+  `play.NotDispatchedError`, and the decision answers `Class`, `Reason`,
+  `Refused` and `Confined` to a client in another package. A task reads
+  an ad-hoc dataset it published without a grant entry whether or not a
+  follower recorded the publisher: play asks the dataset service, which
+  attested the publish.
+- **SD11 — An agent keeps a result in the call it already makes.** ✓
+  Play's `query` (version 2) takes `keep_as` and `order_by`: the statement
+  defines a data set of the task's data session instead of running as the
+  main result, off the frame, and the call settles once it is made. Its
+  answer is the data set (`kept`: revision, rows, bytes, columns, server,
+  label, what was replayed and the data sets its redefinition left stale)
+  and its first rows, which the window reads as its main run,
+  `SELECT * FROM session('<name>') LIMIT n` — so the answer carries a
+  `result_id` a check and a citation rest on. `list_datasets` (version 2)
+  lists the session's data sets beside the ad-hoc datasets the window
+  binds, each with its home, the expression that reads it, rows, bytes,
+  revision and state, and a data set's definition when asked for by name;
+  `drop_dataset` drops one, cascading on request. The resource
+  `session_datasets` names them, and `list_datasets` reads it. No write
+  waits on it: a data session is shared by every window and app of the
+  task, and the service's revision per data set, not the window's, is
+  what a redefinition moves. So `query` does not declare it — a plain
+  query never touches it, and `keep_as` changes it without depending on
+  the list — and `drop_dataset` declares it with `AnyRevision`, since it
+  names the data set it drops. A `keep_as` and a drop settle only once
+  the window's listing of the task's data session shows them, so the
+  revisions they report are the window's. Each data set listed says
+  whether the task may read it; an ad-hoc dataset of the window, with its
+  rows, bytes, revision and bundle as the dataset service holds them and
+  whether the task published it. The `keep_as` answer says how a citation
+  of its result names the data (`cite`). A launch of play asks for
+  `clickhouse-session:<host>` beside the endpoint
+  (`Manifest.LaunchDestinations`).
+- **SD12 — The person's window holds a data session of its own.** ✓ Play
+  opens it at the window's first definition and does not close it
+  explicitly: it ends when the last window holding it closes (SD2). A
+  *Data sets* tab lists the data sets of the session the window's runs
+  read — the task's while an agent's mark is on the window, its own
+  otherwise — with name, rows, bytes, state, server and definition, a
+  Drop per data set and Keep for the editor's statement.
+- **SD13 — A hand-over carries a token, not the ticket.** ✓ A window
+  holding a person's data session mints a hand-over token
+  (`runtime.sessiondata.handover`, `HandOverPrefix` `sdh_`), which one
+  other window claims once, within `HandOverTimeout` (2 min), to hold the
+  session and learn its ticket (`runtime.sessiondata.claim`). The token
+  rides the playground's launch configuration
+  (`playground.Launch.SessionHandOver`, an optional field, so a stored
+  launch row decodes as before); a launch row the host stores holds only a
+  spent or lapsed token. Play's *Open in play* hands its window's session
+  over; a window working for a task hands nothing over, and a task's data
+  session is refused (SD2's open choice about a person's window in a
+  task's session is not widened). A client call names a person's data
+  session by ticket with `play.ExecOptions.SessionTicket`, used whenever
+  the call names no task — `ExecOptions.Agent` nil, or an `OnBehalfOf`
+  without a task holding the person's statement to play's agent limits —
+  and never with a task. `Client.DefineSessionDataset` and
+  `Client.DropSessionDataset` give a client what `keep_as` and
+  `drop_dataset` do through play. A refusal that
+  crosses the bus carries the names its facts hold (the data set asked
+  for, what the session holds), never an endpoint's credentials or a
+  ticket.
 
 ### What it does not cover
 
@@ -241,7 +345,17 @@ binding for the statement they send.
 - **Isolation between the windows of one person's data session.** The
   ticket is a bearer capability; whoever holds it reads and redefines.
 - **A caller that does not release.** The lease lapses; until then the
-  session waits.
+  session waits. A play lane that held a result stream open while it
+  sent a second statement in the same data session would wait on itself;
+  play's lanes drain and close before the next run.
+- **A hand-over from a task's window to the person's.** A window working
+  for a task reads the task's data session; handing that to a person's
+  window would need the person's window to attach to the task's session,
+  the open choice of SD2, which this does not widen. It hands nothing
+  over, and the opened window starts without data sets.
+- **Hand-overs other than the playground's.** Saving an applet and
+  *Open in tally* carry no data session: an applet document is stored,
+  and a data set is not.
 - **The credentials.** A caller hands the endpoint's user and password to
   the service over the in-process bus, which neither logs nor records them;
   the service keeps them for the server session's life.
@@ -251,8 +365,11 @@ binding for the statement they send.
 
 ### Deferred
 
-- **Wiring the apps.** Play, chat and an app in another repository that
-  runs an agent's statements call the service; none does yet.
+- **An app in another repository** that runs an agent's statements
+  through a `play.Client` reaches the service once it wires the client to
+  its window's bus (`SetSessionBus`) and declares the caps; that change is
+  the app's. Chat needs none: it is the coordinator, and reaches data sets
+  only through play's operations.
 - **Moving the gated run out of play.** Parse, security class, grant check,
   `readonly=2`, stamps and the fairlead mark stay in play's client; the
   service is called from inside them (see Alternatives).
@@ -274,6 +391,16 @@ binding for the statement they send.
 | Bus subjects `runtime.sessiondata.*` and their wire DTOs | added, wire version 1 | the free functions of the package; manifest capabilities |
 | Exported Go API: `queryengine.Request.External`, `queryengine.ExternalTable` | added | the server engine sends it; the local engine refuses it |
 | Exported Go API: `agent.Service.TaskLive` | added | — |
+| Bus subjects `runtime.sessiondata.{handover,claim}`, `HandOver`, `Claim`, `HandOverCap`, `ClaimCap`, `IsHandOver` | added, wire version 1 (additive fields `token`) | play's *Open in play* and mount |
+| Launch config `playground.Launch.SessionHandOver`, membership `playLaunchSessionHandOver` (id 280) | added, optional | the playground codec, the vdd golden |
+| Exported Go API: `play.Client.SetSessionBus`, `play.ExecOptions.SessionTicket`, the result stream's `Confined` | added | a downstream app's play client |
+| Exported Go API: `play.Client.DefineSessionDataset`, `DropSessionDataset`, `play.SessionDefineInput`, `SessionDropInput`, `play.NotDispatchedError`, the dispatch decision's `Class`, `Reason`, `Refused`, `Confined` | added | a downstream app's play client |
+| Environment variable `BOXER_SESSIONDATA_BUSY_WAIT`, `Limits.BusyWait` | added | `doc/env-vars.md` |
+| Grant requests naming `clickhouse:` or `clickhouse-session:` without a host | refused by the dispatcher | coordinators |
+| The chat's note naming the server to the model | names `clickhouse-session:<host>` too, from `chclient.ConfigFromEnv` | the chat's recordings |
+| Play operations: `query` v2 (`keep_as`, `order_by`, `kept`), `list_datasets` v2 (`name`, homes; reads `session_datasets`), `drop_dataset` v1 (`AnyRevision`); resource `session_datasets` | changed, added | play's help reference, the chat's direct tool description |
+| Play manifest: caps `runtime.sessiondata.*`, `LaunchDestinations` with `clickhouse-session:<host>`, `WhenToUse` | changed | grant dialogs |
+| Play's dispatch class `session`; the *Data sets* tab (dock id 38) | added | play's toolbar, workingsets name tabs by slug |
 | Grant destination class `clickhouse-session:<host>` | added, `ReachData` | `agent.ReachOf`, the grant dialog's words |
 | Introspection table `keelson('session_datasets')` | added | — |
 | Trail audit events, domain `sessiondata` | added | trail readers |
@@ -380,8 +507,37 @@ layer's advice on the server user changes for a deployment that enables it:
   wrapped; text the server reads that the check did not; a lost session not replayed or replayed out of order; a bound not
   enforced; sealed data sent to an undeclared endpoint; two statements in one
   session at once.
+- **Play's lane.** Default `go test` of `apps/play` against an HTTP stub
+  and the real service on a bus: the four kinds of statement placed;
+  a lease released after a read, a failed run and a cancelled one; a lost
+  session sent once more and not twice; grant refusals naming
+  `clickhouse:<host>`, `clickhouse-session:<host>` and `keelson:<alias>`;
+  the confined label from the binding; `keep_as`, `list_datasets` and
+  `drop_dataset` through the catalog, with stale dependants reported; two
+  apps of one task in one data session; a hand-over and a ticket in
+  `ExecOptions`, with neither in the log or an error; *Open in play*
+  carrying a token; a check over a data set; the tab drawn headless.
+  Integration lane against the server: `keep_as` through the operation and
+  a second statement from another app; an ad-hoc dataset joined with a
+  server table through play; a forced expiry replayed through play's run.
+- **The first live turn's defects** (2026-11-22), each with a test:
+  a dispatch refusal reported as a grant refusal with an empty host
+  (play, `TestARunTheDispatchRefusedAsksForNoDestination`); the server
+  named to the model from `CLICKHOUSE_URL` while play ran on
+  `CLICKHOUSE_ENDPOINT` (chat, `TestTheServerNamedIsTheOnePlayOpensOn`);
+  `query` held back by the data-set catalog after a drop, through the
+  agent dispatcher
+  (`TestTheDataSetCatalogNeverHoldsAQueryBackThroughTheDispatcher`); a
+  dataset the task published listed as not readable and without size
+  (`TestListDatasetsDescribesADatasetTheTaskPublished`); a citation of a
+  kept result refused without the tables it may name
+  (`TestACitationRestsOnAKeptDataSet`); a session the server still ran a
+  stopped statement in (`TestAStatementWaitsOutASessionTheServerStillRuns`).
 - **Gap.** One 26.9 server on loopback; no server user without
-  `CREATE TEMPORARY TABLE`, no `readonly=1` profile, no cluster; no app wired.
+  `CREATE TEMPORARY TABLE`, no `readonly=1` profile, no cluster. The
+  retry of a run whose session was lost between prepare and send ran
+  against the stub only. One model turn has driven the operations, before
+  the fixes listed above; none since.
 
 ## Choices for review
 
@@ -435,7 +591,9 @@ layer's advice on the server user changes for a deployment that enables it:
 - The probe drops capability tables no data set owns.
 - A window's leases are released when it closes, though a statement it sent
   may still be running on the server, which then refuses the next one in
-  the session as locked.
+  the session as locked; the service's next statement waits that out, up
+  to `BOXER_SESSIONDATA_BUSY_WAIT` (10 s by default), rather than the
+  caller.
 - An endpoint URL may not carry `query` or a parameter the service sets;
   other parameters (`database`) are the caller's.
 - A `SETTINGS` clause in a definition's `SELECT` is the task's, as it is in
@@ -443,6 +601,42 @@ layer's advice on the server user changes for a deployment that enables it:
 - The catalog shows definition digests, not texts.
 - The wire is CBOR DTOs, not a leeway codec.
 - Task sessions end by a 30 s sweep of `TaskLive`, not an event.
+- Play places a session statement on the pinned endpoint whatever the
+  resolver says, and refuses one when the window is pinned to the
+  introspection plane, rather than taking the environment's endpoint.
+- `keep_as` belongs to `query`, the direct tool, rather than to an
+  operation of its own, so a model keeps a result in the call it already
+  makes; the window's main result after it is the data set's first rows,
+  which replaces the buffer, so a citation has a result to rest on.
+- `describe_result` and `sample_rows` stay about results; a data set is
+  described by `list_datasets` with its name and read by a `query`.
+- One listing, `list_datasets`, for both homes, renamed `alias` → `name`
+  (version 2), rather than a second listing an agent must know of.
+- `list_datasets` reads the `session_datasets` resource; `query` does not
+  declare it as written and `drop_dataset` writes it with `AnyRevision`, so
+  no call waits on a read of the catalog; the service's revision per data
+  set guards a redefinition. A `keep_as` and a drop settle once the
+  window's listing shows them.
+- A task's reading of an ad-hoc dataset it published is decided by asking
+  the dataset service who published it, at the run, rather than by a
+  record a follower must have set.
+- `ExecOptions.SessionTicket` applies to a call that names no task, gated
+  by an `OnBehalfOf` or not.
+- A definition is sent as written, its window-local dataset names mapped
+  to global aliases; play's pre-execute rewrites (leeway macros) do not run
+  on it, while they do run on a statement that reads a data set.
+- A person's window opens its data session at its first definition and
+  leaves its end to SD2's holder rule rather than closing it at unmount,
+  so a window it handed the session to keeps it.
+- A hand-over is a single-use token the service mints, not the ticket in
+  the launch configuration; the token lapses after 2 min.
+- The window under an agent's mark lists and keeps in the task's data
+  session, and hands nothing over.
+- A refusal crossing the bus appends the facts named in `refusalFacts`
+  to its message.
+- The reach proof is play's `ServesConfined`; until the endpoint passed
+  it, a statement that attaches an ad-hoc dataset is refused — at dispatch
+  when the window binds the dataset, by the service otherwise.
 
 ## Status
 
