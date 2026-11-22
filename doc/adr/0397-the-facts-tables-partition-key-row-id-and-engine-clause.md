@@ -286,6 +286,25 @@ Accepted 2026-11-21.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-11-22 — what "a row id names one row" covers, and what the seed counts
+
+*Consequences* says a row id names one row on the server. That holds for
+the rows the facts store writes, whose ids are leased, and for nothing
+else in the table: the generated stores over it put keys of their own in
+the same column — hashes of a natural key, one id per series or per
+entity — as *Context* says in passing.
+[Facts-bound record stores](../explanation/facts-bound-record-stores.md#what-the-id-column-holds)
+lists them. Their point reads select by `id` alone, so they rely on no
+other writer holding their key, which a 64-bit hash makes unlikely and
+nothing makes impossible. Whether they move onto streams is open.
+
+SD2's recovery of a lost lease row counts only the rows of the kinds the
+facts store writes. A hash falls into the stream's range about once in
+sixteen million rows; counted, it would have restarted the stream at a
+body drawn at random from its whole space.
+
 ## References
 
 - [ADR-0319](./0319-tagged-id-streams-leased-through-one-row-on-the-one-clickhouse-server.md) — the id streams and the lease table.
