@@ -109,12 +109,12 @@ func TestWorkerDeclaresPresenceAndTableMergesIt(t *testing.T) {
 	assert.Equal(t, "run-p", pres.Rows[4].RunId)
 }
 
-// A presence row is found by its run: the natural key is the run id, and the
-// row leaves its id to the writer, which mints it (ADR-0405).
+// A presence row names its run: the natural key is the run id, and the row
+// leaves its id to the writer, which resolves it from that key (ADR-0405).
 func TestPresenceRow_NamesItsRunAndNoId(t *testing.T) {
 	started := PresenceRow(watchbillpresence.PhaseStarted, Status{RunId: "run-1"}, "box", t0)
 	stopped := PresenceRow(watchbillpresence.PhaseStopped, Status{RunId: "run-1"}, "box", t0.Add(time.Minute))
 	assert.Equal(t, []byte("run-1"), started.NaturalKey)
 	assert.Equal(t, started.NaturalKey, stopped.NaturalKey)
-	assert.Zero(t, started.Id, "the id is the writer's to mint")
+	assert.Zero(t, started.Id, "the id is the writer's to resolve")
 }

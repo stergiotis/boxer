@@ -25,7 +25,8 @@ type StoreI interface {
 }
 
 // Store writes dead letters through the facts-bound generated store, which
-// must have been built with the facts table's id generator as its Keys.
+// must have been built with the facts table's keyed id generator for
+// [IdScope] as its Keys.
 type Store struct {
 	Store *stevedorefacts.StevedoreStore
 	// Run is the run id every row's origin carries (ADR-0330 §SD3). Empty
@@ -45,9 +46,10 @@ func (inst *Store) Add(ctx context.Context, row stevedorefacts.DeadLetter) (err 
 			run = ri.RunId
 		}
 	}
-	// The row's id is minted from the facts table's stream, whatever the
-	// row came with (ADR-0405 §SD1).
-	if row.Id, err = inst.Store.MintKey(ctx); err != nil {
+	// The row's id is resolved from its natural key by the store's keyed
+	// generator, whatever the row came with (ADR-0405 §SD2): a failure
+	// delivered again is the same entity.
+	if row.Id, err = inst.Store.MintKeyFor(ctx, row.NaturalKey); err != nil {
 		return eh.Errorf("dead letter row id: %w", err)
 	}
 	err = inst.Store.Begin(ctx, row.Id, row.Ts, stevedorefacts.StevedoreEnvelope{NaturalKey: row.NaturalKey}).
@@ -94,11 +96,14 @@ func New(ts time.Time) stevedorefacts.DeadLetter {
 	return stevedorefacts.DeadLetter{Ts: ts, Kind: Kind}
 }
 
+// IdScope is the scope a dead letter's natural key is resolved in.
+const IdScope = "stevedoreDeadLetter"
+
 // NaturalKey is a row's natural key: a digest of where the message or
 // request sat — a topic, a partition and an offset, or a source name and a
 // position — so a failure delivered again is recognised as the same one.
-// The row's id is not derived from it: the store mints one per row
-// (ADR-0405), so a redelivery is another row under the same natural key.
+// The row's id is not computed from it: the store's keyed generator
+// resolves the key to an id (ADR-0405), so a redelivery restates that id.
 func NaturalKey(topic string, partition int32, offset int64) (key []byte) {
 	h := blake3.New(32, nil)
 	_, _ = h.Write([]byte(topic))

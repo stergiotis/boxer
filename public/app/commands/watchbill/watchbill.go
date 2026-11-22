@@ -155,7 +155,7 @@ func newRunCommand() *cli.Command {
 				}
 				// The declaration of what this run drains (ADR-0237), on
 				// the facts store the same executor reaches.
-				presence := watchbill.NewPresence(store.Executor(), chstore.RowIdsOf(facts))
+				presence := watchbill.NewPresence(store.Executor(), chstore.KeyedIdsOf(facts, watchbill.PresenceIdScope))
 				defer presence.Close()
 				cfg.Presence = presence
 			} else {

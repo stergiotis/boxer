@@ -107,10 +107,10 @@ func openDeadLetters(ctx context.Context, cmd *cli.Command) (dead deadletter.Sto
 		if cfg.ReadTable, terr = factsschema.ReadTableFor(table); terr != nil {
 			return nil, closeFn, eh.Errorf("read table: %w", terr)
 		}
-		// Every row's id is minted from the facts table's stream, leased
-		// through the lease table in the table's database (ADR-0405).
+		// A dead letter's id is resolved from its natural key through the
+		// id directory in the table's database (ADR-0405).
 		database, _ := recordstore.SplitTableRef(table)
-		keys, kerr := chstore.NewRowIdGenerator(exec, chstore.Config{Database: database})
+		keys, kerr := chstore.NewKeyedIdGenerator(exec, chstore.Config{Database: database}, deadletter.IdScope)
 		if kerr != nil {
 			return nil, closeFn, eh.Errorf("row id generator: %w", kerr)
 		}

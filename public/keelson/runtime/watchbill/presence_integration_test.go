@@ -27,7 +27,7 @@ func TestPresenceRoundTripOnTheServer(t *testing.T) {
 	facts, isCh := chstore.NewWithFallback(chstore.ConfigFromEnv(), zerolog.Nop(), 2*time.Second)
 	require.True(t, isCh, "the facts store must reach the server the executor reaches")
 
-	pres := NewPresence(exec, chstore.RowIdsOf(facts))
+	pres := NewPresence(exec, chstore.KeyedIdsOf(facts, PresenceIdScope))
 	defer pres.Close()
 	runId := "presence-it-" + time.Now().UTC().Format("150405.000")
 	started := Status{RunId: runId, Kinds: []string{"it.kind"}, Queues: []string{"bulk"}, MaxWorkers: 3}
@@ -71,7 +71,22 @@ func TestPresenceRoundTripOnTheServer(t *testing.T) {
 			assert.False(t, w.StoppedAt.IsZero())
 		}
 	}
+	ids := map[uint64]int{}
 	for _, r := range rows {
 		assert.Equal(t, "watchbillWorker", r.Kind, "the kind label is on every row")
+		if r.RunId == runId {
+			ids[r.Id]++
+		}
 	}
+	require.Len(t, ids, 1, "the run's started and stopped rows share the run's id")
+	assert.Equal(t, 2, ids[mine[0].Id])
+
+	// Another process of the same deployment resolves the run to the same
+	// id: the mapping is the server's.
+	other, err := chstore.NewKeyedIdGenerator(exec, chstore.ConfigFromEnv(), PresenceIdScope)
+	require.NoError(t, err)
+	got, found, err := other.Lookup(ctx, []byte(runId))
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, mine[0].Id, got.Value())
 }

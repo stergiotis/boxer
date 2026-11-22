@@ -65,10 +65,15 @@ var (
 	_ PresenceReaderI = (*Presence)(nil)
 )
 
+// PresenceIdScope is the scope a presence row's natural key — the run id —
+// is resolved in.
+const PresenceIdScope = "watchbillPresence"
+
 // NewPresence opens the store over exec, which must reach the server that
 // holds boxer.facts; chstore has provisioned the table. ids is the facts
-// table's id generator (chstore.RowIdsOf), which every row's id is minted
-// from (ADR-0405); without one a write fails. Its reads go to the read
+// table's keyed id generator for [PresenceIdScope]
+// (chstore.KeyedIdsOf), which resolves a run id to the id its rows share
+// (ADR-0405); without one a write fails. Its reads go to the read
 // table BOXER_FACTS_READ_TABLE names (ADR-0402 §SD3); a malformed setting,
 // which the host refuses at boot, leaves them on the table written to. The
 // caller closes.
@@ -100,9 +105,9 @@ func (inst *Presence) write(ctx context.Context, phase string, s Status) (err er
 	row := PresenceRow(phase, s, inst.host, time.Now())
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	// The row's id names the row (ADR-0405 §SD1); what ties a run's rows
-	// together is the run id, which is the natural key and a field.
-	if row.Id, err = inst.st.MintKey(ctx); err != nil {
+	// A run's rows share one id, resolved from the run id by the keyed
+	// generator (ADR-0405 §SD2): the run is the entity, the row a phase.
+	if row.Id, err = inst.st.MintKeyFor(ctx, row.NaturalKey); err != nil {
 		return eb.Build().Str("runId", s.RunId).Str("phase", phase).Errorf("presence row id: %w", err)
 	}
 	// The row carries the shared origin (ADR-0330 §SD3): the worker's run,
@@ -120,7 +125,7 @@ func (inst *Presence) write(ctx context.Context, phase string, s Status) (err er
 }
 
 // PresenceRow is the row a worker writes, less its id, which the writer
-// mints: the natural key is the run id, so a run's rows are found by it.
+// resolves from the natural key, the run id: a run's rows share it.
 func PresenceRow(phase string, s Status, host string, at time.Time) (row watchbillpresence.WorkerPresence) {
 	row = watchbillpresence.WorkerPresence{
 		NaturalKey: []byte(s.RunId), Ts: at.UTC(),

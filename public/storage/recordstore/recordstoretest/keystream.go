@@ -3,6 +3,7 @@ package recordstoretest
 import (
 	"github.com/stergiotis/boxer/public/identity/identgen/leased"
 	"github.com/stergiotis/boxer/public/identity/identgen/leased/memalloc"
+	"github.com/stergiotis/boxer/public/identity/identgen/mem"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 )
 
@@ -21,4 +22,16 @@ func KeyStream(tagValue identifier.TagValue) identifier.IdGeneratorI {
 		panic("recordstoretest.KeyStream: " + err.Error())
 	}
 	return seq
+}
+
+// KeyedStream is a keyed id generator for the Keys of a store under test
+// whose key names an entity: the same natural key resolves to the same
+// tagged id, for the life of the value. It stands in for the directory a
+// server keeps. It panics as [KeyStream] does.
+func KeyedStream(tagValue identifier.TagValue) identifier.IdGeneratorI {
+	gen, err := mem.NewIdInternalizer(tagValue, 64)
+	if err != nil {
+		panic("recordstoretest.KeyedStream: " + err.Error())
+	}
+	return gen
 }
