@@ -19,15 +19,15 @@ A sample is what the file stores, in one of six kinds: an unsigned integer
 of 8 or 16 bits (0 to 255, 0 to 65535), a signed integer of 16 or 32 bits,
 or a float of 32 or 64 bits. A sample is kept in the kind it was stored in:
 the samples of a 16-bit PNG are kept as 16 bits and never passed through 8.
-PNG and JPEG hold the unsigned kinds only; TIFF, FITS and NPY files hold the
-others, and so do the *elevation*, *counts*, *float* and *double* sample
-images. A plane
+PNG and JPEG hold the unsigned kinds only; files of the formats a host
+registers can hold the others, and so do the *elevation*, *counts*, *float*
+and *double* sample images. A plane
 may carry a value transform — a scale and an offset — saying what quantity
 a sample stands for; the limits, the colour bar, the histogram and every
 statistic are then in values, and the readout gives the value with the
 stored sample beside it. PNG and JPEG carry no scale, so a file's value is
-its sample; a FITS file's BSCALE and BZERO and a GDAL TIFF's band scales
-are one, and the *scaled* sample image has one.
+its sample; a format that stores a scale and an offset with its samples has
+one, and so has the *scaled* sample image.
 
 A sample can be invalid: it marks that nothing was measured there. In a
 float plane NaN is invalid. A plane of any kind may also declare one stored
@@ -44,8 +44,8 @@ row + 1), and row 0 is the top. A region of columns 10–19 and rows 0–4 is
 ten columns by five rows.
 
 What a reader does is recorded and shown in the status row, because it
-changes what a sample means. A FITS file stores its bottom row first and
-its rows are flipped; an NPY array in Fortran order has its samples
+changes what a sample means. A file that stores its bottom row first has
+its rows flipped; an array stored in another axis order has its samples
 reordered; a reader's own notes say what it read and left unapplied. Two
 more:
 
@@ -241,20 +241,20 @@ pointer is in that frame, at its exact position within the pixel, not the
 pixel's centre. The frame is what the file states, and no more is done with
 it:
 
-- **A coordinate reference system** — a GeoTIFF's EPSG code — gives
+- **A coordinate reference system** — named by a code such as EPSG:2056 — gives
   coordinates as that system defines them, metres for a projected one,
   written to a tenth of a pixel and labelled with the code. They are not
   converted: two images in different systems cannot be compared by
   position here.
-- **The sky** — a FITS file's gnomonic (TAN) projection — gives right
+- **The sky** — a gnomonic (TAN) projection — gives right
   ascension and declination in decimal degrees, not hours, minutes and
   seconds. Another projection, a distortion polynomial or a second system
   the file declares is not applied; the status row lists it, and where the
   affine alone would misplace pixels the image is left unplaced.
 - **A physical scale** gives lengths from an origin that means nothing.
 
-A raster that states its values at pixel centres (a GeoTIFF's
-"PixelIsPoint") was moved half a pixel by its reader so that pixel (column,
+A raster that states its values at pixel centres was moved half a pixel by
+its reader so that pixel (column,
 row) still covers the square from (column, row); the placement's source
 says so.
 

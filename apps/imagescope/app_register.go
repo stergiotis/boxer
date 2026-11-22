@@ -2,10 +2,11 @@
 // JPEG file, or a synthetic sample, as planes of samples at their own bit
 // depth and shows them through a display recipe with
 // [github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imageview].
-// A TIFF, FITS, NPY or NPZ file opens as a stack, of which the person or an
-// agent chooses a position on each selector axis and one band or three, and
-// an image whose file places its pixels has its frame coordinates read out
-// (ADR-0398 §M6). Regions — points, lines, rectangles, ellipses and
+// A file of any other format the host registered a reader for opens as a
+// stack (ADR-0398 §M4, §M5), of which the person or an agent chooses an
+// entry of the file, a position on each selector axis and one band or
+// three, and an image whose file places its pixels has its frame
+// coordinates read out. Regions — points, lines, rectangles, ellipses and
 // polygons in a stated frame — are drawn, made by gesture or by operation,
 // listed, measured and profiled (ADR-0399 §M2), and operators are applied to
 // the window's images, each result an image of the window with the record
@@ -57,7 +58,7 @@ var manifest = app.Manifest{
 	Summary:    "View image samples through limits, a transfer function and a colour map",
 	Icon:       icons.IconFileImage,
 	Topics:     []app.TopicT{app.TopicData, app.TopicSensing},
-	Keywords:   []string{"image", "png", "jpeg", "tiff", "geotiff", "fits", "npy", "stack", "band", "histogram", "pixel", "16-bit", "contrast", "stretch", "colour map"},
+	Keywords:   []string{"image", "png", "jpeg", "stack", "band", "entry", "histogram", "pixel", "16-bit", "contrast", "stretch", "colour map"},
 	Surface:    app.SurfaceWindowed,
 	Maturity:   app.MaturityIncubating,
 	Help:       help.MustSub(helpFS, "help"),
@@ -70,7 +71,7 @@ var manifest = app.Manifest{
 		PreferredHeight: 900,
 	},
 	Caps: append([]app.SubjectFilter{
-		fsbroker.DialogReadCap("imagescope: Open — the system file picker chooses one PNG, JPEG, TIFF, FITS, NPY or NPZ file, which is read once through the handle the reply carries; Load regions… reads a regions document the same way"),
+		fsbroker.DialogReadCap("imagescope: Open — the system file picker chooses one image file, PNG, JPEG or a format the host registered a reader for, which is read once through the handle the reply carries; Load regions… reads a regions document the same way"),
 		fsbroker.DialogWriteCap("imagescope: Save regions… and Save record… — the system file picker chooses where the regions document or an operation's record is written (ADR-0399 §SD6, ADR-0400 §SD8)"),
 		adhocdata.PublishCap("imagescope: publish the pixels of the marked region, the regions' figures or a line's profile as an ephemeral dataset for the play handover (ADR-0134)"),
 		windowopen.OpenCap("imagescope: Send to play — a play window seeded with the query behind the statistics table (ADR-0135 §SD7)"),

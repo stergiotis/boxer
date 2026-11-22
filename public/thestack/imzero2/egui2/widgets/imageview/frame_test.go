@@ -3,8 +3,6 @@ package imageview
 import (
 	"bytes"
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,6 +10,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/science/imaging"
 	"github.com/stergiotis/boxer/public/science/imaging/decode"
+	"github.com/stergiotis/boxer/public/science/imaging/decode/decodetest"
 	"github.com/stergiotis/boxer/public/science/imaging/samples"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
@@ -127,23 +126,29 @@ func TestAnImageSourceKeepsTheView(t *testing.T) {
 	assert.Error(t, v.SetSource(ImageSource(imaging.Image{}), true), "the zero image has no size")
 }
 
-// The readout gives a GeoTIFF's and a FITS file's frame coordinates as their
-// placements' World does, read through the readers.
+// The readout gives the frame coordinates of a placement a reader delivered
+// — a reference system's and the sky's — as the placement's World does: a
+// stack carrying each is written in the conformance kit's test format and
+// read back through its reader.
 func TestTheReadoutOfAReadersPlacement(t *testing.T) {
-	for _, tc := range []struct{ reader, name, code string }{
-		{"tiff", "geo_area.tif", "EPSG:2056"},
-		{"fits", "tan_cd.fits", ""},
+	for _, tc := range []struct {
+		name      string
+		placement imaging.Placement
+		code      string
+	}{
+		{"crs.decodetest", samples.BandsPlacement, "EPSG:32632"},
+		{"sky.decodetest", skyPlacement(), ""},
 	} {
-		b, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "..", "science", "imaging", "decode", tc.reader, "testdata", tc.name))
+		plane, err := imaging.NewPlaneU16(16, 12, make([]uint16, 16*12))
 		require.NoError(t, err)
-		st, err := decode.DecodeStack(context.Background(), bytes.NewReader(b), int64(len(b)), tc.name, decode.Options{})
+		placed, err := imaging.NewStack(nil, []imaging.Plane{plane}, 0, tc.placement, imaging.Provenance{})
 		require.NoError(t, err)
-		var img imaging.Image
-		if st.Model() != 0 {
-			img, _, err = st.AsStored(make([]int, len(st.Axes())))
-		} else {
-			img, err = st.Image(make([]int, len(st.Axes())), nil)
-		}
+		b, err := decodetest.Write(decodetest.Member{Stack: placed})
+		require.NoError(t, err)
+		st, err := decodetest.Reader().Decode(context.Background(), bytes.NewReader(b), int64(len(b)), decode.Request{SourceName: tc.name})
+		require.NoError(t, err)
+		require.Equal(t, tc.placement, st.Placement(), "the reader delivered the placement")
+		img, err := st.Image(nil, nil)
 		require.NoError(t, err)
 		v := New(c.NewWidgetIdStack(), "", Options{})
 		v.SetImage(img)

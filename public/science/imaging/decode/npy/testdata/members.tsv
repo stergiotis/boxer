@@ -1,7 +1,0 @@
-# numpy 2.5.5
-file	member	descr	shape
-single.npz	arr_0.npy	<i2	4,6
-multi.npz	image.npy	<f4	3,5
-multi.npz	cube.npy	>u2	2,3,4
-multi.npz	line.npy	<f8	7
-multi.npz	flags.npy	|b1	2,2

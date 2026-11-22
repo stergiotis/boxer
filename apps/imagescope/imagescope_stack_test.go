@@ -6,8 +6,6 @@ import (
 	"encoding/hex"
 	"image"
 	"math"
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"testing"
@@ -20,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/science/imaging"
 	"github.com/stergiotis/boxer/public/science/imaging/decode"
+	"github.com/stergiotis/boxer/public/science/imaging/decode/decodetest"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
 	"github.com/stergiotis/boxer/public/science/imaging/samples"
 	"github.com/stergiotis/boxer/public/science/imaging/tiles"
@@ -28,32 +27,22 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
-// readerFixture is a file of a reader package's testdata, read where it
-// lies.
-func readerFixture(t *testing.T, reader, name string) []byte {
-	t.Helper()
-	b, err := os.ReadFile(filepath.Join("..", "..", "public", "science", "imaging", "decode", reader, "testdata", name))
-	require.NoError(t, err)
-	return b
-}
-
 // openBytes opens a file's bytes through the window's open path, as the
 // person's Open… does once the picker has handed them over, and waits for
 // the open to end.
 func openBytes(t *testing.T, inst *App, name string, body []byte) {
 	t.Helper()
 	require.True(t, inst.startOpening(image.Rectangle{}, func(ctx context.Context, report bgjob.Reporter, arrive func(*tiles.Store)) (*opened, error) {
-		return openBody(ctx, report, arrive, name, body)
+		return openBody(ctx, inst.registry(), report, arrive, name, body)
 	}))
 	settle(t, inst, func() bool { return !inst.open.Running() && inst.landedGen == inst.openGen })
 }
 
-// decodedStack is a fixture decoded directly, to hold the window against.
-func decodedStack(t *testing.T, body []byte, name string) imaging.Stack {
+// decodedStack is a file's default entry decoded directly, to hold the
+// window against.
+func decodedStack(t *testing.T, body []byte) imaging.Stack {
 	t.Helper()
-	st, err := decode.DecodeStack(context.Background(), bytes.NewReader(body), int64(len(body)), name, decode.Options{})
-	require.NoError(t, err)
-	return st
+	return decodedEntry(t, body, "")
 }
 
 func getView(t *testing.T, inst *App) View {
@@ -69,26 +58,26 @@ func settleShown(t *testing.T, inst *App) {
 	settle(t, inst, func() bool { return !inst.selectionPending() })
 }
 
-// Each reader's format opens through the window's open path into the
-// default selection of its stack: the image shown is the one the stack
-// gives for it, sample for sample.
-func TestAStackOpensFromEachFormat(t *testing.T) {
+// A file a registered reader reads opens through the window's open path
+// into the default selection of its default entry's stack: the image shown
+// is the one the stack gives for it, sample for sample. The files are the
+// conformance kit's test format, standing in for a host's formats.
+func TestAStackOpensFromAFile(t *testing.T) {
 	for _, tc := range []struct {
-		reader, name string
-		axes         []string
-		planes       []string
+		name   string
+		body   []byte
+		axes   []string
+		planes []string
 	}{
-		{"tiff", "multipage_u8.tif", []string{"page", "band"}, []string{"gray"}},
-		{"tiff", "gdal_nodata_meta_i16.tif", []string{"band"}, []string{"near infrared"}},
-		{"tiff", "geo_area.tif", []string{"band"}, []string{"gray"}},
-		{"fits", "cube_i16.fits", nil, []string{"gray"}},
-		{"fits", "bitpix16.fits.gz", nil, []string{"gray"}},
-		{"fits", "tan_cd.fits", nil, []string{"gray"}},
-		{"npy", "cube_u2.npy", nil, []string{"gray"}},
-		{"npy", "single.npz", nil, []string{"gray"}},
+		{"pages.decodetest", testFile(t, decodetest.Member{Stack: pagesStack(t)}), []string{"page", "band"}, []string{"gray"}},
+		{"nodata.decodetest", testFile(t, decodetest.Member{Stack: nodataStack(t)}), []string{"band"}, []string{"near infrared"}},
+		{"geo.decodetest", testFile(t, decodetest.Member{Stack: geoStack(t)}), []string{"band"}, []string{"gray"}},
+		{"cube.decodetest", testFile(t, decodetest.Member{Stack: cubeStack(t)}), []string{"axis3"}, []string{"gray"}},
+		{"sky.decodetest", testFile(t, decodetest.Member{Stack: skyStack(t)}), nil, []string{"gray"}},
+		{"multi.decodetest", multiFile(t), []string{"time", "band"}, []string{"B2"}},
 	} {
-		body := readerFixture(t, tc.reader, tc.name)
-		st := decodedStack(t, body, tc.name)
+		body := tc.body
+		st := decodedStack(t, body)
 		inst := testApp(t)
 		openBytes(t, inst, tc.name, body)
 		require.Empty(t, inst.openErr, tc.name)
@@ -118,17 +107,20 @@ func TestAStackOpensFromEachFormat(t *testing.T) {
 }
 
 // A file a reader refuses ends the open with the reader's own sentence, and
-// what was shown before stays.
+// what was shown before stays; get_view says which refusal it was.
 func TestAReadersRefusalReachesThePersonAsItsSentence(t *testing.T) {
-	for _, tc := range []struct{ reader, name, feature string }{
-		{"tiff", "refused_jpeg.tif", "JPEG"},
-		{"tiff", "refused_zstd.tif", "Zstandard"},
-		{"fits", "tilecomp.fits", "tile-compressed"},
-		{"npy", "object.npy", "object"},
-		{"npy", "multi.npz", "several arrays"},
+	whole := testFile(t, decodetest.Member{Stack: cubeStack(t)})
+	for _, tc := range []struct {
+		name, feature, kind string
+		body                []byte
+	}{
+		{"jpeg.decodetest", "compression 7 (JPEG)", "unsupported", testFile(t, decodetest.Member{Unsupported: "compression 7 (JPEG)"})},
+		{"u32.decodetest", "unsigned 32-bit samples", "unsupported",
+			testFile(t, decodetest.Member{Title: "the only HDU", Unsupported: "unsigned 32-bit samples", Stack: cubeStack(t)})},
+		{"cut.decodetest", "the file is malformed", "malformed", whole[:len(whole)-10]},
 	} {
-		body := readerFixture(t, tc.reader, tc.name)
-		_, rerr := decode.DecodeStack(context.Background(), bytes.NewReader(body), int64(len(body)), tc.name, decode.Options{})
+		body := tc.body
+		_, rerr := testReaders.Decode(context.Background(), bytes.NewReader(body), int64(len(body)), decode.Request{SourceName: tc.name})
 		require.Error(t, rerr, tc.name)
 		inst := withSample(t, samples.NameSmall)
 		before := inst.pic
@@ -139,7 +131,9 @@ func TestAReadersRefusalReachesThePersonAsItsSentence(t *testing.T) {
 		assert.Same(t, before, inst.pic, "%s: what was shown stays", tc.name)
 		v := getView(t, inst)
 		assert.Equal(t, inst.openErr, v.Error, tc.name)
+		assert.Equal(t, tc.kind, v.ErrorKind, tc.name)
 		assert.False(t, v.StackSelection, tc.name)
+		assert.Nil(t, v.File, "%s: the file of what is shown, the sample, is none", tc.name)
 	}
 	assert.NoError(t, checkSampleName(samples.StackBands), "the seed takes the sample stack")
 }
@@ -265,7 +259,7 @@ func TestTheSelectionCommands(t *testing.T) {
 	// With no stack the commands refuse, naming where one comes from.
 	plain := withSample(t, samples.NameSmall)
 	assert.Contains(t, refusal(t, command(t, plain, opSetPosition, SetPositionArgs{Axis: "time"})), "open_sample with bands")
-	assert.Contains(t, refusal(t, command(t, plain, opSetBands, SetBandsArgs{Bands: []int{0}})), "TIFF, FITS, NPY or NPZ")
+	assert.Contains(t, refusal(t, command(t, plain, opSetBands, SetBandsArgs{Bands: []int{0}})), "list_formats lists what this host reads")
 	_, err = query[GetAxisArgs, AxisInfo](t, plain, opGetAxis, GetAxisArgs{Axis: "time"})
 	assert.Contains(t, refusal(t, err), "not a stack")
 	empty := testApp(t)
@@ -276,9 +270,9 @@ func TestTheSelectionCommands(t *testing.T) {
 // over the range of their data, named as such in the status row, and three
 // float bands asked for are shown so and said to be (ADR-0401 §SD3).
 func TestThreeFloatBandsOpenAsALinkedComposite(t *testing.T) {
-	body := readerFixture(t, "tiff", "deflate_pred3_f32_rgb_le.tif")
+	body := testFile(t, decodetest.Member{Stack: rgbF32Stack(t)})
 	inst := testApp(t)
-	openBytes(t, inst, "f.tif", body)
+	openBytes(t, inst, "f.decodetest", body)
 	require.Empty(t, inst.openErr)
 	v := getView(t, inst)
 	assert.Equal(t, "rgb", v.Stack.Model)
@@ -452,7 +446,8 @@ func TestASelectionChangeKeepsTheViewAndTheRecipe(t *testing.T) {
 }
 
 // to_world and to_pixel are the placement's World and Pixel, on the sample
-// stack, a GeoTIFF and a FITS gnomonic projection.
+// stack, and on files whose reader delivered a reference system's placement
+// and a gnomonic projection of the sky.
 func TestFrameCoordinatesBothWays(t *testing.T) {
 	check := func(name string, inst *App, p imaging.Placement, col, row float64) {
 		t.Helper()
@@ -484,20 +479,20 @@ func TestFrameCoordinatesBothWays(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, far.Inside, "a point off the image has frame coordinates too, and says it is off")
 
-	geo := readerFixture(t, "tiff", "geo_area.tif")
+	geo := testFile(t, decodetest.Member{Stack: geoStack(t)})
 	inst = testApp(t)
-	openBytes(t, inst, "geo_area.tif", geo)
-	p := decodedStack(t, geo, "geo_area.tif").Placement()
-	require.False(t, p.IsZero())
-	check("geotiff", inst, p, 3.25, 7.5)
+	openBytes(t, inst, "geo.decodetest", geo)
+	p := decodedStack(t, geo).Placement()
+	require.Equal(t, geoPlacement, p)
+	check("reference system", inst, p, 3.25, 7.5)
 	assert.Equal(t, "EPSG:2056", getView(t, inst).Image.Placement.Code)
 
-	tan := readerFixture(t, "fits", "tan_cd.fits")
+	tan := testFile(t, decodetest.Member{Stack: skyStack(t)})
 	inst = testApp(t)
-	openBytes(t, inst, "tan_cd.fits", tan)
-	p = decodedStack(t, tan, "tan_cd.fits").Placement()
+	openBytes(t, inst, "sky.decodetest", tan)
+	p = decodedStack(t, tan).Placement()
 	require.Equal(t, imaging.FrameKindCelestialGnomonic, p.Frame.Kind)
-	check("fits tan", inst, p, 4.5, 3.5)
+	check("sky", inst, p, 4.5, 3.5)
 	w, err = query[PixelPoint, FrameReading](t, inst, opToWorld, PixelPoint{Col: 4.5, Row: 3.5})
 	require.NoError(t, err)
 	assert.Equal(t, [2]string{"deg", "deg"}, w.Units)
@@ -529,7 +524,7 @@ func TestAnAxisIsListedInPages(t *testing.T) {
 		planes, 0, imaging.Placement{}, imaging.Provenance{SourceName: "deep"})
 	require.NoError(t, err)
 	inst := testApp(t)
-	o, err := openedStack(context.Background(), st, func(uint64, uint64, string) {})
+	o, err := openedStack(context.Background(), st, "", func(uint64, uint64, string) {})
 	require.NoError(t, err)
 	inst.setShown(o.pic, o.stk)
 
@@ -637,8 +632,8 @@ func TestTheWindowRendersAStack(t *testing.T) {
 	assert.Equal(t, 2.0, inst.posSlider[0])
 
 	// Three float bands are the person's composite of them.
-	f32 := readerFixture(t, "tiff", "deflate_pred3_f32_rgb_le.tif")
-	openBytes(t, inst, "f.tif", f32)
+	f32 := testFile(t, decodetest.Member{Stack: rgbF32Stack(t)})
+	openBytes(t, inst, "f.decodetest", f32)
 	frame()
 	inst.bandsGesture([]int{1, 0, 2})
 	settle(t, inst, func() bool { frame(); return !inst.selectionPending() && inst.compAsk == nil })

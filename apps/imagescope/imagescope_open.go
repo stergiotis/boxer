@@ -1,7 +1,6 @@
 package imagescope
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -39,12 +38,14 @@ const (
 var errOpenCancelled = errors.New("no file was chosen")
 
 // opened is what an open leaves: the image as a store of tiles, the region
-// a seed asked to mark on it, and — when the image is a selection of a
-// stack — the stack and that selection.
+// a seed asked to mark on it, when the image is a selection of a stack the
+// stack and that selection, and when it was read from a file the file's
+// format and entries.
 type opened struct {
 	pic    *tiles.Store
 	region image.Rectangle
 	stk    *stackView
+	file   *openedFile
 }
 
 // startOpen runs one open whose load yields a store of tiles; see
@@ -66,9 +67,11 @@ func (inst *App) startOpen(region image.Rectangle, load func(ctx context.Context
 // fills (ADR-0374 §SD7). Decoding costs time proportional to the file's
 // pixels; a PNG streamed into the store holds the file's bytes, the store
 // and a band of rows, any other file its decoded image as well, for a
-// moment, and a stack its decoded samples for as long as it is open.
+// moment, and a stack its decoded samples for as long as it is open — and,
+// when its file has more than one entry, the file's bytes too, at most the
+// file broker's read cap (ADR-0398 §M5).
 func (inst *App) startOpening(region image.Rectangle, load func(ctx context.Context, report bgjob.Reporter, arrive func(*tiles.Store)) (*opened, error)) (started bool) {
-	inst.openErr, inst.openNote = "", ""
+	inst.openErr, inst.openNote, inst.openRefusal = "", "", 0
 	inst.openGen++
 	inst.arriving.Store(nil)
 	started = inst.open.StartReporting(inst.tasks, bgjob.Spec{Kind: openKind, Title: openTitle},
@@ -95,7 +98,7 @@ func (inst *App) openSample(name string, region image.Rectangle) (started bool) 
 			if err != nil {
 				return nil, err
 			}
-			return openedStack(ctx, st, report)
+			return openedStack(ctx, st, "", report)
 		}
 		img, err := samples.ByName(name)
 		if err != nil {
@@ -145,15 +148,16 @@ func (inst *openError) Unwrap() error { return inst.err }
 // one file picked, which is read once, whole, and closed (ADR-0373 §SD10);
 // the broker refuses a file over its read cap before the app sees a byte.
 // The broker's requests take no context, so a cancel of the task lands
-// after the picker closes.
+// after the picker closes. The picker takes no filter of name endings, so
+// the formats' extensions are not offered to it.
 func (inst *App) openFile() {
 	if inst.bus == nil {
 		inst.openErr = "no bus on this host; a file cannot be opened here — a sample can"
 		return
 	}
-	bus := inst.bus
+	bus, reg := inst.bus, inst.registry()
 	inst.startOpening(image.Rectangle{}, func(ctx context.Context, report bgjob.Reporter, arrive func(*tiles.Store)) (*opened, error) {
-		report(0, 0, "choose a PNG, JPEG, TIFF, FITS, NPY or NPZ file")
+		report(0, 0, "choose a file: "+formatTitles(reg))
 		reply, err := app.RequestWithin(ctx, bus, fsbroker.DialogTimeout, fsbroker.SubjectDialogRead, nil)
 		if err != nil {
 			return nil, eh.Errorf("the file picker did not answer: %w", err)
@@ -173,7 +177,7 @@ func (inst *App) openFile() {
 		if err != nil {
 			return nil, &openError{file: dr.DisplayName, what: "could not be read", err: err}
 		}
-		if decode.Sniff(body) == 0 {
+		if _, serr := reg.Sniff(body); decode.Sniff(body) == 0 && serr != nil {
 			// What is no format read here may be the broker's refusal — a
 			// file over its read cap among them — which arrives in the place
 			// of the content.
@@ -185,31 +189,27 @@ func (inst *App) openFile() {
 				return nil, &openError{file: dr.DisplayName, what: reason}
 			}
 		}
-		return openBody(ctx, report, arrive, dr.DisplayName, body)
+		return openBody(ctx, reg, report, arrive, dr.DisplayName, body)
 	})
 }
 
-// openBody decodes a file's bytes as an open does, whatever brought them:
-// a PNG or a JPEG into a store of tiles, streamed where it can be
-// (ADR-0374 §SD7); a TIFF, FITS, NPY or NPZ file into a stack, through
-// decode.DecodeStack, of which the default selection is shown (ADR-0398
-// §M6). A reader's refusal is kept whole in the error, so the window and
-// get_view show the reader's own sentence. A stack costs its decoded samples
-// for as long as it is open, besides the store of the selection shown.
-func openBody(ctx context.Context, report bgjob.Reporter, arrive func(*tiles.Store), name string, body []byte) (res *opened, err error) {
+// openBody decodes a file's bytes as an open does, whatever brought them
+// (ADR-0398 §M5): a PNG or a JPEG into a store of tiles, streamed where it
+// can be (ADR-0374 §SD7); any other file through the reader of reg that
+// claims it, into a stack whose default entry's default selection is
+// shown. A refusal — no reader claims the file, two do, the reader refuses
+// it — is kept whole in the error, so the window and get_view show its own
+// sentence, naming the formats this host reads when no reader claims it.
+// A stack costs its decoded samples for as long as it is open, besides the
+// store of the selection shown.
+func openBody(ctx context.Context, reg *decode.Registry, report bgjob.Reporter, arrive func(*tiles.Store), name string, body []byte) (res *opened, err error) {
 	if err = ctx.Err(); err != nil {
 		return nil, err
 	}
 	report(0, 0, "decoding "+name)
-	if format := decode.Sniff(body); format.IsStack() {
-		st, derr := decode.DecodeStack(ctx, bytes.NewReader(body), int64(len(body)), name, decode.Options{})
-		if derr != nil {
-			if errors.Is(derr, context.Canceled) {
-				return nil, derr
-			}
-			return nil, &openError{file: name, what: "was refused by the " + format.String() + " reader", err: derr}
-		}
-		return openedStack(ctx, st, report)
+	format := decode.Sniff(body)
+	if format == 0 {
+		return readFile(ctx, reg, report, name, body)
 	}
 	pic, err := decode.DecodeTiled(ctx, body, name, decode.Options{}, tiles.Options{
 		Progress: func(done, total int64) { report(uint64(done), uint64(total), "decoding "+name) },
@@ -217,13 +217,15 @@ func openBody(ctx context.Context, report bgjob.Reporter, arrive func(*tiles.Sto
 	if err != nil {
 		return nil, &openError{file: name, what: "is not an image this viewer reads", err: err}
 	}
-	return &opened{pic: pic}, nil
+	return &opened{pic: pic, file: streamedFile(ctx, format, name, body)}, nil
 }
 
 // openedStack is a stack as an open leaves it: its default selection taken
-// into a store of tiles.
-func openedStack(ctx context.Context, st imaging.Stack, report bgjob.Reporter) (*opened, error) {
+// into a store of tiles. entry is the file's entry the stack was read
+// from, empty for a stack that is no file's.
+func openedStack(ctx context.Context, st imaging.Stack, entry string, report bgjob.Reporter) (*opened, error) {
 	sel := defaultSelection(st)
+	sel.entry = entry
 	pic, err := storeOf(ctx, st, sel, report)
 	if err != nil {
 		return nil, err
@@ -236,8 +238,9 @@ func openedStack(ctx context.Context, st imaging.Stack, report bgjob.Reporter) (
 // keeps filling; a failure or a cancel puts back what was shown before.
 func (inst *App) takeOpen() {
 	if s := inst.arriving.Swap(nil); s != nil && s != inst.pic {
-		inst.prev, inst.prevStk, inst.prevShown = inst.openedStore(), inst.stk, inst.shownId
+		inst.prev, inst.prevStk, inst.prevShown, inst.prevFile = inst.openedStore(), inst.stk, inst.shownId, inst.file
 		inst.setPic(s)
+		inst.file = nil
 	}
 	if res, _, ok := inst.open.TakeResult(); ok {
 		if res.pic != inst.pic {
@@ -253,7 +256,8 @@ func (inst *App) takeOpen() {
 			_ = inst.viewer.SetSource(imageview.StoreSource(res.pic), true)
 			inst.syncChecks()
 		}
-		inst.prev, inst.prevStk, inst.prevShown = nil, nil, ""
+		inst.file = res.file
+		inst.prev, inst.prevStk, inst.prevShown, inst.prevFile = nil, nil, "", nil
 		if !res.region.Empty() {
 			inst.viewer.SetRegion(res.region)
 		}
@@ -265,16 +269,17 @@ func (inst *App) takeOpen() {
 		if errors.Is(snap.Err, errOpenCancelled) || errors.Is(snap.Err, context.Canceled) {
 			inst.openNote = "open cancelled"
 		} else {
-			inst.openErr = snap.Err.Error()
+			inst.openErr, inst.openRefusal = snap.Err.Error(), decode.RefusalOf(snap.Err)
 		}
 		if inst.pic != nil && inst.pic.Err() != nil || inst.prev != nil {
 			// The store shown while it filled will not finish.
 			inst.setShown(inst.prev, inst.prevStk)
+			inst.file = inst.prevFile
 			if e, ok := entryOf(inst.images, inst.prevShown); ok && inst.prevShown != openedId {
 				inst.showEntry(e)
 			}
 		}
-		inst.prev, inst.prevStk, inst.prevShown = nil, nil, ""
+		inst.prev, inst.prevStk, inst.prevShown, inst.prevFile = nil, nil, "", nil
 		inst.landedGen = inst.openGen
 		inst.open.Invalidate()
 	}
@@ -301,7 +306,7 @@ func (inst *App) setShown(s *tiles.Store, stk *stackView) {
 		inst.want = stk.shown.clone()
 	}
 	inst.selectJob.Invalidate()
-	inst.selBusy, inst.selectNote, inst.selectErr = false, "", ""
+	inst.selBusy, inst.selectNote, inst.selectErr, inst.selectRefusal = false, "", "", 0
 	inst.lastTriple = nil
 	inst.syncSliders()
 }
@@ -325,13 +330,22 @@ func (inst *App) adopt(s *tiles.Store, keepView bool) {
 	inst.clearHandover()
 }
 
-// describeImage is an image in one line: its name, size, model and sample
-// kind.
+// describeImage is an image in one line: its name, the format it was read
+// from with the variant beside it, its size, model and sample kind. A
+// sample and an operation's result name no format.
 func describeImage(s *tiles.Store) string {
 	if s == nil {
 		return "no image"
 	}
-	return fmt.Sprintf("%s · %d × %d · %s %s", s.Provenance().SourceName, s.Width(), s.Height(), s.Model(), s.Kind())
+	p := s.Provenance()
+	name := p.SourceName
+	if p.Format != "" && p.Format != resultFormat {
+		name += " · " + p.Format
+		if p.Variant != "" {
+			name += " (" + p.Variant + ")"
+		}
+	}
+	return fmt.Sprintf("%s · %d × %d · %s %s", name, s.Width(), s.Height(), s.Model(), s.Kind())
 }
 
 // storeNotes is sourceNotes of the store's provenance, and what its planes

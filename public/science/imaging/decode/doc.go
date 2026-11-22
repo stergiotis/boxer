@@ -1,9 +1,10 @@
-// Package decode reads a PNG or a JPEG file into an [imaging.Image] without
-// passing its samples through 8 bits or through premultiplied alpha (ADR-0373
-// §SD10), and is the one way in to the readers of TIFF, FITS and NPY files,
-// which give a stack (see Stacks). The pixel decoding of PNG and JPEG is the
+// Package decode reads image files: a PNG or a JPEG into an
+// [imaging.Image] without passing its samples through 8 bits or through
+// premultiplied alpha (ADR-0373 §SD10), and any format a host registers a
+// reader for into an [imaging.Stack], through the seam of ADR-0398
+// §SD5–§SD8 (see Readers). The pixel decoding of PNG and JPEG is the
 // standard library's; what this package adds is the way from a decoded
-// picture to planes, and the record of what the file stored.
+// picture to planes, the record of what the file stored, and the seam.
 //
 // # What comes out
 //
@@ -44,15 +45,77 @@
 // profile — is recorded in [imaging.Provenance.ColorDeclaration] and not
 // applied (§SD5).
 //
-// # Stacks
+// # Readers
 //
-// TIFF, FITS, NPY and NPZ files are read into an [imaging.Stack], not an
-// image (ADR-0398 §SD6–§SD8). [Sniff] tells them as it tells PNG and JPEG,
-// and [FormatE.IsStack] says which way a format goes. [DecodeStack] is the
-// one way in: it hands the file to the reader of its format — the packages
-// tiff, fits and npy beneath this one, which say what each reads, converts
-// and refuses — with the limits of [Options] as theirs. A refusal is the
-// reader's own error, which errors.Is matches to the reader's
-// ErrUnsupported, ErrLimit or ErrMalformed and whose message names what was
-// refused. The readers do not import this package.
+// A reader ([ReaderI]) is a value that reads one format into stacks. It is
+// held in a [Registry], which hands a file to the one reader that claims
+// it. This package holds two, PNG and JPEG ([BuiltinReaders]); a host
+// supplies the rest. The contract, in the order a registry calls it:
+//
+//  1. Describe. Format returns the reader's [Format]: a name unique in a
+//     registry and recorded as the Provenance.Format of every stack it
+//     makes, a title for a person, the endings its files carry, a doc of a
+//     sentence or two, and a version. The version is of the reader's own
+//     reading: bump it when the same bytes would decode to something else
+//     — other samples, another placement, other notes — so that whatever
+//     was derived from an earlier reading can be told apart from a new one.
+//  2. Sniff. Sniff says from a file's first [SniffLen] bytes whether the
+//     file is its format. It claims nothing shorter than its signature,
+//     the empty input among them, and no file of another format: a file
+//     two readers claim is refused, whichever was registered first.
+//  3. Entries. Entries lists the images a file holds ([Entry]) from its
+//     headers alone: a stable id each, a title, the shape and kind as far
+//     as the header says, whether the reader reads it or, when not, the
+//     refusal a decode of it is — its kind and its bare words
+//     ([Entry.Refused]) — and exactly one Default: what a plain open
+//     reads, or, in a file with nothing readable, the entry it would have
+//     read, whose refusal is then the file's (ADR-0398 §SD7).
+//  4. Decode. Decode reads one entry — the default for an empty id — into
+//     a stack, under the request's [Limits]. [SelectEntry] finds the entry
+//     and refuses an unreadable one with its kind, so a reader goes
+//     through it rather than choosing for itself.
+//
+// What a decode delivers (§SD5). The pixel convention of ADR-0373 §SD3,
+// whatever the format's: row 0 at the top, pixel (col, row) covering
+// [col, col+1) × [row, row+1). A convention converted on the way — rows
+// flipped, an axis order reversed, a half-pixel shift for a raster
+// registered at pixel centres — is recorded: in
+// [imaging.Provenance.Derivations] where a flag names it, in
+// Provenance.Notes otherwise, and in [imaging.Placement.Source] for the
+// statement a placement was derived from. Where one reader's format covers
+// several variants — a container with wider offsets, an archive of arrays,
+// a compressed wrapping — the variant read is
+// [imaging.Provenance.Variant], in the format's own word, and Format stays
+// the reader's name. Samples come in the kind the file stores them, with
+// its invalid value declared on the planes, and nothing the reader does
+// not evaluate is applied as if it did.
+//
+// What a decode refuses (§SD8). A request over its limits, from the
+// header, before a sample is read: [Limits.Check] does the arithmetic. What
+// the reader does not read, by name — a compression, a sample type, a
+// projection — rather than a guess at it. A file that does not follow its
+// format. Each is an error built with [Unsupported], [OverLimit],
+// [Malformed] or [MalformedWith] — [Refuse] for a kind held as a value —
+// and an unknown entry id is [NoEntry]: an app shows the sentence as it
+// stands and tells the refusals apart with errors.Is or [RefusalOf],
+// without knowing the reader, and [ReasonOf] gives back a refusal's bare
+// words and kind. A reader reads through the io.ReaderAt it is given, no
+// more than it needs to answer, and honours ctx between reads of samples.
+// It reads through [ReadFullAt] — and a stream, a decompressor among them,
+// over [MarkReadFailures] of the file, its errors through [ReadError] — so
+// that a file cut short or a corrupt block is malformed and a read that
+// fails for another reason is returned as it is: no refusal, since the file
+// may be sound.
+//
+// A registry is filled where a host wires its apps, in one visible place:
+// [Default] is the process's, holding PNG and JPEG, and [Register] adds to
+// it. A reader is a parser of untrusted bytes, and which ones a deployment
+// exposes should be readable at that one site, so a reader's package does
+// not register itself from an init function (ADR-0398 §SD6). A test that
+// wants other readers builds its own registry with [NewRegistry].
+//
+// The package decode/decodetest is the conformance kit (§SD9): a reader's
+// tests run decodetest.Check over a few files of its format, and it checks
+// the contract above — not that the format was read correctly, which only
+// the reader's own fixtures can show.
 package decode

@@ -30,11 +30,13 @@ import (
 )
 
 // testApp is an unmounted window, as the tour and the catalog tests have it:
-// no bus, no tasks, its jobs on plain goroutines.
+// no bus, no tasks, its jobs on plain goroutines; it reads files through
+// testReaders, the built-ins and the conformance kit's test format.
 func testApp(t *testing.T) (inst *App) {
 	t.Helper()
 	inst = newApp()
 	inst.logger = zerolog.Nop()
+	inst.readers = testReaders
 	t.Cleanup(func() { _ = inst.Unmount(nil) })
 	return
 }
@@ -190,11 +192,12 @@ func TestOperationsCatalogRegisters(t *testing.T) {
 	require.True(t, ok)
 	// The decided set, pinned: an operation added or dropped is a change to
 	// this list, the help book and the ADR that decides it together —
-	// ADR-0398 §M6 for the stack's, ADR-0399 §M2 for the regions',
+	// ADR-0398 §M4 for the stack's, §M5 for the formats' and the entries', ADR-0399 §M2 for the regions',
 	// ADR-0400 §M2 for the operations' and the images', ADR-0401 §M2 for
 	// the composite's.
 	decided := []string{opGetView, opReadPixels, opMeasure, opOpenSample, opSetRecipe, opSetPlane, opSetRegion, opSetZoom, opSendToPlay,
 		opGetAxis, opSetPosition, opSetBands, opToWorld, opToPixel,
+		opListFormats, opGetEntries, opSetEntry,
 		opListRegions, opGetRegion, opAddRegion, opUpdateRegion, opRemoveRegion, opSelectRegion, opMeasureRegion, opProfileRegion,
 		opGetRegionsDocument, opSetRegionsDocument, opSendRegionsToPlay, opSendProfileToPlay,
 		opListOperators, opPlanOperation, opRunOperation, opCancelOperation, opListImages, opShowImage, opDropImage, opGetRecord,
@@ -217,7 +220,7 @@ func TestOperationsCatalogRegisters(t *testing.T) {
 		assert.Equal(t, app.OperationEffectConsequential, spec.Effect, "%s: publishing writes outside the app", name)
 	}
 	var spec app.OperationSpec
-	for _, name := range []string{opOpenSample, opSetPosition, opSetBands, opMeasureRegion, opRunOperation, opSetComposite, opSetLayer, opMeasureRegions} {
+	for _, name := range []string{opOpenSample, opSetPosition, opSetBands, opMeasureRegion, opRunOperation, opSetComposite, opSetLayer, opMeasureRegions, opSetEntry} {
 		spec, _ = m.Operations.Lookup(name)
 		assert.True(t, spec.Async, "%s settles when the image is shown", name)
 	}
@@ -226,7 +229,7 @@ func TestOperationsCatalogRegisters(t *testing.T) {
 		assert.Equal(t, app.OperationEffectView, spec.Effect, name)
 	}
 	for _, name := range []string{opGetAxis, opToWorld, opToPixel, opListRegions, opGetRegion, opProfileRegion, opGetRegionsDocument,
-		opListOperators, opPlanOperation, opListImages, opGetRecord} {
+		opListOperators, opPlanOperation, opListImages, opGetRecord, opListFormats, opGetEntries} {
 		spec, _ = m.Operations.Lookup(name)
 		assert.Equal(t, app.OperationClassQuery, spec.Class, name)
 	}

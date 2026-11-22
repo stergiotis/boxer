@@ -23,7 +23,7 @@ const (
 	phaseViewing                       // an image is shown; no region is measured
 	phaseMeasuring                     // a region is marked and its statistics are being computed
 	phaseMeasured                      // a region is marked and its statistics are shown
-	phaseSelecting                     // another selection of the stack open is being taken (ADR-0398 §M6)
+	phaseSelecting                     // another selection of the stack open, or another entry of its file, is being taken (ADR-0398 §M4, §M5)
 	phaseRegionMeasuring               // regions are being measured (ADR-0399 §M2)
 	phaseProfiling                     // a line's profile is being taken (ADR-0399 §M2)
 	phaseRunning                       // an operation is being run (ADR-0400 §M2)
@@ -119,8 +119,8 @@ func (inst *App) mirrorPhase() {
 
 // newPhaseMachine declares the window's lifecycle: an image is opened, a
 // region of it is marked and measured, either can be replaced, and the image
-// of a stack can be replaced by another selection of it, which the marked
-// region's measurement then follows.
+// of a stack can be replaced by another selection of it — or by another
+// entry of its file — which the marked region's measurement then follows.
 func newPhaseMachine() (m *fsmview.Machine[phaseE]) {
 	m = fsmview.NewMachine(phaseEmpty, 64, fsmview.MachineOptions[phaseE]{
 		Label:      func(ph phaseE) string { return ph.String() },
@@ -145,9 +145,9 @@ func newPhaseMachine() (m *fsmview.Machine[phaseE]) {
 		EdgeLabel(phaseMeasured, phaseMeasuring, "another region is marked").
 		EdgeLabel(phaseMeasured, phaseViewing, "Clear region").
 		EdgeLabel(phaseMeasured, phaseOpening, "Open, or a sample").
-		EdgeLabel(phaseViewing, phaseSelecting, "a position or the bands are set").
-		EdgeLabel(phaseMeasuring, phaseSelecting, "a position or the bands are set").
-		EdgeLabel(phaseMeasured, phaseSelecting, "a position or the bands are set").
+		EdgeLabel(phaseViewing, phaseSelecting, "a position, the bands or an entry are set").
+		EdgeLabel(phaseMeasuring, phaseSelecting, "a position, the bands or an entry are set").
+		EdgeLabel(phaseMeasured, phaseSelecting, "a position, the bands or an entry are set").
 		EdgeLabel(phaseSelecting, phaseViewing, "the selection is shown, or taking it failed").
 		EdgeLabel(phaseSelecting, phaseMeasuring, "the selection is shown with a region marked, which is measured again").
 		EdgeLabel(phaseSelecting, phaseOpening, "Open, or a sample")
@@ -247,7 +247,7 @@ func (inst *App) renderPhase() {
 }
 
 // tipPhase explains the chip.
-const tipPhase = "Where the window stands: no image, one being opened, one shown, another selection of a stack being taken, the marked region being measured or measured, regions being measured, a line being profiled, or an operation being run. Click for the graph and the history."
+const tipPhase = "Where the window stands: no image, one being opened, one shown, another selection of a stack or another entry of its file being taken, the marked region being measured or measured, regions being measured, a line being profiled, or an operation being run. Click for the graph and the history."
 
 // phaseLine is the phase with what it holds.
 func (inst *App) phaseLine() (s string) {

@@ -6,7 +6,7 @@ package imagescope
 // design-system review see the controls, the image with its colour bar and
 // histogram, and the statistics table together; the sample stack at its
 // second time as a three-band composite, with the stack's controls and the
-// placement line (ADR-0398 §M6); and the stack with regions and an
+// placement line (ADR-0398 §M4); and the stack with regions and an
 // operation run on it (ADR-0399 §M2, ADR-0400 §M2). The stage has no runtime:
 // the jobs run without task rows, and Open… and Send to play say that there
 // is no bus.

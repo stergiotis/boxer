@@ -1,9 +1,9 @@
 package imagescope
 
-// A stack open in the window (ADR-0398 §SD3, §M6): the planes a TIFF, FITS,
-// NPY or NPZ file holds along named axes, of which the window shows one
-// selection — a position on every selector axis, and one band or three — as
-// an image. The stack stays resident while it is open; the image shown is a
+// A stack open in the window (ADR-0398 §SD3, §M4): the planes a file read
+// through a registered reader holds along named axes, or a sample stack's,
+// of which the window shows one selection — a position on every selector
+// axis, and one band or three — as an image. The stack stays resident while it is open; the image shown is a
 // store of tiles copied from the selected planes, so every number the window
 // states is of the selection shown, at full resolution, as it is of an image
 // opened by itself.
@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/science/imaging"
+	"github.com/stergiotis/boxer/public/science/imaging/decode"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
 	"github.com/stergiotis/boxer/public/science/imaging/tiles"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -37,15 +38,19 @@ const (
 // axis, otherwise one band or three, red, green and blue. A selection taken
 // for a composite (ADR-0401 §M2) has composite set, and its bands are the
 // image's planes: the bands its layers show, each once, the first repeated
-// when there are two (see compositePlanes).
+// when there are two (see compositePlanes). entry is the file's entry the
+// stack is read from (ADR-0398 §M5), empty for a stack that is no file's: a
+// selection asking for another entry asks for that entry's stack, whose
+// default selection is shown.
 type selection struct {
 	at        []int
 	bands     []int
 	composite bool
+	entry     string
 }
 
 func (inst selection) clone() selection {
-	out := selection{at: slices.Clone(inst.at), composite: inst.composite}
+	out := selection{at: slices.Clone(inst.at), composite: inst.composite, entry: inst.entry}
 	if inst.bands != nil {
 		out.bands = slices.Clone(inst.bands)
 	}
@@ -54,12 +59,13 @@ func (inst selection) clone() selection {
 
 func (inst selection) equal(o selection) bool {
 	return slices.Equal(inst.at, o.at) && slices.Equal(inst.bands, o.bands) && (inst.bands == nil) == (o.bands == nil) &&
-		inst.composite == o.composite
+		inst.composite == o.composite && inst.entry == o.entry
 }
 
 // key names the selection in a job's key.
 func (inst selection) key() string {
 	var b strings.Builder
+	b.WriteString(strconv.Quote(inst.entry))
 	for _, a := range inst.at {
 		b.WriteString(strconv.Itoa(a))
 		b.WriteByte(',')
@@ -224,10 +230,12 @@ func storeOf(ctx context.Context, st imaging.Stack, sel selection, report bgjob.
 	}})
 }
 
-// selected is what taking a selection leaves.
+// selected is what taking a selection leaves; stk is the stack of another
+// entry of the file, when the selection asked for one.
 type selected struct {
 	pic *tiles.Store
 	sel selection
+	stk *stackView
 }
 
 // demandSelection keeps the store shown on the selection asked for: when
@@ -243,13 +251,19 @@ func (inst *App) demandSelection() {
 	}
 	want := inst.want.clone()
 	key := strconv.FormatUint(stk.gen, 10) + "|" + want.key()
-	val, done, err, busy := inst.selectJob.DemandReporting(key, func(ctx context.Context, report bgjob.Reporter) (*selected, error) {
+	job := func(ctx context.Context, report bgjob.Reporter) (*selected, error) {
 		pic, err := storeOf(ctx, stk.stack, want, report)
 		if err != nil {
 			return nil, err
 		}
 		return &selected{pic: pic, sel: want}, nil
-	})
+	}
+	if file := inst.file; want.entry != stk.shown.entry && file.switchable() {
+		job = func(ctx context.Context, report bgjob.Reporter) (*selected, error) {
+			return readEntry(ctx, file, want.entry, report)
+		}
+	}
+	val, done, err, busy := inst.selectJob.DemandReporting(key, job)
 	inst.selBusy = busy || !done
 	if inst.selBusy {
 		return
@@ -258,7 +272,12 @@ func (inst *App) demandSelection() {
 	inst.selBusy = false
 	if err != nil || val == nil {
 		reason := "the selection was cancelled"
-		if err != nil && !errorsIsCancelled(err) {
+		switch {
+		case err == nil || errorsIsCancelled(err):
+		case want.entry != stk.shown.entry:
+			reason = "the entry " + strconv.Quote(want.entry) + " could not be read: " + refusalText(err)
+			inst.selectRefusal = decode.RefusalOf(err)
+		default:
 			reason = "the selection could not be taken: " + refusalText(err)
 		}
 		inst.selectErr = reason
@@ -313,6 +332,19 @@ func (inst viewKind) name() string {
 // plane and the recipe; limits taken from the data are taken again from the
 // new samples, and the status row says so.
 func (inst *App) showSelection(res *selected) {
+	if res.stk != nil {
+		// Another entry of the file: it replaces the image opened as an
+		// open does, fitted under its default recipe, the regions and the
+		// results kept.
+		inst.stackGen++
+		res.stk.gen = inst.stackGen
+		inst.setShown(res.pic, res.stk)
+		inst.file = inst.file.withShown(res.sel.entry, res.stk.stack.Provenance().Variant)
+		if i := inst.file.index(res.sel.entry); i >= 0 {
+			inst.selectNote = "the entry " + inst.file.entries[i].Title + " is shown, fitted under its default recipe, as an open shows an image"
+		}
+		return
+	}
 	old := inst.viewKindNow()
 	if inst.shownId != openedId {
 		// A result is shown: the stack's new selection is shown in its
@@ -393,14 +425,17 @@ func (inst *App) carryView(old viewKind) (note string) {
 
 // errNoStack is the refusal of a stack operation when the image open is
 // none's selection.
-var errNoStack = app.RefuseOperation("the image open is not a stack's: open_sample with bands opens one, or the person opens a TIFF, FITS, NPY or NPZ file with Open…")
+var errNoStack = app.RefuseOperation(noStackReason)
+
+// noStackReason says where a stack comes from.
+const noStackReason = "the image open is not a stack's: open_sample with bands opens one, or the person opens a file with Open… whose format holds stacks — list_formats lists what this host reads"
 
 // setWant asks for a selection: the store shown follows it off the frame.
 // A composite waiting for another selection is dropped.
 func (inst *App) setWant(sel selection) {
 	inst.want = sel
 	inst.compAsk = nil
-	inst.selectErr, inst.selectNote = "", ""
+	inst.selectErr, inst.selectNote, inst.selectRefusal = "", "", 0
 	inst.syncSliders()
 }
 
@@ -413,6 +448,9 @@ func (inst *App) setPosition(axis string, pos int) error {
 	stk := inst.stk
 	if stk == nil {
 		return errNoStack
+	}
+	if inst.entryPending() {
+		return errEntryPending
 	}
 	i := stk.axisIndex(axis)
 	switch {
@@ -450,6 +488,9 @@ func (inst *App) setBands(bands []int) error {
 	stk := inst.stk
 	if stk == nil {
 		return errNoStack
+	}
+	if inst.entryPending() {
+		return errEntryPending
 	}
 	if stk.band < 0 {
 		return app.RefuseOperation("this stack has no band axis: each of its planes is a position of a selector axis, which set_position chooses")

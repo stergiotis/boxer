@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
+	"github.com/stergiotis/boxer/public/science/imaging/decode"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
 	"github.com/stergiotis/boxer/public/science/imaging/regions"
 	"github.com/stergiotis/boxer/public/science/imaging/tiles"
@@ -35,7 +36,7 @@ import (
 // Hover help. The texts are constants beside the render code so a scene can
 // read them and the help book can quote them (keelson-app A5).
 const (
-	tipOpen = "Open a PNG, JPEG, TIFF, FITS, NPY or NPZ file. The system file picker chooses it: this app never sees your filesystem, only the one file you pick, which is read once, whole — a file larger than the picker's read limit (64 MiB unless the host raises it) is refused."
+	tipOpen = "Open an image file: PNG, JPEG, or a format this host registered a reader for — the window lists them while it is empty. A file is recognised by its first bytes, not its name. The system file picker chooses it: this app never sees your filesystem, only the one file you pick, which is read once, whole — a file larger than the picker's read limit (64 MiB unless the host raises it) is refused."
 
 	tipSample = "Open a synthetic image made from its own coordinates — nothing measured — to try the controls on; bands is a stack of three times and four bands."
 
@@ -135,7 +136,7 @@ type App struct {
 	resultsCap int64
 
 	// stk is the stack the image opened is a selection of, with that
-	// selection; nil when the image is no stack's (ADR-0398 §M6). want is
+	// selection; nil when the image is no stack's (ADR-0398 §M4). want is
 	// the selection asked for, which the store shown follows: selectJob takes
 	// it off the frame, selBusy says it is in flight, and selectNote and
 	// selectErr say what the last one kept of the view or why it failed.
@@ -151,6 +152,20 @@ type App struct {
 	selectErr  string
 	lastTriple []int
 	posSlider  []float64
+	// selectRefusal is which of the decode seam's refusals selectErr is,
+	// for an entry the reader refused; zero otherwise.
+	selectRefusal decode.RefusalE
+
+	// readers is the registry files are read through; nil for the
+	// process's (decode.Default). A test gives the window its own.
+	// file is the file the image opened was read from, nil for a sample;
+	// prevFile is the one before an open in flight, put back if it fails.
+	// openRefusal is which of the decode seam's refusals openErr is; zero
+	// for a failure that is none (ADR-0398 §SD8, §M5).
+	readers     *decode.Registry
+	file        *openedFile
+	prevFile    *openedFile
+	openRefusal decode.RefusalE
 	// compAsk is a composite asked for whose bands the stack's selection
 	// shown does not hold yet: it is shown when the selection that does
 	// lands (ADR-0401 §M2).
@@ -568,6 +583,7 @@ func (inst *App) renderControls() {
 	}
 	inst.renderToolRow()
 	inst.renderImagesRow()
+	inst.renderEntryRow()
 	inst.renderStackControls()
 	recipe := inst.viewer.Recipe()
 	plane, single := inst.viewer.Plane()
@@ -714,7 +730,7 @@ func (inst *App) renderEmpty() {
 	case inst.bus == nil:
 		c.Label("No image. There is no bus on this host, so a file cannot be opened here; a sample can.").Send()
 	default:
-		c.Label("No image. Open a PNG, JPEG, TIFF, FITS, NPY or NPZ file with Open…, or start from a sample.").Send()
+		c.Label("No image. Open… reads a file in a format this host reads — " + formatTitles(inst.registry()) + " — or start from a sample.").Send()
 	}
 	inst.renderSampleButtons()
 }

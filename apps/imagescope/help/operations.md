@@ -18,11 +18,16 @@ says how to use them together and what each refuses.
 
 No operation opens a file. The file picker is the person's: an agent that
 needs a particular image asks the person to open it with **Open…**, then
-reads `get_view`. A PNG, JPEG, TIFF, FITS, NPY or NPZ file opens; a file
-over the file broker's read limit — 64 MiB unless the host raises it — is
-refused before the window sees it, and a file a reader refuses ends in
-`get_view`'s `Error` with the reader's own sentence, which names the
-feature, the limit or the defect.
+reads `get_view`. What opens is what the host registered: `list_formats`
+lists the formats — name, title, the endings their files carry, the
+reader's version and what it reads and refuses — and a file is recognised
+by its first bytes. A file over the file broker's read limit — 64 MiB
+unless the host raises it — is refused before the window sees it. A file a
+reader refuses ends in `get_view`'s `Error` with the reader's own sentence,
+which names the feature, the limit or the defect, and `ErrorKind` says
+which refusal it was: `unknown-format` (no reader claims the file; the
+sentence names the formats), `ambiguous` (two do), `unsupported`, `limit`,
+`malformed`.
 
 For scenes and headless runs, `BOXER_IMAGESCOPE_SAMPLE` opens a new window on
 a sample (`field`, `colour`, `small`, `float`, `scaled`, `elevation`, `double`,
@@ -42,8 +47,8 @@ status row.
   marked region and, for a stack, the selection asked for. A composite is
   there whole, as `set_composite` takes it, linked or not, so restoring the
   resource shows it again. Written by `set_plane`, `set_recipe`,
-  `set_region`, `set_position`, `set_bands`, `set_composite` and
-  `set_layer`.
+  `set_region`, `set_position`, `set_bands`, `set_entry`, `set_composite`
+  and `set_layer`.
 - `regions` — the window's regions, as the regions document, and the one
   selected. Written by `add_region`, `update_region`, `remove_region`,
   `select_region` and `set_regions_document`.
@@ -64,8 +69,9 @@ the regions document and a record are kept only by saving them.
   refused, naming those two ways on.
 - *opening* — a file is being chosen, read or decoded, or a sample made.
 - *viewing* — an image is shown and no region is measured.
-- *selecting* — a position or bands of the stack open were set and that
-  selection is being taken; the image shown stays until it lands.
+- *selecting* — a position or bands of the stack open, or another entry
+  of the file, were set and that selection is being taken; the image shown
+  stays until it lands.
 - *measuring* — a region is marked and its statistics are being computed.
 - *measured* — the marked region's statistics are computed.
 - *measuring-regions* — regions are being measured, by `measure_region`,
@@ -90,7 +96,10 @@ the same way, with the reason in `SelectionError`.
   lists its axes — name, role, size, unit, and at most 32 labels and
   coordinates each, `Truncated` when there are more — the selection shown,
   the one asked for, and `Pending` while they differ. `SelectionNote` says
-  what the last selection change kept of the view. `Mode` says how the
+  what the last selection change kept of the view. For an image read from
+  a file, `File` names it, its format with the reader's version — and the
+  `Variant` read, in the format's own word, where one format covers
+  several — the entry shown and how many the file holds. `Mode` says how the
   image is shown: `as stored`, `single plane` or `composite`; `Composite`
   lists a composite's layers — label, band or plane, colour, whether
   hidden, and the recipe with the limits in force — whether it is `Linked`,
@@ -101,6 +110,14 @@ the same way, with the reason in `SelectionError`.
   bins rather than counted; it is absent until the histogram is counted.
 - `get_axis` — the labels and coordinates of one axis from a position, at
   most 256: the rest of an axis `get_view` cut short.
+- `list_formats` — the formats this host reads.
+- `get_entries` — the entries of the file open, from `From`, at most
+  `Count` (256; 0 lists 64), `Truncated` when there are more: each with its
+  `Id`, title, size, planes and kind as the header says them, whether the
+  reader reads it or, when not, the `Refusal` — `unsupported` for what the
+  reader does not read, `limit` for a bound of its own, `malformed` for an
+  entry that does not follow its format — and the `Reason`, the `Default`
+  and the one `Shown`. Refused when no file is open.
 - `read_pixels` — a block of samples, every plane, as values in row-major
   order, through the plane's value transform; an invalid sample — NaN, or
   the declared value — is 0 and counted in `Invalid`. At most 1024 pixels: a larger block is cut to whole rows that fit
@@ -124,8 +141,9 @@ the same way, with the reason in `SelectionError`.
 Both are refused, by name, for an image without a placement.
 
 For a stack, `read_pixels` and `measure` name in `Selection` the selection
-their numbers are of: the one shown, which is the one asked for unless a
-change is still pending. Read it before quoting a number.
+their numbers are of — the file's `Entry` among it: the one shown, which is
+the one asked for unless a change is still pending. Read it before quoting a
+number.
 
 Pixel (column, row) covers the square from (column, row) to (column + 1,
 row + 1); row 0 is the top. A region is `Col`, `Row`, `Width`, `Height`.
@@ -151,6 +169,16 @@ Every command sets a value; none toggles, so a repeat leaves the same view.
   open as the linked composite of the three in red, green and blue over the
   range of their data — the same picture — and the outcome's `Note` says
   so.
+- `set_entry` — `Id`, an entry of the file open from `get_entries`: it is
+  read from the bytes the window holds and replaces the image opened as an
+  open does — its default selection, fitted, under the default recipe; the
+  regions and the results stay. It settles when the entry is shown, the
+  outcome's `Selection.Entry` naming it. An entry the reader does not read
+  is refused with its reason, an id the file lacks naming the ones it has;
+  an entry the reader refuses while reading it leaves the one shown, and
+  the outcome's `Error` says why, `get_view`'s `SelectionErrorKind` which
+  refusal it was. While it is read, `set_position`, `set_bands` and
+  `set_composite` are refused.
 - `set_position` and `set_bands` settle when the selection is shown; the
   outcome names it, and `Note` says what was kept. The view, the marked
   region and, while the view stays of one kind, the plane and the recipe are

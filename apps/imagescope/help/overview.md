@@ -9,12 +9,14 @@ title: An image as samples
 
 # An image as samples
 
-Image scope opens one PNG, JPEG, TIFF, FITS, NPY or NPZ file and keeps it
-as what the file holds: planes of samples in their own kind — 8 or 16 bits,
-signed integers of 16 or 32 bits, floats of 32 or 64 bits — with a colour
-model saying what the planes are. A TIFF, FITS or NPY file can hold more
-planes than one image: a stack, along axes such as time or band, of which
-the window shows one selection. What the window draws is those
+Image scope opens one image file — a PNG or a JPEG, or a file of another
+format this host registered a reader for — and keeps it as what the file
+holds: planes of samples in their own kind — 8 or 16 bits, signed integers
+of 16 or 32 bits, floats of 32 or 64 bits — with a colour model saying what
+the planes are. A file of a registered format can hold more planes than one
+image: a stack, along axes such as time or band, of which the window shows
+one selection; and it can hold several images, its entries, of which the
+window shows one. What the window draws is those
 samples through a display recipe: two limits, a transfer function between
 them and, for a single plane, a colour map. Changing the recipe changes the
 picture and never the samples, so every number the window states — the
@@ -22,17 +24,22 @@ readout under the pointer, the histogram, a region's statistics — is the same
 under every recipe. How each is computed, and what it assumes, is on the
 **What the numbers are** page; this page is the window.
 
-The viewer reads those six formats and nothing else. It applies no colour
-profile: samples are shown as sRGB, and a file that declares another
-encoding gets a note in the status row saying the declaration was not
-applied.
+The viewer reads PNG and JPEG itself; every other format is the host's.
+What it registered is listed on the empty window, and an agent reads it
+with `list_formats`. A file is recognised by its first bytes, never by its
+name. The viewer applies no colour profile: samples are shown as sRGB, and a
+file that declares another encoding gets a note in the status row saying the
+declaration was not applied.
 
 What opens is bounded twice. The file picker hands the window the whole
 file, and refuses one larger than its read limit — 64 MiB unless the host
 raises it — before the window sees a byte: that limit is the bound on what
-opens here. Within it, a plane larger than 64 megapixels and a stack whose
-samples take more than 1 GiB are refused from the file's header. A stack
-stays in memory while it is open.
+opens here. Within it, a plane larger than 64 megapixels, a stack whose
+samples take more than 1 GiB and one of more than 65536 planes are refused
+from the file's header. A stack stays in memory while it is open, and so
+does a file of more than one entry, whole, while the window shows an image
+from it — at most the read limit — so that another entry opens without the
+file being picked again.
 
 An agent drives the window through its operations catalog; that, with the
 phases of the window's machine, is on the **Operating image scope as an
@@ -46,10 +53,12 @@ gives the handle back. A PNG is shown as it is read, from the top down; the
 histogram, the data limits and measurements are offered once the whole file
 is in, and the limits then move to the image's data range unless you set
 them meanwhile. If the file turns out to be damaged, what was shown before
-comes back. A TIFF, FITS, NPY or NPZ file is read whole and then shown.
-What a reader does not read — a compression, a sample format, a projection
-it cannot evaluate, a malformed header — is refused, and the status row
-quotes the reader's own sentence, which names it. Nothing is kept after the window closes — neither the image nor
+comes back. A file of any other format is read whole by its reader and
+then shown. A file no reader claims is refused, and the sentence names the
+formats this host reads; a file two readers claim is refused too, naming
+both. What a reader does not read — a compression, a sample format, a
+projection it cannot evaluate, a malformed header — is refused, and the
+status row quotes the reader's own sentence, which names it. Nothing is kept after the window closes — neither the image nor
 the view of it.
 
 The **Sample** buttons, on the empty window and under *Advanced*, open a
@@ -68,8 +77,10 @@ EPSG:32632 at 10 m a pixel.
 
 The status row leads with the window's phase chip — *empty*, *opening*,
 *viewing*, *selecting*, *measuring*, *measured*, and *measuring-regions*,
-*profiling* or *running* while that work is under way — and carries what the last
-open came to. Under it, in warning badges, is what to know about the samples
+*profiling* or *running* while that work is under way — then the image
+shown: its name, the format it was read from with the variant in brackets
+where one format covers several, its size, colour model and sample kind.
+It carries what the last open came to. Under it, in warning badges, is what to know about the samples
 before reading numbers off them: that a JPEG's samples are what the decoder
 reconstructs, that a palette was expanded, that an animation is shown as its
 default image, that rows were flipped, which stored value marks no
@@ -82,9 +93,9 @@ the file declared that is not applied.
 ## A stack
 
 A stack opens on position 0 of every axis, and on the image as stored when
-its bands are a colour model — a TIFF's grey or RGB — otherwise on its
-first band. A row per selector axis — a time, a depth, a page, a FITS
-cube's third axis — has a stepper, **‹** and **›**, around a slider, and
+its bands are a colour model — a grey or a red, green and blue image —
+otherwise on its first band. A row per selector axis — a time, a depth, a
+page, a cube's third axis — has a stepper, **‹** and **›**, around a slider, and
 says which position is shown: its label, its coordinate with the axis's
 unit, and which of how many it is. The **Bands** row chooses *as stored*,
 *one band* — shown by itself through a colour map — or *three bands*, shown
@@ -99,6 +110,22 @@ or stays a colour image, the plane and the recipe are kept. Limits taken
 from the data are taken again from the new plane, and the status row says
 so. Every number — the readout, the histogram, a region's statistics, what
 **Send to play** sends — is of the selection shown.
+
+## A file's entries
+
+A file can hold several images — the header units of one format, the
+arrays of an archive of another. They are its entries, and the window
+opens the one the file marks as its default. For a file of more than one,
+an **Entry** row lists them all with their size, planes and sample kind as
+the file's header says them, and which of how many is shown. Choosing
+another reads it from the file held, in the background — the phase reads
+*selecting* — and shows it as an open shows an image: on its own default
+selection, fitted, under its default recipe. The regions and the results of
+operations stay. An entry the reader does not read is listed with its
+reason and cannot be chosen; one it refuses while reading it — over a
+limit, or damaged — leaves the entry shown, with the reason on the status
+row. A file with no entry the reader reads does not open: the status row
+says why the entry the file means could not be read.
 
 ## Looking
 

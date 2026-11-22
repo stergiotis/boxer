@@ -294,6 +294,9 @@ func (inst *App) setComposite(in CompositeArgs) error {
 	if inst.pic == nil {
 		return errNoImage
 	}
+	if inst.entryPending() {
+		return errEntryPending
+	}
 	ask, err := inst.checkComposite(in)
 	if err != nil {
 		return err

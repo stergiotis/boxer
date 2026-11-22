@@ -16,9 +16,9 @@ status: draft
 This page is for a project that uses the image engine of
 [ADR-0373](../adr/0373-an-image-viewer-samples-apart-from-presentation-mapped-in-go-shipped-as-tiles.md)
 and its extension in
-[ADR-0398](../adr/0398-images-beyond-a-colour-model-more-sample-kinds-invalid-samples-stacks-a-placement-and-three-readers.md)
-without the `imagescope` app: to read PNG, JPEG, TIFF, FITS and NPY files
-into samples, to compute numbers from them, to map them to colours, or to
+[ADR-0398](../adr/0398-images-beyond-a-colour-model-more-sample-kinds-invalid-samples-stacks-a-placement-and-a-seam-for-readers.md)
+without the `imagescope` app: to read PNG and JPEG files, and the formats
+you register a reader for, into samples, to compute numbers from them, to map them to colours, or to
 show them in an imzero2 window. Each package's doc comment has the API; this
 page is which package to reach for and the contracts that cross them.
 
@@ -27,8 +27,8 @@ page is which package to reach for and the contracts that cross them.
 | You want to… | Use | Needs imzero2 |
 | --- | --- | --- |
 | hold an image as planes of samples in their own kind, a stack of planes along named axes, and where the pixels are | [`imaging`](../../public/science/imaging/doc.go) | no |
-| read a PNG or JPEG file into an image, or a TIFF, FITS, NPY or NPZ file into a stack | [`imaging/decode`](../../public/science/imaging/decode/doc.go) | no |
-| read one of those three formats with its reader's own options — a FITS HDU, an NPZ member — or list what a file holds without its samples | [`decode/tiff`](../../public/science/imaging/decode/tiff/doc.go), [`decode/fits`](../../public/science/imaging/decode/fits/doc.go), [`decode/npy`](../../public/science/imaging/decode/npy/doc.go) | no |
+| read a PNG or JPEG file into an image; register a reader of another format and read any registered format into a stack, entry by entry | [`imaging/decode`](../../public/science/imaging/decode/doc.go) | no |
+| check a reader against the seam's contract, or give a test a file of several entries without a real format | [`decode/decodetest`](../../public/science/imaging/decode/decodetest/doc.go) | no |
 | keep an image as 512-pixel tiles with every reduced level, and read a region's histogram and samples from them | [`imaging/tiles`](../../public/science/imaging/tiles/doc.go) | no |
 | count samples, take percentiles, mean and standard deviation of a plane or a region | [`imaging/stats`](../../public/science/imaging/stats/doc.go) | no |
 | reduce an image for showing it smaller — means, minima, maxima | [`imaging/levels`](../../public/science/imaging/levels/doc.go) | no |
@@ -113,34 +113,93 @@ is not part of the digest.
 
 ## Decoding untrusted files
 
-`decode.Sniff` tells the six formats from a file's first bytes, and
-`FormatE.IsStack` which way each goes. `decode.Decode` reads a PNG or JPEG
-from a byte slice and refuses an image over `Options.MaxPixels` — 64
-megapixels unless set — from its header, before decoding it.
-
-`decode.DecodeStack` reads a TIFF or BigTIFF, a FITS file (gzip-wrapped
-too), an NPY array or an NPZ archive's only array from an `io.ReaderAt`
-into a stack, through the reader of its format. `Options.MaxPixels`,
-`MaxBytes` and `MaxPlanes` are the readers' own limits — a plane, the whole
-stack's samples, its plane count — checked from the header before a sample
-is read. What each reader reads is in its package's doc comment; what it
-does not read it refuses by name rather than guessing: in TIFF, JPEG,
-Zstandard and LERC compression and an orientation other than top-left; in
-FITS, 64-bit integers, tile compression and random groups; in NPY, object
-arrays and native byte order; and in each, a sample type outside the six
-kinds — unsigned 32-bit, 64-bit integer, complex — where the format has one. A refusal keeps the reader's error, so `errors.Is`
-matches the reader's `ErrUnsupported`, `ErrLimit` or `ErrMalformed` and the
-message names the feature, the limit or the defect: show it as it stands. A
-reader converts its format's conventions to the pixel convention above —
-FITS rows flipped, a point-registered raster shifted half a pixel, a
-Fortran-ordered array reordered — and records it in `Provenance`
-(`Derivations`, and `Notes` for the rest). The chunk and marker scanners and the decode are fuzzed
+`decode.Sniff` tells PNG and JPEG from a file's first bytes, and
+`decode.Decode` reads one from a byte slice, refusing an image over
+`Options.MaxPixels` — 64 megapixels unless set — from its header, before
+decoding it. The chunk and marker scanners and the decode are fuzzed
 against the standard library's reading of the same file
 (`decode/fuzz_test.go`); run them with `scripts/ci/gofuzz.sh
-./public/science/imaging/decode/` after changing the decoder. What the reader
-changed on the way — a palette expanded, chroma converted, an animation cut
-to its first frame, a lossy source — is in `Provenance`, and a project that
-shows numbers should show those notes beside them, as the app does.
+./public/science/imaging/decode/` after changing the decoder. What the
+decoder changed on the way — a palette expanded, chroma converted, an
+animation cut to its first frame, a lossy source — is in `Provenance`, and
+a project that shows numbers should show those notes beside them, as the
+app does.
+
+## Registering a reader
+
+Every other format comes through a reader you supply: a value implementing
+`decode.ReaderI` that describes its format (`Format`: a name, a title, the
+endings its files carry, a version of its own reading and a doc line),
+claims its files from their first `decode.SniffLen` bytes, lists what a
+file holds as entries — a directory, a header unit, an array, each with an
+id, its shape and kind — and decodes an entry into a stack under
+`decode.Limits`. It reads from an `io.ReaderAt`, delivers row 0 at the top
+and records each convention it converted in `Provenance`, checks the limits
+from the header before reading samples (`Limits.Check`), and refuses by
+name with `decode.Unsupported`, `OverLimit`, `Malformed` or `NoEntry`
+(`decode.Refuse` for a kind held as a value); the contract is in the
+package doc of [`imaging/decode`](../../public/science/imaging/decode/doc.go).
+PNG and JPEG are readers too (`decode.BuiltinReaders`).
+
+An entry the reader does not read is listed with the refusal a decode of it
+would be: `entry.Refused(err)` sets `Readable` false, `Refusal` to the kind
+— unsupported, limit or malformed — and `Reason` to the refusal's bare
+words, without the kind's closing sentence (`decode.ReasonOf` gives them
+back from any refusal). Exactly one entry of a file is the `Default`: the
+one a plain open reads, or, in a file with nothing readable — a file of
+tables, an archive of other members — the one it would have read. Decode
+finds its entry with `decode.SelectEntry`, which refuses an unreadable one,
+the default among them, with its own kind and its title, so a reader never
+picks an entry or a refusal for itself.
+
+Read the file through `decode.ReadFullAt`, so that a file that ends early is
+malformed and a read that fails for any other reason reaches the caller as
+it is, no refusal: a failing disk does not make a file malformed. Read a
+stream — a section of the file, a decompressor over it — from
+`decode.MarkReadFailures` of the file and pass what it returns to
+`decode.ReadError`: the mark survives the decompressor, so a failed read
+stays no refusal while a corrupt block, a checksum or the stream's early
+end is malformed, without your knowing the decompressor's errors. Where one
+format name covers several variants — wider offsets, an archive of arrays,
+a compressed wrapping — set `Provenance.Variant` to the variant's word and
+keep `Provenance.Format` the reader's name.
+
+Register readers with `decode.Register` where your host wires its apps,
+before any window opens a file — not from an `init` of the reader's
+package, so that the formats a deployment parses are listed in one place.
+`decode.Default()` is the registry that holds them; `Registry.Decode`
+hands a file to the one reader that claims it and refuses a file none
+claims (`ErrUnknownFormat`, its sentence naming the formats registered) or
+two claim (`ErrAmbiguous`). An app shows a refusal's sentence as it stands
+and tells the kinds apart with `decode.RefusalOf`. A test builds its own
+registry with `decode.NewRegistry`.
+
+Run [`decodetest.Check`](../../public/science/imaging/decode/decodetest/doc.go)
+from your reader's tests over a few valid files whose samples are larger
+than their headers, and a file with no readable entry where your format has
+one (`Expect.Refusal` states the kind it is listed with). It checks the
+contract — sniffing, entries and their refusals, entries that decode to
+what they announce, each limit refused before samples are read, cancel,
+refusals that wrap the seam's sentinels, every truncation survived, a
+failing read kept apart from a malformed file — and not that the format was
+read correctly, which only your fixtures, held against a reference reader,
+can show. Bump `Format.Version` whenever the same bytes would decode to
+something else.
+
+Three things the kit cannot judge for you. "Before samples are read" is
+measured against what `Entries` reads: a reader of a compressed container
+inflates a block of input to reach a member's header, so it sets
+`File.HeaderSlack` to its decompressor's input buffer and the member's own
+header; a reader that decompresses a whole file to list it reads everything
+in `Entries`, so the bound proves nothing of it, and it owes a test of its
+own that a decode over a limit stops by what it decompresses. And the three
+`Limits` are the caller's: a bound of your own — on a chunk or a tile held
+at once, on what listing inflates — is refused with `OverLimit` naming it as
+the reader's, and must not refuse a stack the caller's limits admit because
+one chunk is larger than a plane. Derive it from the request rather than
+fix it: no lower than `MaxPixels` and `MaxBytes`, and no lower than a floor
+that holds the largest chunk the format's writers put around a small image,
+so that the kit's exact limits still decode.
 
 ## A large PNG, into tiles
 

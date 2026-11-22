@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/fsmops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
 	"github.com/stergiotis/boxer/public/science/imaging"
+	"github.com/stergiotis/boxer/public/science/imaging/decode"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
 	"github.com/stergiotis/boxer/public/science/imaging/tiles"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imageview"
@@ -27,10 +28,13 @@ import (
 // after the command stage and take their own arguments; the commands set
 // values and never toggle them. The controls of the window go through the
 // same handlers (ADR-0269 §SD8). Opening a file is not here: the file picker
-// is the person's, and an agent is given no path to name. A stack open in
-// the window adds its axes to get_view and the two commands that choose its
-// selection; an image with a placement adds the frame and the two queries
-// that convert between pixels and frame coordinates (ADR-0398 §M6).
+// is the person's, and an agent is given no path to name; list_formats says
+// what a file the person opens can be in. A stack open in the window adds
+// its axes to get_view and the two commands that choose its selection; an
+// image with a placement adds the frame and the two queries that convert
+// between pixels and frame coordinates (ADR-0398 §M4); a file of several
+// entries adds get_entries and set_entry (ADR-0398 §M5,
+// imagescope_entries.go).
 
 const (
 	resImage = "image"
@@ -196,7 +200,9 @@ type View struct {
 	Level         int            `desc:"0 when the view draws the samples themselves; k when each drawn cell is the mean of a 2^k × 2^k block"`
 	LevelsReady   bool           `desc:"the reduced levels are built"`
 	LimitsPending bool           `desc:"percentile limits asked for wait for the plane's histogram, or zscale limits for their sample of the plane; View.Recipe carries the limits in force until they land"`
-	Error         string         `desc:"why the last open failed; empty otherwise"`
+	Error         string         `desc:"why the last open failed, as the reader or the registry said it; empty otherwise"`
+	ErrorKind     string         `json:",omitzero" desc:"which refusal Error is: unknown-format (no reader of this host claims the file; list_formats), ambiguous (two do), unsupported (the reader does not read what the file uses), limit (over a decode limit), malformed, no-entry; absent for a failure that is none of them, such as a failed read"`
+	File          *FileInfo      `json:",omitzero" desc:"the file the image opened was read from: its format, the reader's version, the entry shown and how many the file holds; absent for a sample"`
 	Note          string         `desc:"the last open's outcome that was not a failure; empty otherwise"`
 	Refused       string         `desc:"why the person's last change to the view was refused; empty otherwise"`
 	Measured      bool           `desc:"the marked region's statistics are computed; measure returns them"`
@@ -217,10 +223,11 @@ type View struct {
 	RegionsHandover Handover `desc:"the last send_regions_to_play"`
 	ProfileHandover Handover `desc:"the last send_profile_to_play"`
 
-	StackSelection bool       `desc:"the image shown is a selection of a stack; Stack says which"`
-	Stack          *StackInfo `json:",omitzero" desc:"the stack the image shown is a selection of: its axes, the selection shown and the one asked for; absent for an image that is no stack's"`
-	SelectionNote  string     `json:",omitzero" desc:"what the last selection change kept of the view, or had to change: limits taken again from the data, a view of another kind"`
-	SelectionError string     `json:",omitzero" desc:"why the last selection asked for could not be taken; the one shown stayed"`
+	StackSelection     bool       `desc:"the image shown is a selection of a stack; Stack says which"`
+	Stack              *StackInfo `json:",omitzero" desc:"the stack the image shown is a selection of: its axes, the selection shown and the one asked for; absent for an image that is no stack's"`
+	SelectionNote      string     `json:",omitzero" desc:"what the last selection change kept of the view, or had to change: limits taken again from the data, a view of another kind"`
+	SelectionError     string     `json:",omitzero" desc:"why the last selection or entry asked for could not be taken; the one shown stayed"`
+	SelectionErrorKind string     `json:",omitzero" desc:"for an entry the reader refused to read: which refusal SelectionError is, as ErrorKind names them"`
 }
 
 // AxisInfo is one axis of a stack other than rows and columns.
@@ -276,11 +283,12 @@ type SelectionInfo struct {
 	AsStored  bool           `json:",omitzero" desc:"the image as stored: every band of the colour model the stack's bands are"`
 	Composite bool           `json:",omitzero" desc:"the image was taken for a composite: Bands are its planes, each band its layers show once, the first repeated when there are two; set_composite asks for it"`
 	Text      string         `desc:"the same in one line, as the window says it"`
+	Entry     string         `json:",omitzero" desc:"the id of the file's entry the stack was read from; absent for a stack that is no file's"`
 }
 
 // selectionInfo is a selection of a stack as the catalog reports it.
 func selectionInfo(stk *stackView, sel selection) SelectionInfo {
-	out := SelectionInfo{Text: stk.describe(sel), AsStored: sel.bands == nil && stk.band >= 0, Composite: sel.composite}
+	out := SelectionInfo{Text: stk.describe(sel), AsStored: sel.bands == nil && stk.band >= 0, Composite: sel.composite, Entry: sel.entry}
 	for i, a := range stk.axes {
 		if a.Role != imaging.AxisRoleSelector || i >= len(sel.at) {
 			continue
@@ -300,7 +308,11 @@ func selectionInfo(stk *stackView, sel selection) SelectionInfo {
 // selectionOf is a selection the catalog reported, read back: what
 // restoring the view resource asks for again.
 func selectionOf(stk *stackView, in SelectionInfo) (sel selection, ok bool) {
-	sel = selection{at: make([]int, len(stk.axes)), composite: in.Composite}
+	if in.Entry != stk.shown.entry {
+		// A selection of another entry's stack: its axes are not these.
+		return sel, false
+	}
+	sel = selection{at: make([]int, len(stk.axes)), composite: in.Composite, entry: in.Entry}
 	for _, p := range in.Positions {
 		i := stk.axisIndex(p.Axis)
 		if i < 0 || p.Position < 0 || p.Position >= stk.axes[i].Size {
@@ -748,7 +760,14 @@ type opsSnap struct {
 	clipped       *ClippedInfo
 	opening       bool
 	openErr       string
+	openRefusal   decode.RefusalE
 	openNote      string
+	// registry is the registry files are read through; file is the file
+	// the image opened was read from, nil for none; selectRefusal is which
+	// refusal selectErr is, for an entry refused.
+	registry      *decode.Registry
+	file          *openedFile
+	selectRefusal decode.RefusalE
 	problem       string
 	measured      *measurement
 	measureErr    string
@@ -790,7 +809,8 @@ func (inst opsSnap) runSource() runSource {
 
 func (inst *App) opsSnapshot() (sn opsSnap) {
 	sn = opsSnap{phase: inst.observePhase(), pic: inst.pic, view: inst.viewState(), opening: inst.open.Running(),
-		openErr: inst.openErr, openNote: inst.openNote, problem: inst.problem, measured: inst.measured, seedErr: inst.seedErr,
+		openErr: inst.openErr, openRefusal: inst.openRefusal, openNote: inst.openNote, problem: inst.problem, measured: inst.measured, seedErr: inst.seedErr,
+		registry: inst.registry(), file: inst.file, selectRefusal: inst.selectRefusal,
 		stk: inst.stk, want: inst.want.clone(), pending: inst.selectionPending(), selectNote: inst.selectNote, selectErr: inst.selectErr,
 		stkShown: inst.stackShown(), regs: inst.regs, selRegion: inst.selRegion, tool: inst.tool, profile: inst.profile,
 		regionMeasuring: inst.regionJob.Running(), profiling: inst.profileJob.Running(), images: inst.images, shownId: inst.shownId,
@@ -933,7 +953,8 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 				Level:         sn.level, LevelsReady: sn.levelsReady, LimitsPending: sn.limitsPending, Error: sn.openErr, Note: sn.openNote, Refused: sn.problem,
 				Measured: sn.measured != nil, MeasureError: sn.measureErr, Handover: sn.handover, SeedProblem: sn.seedErr,
 				StackSelection: sn.stkShown != nil, Stack: stackInfo(sn.stk, sn.want, sn.pending),
-				SelectionNote: sn.selectNote, SelectionError: sn.selectErr,
+				SelectionNote: sn.selectNote, SelectionError: sn.selectErr, SelectionErrorKind: refusalName(sn.selectRefusal),
+				ErrorKind: refusalName(sn.openRefusal), File: fileInfo(sn.file),
 				ShownImage: sn.shownId, Images: len(sn.images), Running: sn.running, RunError: sn.runErr, RunNote: sn.runNote,
 				Regions: len(sn.regs), SelectedRegion: sn.selRegion, Tool: sn.tool.String(),
 				RegionMeasuring: sn.regionMeasuring, Profiling: sn.profiling, RegionsHandover: sn.regionsOut, ProfileHandover: sn.profileOut}
@@ -1084,7 +1105,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		case sn.pic == nil:
 			return false, "there is no image; open_sample opens one, or the person opens a file with Open…"
 		case sn.stk == nil:
-			return false, "the image open is not a stack's: open_sample with bands opens one, or the person opens a TIFF, FITS, NPY or NPZ file"
+			return false, noStackReason
 		}
 		return true, ""
 	}
@@ -1194,8 +1215,18 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 	regionOperations(s)
 	runOperations(s)
 	compositeOperations(s)
+	entryOperations(s)
 	return
 }()
+
+// refusalName names a refusal of the decode seam for the catalog; empty for
+// none.
+func refusalName(r decode.RefusalE) string {
+	if r == 0 {
+		return ""
+	}
+	return r.String()
+}
 
 // Operations serves the catalog for this window (app.OperationsAppI).
 func (inst *App) Operations() (h app.OperationsHandlerI) { return ops.Bind(inst) }
