@@ -42,7 +42,7 @@ GROUP BY arm
 {"do":"wait","name":"Run","comment":"the app has mounted"}
 {"do":"sleep","settleMs":2500}
 {"do":"capture","text":"08_distribution","settleMs":600}
-{"do":"click","contains":"A baseline","comment":"pin the baseline by name, not by row order"}
+{"do":"click","contains":"A baseline","role":"button","comment":"pin the baseline by name, not by row order: the series chip, not the plot's hit regions of the same name"}
 {"do":"click","name":"Shift"}
 {"do":"capture","text":"08_distribution_shift","settleMs":600}
 {"do":"click","name":"Boxen"}
