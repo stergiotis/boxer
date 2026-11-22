@@ -22,8 +22,8 @@ screen back through the accessibility node the console carries (named
 {"do":"wait","role":"text_input","comment":"the gallery has mounted; its filter box is the only text input while every demo is folded"}
 {"do":"focus","role":"text_input"}
 {"do":"type","role":"text_input","text":"console"}
-{"do":"wait","contains":" console","role":"button","settleMs":400}
-{"do":"click","contains":" console","role":"button","comment":"expand the demo"}
+{"do":"wait","name":"\ue47e console","role":"button","settleMs":400,"comment":"the name whole, glyph included: the filter also keeps the agent console's tour entry"}
+{"do":"click","name":"\ue47e console","role":"button","comment":"expand the demo"}
 {"do":"wait","name":"terminal","settleMs":600}
 {"do":"read","name":"terminal","pattern":"(?P<banner>imzero2 console)","comment":"the banner reached the screen"}
 {"do":"type","name":"terminal","text":"echo hello"}

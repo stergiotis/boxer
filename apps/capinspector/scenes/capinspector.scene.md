@@ -48,7 +48,7 @@ accessibility node, so the scene does not open it.
 {"do":"capture","text":"capinspector-facts","comment":"facts selected: green card, amber chstore row, the grid four columns wide in this window"}
 
 {"do":"note","text":"--- a click on a graph node selects its cap ---"}
-{"do":"click","x":523,"y":452,"pointer":true,"comment":"the 'Subject router' card; coordinates because the graph has no accessibility nodes"}
+{"do":"click","x":523,"y":487,"pointer":true,"comment":"the 'Subject router' card; coordinates because the graph has no accessibility nodes"}
 {"do":"wait","value":"Subject family: (all subjects)","role":"label"}
 {"do":"click","name":"runtime.llm.* model inference","role":"button"}
 {"do":"wait","valueContains":"Live consumers in this registry:","role":"label","comment":"llm has a per-app filter, so the line lists the apps that declare it"}

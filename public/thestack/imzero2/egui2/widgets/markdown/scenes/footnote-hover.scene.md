@@ -44,6 +44,6 @@ opened. Run it with `scripts/dev/scene.sh` and this file's path (ADR-0248).
 
 {"do":"note","text":"--- the definitions, for a reader without hover: a numbered list after a rule at the end ---"}
 {"do":"scroll_into_view","valueContains":"that expose runtime state","role":"label","settleMs":600,"comment":"the last definition, [^introspection]"}
-{"do":"wait","value":"4. ","role":"label","comment":"numbered in order of first reference: bus, capability, facts, introspection"}
+{"do":"wait","value":"4.","role":"label","comment":"numbered in order of first reference: bus, capability, facts, introspection"}
 {"do":"capture","text":"footnote-definitions"}
 ```

@@ -39,5 +39,5 @@ The time strip of ADR-0251 in the widget gallery, with no map under it: a foreca
 {"do":"click","contains":"Clear range","role":"button"}
 {"do":"click","contains":"Play","role":"button"}
 {"do":"wait","valueContains":"between steps","role":"label","timeoutMs":20000,"comment":"playback entered a bracket, which it does only once both of its steps are held"}
-{"do":"click","contains":"Pause","role":"button"}
+{"do":"click","contains":"Pause","role":"button","nth":1,"comment":"the strip's own; the first is the Pause the host draws above every window's body"}
 ```

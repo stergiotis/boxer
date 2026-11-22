@@ -32,7 +32,7 @@ byte unit is the first row's RSS.
 {"do":"click","name":"Processes","role":"button","settleMs":2500}
 {"do":"wait","name":"CPU%~ ▼","role":"button","nth":0}
 {"do":"capture","text":"imztop-sort-cpu"}
-{"do":"click","name":"RSS","role":"button","nth":0,"settleMs":800}
+{"do":"click","name":"RSS\u00a0\u00a0","role":"button","nth":0,"settleMs":800,"comment":"an unsorted header keeps the sort glyph's room as two non-breaking spaces"}
 {"do":"wait","name":"RSS ▼","role":"button","nth":0}
 {"do":"read","contains":"iB","role":"button","nth":0,"on":"name","pattern":"^(?P<rss>[\\d.]+) (?P<unit>[KMG]iB)$","comment":"the first row's RSS cell"}
 {"do":"expect","of":"unit","matches":"^[MG]iB$"}
