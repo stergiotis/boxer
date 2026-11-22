@@ -2,6 +2,7 @@ package sessiondata
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -103,4 +104,22 @@ func TestTheBusRoundTrip(t *testing.T) {
 	require.NoError(t, host2.Publish(app.SubjectInstanceClosed, payload))
 	_, _, err = List(ctx, window, ticket, nil)
 	assert.ErrorContains(t, err, "no data session", "the session ended with its last window")
+}
+
+// TestARefusalCarriesTheNamesItIsAbout: what a refusal's facts say — the
+// name asked for, what the session holds — crosses the bus in its text.
+func TestARefusalCarriesTheNamesItIsAbout(t *testing.T) {
+	r := newRig(t, Limits{})
+	ticket, err := r.svc.Open(context.Background(), person)
+	require.NoError(t, err)
+	e := Endpoint{URL: r.stub.url()}
+	_, err = r.svc.Define(context.Background(), DefineInput{Caller: Caller{By: person}, Ticket: ticket, Endpoint: e, Name: "msgs", SQL: "SELECT 1 AS x"})
+	require.NoError(t, err)
+	_, err = r.svc.Prepare(context.Background(), PrepareInput{Caller: Caller{By: person}, Ticket: ticket, Endpoint: e, SQL: "SELECT * FROM session('nope')"})
+	require.Error(t, err)
+	text := refusalText(err)
+	assert.Contains(t, text, "name: nope")
+	assert.Contains(t, text, "available: msgs")
+	assert.NotContains(t, text, ticket)
+	assert.Equal(t, "plain", refusalText(errors.New("plain")))
 }

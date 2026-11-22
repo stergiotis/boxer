@@ -3,6 +3,8 @@ package sessiondata
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -209,7 +211,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 // refusal is the reply to a refused request: the reason, and the grant
 // destination it needed.
 func refusal(err error) (rep wireReply) {
-	rep = wireReply{V: wireVersion, Reason: err.Error()}
+	rep = wireReply{V: wireVersion, Reason: refusalText(err)}
 	var ge *GrantError
 	if errors.As(err, &ge) {
 		rep.Destination = ge.Destination
@@ -226,4 +228,45 @@ func (inst *Service) reply(subject string, rep wireReply) {
 	if pubErr := inst.busClient.Publish(subject, payload); pubErr != nil {
 		inst.log.Warn().Err(pubErr).Msg("sessiondata: publish reply")
 	}
+}
+
+// refusalFacts are the structured facts of a refusal that cross the bus in
+// its text, in this order: what a window or an agent needs to act on it —
+// the names, what the session holds, the bound — and nothing that could
+// carry a credential or a ticket.
+var refusalFacts = []string{"name", "names", "datasets", "available", "livesOn", "reads", "readBy", "cycle", "alias",
+	"bound", "function", "arg", "column", "parameter", "kind", "class", "diagnostics"}
+
+// refusalText is err's message with the facts of refusalFacts it carries,
+// as "message (key: value; …)": the message alone drops them, and a caller
+// across the bus has nothing else.
+func refusalText(err error) (text string) {
+	text = err.Error()
+	var parts []string
+	for _, key := range refusalFacts {
+		v, ok := eh.LookupFact[any](err, key)
+		if !ok {
+			continue
+		}
+		var value string
+		switch x := v.(type) {
+		case string:
+			value = x
+		case []any:
+			items := make([]string, 0, len(x))
+			for _, item := range x {
+				items = append(items, fmt.Sprint(item))
+			}
+			value = strings.Join(items, ", ")
+		default:
+			value = fmt.Sprint(x)
+		}
+		if value != "" {
+			parts = append(parts, key+": "+value)
+		}
+	}
+	if len(parts) > 0 {
+		text += " (" + strings.Join(parts, "; ") + ")"
+	}
+	return
 }
