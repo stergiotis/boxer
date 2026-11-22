@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-20
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-22
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0387: What a binary does when a stored table is older or newer than its schema
 
@@ -93,7 +91,7 @@ tables it uses, keeps the verdicts on a board served as
 `keelson('schema_tables')`, and logs one line per table whose verdict is
 not `ok`. The check itself reports and switches nothing. A store that
 opens its table at start applies its own rule to the same verdict (see
-*Choices for review*), and an `unchecked` verdict — the catalogue could
+*Choices accepted with the decision*), and an `unchecked` verdict — the catalogue could
 not be read — counts as not `ok` there. The board is the
 start's snapshot: after `schema apply` a process shows the new verdicts,
 and starts a watchbill worker it withheld, only when it is restarted.
@@ -262,7 +260,11 @@ is `boxer schema apply`, then the new binary.
   generator adds later, spelled differently by the server, would read as
   incompatible until the comparison learns it.
 
-## Choices for review
+## Choices accepted with the decision
+
+Reviewed by the code owner on 2026-11-22, after an external review, and
+accepted as listed.
+
 
 - The verdict is called `migratable` rather than additive, because it also
   covers aspect-only renames.
@@ -289,7 +291,7 @@ is `boxer schema apply`, then the new binary.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-11-22.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
