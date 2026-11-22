@@ -296,6 +296,20 @@ Accepted 2026-11-22.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 
+## Updates
+
+### 2026-11-22 — `schema apply` on a server
+
+The verification plan's gap is closed for the two mechanical cases. The
+`integration` lane runs both apply tests on a server as well as on
+clickhouse-local (`TestApplyBringsAnOlderTableInLine_Server`,
+`TestApplyRenamesAnAspectOnlyVariant_Server`), and they pass on the pinned
+26.8 release. An older table gets its missing columns, the window and the
+stamp, and a row written before the apply is still there afterwards. An
+aspect-only rename keeps the column's values under the new name, and the
+column carries the generated codec. A type a generator adds later is still
+judged only against the spellings the server gives it then.
+
 ## References
 
 - [ADR-0100](./0100-recordstore-generated-leeway-clickhouse-store.md) — the generated record store.
