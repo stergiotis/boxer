@@ -3,10 +3,12 @@ package fsmview
 import (
 	"context"
 	"fmt"
+	"iter"
 	"strconv"
 	"time"
 
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
@@ -87,6 +89,26 @@ type Options[T comparable] struct {
 	// [View.HistorySnapshot] inside the click branch to get the rows. nil
 	// emits neither footer nor separator. Host-drawn content (W13).
 	HistoryFooter func()
+	// Inline emits the chip, its summary and its toggle into the caller's
+	// row instead of a row of the widget's own. Set it where Render is
+	// called inside a horizontal row beside other controls: a nested row
+	// starts at the height of a plain control and grows downward, so a chip
+	// taller than that sits below the centre line of its neighbours.
+	Inline bool
+	// Details renders caller-owned content at the top of the level-2 popup,
+	// under the provenance chip and above the renderer toggle: the facts of
+	// the thing whose state the chip shows (its identifiers, where it runs),
+	// so the chip is the one inspector for them. It runs in the popup's
+	// vertical flow under a scope of its own. nil draws nothing.
+	// Host-drawn content (W13).
+	Details func()
+	// ChipTooltip replaces the chip's default hover text ("<title> — click
+	// for state-machine details"); "" keeps the default.
+	ChipTooltip string
+	// ChipLabel names the current state on the chip in the reader's words,
+	// where the machine's labels are the ones its operations report; nil
+	// shows the machine's label. The popup keeps the machine's labels.
+	ChipLabel func(T) string
 }
 
 // Events is what one Render, RenderChip or RenderPopup reports.
@@ -361,16 +383,23 @@ func (inst *View[T]) renderPopupAndTether() {
 func (inst *View[T]) renderChip() {
 	current := inst.machine.Current()
 	label := inst.machine.Label(current)
+	if inst.Opts.ChipLabel != nil {
+		label = inst.Opts.ChipLabel(current)
+	}
 	tone := badge.TonePrimary
 	if inst.Opts.BadgeTone != nil {
 		tone = inst.Opts.BadgeTone(current)
+	}
+	tip := inst.Opts.ChipTooltip
+	if tip == "" {
+		tip = fmt.Sprintf("%s — click for state-machine details", inst.title())
 	}
 	emitBadge := func() {
 		resp := badge.New(inst.ids.PrepareStr("chip"), label).
 			Tone(tone).
 			Variant(badge.VariantSolid).
 			Size(badge.SizeMd).
-			Tooltip(fmt.Sprintf("%s — click for state-machine details", inst.title())).
+			Tooltip(tip).
 			SendResp()
 		if resp.HasPrimaryClicked() {
 			inst.popupOpen = !inst.popupOpen
@@ -384,7 +413,7 @@ func (inst *View[T]) renderChip() {
 			if inst.Opts.AutoAnchor && inst.popupOpen {
 				p := c.CurrentApplicationState.StateManager.GetPointer()
 				if p.Valid {
-					inst.popupAnchor = &popupAnchorXY{X: p.X, Y: p.Y}
+					inst.popupAnchor = &popupAnchorXY{X: p.X + popupAutoOffset, Y: p.Y + popupAutoOffset}
 				}
 			}
 		}
@@ -393,20 +422,22 @@ func (inst *View[T]) renderChip() {
 		inst.ensureTether()
 		// Tethered inspector summary: badge · caller summary · AnchorToggle,
 		// then stamp the row rect for the bezier tether.
-		for range c.Horizontal().KeepIter() {
+		for range inst.row() {
 			emitBadge()
 			if inst.Opts.Summary != nil {
 				c.AddSpace(styletokens.GapInline(inst.density))
 				inst.Opts.Summary()
 			}
 			c.AddSpace(styletokens.GapInline(inst.density))
-			if inspector.AnchorToggle(inst.ids.PrepareStr("anchor-toggle"), &inst.popupOpen) {
+			// Named by the title, so two toggles on one screen stay apart
+			// for a driver (inspector.AnchorToggleNamed).
+			if inspector.AnchorToggleNamed(inst.ids.PrepareStr("anchor-toggle"), &inst.popupOpen, inst.Opts.Title) {
 				inst.events.Toggled = true
 				// Same AutoAnchor pointer-capture as the badge click, so the
 				// window opens near the toggle and the bezier stays short.
 				if inst.Opts.AutoAnchor && inst.popupOpen {
 					if p := c.CurrentApplicationState.StateManager.GetPointer(); p.Valid {
-						inst.popupAnchor = &popupAnchorXY{X: p.X, Y: p.Y}
+						inst.popupAnchor = &popupAnchorXY{X: p.X + popupAutoOffset, Y: p.Y + popupAutoOffset}
 					}
 				}
 			}
@@ -418,7 +449,7 @@ func (inst *View[T]) renderChip() {
 		emitBadge()
 		return
 	}
-	for range c.Horizontal().KeepIter() {
+	for range inst.row() {
 		emitBadge()
 		if sub := inst.subscriptText(); sub != "" {
 			c.AddSpace(styletokens.GapInline(inst.density))
@@ -429,6 +460,17 @@ func (inst *View[T]) renderChip() {
 			c.LabelAtoms(subAtoms).Send()
 		}
 	}
+}
+
+// row is where the chip and what follows it are laid out: a row of the
+// widget's own, or the caller's when Opts.Inline is set.
+func (inst *View[T]) row() iter.Seq[functional.NilIteratorValueType] {
+	if inst.Opts.Inline {
+		return func(yield func(functional.NilIteratorValueType) bool) {
+			yield(functional.NilIteratorValue)
+		}
+	}
+	return c.Horizontal().KeepIter()
 }
 
 // subscriptText resolves the "Xs ago" rendering of the last transition's
@@ -485,6 +527,12 @@ func (inst *View[T]) renderPopup() {
 		c.AddSpace(styletokens.PaddingInner(inst.density))
 		if !inst.Opts.Provenance.IsZero() {
 			inspector.ProvenanceChip(inst.Opts.Provenance)
+			c.Separator().Horizontal().Send()
+		}
+		if inst.Opts.Details != nil {
+			for range c.IdScope(inst.ids.PrepareStr("details")) {
+				inst.Opts.Details()
+			}
 			c.Separator().Horizontal().Send()
 		}
 		inst.renderRendererToggle()
@@ -685,6 +733,11 @@ func (inst *View[T]) graphCanvasSize() (w, h float32) {
 	}
 	return inst.graphCanvasW, inst.graphCanvasH
 }
+
+// popupAutoOffset moves an AutoAnchor popup off the point that was clicked,
+// down and to the right, so the window does not open over the chip and the
+// toggle that close it again.
+const popupAutoOffset float32 = 24
 
 // fsmPopup* and fsmGraphCanvas* size the level-2 popup and the graph inside
 // it. The popup opens large enough for a graph of a dozen states to read;

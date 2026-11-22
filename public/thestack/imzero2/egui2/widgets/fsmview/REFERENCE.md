@@ -18,7 +18,7 @@ Two-level finite-state-machine viewer for the ImZero2 framework. Level 1 is a co
 |---|---|
 | [`Machine[T comparable]`](./machine.go) | Visualization-aware wrapper around `*statetrooper.FSM[T]`. Owns rule mirror, display labels, edge labels, per-state colours, stable node ids. |
 | [`View[T comparable]`](./widget.go) | The two-level composite, a semi-retained widget (ADR-0267). Holds popup-open / selected-renderer / cached-graph-layout state on the receiver pointer; its `Opts` are re-read every frame. |
-| [`Options[T comparable]`](./widget.go) | The view's configuration: title, subscript, auto-anchor, tethering, initial renderer, provenance, badge tone, the host-drawn summary and history footer. Zero values are defaults. |
+| [`Options[T comparable]`](./widget.go) | The view's configuration: title, subscript, auto-anchor, tethering, initial renderer, provenance, badge tone, the host-drawn summary, history footer and popup details, and the chip's own label and hover text. Zero values are defaults. |
 | [`Events`](./widget.go) | What one render reports: `Toggled` (the user opened or closed the popup), `Driven` (a graph-node click drove the machine). |
 | [`MachineOptions[T comparable]`](./machine.go) | Construction-time configuration of a [`Machine`]: display label, pinned state order, per-state colour. Zero values are defaults. |
 | [`StateColorFn[T comparable]`](./machine.go) | `func(state T, isCurrent bool) styletokens.RGBA8`. Hook for [`MachineOptions.StateColor`] — domain-specific per-state colouring. |
