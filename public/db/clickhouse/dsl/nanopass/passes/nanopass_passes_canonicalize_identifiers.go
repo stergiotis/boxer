@@ -58,12 +58,23 @@ func canonicalizeIdentifiersImpl(sql string) (result string, err error) {
 			// when the name lexes as a keyword (e.g. a setting literally
 			// named "max"): Grammar1's keyword-tolerant identifier rule
 			// accepts it bare, Grammar2's IDENTIFIER token does not, and
-			// the server accepts the quoted spelling. The value side only
-			// carries literals and array()/tuple() constructors whose
-			// names are real functions; it is never touched. A setting
-			// named true or false is a name here, not a boolean, and is
-			// quoted like a keyword.
+			// the server accepts the quoted spelling. A setting named true
+			// or false is a name here, not a boolean, and is quoted like a
+			// keyword.
+			//
+			// The value side carries literals and constructor calls. A
+			// constructor's name is quoted on the same rule as a function
+			// name in an expression: `array` lexes as the ARRAY keyword, so
+			// the call CanonicalizeConstructors writes for `[1, 2]` reads in
+			// Grammar2 only as "array"(1, 2). Nothing else there is touched.
 			quoteIfKeyword(rw, c, guard, true)
+			nanopass.WalkCST(c, func(n antlr.ParserRuleContext) bool {
+				switch n.(type) {
+				case *grammar1.SettingFunctionContext, *grammar1.SettingFunctionEmptyContext:
+					quoteIfKeyword(rw, n, guard, false)
+				}
+				return true
+			})
 			return false
 		case *grammar1.IdentifierOrNullContext:
 			// The FORMAT clause name stays bare unless it collides with a
