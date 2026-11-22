@@ -339,9 +339,11 @@ binding for the statement they send.
   `readonly=2`. Both classifiers now refuse a statement whose block comment
   opens another (ADR-0132, update of 2026-11-22), which closes that gap for
   play's limits, the pass and this service alike. Other token-level
-  differences between the two lexers are not ruled out, and with the grant
-  in place the server no longer stands behind the client for this one
-  effect.
+  differences between the two lexers are not ruled out. With the grant in
+  place `readonly=2` no longer has the server stand behind the client for
+  this one effect, so a statement under the agent limits that runs in a
+  data session is sent with `readonly=1`, at which the server refuses the
+  create itself (see *Decided with the owner*).
 - **Isolation between the windows of one person's data session.** The
   ticket is a bearer capability; whoever holds it reads and redefines.
 - **A caller that does not release.** The lease lapses; until then the
@@ -539,6 +541,40 @@ layer's advice on the server user changes for a deployment that enables it:
   against the stub only. One model turn has driven the operations, before
   the fixes listed above; none since.
 
+## Decided with the owner, 2026-11-22
+
+Three choices this ADR first listed for review were put to the code owner,
+who took the author's recommendation on each. They are recorded here; the
+ADR as a whole still awaits review.
+
+- **The composed create stands (SD5).** A `CREATE TEMPORARY TABLE` the
+  service writes around a read it has checked is the service's own
+  statement, in the sense ADR-0403 gives an app's writes, and is not a
+  task's non-read the person must adopt. The condition was that the
+  classifiers read block comments as the server does, which they now do
+  for nesting (ADR-0132, update of 2026-11-22).
+- **A gated statement in a data session goes out with `readonly=1`.** With
+  the server user allowed to create temporary tables and the session
+  keeping them, `readonly=2` no longer has the server refuse a create that
+  a task's text got past the client's checks; `readonly=1` does. Measured
+  on a 26.9 server with the setting passed beside the statement: reads of
+  session tables, attached external data, the `log_comment` stamp and the
+  progress settings all work, and a create is refused (Code 164). The cost
+  is that a `SETTINGS` clause inside the task's own statement is refused
+  too. Play does this for every run under the agent limits that the
+  dispatch places in a data session; the service's own statements and a
+  person's ungated runs keep `readonly=2`, and a task's statement outside
+  a data session keeps it too, since a table created without a session
+  ends with the request.
+- **A person's window may attach to a task's data session by its ticket.**
+  The ticket comes back with every define, list and binding as a person's
+  does; a window that attaches by it works in the task's data session as
+  the person — defining, dropping and preparing without the task's grant —
+  and stays a holder until the session ends. The person is the authority
+  the task works under and may look at, and work in, what it keeps. The
+  other direction stays closed: an agent's call never takes a ticket, and
+  a task's window hands nothing over (SD10).
+
 ## Choices for review
 
 - The package and subject name `sessiondata`, the macro `session('…')`,
@@ -573,17 +609,9 @@ layer's advice on the server user changes for a deployment that enables it:
 - Prepare checks an agent's statement is a read after replacing its macros,
   in addition to the caller's checks.
 - Credentials cross the in-process bus in the request.
-- A task's data session has a ticket, returned with every define, list and
-  binding as a person's is; a window that attaches by it works in the
-  task's data session as the person — defining, dropping and preparing
-  without the task's grant — and stays a holder until the session ends.
 - Comments in a definition are not sent; a definition or an agent's
   prepared statement nesting a block comment is refused (by the
   classifiers) rather than rewritten.
-- Whether a caller sends an agent's statement that reads data sets with
-  `readonly=1`, so the server itself refuses a create the task's text
-  smuggles past the client, leaving `readonly=2` to the service's own
-  creates; play sends `readonly=2` today for the settings it changes.
 - The byte bound is the server's `total_bytes` after the create, so one
   create may take more than the bound on the server before it is dropped;
   only rows are bounded while the create runs.

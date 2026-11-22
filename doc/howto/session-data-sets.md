@@ -241,7 +241,9 @@ gets play's whole path from these, and need not copy any of it:
 
 - **A person's statement under the limits.** Pass an `app.OnBehalfOf`
   without a task as `ExecOptions.Agent` to hold text your code composed to
-  play's agent limits and `readonly=2`. `ExecOptions.SessionTicket` names
+  play's agent limits and a read-only setting (`readonly=1` for a statement
+  that runs in a data session, `readonly=2` otherwise).
+  `ExecOptions.SessionTicket` names
   the person's data session whenever `Agent` names no task — nil or such a
   gate — and is never used with a task, whose data session comes from its
   attested call.

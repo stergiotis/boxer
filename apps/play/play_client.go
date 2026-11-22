@@ -1404,6 +1404,15 @@ func (inst *Client) executeArrowStream(ctx context.Context, authored string, sen
 			return
 		}
 		req.Settings["readonly"] = "2"
+		if dec.class == dispatchClassSession {
+			// Inside a data session the server user may create temporary
+			// tables, which the session keeps, so readonly=2 no longer has
+			// the server refuse a create this text got past the checks
+			// above. readonly=1 does, and still admits the settings that
+			// travel beside the statement; a SETTINGS clause in the text
+			// itself is refused.
+			req.Settings["readonly"] = "1"
+		}
 		// The task wrote this text, so the host's pass judges it again at
 		// the engine's exit (ADR-0403), behind the check above.
 		req.Task = agent.Task

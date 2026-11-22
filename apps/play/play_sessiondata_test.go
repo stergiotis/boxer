@@ -252,6 +252,7 @@ func TestTwoAppsOfOneTaskShareItsDataSession(t *testing.T) {
 	rows, _, err := runAll(t, quickly(t), other, "SELECT * FROM session('msgs')", &ExecOptions{Agent: obo, Label: "kernel-input"})
 	require.NoError(t, err)
 	assert.Equal(t, int64(3), rows)
+	assert.Equal(t, "1", r.stub.lastRun().Params["readonly"], "a task's statement in its data session is sent at the level that has the server refuse a create")
 	infos, err := other.listSession(t.Context(), obo)
 	require.NoError(t, err)
 	require.Len(t, infos, 1)
@@ -523,7 +524,7 @@ func TestAGatedPersonsRunTakesTheTicket(t *testing.T) {
 	rows, _, err := runAll(t, quickly(t), kernel, "SELECT * FROM session('msgs')", &ExecOptions{Agent: gate, SessionTicket: ticket})
 	require.NoError(t, err, "the gate without a task runs in the person's data session")
 	assert.Equal(t, int64(3), rows)
-	assert.Equal(t, "2", r.stub.lastRun().Params["readonly"], "and under the limits' read-only setting")
+	assert.Equal(t, "1", r.stub.lastRun().Params["readonly"], "and read-only to the level at which the server refuses a create in the session")
 
 	_, _, err = runAll(t, quickly(t), kernel, "SELECT * FROM session('msgs')", &ExecOptions{Agent: &app.OnBehalfOf{}, SessionTicket: ticket})
 	var limit *AgentLimitError

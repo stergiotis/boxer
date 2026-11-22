@@ -143,7 +143,9 @@ operation:
   server refuses any INSERT or DDL that reaches it; a gated INSERT lands in
   the status line (`get_state` reports it as the result's notice) with the
   variable to set. An agent's run is sent `readonly=2` whatever the
-  variable says.
+  variable says, and `readonly=1` when it runs in a data session, where
+  the server would otherwise let a statement create a temporary table: a
+  `SETTINGS` clause in such a statement is refused by the server.
 - `BOXER_PLAY_APP_WRITES=off` stops play's own writes: the Series verdicts
   in `boxer.tslabels`. An agent's call that would cause one needs the
   endpoint in its grant, as a run does.
