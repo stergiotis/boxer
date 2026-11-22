@@ -50,6 +50,7 @@ the linked document wins.
 | Read, measure or show an image — 16-bit and float samples, a display recipe, region statistics, the viewer widget | [doc/howto/image-engine.md](./doc/howto/image-engine.md) |
 | Run an app in a browser tab — build the bundle, serve it, what the tab lacks | [doc/howto/imzero2-in-the-browser.md](./doc/howto/imzero2-in-the-browser.md) |
 | Design or write an app under `apps/` — data as Arrow, a readable state machine, tasks and progress, the operations catalog and help book, honest analysis, IDS look, the frame cost model | [doc/skills/keelson-app/SKILL.md](./doc/skills/keelson-app/SKILL.md) |
+| Decide what a window shows and how a person operates it — who it is for, the order of work, which control instead of a button, words, space, how to check a screen | [doc/skills/keelson-ux/SKILL.md](./doc/skills/keelson-ux/SKILL.md) |
 | Drive a running app, or write a headless scene that asserts and captures | [doc/skills/imzero2-drive/SKILL.md](./doc/skills/imzero2-drive/SKILL.md) |
 | Diagnose janky / laggy rendering | [doc/howto/imzero2-render-troubleshooting.md](./doc/howto/imzero2-render-troubleshooting.md) |
 | Report a vulnerability | [SECURITY.md](./SECURITY.md) |

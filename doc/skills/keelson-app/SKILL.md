@@ -16,7 +16,9 @@ window owes its host, its data and its operators, and which of boxer's
 unusual properties it is expected to lean on. It is a router with rules:
 each rule names the decision it follows from and the package or app to copy,
 and stops there. The [imzero2 skill](../imzero2/SKILL.md) covers how a frame
-is built; the [app package explanation](../../../public/keelson/runtime/app/EXPLANATION.md)
+is built; the [keelson-ux skill](../keelson-ux/SKILL.md) covers who the
+window is for, the order of work on it and which control a thing should
+be; the [app package explanation](../../../public/keelson/runtime/app/EXPLANATION.md)
 covers the `AppI` contract; the ADRs cited are the record and win where
 this page disagrees.
 
@@ -661,7 +663,11 @@ follow it. `apps/imztop/imztop_theme.go` derives everything from tokens.
 what destroys, `Ghost` for the toolbar; the client colours them per theme
 ([ADR-0273](../../adr/0273-imzero2-ids-button-kinds.md)). Status is a
 `badge` with a tone, never a coloured label, and it stays Soft or Ghost so
-that it does not read as a button.
+that it does not read as a button. A question the person settles with a
+button is drawn by `decision.Render`, which assigns the kinds itself: the
+affirmative primary, except on a request that carries a note of caution ([keelson-ux](../keelson-ux/SKILL.md) C7,
+[ADR-0404](../../adr/0404-what-a-person-reads-in-a-window-a-stated-reader-one-way-to-draw-a-decision-and-the-chat-window-as-the-first-case.md)
+§SD3, §SD4).
 
 **L3 — Familiar vocabulary, consistent verbs.** *Open in play*, *Send to
 play*, *Cancel*, *Retry*, *Refresh*, *Pause*, *Resume*, *Freeze*, *Go

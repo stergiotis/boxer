@@ -121,9 +121,11 @@ here for the reader who finds the window changed:
   from the question: after a long turn the question sat at the top of the
   view with the tool lines under it, and the answer below the fold.
 
-Kept as they were, by the person's choice on 2026-11-17: the full bar is the
-plain chat's default (the Simple view of ADR-0364 SD6 stays opt-in), and
-the dock's split is unchanged. Taint is unchanged as well: reading the
+The full bar as the plain chat's default and the dock's split were kept
+by the person's choice on 2026-11-17 and reopened by the same person on
+2026-11-22;
+[ADR-0404](./0404-what-a-person-reads-in-a-window-a-stated-reader-one-way-to-draw-a-decision-and-the-chat-window-as-the-first-case.md)
+§SD7 decides both. Taint is unchanged: reading the
 desktop's window list still marks the conversation, since a window title
 can carry text someone typed (ADR-0269 §SD7).
 
