@@ -836,7 +836,7 @@ when recorded. The vocabulary appends five memberships after
 corpus's shape — vault authoritative, two grains, prose verbatim, relations
 as rows — is unchanged.
 
-### 2026-11-22 — a row's id is resolved from its natural key (ADR-0405, proposed)
+### 2026-11-22 — a row's id is resolved from its natural key (ADR-0405)
 
 The rows' ids were the low eight bytes of the natural key's digest, so a
 relation could compute its endpoints' ids and a load restated the same

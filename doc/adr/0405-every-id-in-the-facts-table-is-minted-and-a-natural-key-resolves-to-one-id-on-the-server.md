@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-22
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-22
 ---
-
-> **Status: proposed — pre-human-review.** The direction — every writer mints, a natural key resolves to one id through the server, stored rows stay — was chosen by the code owner on 2026-11-22. The choices under it, listed at the end, are not reviewed. Built on that day for the facts store, the trail, system metrics, the watchbill presence, markdown documents, dead letters and the capability map; query runs still derive their ids (see *Deferred*).
 
 # ADR-0405: Every id in the facts table is minted, and a natural key resolves to one id on the server
 
@@ -44,10 +42,11 @@ process, one in a file of one machine.
 
 **SD1 — Every id is minted.** Every row written to the facts table carries
 an id of the table's stream, `factsRow`, leased as ADR-0397 §SD2
-describes. One stream serves every writer: a tag is claimed per table
+describes — but for the two writers of SD8, which keep the id they have.
+One stream serves every writer: a tag is claimed per table
 ([ADR-0319](./0319-tagged-id-streams-leased-through-one-row-on-the-one-clickhouse-server.md)
 §SD2), and the tag of an id then says the row is the facts table's. No
-writer computes an id from anything.
+other writer computes an id from anything.
 
 **SD2 — An id names an entity where the writer has one, and a row where
 it has none.** A writer whose rows belong to something that recurs — the
@@ -100,19 +99,17 @@ facts table, and nothing else says which key each belongs to: a directory
 dropped and created again gives every key a new id. It is backed up,
 restored and moved with the facts table, as the lease table is.
 
+**SD8 — Two writers keep the id they have.** A query-run event's id stays
+a digest of the event, in the band it has to itself: the top bit, which no
+leased or process-local id carries (ADR-0115 SD2, ADR-0397 §SD2). The
+capture deduplicates by that id, every event is its own entity, and an id
+from the directory would cost a directory row per event; such an id can
+equal another capture id by the odds of 63 bits and nothing else's. The
+lading mount policy keeps the mount's own tagged id, minted elsewhere and
+shared by a mount's versions: an entity id already, and not a hash.
+
 ### Deferred
 
-- **Query runs.** A run event's id is a digest that the capture
-  deduplicates by. Every event is its own entity, so resolving its id
-  through the directory would write a directory row per event. The lighter
-  change is a sequential id and a capture that deduplicates by natural key
-  and time, which its extract already filters by, in the view's anti-join
-  and in the service's own under an insert transform
-  ([ADR-0402](./0402-facts-stored-in-a-deployments-own-table-a-write-transform-at-the-insert-seam-and-one-read-table-setting.md),
-  update of 2026-11-22).
-- The lading mount policy. Its id is the mount's own tagged id, minted
-  elsewhere and shared by a mount's versions; it is an entity id in the
-  `id` column, and not a hash.
 - Expiry of directory rows. Facts rows expire; the directory row of an
   entity whose rows have all expired stays.
 - Rebuilding a lost directory from the facts rows, which carry each keyed
@@ -134,7 +131,7 @@ restored and moved with the facts table, as the lease table is.
 | capability map | an id per competence and per relation, resolved from the natural key; a relation's endpoints resolve the same way | the encoder takes a generator; the read-back takes the newest row per natural key and accepts the older id for an endpoint; the vault's tables show the natural key where they showed an id (ADR-0168, update of 2026-11-22) |
 | the trail, markdown documents | an id per row, drawn from the stream | — |
 | audit recorder | takes an id generator; without one it derives ids as before | a store elsewhere that uses the recorder is unaffected until it passes one |
-| query runs | not yet | the capture's view |
+| query runs, lading mount policy | unchanged (SD8) | — |
 | lease seed | counts every kind | — |
 
 ## Alternatives
@@ -145,9 +142,10 @@ restored and moved with the facts table, as the lease table is.
   thing was another row under another id, and the generators' keyed
   interface went unused. Killed by the code owner's choice of keyed
   minting on 2026-11-22.
-- **Keep derived ids, in a band of their own.** A reserved high bit would
-  keep a derived id from ever equalling a leased one, at almost no cost.
-  Not taken: derived ids would still collide with each other.
+- **Keep derived ids, in a band of their own.** A reserved high bit keeps
+  a derived id from ever equalling a leased one, at almost no cost. Not
+  taken for the table: derived ids would still collide with each other.
+  It is what the query runs keep (SD8), where only they are in the band.
 - **The mapping kept per process** (`leased.Internalizer`). No table and
   no round trip. Not taken: two processes that write one series would give
   it two ids, and a restart would give it a third.
@@ -229,7 +227,9 @@ restored and moved with the facts table, as the lease table is.
   with many new keys. No test of a directory restored from a backup older
   than the facts it maps.
 
-## Choices for review
+## Choices accepted with the decision
+
+Reviewed by the code owner on 2026-11-22 and accepted as listed.
 
 - Which writers are keyed: metric series, presence and dead letters are;
   the trail and markdown ingests are not, because each of their rows is
@@ -247,11 +247,11 @@ restored and moved with the facts table, as the lease table is.
 - The capability map's encoder no longer runs without a generator, and its
   vault tables show the natural key where they showed an id (the code
   owner chose on 2026-11-22 to move it).
-- Query runs are left as they are, for the reason under *Deferred*.
+- Query runs are not migrated (SD8).
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-11-22.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

@@ -291,12 +291,12 @@ reconciled.
 
 ## What the `id` column holds
 
-Every row of the facts table is meant to carry an id minted from the
-table's stream: one per entity where the writer's rows share an entity,
-one per row where they do not
-([ADR-0405](../adr/0405-every-id-in-the-facts-table-is-minted-and-a-natural-key-resolves-to-one-id-on-the-server.md),
-proposed). That is built for most writers and not yet for all, and rows
-written before it keep what they had. Read this before you choose a key
+A row of the facts table carries an id minted from the table's stream:
+one per entity where the writer's rows share an entity, one per row where
+they do not
+([ADR-0405](../adr/0405-every-id-in-the-facts-table-is-minted-and-a-natural-key-resolves-to-one-id-on-the-server.md)).
+Two writers keep an id of their own, and rows written before the decision
+keep what they had. Read this before you choose a key
 for a new store, and before you treat an `id` as the name of a row.
 Checked against the tree on 2026-11-22.
 
@@ -308,7 +308,7 @@ Checked against the tree on 2026-11-22.
 | dead letters | an id per message position, resolved from the position's digest | a digest of the position |
 | the trail, markdown documents | an id per row, the next of the stream | a hash of the row's key, or of content and ingest time |
 | the capability map | an id per competence and per relation, resolved from the natural key | the leading bytes of the natural key's digest |
-| query runs | a digest with the top bit set (`queryrunfacts.IdBand`) | the same |
+| query runs | a digest with the top bit set (`queryrunfacts.IdBand`), which no minted id carries; kept by decision (ADR-0405 §SD8) | the same |
 | the lading mount policy | the mount's tagged id, minted elsewhere under a tag the app declares; one per mount, a row per version | the same |
 
 What follows from it:
