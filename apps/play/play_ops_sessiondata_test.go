@@ -104,7 +104,7 @@ func TestQueryKeepAsKeepsADataSetAndSamplesIt(t *testing.T) {
 
 	// A data set reading it is left stale by a redefinition, and the call
 	// that redefined it says so.
-	_, err = l.inner.client.defineSession(t.Context(), obo, "top", "SELECT * FROM session('msgs')", nil)
+	_, err = l.inner.client.defineSession(t.Context(), obo, "", "top", "SELECT * FROM session('msgs')", nil)
 	require.NoError(t, err)
 	call2 := app.OperationCall{Writer: "task:t1", OnBehalfOf: obo, Key: "k2"}
 	args2 := mustEncode(t, QueryArgs{Sql: "SELECT 2 AS x", KeepAs: "msgs"})
@@ -157,7 +157,7 @@ func TestTheDataSetsTabRendersHeadless(t *testing.T) {
 	t.Cleanup(egui2test.Install())
 	r := newSdRig(t)
 	cl := r.client("github.com/x/play", 1)
-	_, err := cl.defineSession(t.Context(), nil, "msgs", "SELECT 1 AS x", nil)
+	_, err := cl.defineSession(t.Context(), nil, "", "msgs", "SELECT 1 AS x", nil)
 	require.NoError(t, err)
 	inst := NewPlayApp(cl, newLiveQueryGraph(cl, memory.NewGoAllocator(), 4), "SELECT 1", nil)
 	inst.refreshSessions()

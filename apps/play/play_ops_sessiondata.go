@@ -271,12 +271,7 @@ func (inst *PlayApp) startKeep(obo *app.OnBehalfOf, name string, sql string, ord
 	return startSessionCall(c, func(ctx context.Context) (out keepResult, err error) {
 		ctx, cancel := context.WithTimeout(ctx, sessiondata.RequestTimeout)
 		defer cancel()
-		if obo != nil {
-			if err = c.sessionDefineLimits(ctx, obo, sql); err != nil {
-				return
-			}
-		}
-		out.res, err = c.defineSession(ctx, obo, name, sql, orderBy)
+		out.res, err = c.DefineSessionDataset(ctx, SessionDefineInput{Agent: obo, Name: name, SQL: sql, OrderBy: orderBy})
 		if err != nil {
 			return
 		}
@@ -376,7 +371,7 @@ func addSessionDatasetOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			p.dropCalls[call.Key] = &dropCall{obo: obo, call: startSessionCall(c, func(ctx context.Context) ([]string, error) {
 				ctx, cancel := context.WithTimeout(ctx, sessiondata.RequestTimeout)
 				defer cancel()
-				return c.dropSession(ctx, obo, in.Name, in.Cascade)
+				return c.dropSession(ctx, obo, "", in.Name, in.Cascade)
 			})}
 			return out, nil
 		})

@@ -1,15 +1,18 @@
 package play
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
 )
@@ -130,6 +133,52 @@ func (inst datasetName) coveredFor(obo *app.OnBehalfOf, t string) (covered bool)
 		(inst.publisherTask != "" && inst.publisherTask == obo.Task)
 	for _, d := range inst.destinations() {
 		covered = covered || slices.Contains(obo.Destinations, d)
+	}
+	return
+}
+
+// publisherLookupTimeout bounds asking the dataset service who published
+// a dataset.
+const publisherLookupTimeout = 2 * time.Second
+
+// withPublishers is aliasOf with the publishing task of each ad-hoc
+// dataset residual reads that obo's grant does not list and the client
+// holds no record of, as the ad-hoc dataset service answers it, so the
+// rule that a task reads what it published holds for a client no follower
+// told. A bound handle takes the publisher only when it is still the
+// alias's newest dataset. aliasOf is the caller's own map, as
+// datasetAliasOf makes it, and gains the entries. For the person, or a
+// client without a bus, it comes back as it is. It asks over the bus, so it
+// is not called on the render goroutine.
+func (inst *Client) withPublishers(ctx context.Context, residual string, obo *app.OnBehalfOf, aliasOf map[string]datasetName) (out map[string]datasetName) {
+	out = aliasOf
+	if obo == nil || obo.Task == "" {
+		return
+	}
+	bus := inst.sessionBus()
+	if bus == nil {
+		return
+	}
+	for _, t := range keelsonsql.References(residual) {
+		n := datasetNameIn(out, t)
+		_, bound := out[t]
+		if n.publisherTask != "" || n.coveredFor(obo, t) || adhocdata.IsHandle(n.alias) {
+			continue
+		}
+		if _, table := introspect.Default.Lookup(t); table && !bound {
+			continue
+		}
+		rctx, cancel := context.WithTimeout(ctx, publisherLookupTimeout)
+		res, err := adhocdata.ResolveRequest(rctx, bus, n.alias)
+		cancel()
+		if err != nil || res.Origin.PublisherTask == "" || (bound && res.Handle != t) {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]datasetName, 1)
+		}
+		n.publisherTask = res.Origin.PublisherTask
+		out[t] = n
 	}
 	return
 }

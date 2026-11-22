@@ -337,6 +337,16 @@ type ExecOptions struct {
 	// query would actually run on. The wrapper is machine-built and must
 	// not carry its own FORMAT clause.
 	WrapStatement func(residual string) string
+
+	// SessionTicket names the person's data session a run reads session
+	// data sets from, by its ticket, for a run on no task's behalf —
+	// Agent nil, or an OnBehalfOf without a task that holds the person's
+	// statement to the agent limits: a client whose window claimed the
+	// session by a hand-over, or holds one it was given otherwise. Empty
+	// takes the session the client's window opened itself. A task's run
+	// never uses it: it reads its task's data session. The ticket is a
+	// bearer capability; keep it out of logs and stored state.
+	SessionTicket string
 }
 
 // newExecOptions mints a lane's stable ExecOptions.
@@ -1390,7 +1400,7 @@ func (inst *Client) executeArrowStream(ctx context.Context, authored string, sen
 		req.Settings["readonly"] = "2"
 	}
 	if agent != nil {
-		if err = checkAgentLimits(residual, dec, agent, inst.datasetAliasOf()); err != nil {
+		if err = checkAgentLimits(residual, dec, agent, inst.withPublishers(ctx, residual, agent, inst.datasetAliasOf())); err != nil {
 			return
 		}
 		req.Settings["readonly"] = "2"

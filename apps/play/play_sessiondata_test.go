@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchrequest"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
@@ -85,7 +86,7 @@ func TestDispatchPlacesTheFourKindsOfStatement(t *testing.T) {
 func TestARunReadsADataSetInItsSessionAndReleasesItsLease(t *testing.T) {
 	r := newSdRig(t)
 	c := r.client("github.com/x/play", 1)
-	res, err := c.defineSession(t.Context(), nil, "msgs", "SELECT 1 AS x", nil)
+	res, err := c.defineSession(t.Context(), nil, "", "msgs", "SELECT 1 AS x", nil)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1), res.Dataset.Revision)
 	assert.NotEmpty(t, c.windowTicket(), "the window's first definition opened its data session")
@@ -145,7 +146,7 @@ func TestARunReadsADataSetInItsSessionAndReleasesItsLease(t *testing.T) {
 func TestARunThatMetALostSessionIsSentOnceMore(t *testing.T) {
 	r := newSdRig(t)
 	c := r.client("github.com/x/play", 1)
-	_, err := c.defineSession(t.Context(), nil, "msgs", "SELECT 1 AS x", nil)
+	_, err := c.defineSession(t.Context(), nil, "", "msgs", "SELECT 1 AS x", nil)
 	require.NoError(t, err)
 	r.stub.mu.Lock()
 	r.stub.loseOnRun = 1
@@ -176,13 +177,13 @@ func TestAnAgentsRunIsHeldToTheGrantAndMarkedWithItsTask(t *testing.T) {
 	obo := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: []string{DestinationClickHouse(r.host)}}
 	r.grant("t1", DestinationClickHouse(r.host))
 
-	_, err := c.defineSession(t.Context(), obo, "msgs", "SELECT 1 AS x", nil)
+	_, err := c.defineSession(t.Context(), obo, "", "msgs", "SELECT 1 AS x", nil)
 	var limit *AgentLimitError
 	require.ErrorAs(t, err, &limit)
 	assert.Equal(t, sessiondata.DestinationSession(r.host), limit.Destination, "keeping a data set needs its own destination")
 
 	r.grant("t1", sessiondata.DestinationSession(r.host))
-	_, err = c.defineSession(t.Context(), obo, "msgs", "SELECT 1 AS x", nil)
+	_, err = c.defineSession(t.Context(), obo, "", "msgs", "SELECT 1 AS x", nil)
 	require.NoError(t, err)
 
 	_, _, err = runAll(t, quickly(t), c, "SELECT * FROM session('msgs')", &ExecOptions{Agent: obo})
@@ -213,7 +214,7 @@ func TestAnAdhocDatasetJoinsAServerTableAsConfinedData(t *testing.T) {
 	r := newSdRig(t)
 	c := r.client("github.com/x/play", 1)
 	c.SetResolver(autoResolver)
-	_, err := c.defineSession(t.Context(), nil, "msgs", "SELECT 1 AS x", nil)
+	_, err := c.defineSession(t.Context(), nil, "", "msgs", "SELECT 1 AS x", nil)
 	require.NoError(t, err)
 
 	_, _, err = runAll(t, quickly(t), c, "SELECT * FROM session('msgs') JOIN keelson('items') USING x", nil)
@@ -228,7 +229,7 @@ func TestAnAdhocDatasetJoinsAServerTableAsConfinedData(t *testing.T) {
 	assert.Equal(t, []string{"__adhoc_0"}, run.Files)
 
 	// A data set defined from one is confined, and so is what reads it.
-	_, err = c.defineSession(t.Context(), nil, "joined", "SELECT * FROM keelson('items')", nil)
+	_, err = c.defineSession(t.Context(), nil, "", "joined", "SELECT * FROM keelson('items')", nil)
 	require.NoError(t, err)
 	_, confined, err = runAll(t, quickly(t), c, "SELECT * FROM session('joined')", nil)
 	require.NoError(t, err)
@@ -245,7 +246,7 @@ func TestTwoAppsOfOneTaskShareItsDataSession(t *testing.T) {
 	play := r.client("github.com/x/play", 1)
 	other := r.client("github.com/x/kernel", 9)
 
-	_, err := play.defineSession(t.Context(), &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: dests}, "msgs", "SELECT 1 AS x", nil)
+	_, err := play.defineSession(t.Context(), &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: dests}, "", "msgs", "SELECT 1 AS x", nil)
 	require.NoError(t, err)
 	obo := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c7", Destinations: dests}
 	rows, _, err := runAll(t, quickly(t), other, "SELECT * FROM session('msgs')", &ExecOptions{Agent: obo, Label: "kernel-input"})
@@ -263,8 +264,9 @@ func TestTwoAppsOfOneTaskShareItsDataSession(t *testing.T) {
 }
 
 // TestAHandOverCarriesThePersonsDataSession: the opener's window mints a
-// token, the opened window claims it and reads the opener's data sets.
-// Neither ticket nor token reaches the log or an error.
+// token, the opened window claims it and reads the opener's data sets; a
+// client call names the session by ticket. Neither ticket nor token reaches
+// the log or an error.
 func TestAHandOverCarriesThePersonsDataSession(t *testing.T) {
 	var logged bytes.Buffer
 	prev := log.Logger
@@ -274,7 +276,7 @@ func TestAHandOverCarriesThePersonsDataSession(t *testing.T) {
 	r := newSdRig(t)
 	opener := r.client("github.com/x/play", 1)
 	opened := r.client("github.com/x/play", 2)
-	_, err := opener.defineSession(t.Context(), nil, "msgs", "SELECT 1 AS x", nil)
+	_, err := opener.defineSession(t.Context(), nil, "", "msgs", "SELECT 1 AS x", nil)
 	require.NoError(t, err)
 	ticket := opener.windowTicket()
 
@@ -292,6 +294,21 @@ func TestAHandOverCarriesThePersonsDataSession(t *testing.T) {
 	require.Error(t, err, "a token is claimed once")
 	assert.NotContains(t, err.Error(), token)
 
+	// A client whose window claimed the session by itself names it by ticket.
+	third := r.client("github.com/x/kernel", 3)
+	token, err = opener.handOverToken(t.Context())
+	require.NoError(t, err)
+	got, err := sessiondata.Claim(t.Context(), third.sessionBus(), token)
+	require.NoError(t, err)
+	_, _, err = runAll(t, quickly(t), third, "SELECT * FROM session('msgs')", &ExecOptions{SessionTicket: got})
+	require.NoError(t, err)
+
+	// A window that does not hold the session gets nothing for the ticket.
+	stranger := r.client("github.com/x/kernel", 4)
+	_, _, err = runAll(t, quickly(t), stranger, "SELECT * FROM session('msgs')", &ExecOptions{SessionTicket: ticket})
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), ticket)
+
 	assert.NotContains(t, logged.String(), ticket)
 	assert.NotContains(t, logged.String(), token)
 }
@@ -299,7 +316,7 @@ func TestAHandOverCarriesThePersonsDataSession(t *testing.T) {
 func TestOpenInPlayHandsTheWindowsDataSessionOver(t *testing.T) {
 	r := newSdRig(t)
 	c := r.client("github.com/x/play", 1)
-	_, err := c.defineSession(t.Context(), nil, "msgs", "SELECT 1 AS x", nil)
+	_, err := c.defineSession(t.Context(), nil, "", "msgs", "SELECT 1 AS x", nil)
 	require.NoError(t, err)
 	bus := &fakeOpenBus{}
 	inst := newOpenTestApp(t, bus)
@@ -360,7 +377,7 @@ func TestACheckRestsOnAResultThatReadADataSet(t *testing.T) {
 	dests := []string{DestinationClickHouse(r.host), sessiondata.DestinationSession(r.host)}
 	r.grant("t1", dests...)
 	obo := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: dests}
-	_, err := c.defineSession(t.Context(), obo, "msgs", "SELECT 1 AS x", nil)
+	_, err := c.defineSession(t.Context(), obo, "", "msgs", "SELECT 1 AS x", nil)
 	require.NoError(t, err)
 	cs := checkSnap{checkSource: checkSource{resultId: 12, source: "SELECT * FROM session('msgs') LIMIT 20"}}
 	for range 2 {
@@ -385,7 +402,7 @@ func TestASessionRunCarriesTheTaskAndTheServicesStatementsDoNot(t *testing.T) {
 	r.grant("t1", dests...)
 	obo := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: dests}
 	c := r.client("github.com/x/play", 1)
-	_, err := c.defineSession(t.Context(), obo, "msgs", "SELECT 1 AS x", nil)
+	_, err := c.defineSession(t.Context(), obo, "", "msgs", "SELECT 1 AS x", nil)
 	require.NoError(t, err)
 	_, _, err = runAll(t, quickly(t), c, "SELECT x FROM session('msgs')", &ExecOptions{Agent: obo})
 	require.NoError(t, err)
@@ -414,6 +431,51 @@ func (inst *siteRecorder) Lead(_ context.Context, st fairlead.Statement) (string
 	return st.SQL, nil
 }
 
+// TestARunTheDispatchRefusedAsksForNoDestination: an ad-hoc dataset joined
+// with a server table on an endpoint that has not passed the reach proof is
+// refused by the dispatch, and the agent limits report that reason rather
+// than a grant destination with an empty host; a grant entry without a host
+// covers no run.
+func TestARunTheDispatchRefusedAsksForNoDestination(t *testing.T) {
+	// The host's predicate: every ad-hoc dataset is sealed (ADR-0240).
+	introspect.SetLocalSealedPredicate(func(name string) bool { return name == "items" })
+	t.Cleanup(func() { introspect.SetLocalSealedPredicate(nil) })
+	r := newSdRig(t)
+	c := r.client("github.com/x/play", 1)
+	server := DestinationClickHouse(r.host)
+	obo := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: []string{server, DestinationKeelson("items")}}
+	r.grant("t1", obo.Destinations...)
+	stmt := "SELECT count() FROM t JOIN keelson('items') USING x"
+
+	p := &PlayApp{client: c, sql: stmt}
+	err := p.refuseAgentRun(obo)
+	var refusal *app.OperationRefusal
+	require.ErrorAs(t, err, &refusal)
+	assert.Empty(t, refusal.Destinations, "a statement no endpoint may serve asks for no destination")
+	assert.NotContains(t, refusal.Reason, "clickhouse:")
+	assert.Contains(t, refusal.Reason, "sealed data")
+
+	dec := c.dispatchFor(obo, stmt, "")
+	require.True(t, dec.Refused())
+	err = checkAgentLimits(stmt, dec, obo, nil)
+	var nd *NotDispatchedError
+	require.ErrorAs(t, err, &nd)
+	assert.Equal(t, "refused", nd.Class)
+	_, _, _, err = c.ExecuteArrowStream(quickly(t), stmt, memory.NewGoAllocator(), &ExecOptions{Agent: obo}, nil, dec)
+	require.ErrorAs(t, err, &nd, "the run reports the decision's refusal as a typed error")
+
+	// A decision that names no endpoint is never covered, and asks for
+	// nothing, whatever the grant lists.
+	empty := &app.OnBehalfOf{Task: "t1", Destinations: []string{"clickhouse:"}}
+	var limit *AgentLimitError
+	require.ErrorAs(t, checkAgentLimits("SELECT 1", dispatchDecision{targetURL: " ", class: dispatchClassManual}, empty, nil), &limit)
+	assert.Empty(t, limit.Destination)
+
+	// Once the endpoint passed the proof the statement runs under the grant.
+	c.reach.record(r.stub.url())
+	require.NoError(t, p.refuseAgentRun(obo))
+}
+
 // TestACitationRestsOnAKeptDataSet: the result of a keep is the data set's
 // first rows, so an assertion citing it reads session('<name>') and holds;
 // one naming the definition's base table is refused, and the refusal names
@@ -424,7 +486,7 @@ func TestACitationRestsOnAKeptDataSet(t *testing.T) {
 	dests := []string{DestinationClickHouse(r.host), sessiondata.DestinationSession(r.host)}
 	r.grant("t1", dests...)
 	obo := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: dests}
-	res, err := c.defineSession(t.Context(), obo, "top", "SELECT 1 AS x FROM db.message", nil)
+	res, err := c.defineSession(t.Context(), obo, "", "top", "SELECT 1 AS x FROM db.message", nil)
 	require.NoError(t, err)
 	kept := keptOf(res, nil)
 	assert.Contains(t, kept.Cite, "session('top')", "the keep's answer says how to cite it")
@@ -439,4 +501,107 @@ func TestACitationRestsOnAKeptDataSet(t *testing.T) {
 	require.ErrorAs(t, err, &refusal)
 	assert.Contains(t, refusal.Reason, "names db.message")
 	assert.Contains(t, refusal.Reason, "it read session('top')", "the refusal says what the statement read")
+}
+
+// TestAGatedPersonsRunTakesTheTicket: a downstream client gates the
+// person's statement with an OnBehalfOf that names no task, so play's agent
+// limits apply; the run still reads the person's data session the ticket
+// names. With a task the ticket is never used: the task's data session is
+// the one its attested call reaches.
+func TestAGatedPersonsRunTakesTheTicket(t *testing.T) {
+	r := newSdRig(t)
+	opener := r.client("github.com/x/play", 1)
+	_, err := opener.DefineSessionDataset(t.Context(), SessionDefineInput{Name: "msgs", SQL: "SELECT 1 AS x"})
+	require.NoError(t, err)
+	kernel := r.client("github.com/x/kernel", 3)
+	token, err := opener.handOverToken(t.Context())
+	require.NoError(t, err)
+	ticket, err := sessiondata.Claim(t.Context(), kernel.sessionBus(), token)
+	require.NoError(t, err)
+
+	gate := &app.OnBehalfOf{Destinations: []string{DestinationClickHouse(r.host)}}
+	rows, _, err := runAll(t, quickly(t), kernel, "SELECT * FROM session('msgs')", &ExecOptions{Agent: gate, SessionTicket: ticket})
+	require.NoError(t, err, "the gate without a task runs in the person's data session")
+	assert.Equal(t, int64(3), rows)
+	assert.Equal(t, "2", r.stub.lastRun().Params["readonly"], "and under the limits' read-only setting")
+
+	_, _, err = runAll(t, quickly(t), kernel, "SELECT * FROM session('msgs')", &ExecOptions{Agent: &app.OnBehalfOf{}, SessionTicket: ticket})
+	var limit *AgentLimitError
+	require.ErrorAs(t, err, &limit, "the gate's limits apply")
+	assert.Equal(t, DestinationClickHouse(r.host), limit.Destination)
+
+	r.grant("t1", DestinationClickHouse(r.host))
+	task := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: []string{DestinationClickHouse(r.host)}}
+	_, _, err = runAll(t, quickly(t), kernel, "SELECT * FROM session('msgs')", &ExecOptions{Agent: task, SessionTicket: ticket})
+	require.Error(t, err, "a task's run never takes the person's ticket")
+	assert.NotContains(t, err.Error(), ticket)
+}
+
+// TestADownstreamClientKeepsAndDropsAsKeepAsDoes: DefineSessionDataset maps
+// a window-local dataset name to its alias, declares the endpoint as seeing
+// sealed data only after the reach proof, and refuses a grant without the
+// right to keep session tables as an AgentLimitError naming it;
+// DropSessionDataset drops in the same data session.
+func TestADownstreamClientKeepsAndDropsAsKeepAsDoes(t *testing.T) {
+	r := newSdRig(t)
+	c := r.client("github.com/x/kernel", 3)
+	server, session := DestinationClickHouse(r.host), sessiondata.DestinationSession(r.host)
+	r.grant("t1", server, session, DestinationKeelson("items"))
+	obo := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: []string{server, DestinationKeelson("items")}}
+
+	_, err := c.DefineSessionDataset(t.Context(), SessionDefineInput{Agent: obo, Name: "msgs", SQL: "SELECT 1 AS x"})
+	var limit *AgentLimitError
+	require.ErrorAs(t, err, &limit)
+	assert.Equal(t, session, limit.Destination)
+	obo.Destinations = append(obo.Destinations, session)
+
+	_, err = c.DefineSessionDataset(t.Context(), SessionDefineInput{Agent: obo, Name: "msgs", SQL: "INSERT INTO t SELECT 1"})
+	require.ErrorAs(t, err, &limit, "play's limits judge the definition")
+
+	_, err = c.DefineSessionDataset(t.Context(), SessionDefineInput{Agent: obo, Name: "msgs", SQL: "SELECT 1 AS x"})
+	require.NoError(t, err)
+	dropped, err := c.DropSessionDataset(t.Context(), SessionDropInput{Agent: obo, Name: "msgs"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"msgs@1"}, dropped)
+
+	// A dataset the window binds under a local name is defined by its
+	// alias, and sealed data waits for the reach proof; the person's
+	// definition gated without a task is held to the gate.
+	c.setDatasetOrigin("local_items", "items", "")
+	c.bindDataset("local_items", "adhoc_00000000000000aa")
+	introspect.SetLocalSealedPredicate(func(name string) bool { return name == "items" })
+	t.Cleanup(func() { introspect.SetLocalSealedPredicate(nil) })
+	gated := &app.OnBehalfOf{Destinations: []string{server, session}}
+	c.reach.record(r.stub.url())
+	_, err = c.DefineSessionDataset(t.Context(), SessionDefineInput{Agent: gated, Name: "joined", SQL: "SELECT * FROM keelson('local_items')"})
+	require.ErrorAs(t, err, &limit, "the gate lists no ad-hoc dataset")
+	assert.Equal(t, DestinationKeelson("items"), limit.Destination, "named by its alias, not by the local name")
+	gated.Destinations = append(gated.Destinations, DestinationKeelson("items"))
+	unproven := r.client("github.com/x/kernel", 5)
+	unproven.setDatasetOrigin("local_items", "items", "")
+	_, err = unproven.DefineSessionDataset(t.Context(), SessionDefineInput{Agent: gated, Name: "joined", SQL: "SELECT * FROM keelson('local_items')"})
+	var nd *NotDispatchedError
+	require.ErrorAs(t, err, &nd, "an endpoint without the reach proof sees no sealed data")
+	res, err := c.DefineSessionDataset(t.Context(), SessionDefineInput{Agent: gated, Name: "joined", SQL: "SELECT * FROM keelson('local_items')"})
+	require.NoError(t, err)
+	assert.True(t, res.Dataset.Confined)
+	assert.Equal(t, []string{"items"}, res.Dataset.Attachments, "the service read the alias, not the local name")
+	dropped, err = c.DropSessionDataset(t.Context(), SessionDropInput{Agent: gated, Name: "joined"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"joined@1"}, dropped)
+
+	// The person's, by the ticket of a session the client's window holds.
+	opener := r.client("github.com/x/play", 1)
+	_, err = opener.DefineSessionDataset(t.Context(), SessionDefineInput{Name: "mine", SQL: "SELECT 1 AS x"})
+	require.NoError(t, err)
+	token, err := opener.handOverToken(t.Context())
+	require.NoError(t, err)
+	ticket, err := sessiondata.Claim(t.Context(), c.sessionBus(), token)
+	require.NoError(t, err)
+	gate := &app.OnBehalfOf{Destinations: []string{server, session}}
+	_, err = c.DefineSessionDataset(t.Context(), SessionDefineInput{Agent: gate, SessionTicket: ticket, Name: "more", SQL: "SELECT * FROM session('mine')"})
+	require.NoError(t, err, "a gate without a task defines in the person's data session")
+	dropped, err = c.DropSessionDataset(t.Context(), SessionDropInput{Agent: gate, SessionTicket: ticket, Name: "more"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"more@1"}, dropped)
 }

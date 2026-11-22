@@ -198,7 +198,7 @@ func (inst *PlayApp) personDropDataset(name string) {
 		c.Go(func(ctx context.Context) {
 			ctx, cancel := context.WithTimeout(ctx, sessiondata.RequestTimeout)
 			defer cancel()
-			if _, err := c.dropSession(ctx, obo, name, false); err != nil {
+			if _, err := c.dropSession(ctx, obo, "", name, false); err != nil {
 				inst.setActionNote("drop " + name + ": " + err.Error())
 			}
 			inst.refreshSessions()

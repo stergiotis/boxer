@@ -166,7 +166,7 @@ func TestTheDataSetCatalogNeverHoldsAQueryBackThroughTheDispatcher(t *testing.T)
 	require.NoError(t, err)
 	r.grant(g.Task, dests...)
 	obo := &app.OnBehalfOf{Task: g.Task, Epoch: 1, Call: "c0", Destinations: dests}
-	_, err = l.inner.client.defineSession(ctx, obo, "top", "SELECT 1 AS x", nil)
+	_, err = l.inner.client.defineSession(ctx, obo, "", "top", "SELECT 1 AS x", nil)
 	require.NoError(t, err)
 	// A run for the task put its mark on the window, as the live turn's
 	// runs did before the drop.

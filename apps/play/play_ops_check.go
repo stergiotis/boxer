@@ -292,7 +292,7 @@ func runCheck(ctx context.Context, client *Client, cs checkSnap, obo *app.OnBeha
 	residual, _, _ := client.rewriteFor(obo, in.Statement, nil)
 	dec := client.dispatchResidual(residual, "")
 	if obo != nil {
-		if lerr := checkAgentLimits(residual, dec, obo, client.datasetAliasOf()); lerr != nil {
+		if lerr := checkAgentLimits(residual, dec, obo, client.withPublishers(ctx, residual, obo, client.datasetAliasOf())); lerr != nil {
 			if limit, ok := lerr.(*AgentLimitError); ok && limit.Destination != "" {
 				return out, app.RefuseForDestinations(lerr.Error(), limit.Destination)
 			}

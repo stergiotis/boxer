@@ -404,3 +404,28 @@ func TestListDatasetsDescribesADatasetTheTaskPublished(t *testing.T) {
 	assert.False(t, list.Datasets[0].Published)
 	assert.Equal(t, "keelson-bundle:kernel_top", list.Datasets[0].Destination)
 }
+
+// TestTheRunAsksTheDatasetServiceWhoPublishedADataset: a client no follower
+// told who published a dataset — a downstream app's — still lets the
+// publishing task read it without a grant entry, by asking the dataset
+// service; another task is refused with the bundle to ask for.
+func TestTheRunAsksTheDatasetServiceWhoPublishedADataset(t *testing.T) {
+	_, _, publisher := bundleLauncher(t)
+	in := adhocdata.BundlePublishInput{Alias: "kernel_top", Document: []byte("SELECT 1"), OnBehalfOf: &agentCall,
+		Datasets: []adhocdata.BundleDatasetInput{{LocalName: "result", ArrowIPCStream: intStream(t, 7)}}}
+	_, err := adhocdata.PublishBundleRequest(t.Context(), publisher, in)
+	require.NoError(t, err)
+	c := NewClient(ClientConfig{URL: "http://ch.example:8123/"}, nil)
+	c.SetSessionBus(publisher)
+	residual := "SELECT * FROM keelson('kernel_top__result')"
+	dec := dispatchDecision{targetURL: "http://127.0.0.1:1/query", class: dispatchClassIntrospection}
+	obo := agentCall
+
+	var limit *AgentLimitError
+	require.ErrorAs(t, checkAgentLimits(residual, dec, &obo, c.datasetAliasOf()), &limit, "without asking, the client knows no publisher")
+	require.NoError(t, checkAgentLimits(residual, dec, &obo, c.withPublishers(t.Context(), residual, &obo, c.datasetAliasOf())))
+
+	other := app.OnBehalfOf{Task: "other"}
+	require.ErrorAs(t, checkAgentLimits(residual, dec, &other, c.withPublishers(t.Context(), residual, &other, c.datasetAliasOf())), &limit)
+	assert.Equal(t, "keelson-bundle:kernel_top", limit.Destination)
+}

@@ -129,7 +129,7 @@ func TestLiveAnAdhocDatasetJoinsAServerTable(t *testing.T) {
 	assert.True(t, confined)
 
 	// Kept, then joined again from the data set.
-	_, err = c.defineSession(t.Context(), nil, "items_kept", "SELECT * FROM keelson('items')", []string{"id"})
+	_, err = c.defineSession(t.Context(), nil, "", "items_kept", "SELECT * FROM keelson('items')", []string{"id"})
 	require.NoError(t, err)
 	rows, confined, err = runAll(t, t.Context(), c, "SELECT k.id FROM session('items_kept') AS k CROSS JOIN (SELECT 1 FROM "+r.table+" LIMIT 1) AS m", nil)
 	require.NoError(t, err)
@@ -140,9 +140,9 @@ func TestLiveAnAdhocDatasetJoinsAServerTable(t *testing.T) {
 func TestLiveAnExpiredSessionIsReplayedThroughPlaysRunPath(t *testing.T) {
 	r := newLiveRig(t, sessiondata.Limits{SessionTimeout: 2 * time.Second})
 	c := r.liveClient("github.com/x/play", 1)
-	_, err := c.defineSession(t.Context(), nil, "base", "SELECT * FROM "+r.table+" LIMIT 100", nil)
+	_, err := c.defineSession(t.Context(), nil, "", "base", "SELECT * FROM "+r.table+" LIMIT 100", nil)
 	require.NoError(t, err)
-	_, err = c.defineSession(t.Context(), nil, "derived", "SELECT count() AS n FROM session('base')", nil)
+	_, err = c.defineSession(t.Context(), nil, "", "derived", "SELECT count() AS n FROM session('base')", nil)
 	require.NoError(t, err)
 	time.Sleep(5500 * time.Millisecond)
 	rows, _, err := runAll(t, t.Context(), c, "SELECT n FROM session('derived')", nil)

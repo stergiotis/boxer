@@ -30,7 +30,7 @@ import (
 // result stream closes. Whose data session it is follows the run: an
 // agent's run reaches its task's, through the on-behalf-of context it
 // carries; the person's reaches the session the window opened at its first
-// definition.
+// definition, or the one ExecOptions.SessionTicket names.
 
 // sessionReleaseTimeout bounds the release of a lease on a run's way out.
 const sessionReleaseTimeout = 5 * time.Second
@@ -209,9 +209,25 @@ func (inst *sessionHold) release() {
 	})
 }
 
+// hasTask reports whether obo is an agent's call of a task, rather than
+// nil or a gate without a task: the person's statement held to play's
+// agent limits.
+func hasTask(obo *app.OnBehalfOf) (yes bool) { return obo != nil && obo.Task != "" }
+
+// sessionCaller is the caller the service sees for obo: the task's call,
+// whose data session the service finds by attesting it, or the person's
+// when obo carries no task — a gate whose limits are the client's to apply.
+func sessionCaller(obo *app.OnBehalfOf) (c sessiondata.Caller) {
+	if hasTask(obo) {
+		c.OnBehalfOf = obo
+	}
+	return
+}
+
 // prepareSession readies sql, as its author wrote it, for a run that dec
-// placed in a data session: an agent's run in its task's, the person's in
-// the window's.
+// placed in a data session: an agent's run in its task's, the person's —
+// gated by an OnBehalfOf without a task or not — in opts' ticket or the
+// window's.
 func (inst *Client) prepareSession(ctx context.Context, sql string, opts *ExecOptions, dec dispatchDecision) (hold *sessionHold, err error) {
 	bus := inst.sessionBus()
 	if bus == nil {
@@ -222,9 +238,14 @@ func (inst *Client) prepareSession(ctx context.Context, sql string, opts *ExecOp
 		return
 	}
 	agent, _ := inst.runAgent(opts)
-	in := sessiondata.PrepareInput{Caller: sessiondata.Caller{OnBehalfOf: agent}, Endpoint: inst.sessionEndpoint(target), SQL: inst.sessionText(sql)}
-	if agent == nil {
-		in.Ticket = inst.windowTicket()
+	in := sessiondata.PrepareInput{Caller: sessionCaller(agent), Endpoint: inst.sessionEndpoint(target), SQL: inst.sessionText(sql)}
+	if !hasTask(agent) {
+		if opts != nil {
+			in.Ticket = opts.SessionTicket
+		}
+		if in.Ticket == "" {
+			in.Ticket = inst.windowTicket()
+		}
 		if in.Ticket == "" {
 			if datasets, _ := sessiondata.References(in.SQL); len(datasets) > 0 {
 				return nil, eb.Build().Strs("datasets", datasets).Errorf("this window holds no data session yet: keep a data set first, or open the window from one that holds the session")
@@ -324,6 +345,67 @@ func sessionStandIn(sql string) (out string) {
 	return nanopass.GetText(rw)
 }
 
+// SessionDefineInput is a definition DefineSessionDataset makes.
+type SessionDefineInput struct {
+	// Agent is the agent's call the definition is work of: the data set
+	// joins its task's data session, and its grant must list
+	// clickhouse:<host> and clickhouse-session:<host> of the pinned
+	// endpoint and every ad-hoc dataset the definition reads. An
+	// OnBehalfOf without a task holds the person's definition to the same
+	// limits, in the person's data session. Nil is the person's,
+	// unlimited.
+	Agent *app.OnBehalfOf
+	// SessionTicket names the person's data session when Agent names no
+	// task; empty takes the one the client's window holds, which the
+	// first definition opens. With a task it is not used.
+	SessionTicket string
+	// Name is the data set's name, an identifier; SQL its defining SELECT,
+	// as its author wrote it: session('name') reads another data set and
+	// keelson('name') an ad-hoc dataset, by a name the window binds or by
+	// its global alias.
+	Name string
+	SQL  string
+	// OrderBy is the kept table's sort key, by column name.
+	OrderBy []string
+}
+
+// DefineSessionDataset defines, or redefines, a session data set on the
+// pinned endpoint, as play's keep_as does: each keelson('…') name the
+// window binds under a local name is sent as the dataset's global alias,
+// the endpoint is declared as seeing sealed data only once it passed play's
+// reach proof, and, for an Agent, play's agent limits judge the definition
+// before it is sent. A destination the grant lacks comes back as an
+// *AgentLimitError naming it; a definition the dispatch would not place —
+// sealed data on an endpoint without the proof — as a *NotDispatchedError.
+// The client must be wired with SetSessionBus.
+func (inst *Client) DefineSessionDataset(ctx context.Context, in SessionDefineInput) (res sessiondata.DefineResult, err error) {
+	if in.Agent != nil {
+		if err = inst.sessionDefineLimits(ctx, in.Agent, in.SQL); err != nil {
+			return
+		}
+	}
+	return inst.defineSession(ctx, in.Agent, in.SessionTicket, in.Name, in.SQL, in.OrderBy)
+}
+
+// SessionDropInput is a drop DropSessionDataset makes.
+type SessionDropInput struct {
+	// Agent and SessionTicket name the data session as for
+	// SessionDefineInput.
+	Agent         *app.OnBehalfOf
+	SessionTicket string
+	// Name is the data set to drop; Cascade drops the data sets that read
+	// it too, without which one others read is refused.
+	Name    string
+	Cascade bool
+}
+
+// DropSessionDataset drops a session data set from the data session in
+// names, returning what it dropped as name@revision. The client must be
+// wired with SetSessionBus.
+func (inst *Client) DropSessionDataset(ctx context.Context, in SessionDropInput) (dropped []string, err error) {
+	return inst.dropSession(ctx, in.Agent, in.SessionTicket, in.Name, in.Cascade)
+}
+
 // sessionDefineLimits is play's agent limits on a definition for obo: a
 // plain read, the ad-hoc datasets it reads and the endpoint, judged as a
 // statement placed in the data session, and the right to keep session
@@ -335,7 +417,7 @@ func (inst *Client) sessionDefineLimits(ctx context.Context, obo *app.OnBehalfOf
 	}
 	text := inst.sessionText(strings.TrimSpace(sql))
 	dec := inst.confine(text, dispatchDecision{targetURL: target, class: dispatchClassSession, reason: "a definition in the data session"})
-	if err = checkAgentLimits(text, dec, obo, nil); err != nil {
+	if err = checkAgentLimits(text, dec, obo, inst.withPublishers(ctx, text, obo, nil)); err != nil {
 		return
 	}
 	if d := sessiondata.DestinationSession(endpointHost(target)); !slices.Contains(obo.Destinations, d) {
@@ -345,11 +427,11 @@ func (inst *Client) sessionDefineLimits(ctx context.Context, obo *app.OnBehalfOf
 }
 
 // defineSession defines, or redefines, the data set name from sql in the
-// data session of obo's task, or of the window when obo is nil — opening
-// the window's at its first definition. The definition is sent as its
-// author wrote it, its keelson('…') names mapped to global aliases; play's
-// pre-execute rewrites do not run on it.
-func (inst *Client) defineSession(ctx context.Context, obo *app.OnBehalfOf, name string, sql string, orderBy []string) (res sessiondata.DefineResult, err error) {
+// data session of obo's task, or the person's — the one ticket names, else
+// the window's, opened at its first definition — when obo names no task.
+// The definition is sent as its author wrote it, its keelson('…') names
+// mapped to global aliases; play's pre-execute rewrites do not run on it.
+func (inst *Client) defineSession(ctx context.Context, obo *app.OnBehalfOf, ticket string, name string, sql string, orderBy []string) (res sessiondata.DefineResult, err error) {
 	bus := inst.sessionBus()
 	if bus == nil {
 		return res, errNoSessionBus
@@ -358,11 +440,13 @@ func (inst *Client) defineSession(ctx context.Context, obo *app.OnBehalfOf, name
 	if err != nil {
 		return
 	}
-	in := sessiondata.DefineInput{Caller: sessiondata.Caller{OnBehalfOf: obo}, Endpoint: inst.sessionEndpoint(target), Name: name,
+	in := sessiondata.DefineInput{Caller: sessionCaller(obo), Endpoint: inst.sessionEndpoint(target), Name: name,
 		SQL: inst.sessionText(strings.TrimSpace(sql)), OrderBy: orderBy}
-	if obo == nil {
-		if in.Ticket, err = inst.ensureWindowTicket(ctx); err != nil {
-			return
+	if !hasTask(obo) {
+		if in.Ticket = ticket; in.Ticket == "" {
+			if in.Ticket, err = inst.ensureWindowTicket(ctx); err != nil {
+				return
+			}
 		}
 	}
 	res, err = sessiondata.Define(ctx, bus, in)
@@ -373,19 +457,19 @@ func (inst *Client) defineSession(ctx context.Context, obo *app.OnBehalfOf, name
 }
 
 // listSession lists the data sets of obo's task's data session, or of the
-// window's when obo is nil; nothing when there is none yet.
+// window's when obo names no task; nothing when there is none yet.
 func (inst *Client) listSession(ctx context.Context, obo *app.OnBehalfOf) (infos []sessiondata.DatasetInfo, err error) {
 	bus := inst.sessionBus()
 	if bus == nil {
 		return nil, nil
 	}
 	ticket := ""
-	if obo == nil {
+	if !hasTask(obo) {
 		if ticket = inst.windowTicket(); ticket == "" {
 			return nil, nil
 		}
 	}
-	infos, _, err = sessiondata.List(ctx, bus, ticket, obo)
+	infos, _, err = sessiondata.List(ctx, bus, ticket, sessionCaller(obo).OnBehalfOf)
 	if err != nil {
 		return nil, sessionError("the data sets could not be listed", err)
 	}
@@ -393,15 +477,19 @@ func (inst *Client) listSession(ctx context.Context, obo *app.OnBehalfOf) (infos
 }
 
 // dropSession drops a data set of obo's task's data session, or of the
-// window's; cascade drops the data sets that read it too.
-func (inst *Client) dropSession(ctx context.Context, obo *app.OnBehalfOf, name string, cascade bool) (dropped []string, err error) {
+// person's — ticket's, else the window's — when obo names no task; cascade
+// drops the data sets that read it too.
+func (inst *Client) dropSession(ctx context.Context, obo *app.OnBehalfOf, ticket string, name string, cascade bool) (dropped []string, err error) {
 	bus := inst.sessionBus()
 	if bus == nil {
 		return nil, errNoSessionBus
 	}
-	in := sessiondata.DropInput{Caller: sessiondata.Caller{OnBehalfOf: obo}, Name: name, Cascade: cascade}
-	if obo == nil {
-		if in.Ticket = inst.windowTicket(); in.Ticket == "" {
+	in := sessiondata.DropInput{Caller: sessionCaller(obo), Name: name, Cascade: cascade}
+	if !hasTask(obo) {
+		if in.Ticket = ticket; in.Ticket == "" {
+			in.Ticket = inst.windowTicket()
+		}
+		if in.Ticket == "" {
 			return nil, eh.Errorf("this window holds no data session")
 		}
 	}

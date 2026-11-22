@@ -125,13 +125,33 @@ func (inst dispatchDecision) killTarget() (endpoint string, err error) {
 	return
 }
 
+// Class names the kind of endpoint the decision places a statement on:
+// "manual" (the pinned endpoint), "introspection" (this process's
+// introspection plane), "session" (the pinned server, inside a data session
+// of the session data service), "refused" (no endpoint may serve it) or
+// "unresolved" (the zero decision).
+func (inst dispatchDecision) Class() (class string) { return inst.class.String() }
+
+// Reason is the decision's reason in words: the evidence it was placed on,
+// or why no endpoint may serve the statement.
+func (inst dispatchDecision) Reason() (reason string) { return inst.reason }
+
+// Refused reports whether no endpoint may serve the statement; Reason says
+// why.
+func (inst dispatchDecision) Refused() (refused bool) { return inst.class == dispatchClassRefused }
+
+// Confined reports whether the statement names sealed data, so its result
+// is confined.
+func (inst dispatchDecision) Confined() (confined bool) {
+	return inst.sensitivity == queryengine.SensitivityConfined
+}
+
 // NotDispatchedError is a statement a dispatch decision refused, or a
 // decision that names no endpoint. It is the error ExecuteArrowStream and
 // the other issuers return for such a decision; the dispatchReason fact on
 // the wrapping error carries the reason as well.
 type NotDispatchedError struct {
-	// Class is the decision's class by name, "refused" for a statement it
-	// refused.
+	// Class is the decision's class, as Class names it.
 	Class string
 	// Reason is why the statement was not sent.
 	Reason string
