@@ -1,6 +1,13 @@
 package styletokens
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"strconv"
+	"testing"
+)
 
 // TestParseThemeAcceptsFreshOnly pins the contract of IMZERO2_THEME: one
 // word selects the light theme, anything else — including the names a
@@ -56,5 +63,29 @@ func TestButtonPaddingYFollowsTheTheme(t *testing.T) {
 	}
 	if got, want := ButtonPaddingY(DensityStandard), buttonPaddingY(DensityStandard, ActiveTheme()); got != want {
 		t.Errorf("ButtonPaddingY = %v, want the active theme's %v", got, want)
+	}
+}
+
+// TestRoundingButtonFollowsTheTheme pins the mirror of imzero2_egui's
+// widget radius: RoundingSm under the IDS overlay, and the fresh theme's
+// ROUND_WIDGET, read from its source so the two cannot drift.
+func TestRoundingButtonFollowsTheTheme(t *testing.T) {
+	if got := roundingButton(ThemeDark); got != RoundingSm {
+		t.Errorf("dark: %v, want RoundingSm %v", got, RoundingSm)
+	}
+	_, here, _, _ := runtime.Caller(0)
+	b, err := os.ReadFile(filepath.Join(filepath.Dir(here), "..", "..", "..", "..", "rust", "imzero2", "imzero2_egui", "src", "style", "fresh.rs"))
+	if err != nil {
+		t.Fatalf("read fresh.rs: %v", err)
+	}
+	m := regexp.MustCompile(`pub const ROUND_WIDGET: u8 = (\d+);`).FindSubmatch(b)
+	if m == nil {
+		t.Fatal("fresh.rs: no ROUND_WIDGET")
+	}
+	if got, want := roundingButton(ThemeFresh), string(m[1]); strconv.FormatFloat(float64(got), 'f', -1, 32) != want {
+		t.Errorf("fresh: %v, want ROUND_WIDGET %s", got, want)
+	}
+	if got, want := RoundingButton(), roundingButton(ActiveTheme()); got != want {
+		t.Errorf("RoundingButton = %v, want the active theme's %v", got, want)
 	}
 }

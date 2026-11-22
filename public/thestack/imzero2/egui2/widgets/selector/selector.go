@@ -38,7 +38,9 @@
 package selector
 
 import (
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
 // Style selects the visual skin. The three are interchangeable at the call
@@ -49,9 +51,17 @@ const (
 	// StyleRadio renders egui's classic ○/● RadioButton dot. Default for
 	// [RadioValue]; the natural fit for a vertical settings-style group.
 	StyleRadio Style = iota
-	// StyleSegmented renders a framed Button whose Selected state fills it —
-	// the compact "segmented control" look. Default for [Segmented]; fits a
-	// horizontal options bar better than a row of radio dots.
+	// StyleSegmented is the segmented control, the default for [Segmented]:
+	// the options sit under one outline, a hairline apart, and the selected
+	// one is filled, so at rest the bar reads as one control and not as a
+	// row of command buttons (ADR-0404 §SD5). Only the selected option is
+	// ringed in the accent, at rest and under the pointer; an unselected one
+	// shows a neutral fill only while hovered, and takes the same width at
+	// rest as hovered, so hovering never moves the options after it. The
+	// outline's corners follow the active theme's button radius
+	// (styletokens.RoundingButton). A lone
+	// [RadioValue] in this style is a framed button whose Selected state
+	// fills it.
 	StyleSegmented
 	// StyleSelectable renders a frameless highlighted label
 	// (egui `Button::selectable`) — the filter-chip / tag-picker look.
@@ -69,13 +79,34 @@ func commit[T comparable](current *T, value T, clicked bool) (changed bool) {
 	return false
 }
 
+// segmentHoverFill is a hovered unselected segment's fill: the neutral
+// background that stands furthest from the panel, the surface in the dark
+// theme and the faint ground in the light one. The selected segment's fill
+// is the selection's accent tint, which the light theme also uses for a
+// hovered control, so a hovered segment does not borrow it.
+func segmentHoverFill() color.Color {
+	if styletokens.ActiveTheme() == styletokens.ThemeFresh {
+		return color.Hex(styletokens.NeutralBgFaint.AsHex())
+	}
+	return color.Hex(styletokens.NeutralBgSurface.AsHex())
+}
+
 // renderControl draws one selectable control in the given style and returns
 // whether it was primary-clicked this frame. It never mutates state — the
 // caller owns the compare/assign via [commit] so both entry points share one
 // rule. A non-empty tooltip wraps the single control in a HoverText scope;
 // that is safe here precisely because a control is one widget (HoverText
 // silently drops all but the first child of a multi-widget body).
-func renderControl(id c.WidgetIdCreatorI, style Style, frameless, checked bool, label, icon, tooltip string) (clicked bool) {
+//
+// joined draws a [StyleSegmented] option as one segment of a joined bar
+// (ADR-0404 §SD5); the bar's outline is drawn by the caller. The selected
+// segment is filled and ringed in the accent, at rest and under the pointer.
+// The others are ghost buttons: no frame at rest and, hovered, a neutral fill
+// without the accent ring (segmentHoverFill), so a hovered segment is never
+// taken for the selected one in either theme. Each unselected segment
+// reserves the frame it draws when hovered (ButtonFluid.ReserveFrame), so
+// hovering one does not move the segments after it.
+func renderControl(id c.WidgetIdCreatorI, style Style, frameless, joined, checked bool, label, icon, tooltip string) (clicked bool) {
 	text := label
 	if icon != "" {
 		// U+00A0 NBSP keeps the glyph and label on one line, as badge does.
@@ -85,6 +116,16 @@ func renderControl(id c.WidgetIdCreatorI, style Style, frameless, checked bool, 
 		switch style {
 		case StyleSegmented:
 			b := c.Button(id, c.Atoms().Text(text).Keep()).Selected(checked)
+			if joined {
+				if checked {
+					// The tertiary kind's ring is the accent in both themes:
+					// the dark theme's selection fill alone is close to the
+					// panel, and a selected segment read as one at rest.
+					b = b.Kind(c.ButtonKindTertiary)
+				} else {
+					b = b.Kind(c.ButtonKindGhost).ReserveFrame().Fill(segmentHoverFill())
+				}
+			}
 			if frameless {
 				// Frame(false) drops the button chrome — the borderless
 				// segment used in ComboBox popups, where what is selected is
@@ -163,7 +204,7 @@ func (inst ValueFluid[T]) Style(s Style) ValueFluid[T] { inst.style = s; return 
 // the selection to this value (re-clicking the current value is not a change),
 // so callers can gate a requery or other side effect on the edge.
 func (inst ValueFluid[T]) SendResp() (changed bool) {
-	clicked := renderControl(inst.id, inst.style, false, *inst.current == inst.value,
+	clicked := renderControl(inst.id, inst.style, false, false, *inst.current == inst.value,
 		inst.label, inst.icon, inst.tooltip)
 	return commit(inst.current, inst.value, clicked)
 }
@@ -225,7 +266,8 @@ func (inst GroupFluid[T]) OptionIcon(value T, icon, label, tooltip string) Group
 func (inst GroupFluid[T]) Style(s Style) GroupFluid[T] { inst.style = s; return inst }
 
 // Vertical stacks the options top-to-bottom instead of left-to-right — the
-// settings-style layout, usually paired with [StyleRadio].
+// settings-style layout, usually paired with [StyleRadio]. A vertical
+// [StyleSegmented] bar is one column of segments under one outline.
 func (inst GroupFluid[T]) Vertical() GroupFluid[T] { inst.vertical = true; return inst }
 
 // Inline emits the options straight into the caller's existing layout instead
@@ -233,12 +275,18 @@ func (inst GroupFluid[T]) Vertical() GroupFluid[T] { inst.vertical = true; retur
 // other widgets (a label, a gap, sibling checkboxes) and the nested-horizontal
 // vertical offset would misalign them. The id scope is still opened, so two
 // inline bars on one stack stay collision-free. When set, [GroupFluid.Vertical]
-// is ignored — orientation is then the caller's layout.
+// is ignored — orientation is then the caller's layout. An inline
+// [StyleSegmented] bar still draws its outline: the outline is one block in
+// the caller's row, and the segments inside it follow the caller's
+// orientation.
 func (inst GroupFluid[T]) Inline() GroupFluid[T] { inst.inline = true; return inst }
 
 // Gap inserts px logical points of space between adjacent options (never before
 // the first or after the last) — matches the AddSpace(GapInline(density)) that
 // hand-rolled tab bars put between segments. Zero (the default) packs them flush.
+// In a [StyleSegmented] bar the space falls inside the shared outline, on
+// top of the hairline the bar keeps between segments: the bar stays one
+// control with its segments set further apart.
 func (inst GroupFluid[T]) Gap(px float32) GroupFluid[T] { inst.gap = px; return inst }
 
 // Frameless drops the button chrome on [StyleSegmented] (renders each segment
@@ -255,6 +303,10 @@ func (inst GroupFluid[T]) Gap(px float32) GroupFluid[T] { inst.gap = px; return 
 // selected option. Four `play` panels reached here first and rendered
 // unreadable bars until a pair of screenshots differing only in one toggle came
 // back pixel-identical.
+//
+// A frameless bar draws no shared outline either (ADR-0404 SD5) and keeps
+// egui's item spacing between its options: a plain row of borderless
+// buttons.
 func (inst GroupFluid[T]) Frameless() GroupFluid[T] { inst.frameless = true; return inst }
 
 // SendResp lays out the bar and returns true on the frame a click moves the
@@ -263,6 +315,8 @@ func (inst GroupFluid[T]) Frameless() GroupFluid[T] { inst.frameless = true; ret
 func (inst GroupFluid[T]) SendResp() (changed bool) {
 	withLayout := func() {
 		switch {
+		case inst.joined():
+			changed = inst.renderJoined()
 		case inst.inline:
 			// Caller owns the surrounding layout row; emit options into it.
 			changed = inst.renderOptions()
@@ -282,16 +336,59 @@ func (inst GroupFluid[T]) SendResp() (changed bool) {
 	return
 }
 
+// joined reports whether the bar takes the joined segmented look: the
+// segmented style with its frames on.
+func (inst GroupFluid[T]) joined() bool {
+	return inst.style == StyleSegmented && !inst.frameless
+}
+
+// renderJoined draws a segmented bar as one control (ADR-0404 §SD5, §SD8):
+// one outline in the border token around the segments. Two things follow the
+// theme the bar is drawn in. The outline's radius is the theme's button
+// radius plus the inset, so its corners are concentric with a selected
+// segment's. And the segments sit PaddingHair apart and as far inside the
+// line, which is at least the lift a hovered control grows by in the light
+// theme: a hovered or selected segment never touches its neighbour or the
+// outline. The frame pushes its id, so the options' ids sit under it.
+func (inst GroupFluid[T]) renderJoined() (changed bool) {
+	inset := styletokens.PaddingHair(styletokens.ActiveDensity())
+	flush := func() {
+		c.UiSetItemSpacing(inset, inset)
+		changed = inst.renderOptions()
+	}
+	for range c.Frame(inst.ids.PrepareStr("outline")).
+		Stroke(styletokens.StrokeHair, color.Hex(styletokens.NeutralBorderDefault.AsHex())).
+		CornerRadius(styletokens.RoundingButton() + inset).
+		InnerMargin(inset).
+		KeepIter() {
+		switch {
+		case inst.inline:
+			// The frame's content takes the caller's orientation.
+			flush()
+		case inst.vertical:
+			for range c.Vertical().KeepIter() {
+				flush()
+			}
+		default:
+			for range c.HorizontalTop().KeepIter() {
+				flush()
+			}
+		}
+	}
+	return
+}
+
 // renderOptions draws every option once, gap-separated, and reports whether any
 // click moved the selection. At most one option can be clicked per frame, so
 // the running OR yields that option's change edge.
 func (inst GroupFluid[T]) renderOptions() (changed bool) {
+	joined := inst.joined()
 	for i := range inst.opts {
 		if i > 0 && inst.gap > 0 {
 			c.AddSpace(inst.gap)
 		}
 		o := inst.opts[i]
-		clicked := renderControl(inst.idFor(i), inst.style, inst.frameless,
+		clicked := renderControl(inst.idFor(i), inst.style, inst.frameless, joined,
 			*inst.current == o.value, o.label, o.icon, o.tooltip)
 		if commit(inst.current, o.value, clicked) {
 			changed = true

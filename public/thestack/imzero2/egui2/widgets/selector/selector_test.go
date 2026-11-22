@@ -3,7 +3,9 @@ package selector
 import (
 	"testing"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
 type gran uint8
@@ -123,5 +125,63 @@ func TestStyleDefaults(t *testing.T) {
 	}
 	if sg := Segmented(nil, "k", &cur); sg.style != StyleSegmented {
 		t.Errorf("Segmented default style = %v, want StyleSegmented", sg.style)
+	}
+}
+
+// TestJoinedIsTheFramedSegmentedStyle pins which bars take the one-outline
+// look (ADR-0404 SD5): the segmented style with its frames on, whatever the
+// layout knobs say.
+func TestJoinedIsTheFramedSegmentedStyle(t *testing.T) {
+	var cur gran
+	cases := []struct {
+		name string
+		g    GroupFluid[gran]
+		want bool
+	}{
+		{"default", Segmented(nil, "k", &cur), true},
+		{"inline", Segmented(nil, "k", &cur).Inline(), true},
+		{"vertical", Segmented(nil, "k", &cur).Vertical(), true},
+		{"gap", Segmented(nil, "k", &cur).Gap(4), true},
+		{"frameless", Segmented(nil, "k", &cur).Frameless(), false},
+		{"selectable", Segmented(nil, "k", &cur).Style(StyleSelectable), false},
+		{"radio", Segmented(nil, "k", &cur).Style(StyleRadio), false},
+	}
+	for _, tc := range cases {
+		if got := tc.g.joined(); got != tc.want {
+			t.Errorf("%s: joined = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestEveryLayoutRendersAndAJoinedClickCommits plays one frame of each knob
+// combination under the discard channel, then clicks an option of a joined
+// bar, whose ids sit under the outline's frame.
+func TestEveryLayoutRendersAndAJoinedClickCommits(t *testing.T) {
+	t.Cleanup(egui2test.Install())
+	sm := c.CurrentApplicationState.StateManager
+	ids := c.NewWidgetIdStack()
+	cur := perRow
+	bar := func(scope string) GroupFluid[gran] {
+		return Segmented(ids, scope, &cur).Option(perRow, "a").Option(perAttr, "b").Option(perCell, "c")
+	}
+	for _, g := range []GroupFluid[gran]{
+		bar("default"), bar("inline").Inline(), bar("vertical").Vertical(), bar("gap").Gap(4),
+		bar("frameless").Frameless(), bar("selectable").Style(StyleSelectable), bar("radio").Style(StyleRadio).Vertical(),
+	} {
+		sm.ScriptReset()
+		if g.SendResp() {
+			t.Errorf("a frame with no click changed the selection")
+		}
+	}
+	var h widgethandle.WidgetHandle
+	for range c.IdScope(ids.PrepareStr("default")) {
+		for range c.IdScope(ids.PrepareStr("outline")) {
+			h = widgethandle.Make(ids.PrepareSeq(1).Derive())
+		}
+	}
+	sm.ScriptReset()
+	sm.ScriptResponse(h, c.PrimaryClickedResponseFlags)
+	if !bar("default").SendResp() || cur != perAttr {
+		t.Errorf("a click on the joined bar's second option did not commit: cur = %v", cur)
 	}
 }

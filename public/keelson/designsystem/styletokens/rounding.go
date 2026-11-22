@@ -15,3 +15,23 @@ const (
 	// RoundingLg — floating windows, modals, popovers.
 	RoundingLg float32 = 6.0
 )
+
+// RoundingButton returns the corner radius the active theme gives a button,
+// a text field or a combo box at rest. A control composed from primitives
+// around buttons (an outline enclosing them) takes its radius from here, so
+// it follows the theme it is drawn in (ADR-0404 §SD8).
+func RoundingButton() (v float32) { return roundingButton(ActiveTheme()) }
+
+// roundingButton mirrors imzero2_egui's style: the IDS overlay sets every
+// widget state to RoundingSm (tokens/mod.rs apply_rounding), and the fresh
+// theme replaces it with freshRoundingWidget (fresh.rs ROUND_WIDGET).
+func roundingButton(th ThemeE) (v float32) {
+	v = RoundingSm
+	if th == ThemeFresh {
+		v = freshRoundingWidget
+	}
+	return
+}
+
+// freshRoundingWidget is the fresh theme's resting widget radius.
+const freshRoundingWidget = 8
