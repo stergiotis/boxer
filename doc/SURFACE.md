@@ -23,7 +23,7 @@ itself; ADR-0389 states its tier.
 | Section | Packages |
 | --- | ---: |
 | [Stable](#stable) | 77 |
-| [Experimental](#experimental) | 285 |
+| [Experimental](#experimental) | 286 |
 | [Internal](#internal) | 16 |
 | [Test support](#test-support) | 18 |
 | [Tools](#tools) | 91 |
@@ -262,6 +262,7 @@ Public and usable, but may change in any MINOR version without a deprecation win
 - `public/identity/identgen/leased` — Package leased generates identifier.IdGeneratorI ids over a technology-neutral identgen.AllocatorI: the id source is a swappable block allocator rather than a hard-wired embedded store.
 - `public/identity/identgen/leased/memalloc` — Package memalloc is an in-memory identgen.AllocatorI: a per-tag monotonic counter handing out body-value blocks.
 - `public/identity/identgen/leased/rowalloc` — Package rowalloc is an identgen.AllocatorI over one lease row per tag on the one ClickHouse server a deployment runs (ADR-0319 §SD1, §SD3): the row carries the next unleased body, and a block is reserved by a compare-and-set on it — a guarded lightweight update writing the new bound and a holder token, then a read of the row by the same client.
+- `public/identity/identgen/leased/rowintern` — Package rowintern is a keyed id generator whose key-to-id mapping lives on the one ClickHouse server a deployment runs (ADR-0405 §SD3): the same natural key resolves to the same tagged id from every process and across restarts.
 - `public/identity/identgen/mem` — Package mem is the dependency-free, in-memory get-or-assign identifier.IdGeneratorI: it maps a natural key to a stable surrogate id in a Go map and resolves ids back to keys.
 - `public/identity/identgen/seq` — Package seq provides persistent, per-tag monotonic identifier.IdGeneratorI implementations: each hands out a dense, increasing stream of ids for one tag and ignores the natural key.
 
