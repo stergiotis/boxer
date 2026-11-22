@@ -1,6 +1,9 @@
 package introspect
 
-import "io"
+import (
+	"context"
+	"io"
+)
 
 // An exposed dataset (ADR-0407, proposed) is one a person, or a task under its
 // grant, made readable by programs on this machine: the loopback listener
@@ -14,16 +17,16 @@ import "io"
 type ExposedStatusE uint8
 
 const (
-	// ExposedNotFound covers every request that does not open a dataset: an
+	// ExposedStatusNotFound covers every request that does not open a dataset: an
 	// unknown alias, a missing or wrong token, a lapsed or revoked
 	// exposure. A listener answers them alike, so the answer confirms no
 	// token ever existed.
-	ExposedNotFound ExposedStatusE = iota
-	// ExposedOpen is a request that opened the dataset.
-	ExposedOpen
-	// ExposedBusy is a request presenting a valid token while the
+	ExposedStatusNotFound ExposedStatusE = iota
+	// ExposedStatusOpen is a request that opened the dataset.
+	ExposedStatusOpen
+	// ExposedStatusBusy is a request presenting a valid token while the
 	// exposure already has as many reads open as it admits.
-	ExposedBusy
+	ExposedStatusBusy
 )
 
 // ExposedFormatE is the format a request for an exposed dataset asks for.
@@ -65,9 +68,9 @@ type ExposedRead struct {
 }
 
 // ExposureSourceI opens exposed datasets for a listener. A source must not
-// record or log the token.
+// record or log the token. ctx is the request's.
 type ExposureSourceI interface {
-	OpenExposed(alias string, token string, req ExposedRequest) (rd ExposedRead, status ExposedStatusE)
+	OpenExposed(ctx context.Context, alias string, token string, req ExposedRequest) (rd ExposedRead, status ExposedStatusE)
 }
 
 // SetExposureSource makes src the source of the datasets exposed through

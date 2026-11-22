@@ -359,7 +359,7 @@ func NewService(cfg Config) (inst *Service, err error) {
 // Close unsubscribes, unregisters every provider and closes every sealed
 // file at once — readers mid-flight fail rather than outlive the service.
 // Idempotent; every later operation returns ErrClosed.
-func (inst *Service) Close(context.Context) (err error) {
+func (inst *Service) Close(ctx context.Context) (err error) {
 	inst.mu.Lock()
 	if inst.closed {
 		inst.mu.Unlock()
@@ -390,7 +390,7 @@ func (inst *Service) Close(context.Context) (err error) {
 	for _, u := range unsubs {
 		u()
 	}
-	inst.endAllExposures(context.Background())
+	inst.endAllExposures(context.WithoutCancel(ctx))
 	for _, r := range recs {
 		inst.reg.Unregister(r.handle)
 		r.mu.RLock()

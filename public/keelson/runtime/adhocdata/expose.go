@@ -3,12 +3,13 @@ package adhocdata
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"strings"
 	"sync"
 	"time"
+
+	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
@@ -124,7 +125,7 @@ type ExposeResult struct {
 // exposure is one live exposure. Its token exists only as its digest.
 type exposure struct {
 	id        string
-	digest    [sha256.Size]byte
+	digest    [32]byte
 	alias     string
 	bundle    string
 	owner     Identity
@@ -155,7 +156,7 @@ func (inst *exposure) task() (task string) {
 type exposures struct {
 	mu       sync.Mutex
 	byId     map[string]*exposure
-	byDigest map[[sha256.Size]byte]*exposure
+	byDigest map[[32]byte]*exposure
 }
 
 // Expose makes the newest live dataset under in.Alias readable by programs
@@ -187,8 +188,7 @@ func (inst *Service) expose(in ExposeInput, cc option.Option[app.CallContext]) (
 	case lifetime == 0:
 		lifetime = DefaultExposureLifetime
 	case lifetime < 0 || lifetime > MaxExposureLifetime:
-		return res, eb.Build().Str("alias", in.Alias).Str("lifetime", lifetime.String()).
-			Errorf("an exposure lasts at most %s", MaxExposureLifetime) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text and names the bound"
+		return res, eb.Build().Str("alias", in.Alias).Str("lifetime", lifetime.String()).Errorf("an exposure lasts at most %s", MaxExposureLifetime) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text and names the bound"
 	case !validAlias(in.Alias):
 		return res, eb.Build().Str("alias", in.Alias).Errorf("invalid alias (want [A-Za-z_][A-Za-z0-9_]*, <=64)")
 	}
@@ -218,7 +218,7 @@ func (inst *Service) expose(in ExposeInput, cc option.Option[app.CallContext]) (
 	now := time.Now()
 	rec.mu.RLock()
 	e := &exposure{
-		id: id, digest: sha256.Sum256([]byte(token)), alias: in.Alias, bundle: rec.bundle, owner: rec.owner,
+		id: id, digest: blake3.Sum256([]byte(token)), alias: in.Alias, bundle: rec.bundle, owner: rec.owner,
 		structure: rec.structure, by: in.By, context: cc, baseURL: base, createdAt: now, expiresAt: now.Add(lifetime),
 	}
 	rec.mu.RUnlock()
@@ -284,8 +284,7 @@ func checkTaskMayExpose(rec *record, cc app.CallContext) (err error) {
 	rec.mu.RUnlock()
 	switch {
 	case !pub.Has || pub.Val.Task != cc.Task:
-		return eb.Build().Str("alias", alias).Str("task", cc.Task).
-			Errorf("%w; %s was not published by this task's call, so only the person exposes it, from play's Data sets tab", ErrNotTheTasks, alias) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text and names who may expose it"
+		return eb.Build().Str("alias", alias).Str("task", cc.Task).Errorf("%w; %s was not published by this task's call, so only the person exposes it, from play's Data sets tab", ErrNotTheTasks, alias) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text and names who may expose it"
 	case pub.Val.Tier > uint8(agentrun.TierClear):
 		return eb.Build().Str("alias", alias).Errorf("%s was published by a call labelled %s; a task exposes only what it published at TLP:CLEAR, and the person exposes the rest", alias, agentrun.TierE(pub.Val.Tier)) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text"
 	case cc.Tier > uint8(agentrun.TierClear):
@@ -386,11 +385,11 @@ func (inst *Service) liveFor(e *exposure) (rec *record, lapsed string) {
 
 // OpenExposed implements introspect.ExposureSourceI: it opens the dataset
 // exposed under alias for a request presenting token.
-func (inst *Service) OpenExposed(alias string, token string, req introspect.ExposedRequest) (rd introspect.ExposedRead, status introspect.ExposedStatusE) {
+func (inst *Service) OpenExposed(ctx context.Context, alias string, token string, req introspect.ExposedRequest) (rd introspect.ExposedRead, status introspect.ExposedStatusE) {
 	if !strings.HasPrefix(token, exposureTokenPrefix) {
 		return
 	}
-	digest := sha256.Sum256([]byte(token))
+	digest := blake3.Sum256([]byte(token))
 	now := time.Now()
 	inst.exp.mu.Lock()
 	e := inst.exp.byDigest[digest]
@@ -400,11 +399,11 @@ func (inst *Service) OpenExposed(alias string, token string, req introspect.Expo
 		return
 	case !now.Before(e.expiresAt):
 		inst.exp.mu.Unlock()
-		inst.endExposure(context.Background(), e, ExposureAuditLapse, "its lifetime ended")
+		inst.endExposure(ctx, e, ExposureAuditLapse, "its lifetime ended")
 		return
 	case e.open >= MaxExposureReads:
 		inst.exp.mu.Unlock()
-		return rd, introspect.ExposedBusy
+		return rd, introspect.ExposedStatusBusy
 	}
 	e.open++
 	inst.exp.mu.Unlock()
@@ -416,7 +415,7 @@ func (inst *Service) OpenExposed(alias string, token string, req introspect.Expo
 	rec, lapsed := inst.liveFor(e)
 	if lapsed != "" {
 		release()
-		inst.endExposure(context.Background(), e, ExposureAuditLapse, lapsed)
+		inst.endExposure(ctx, e, ExposureAuditLapse, lapsed)
 		return
 	}
 	rc, revision, err := rec.Open()
@@ -442,9 +441,9 @@ func (inst *Service) OpenExposed(alias string, token string, req introspect.Expo
 		if rerr != nil {
 			r.Outcome, r.Reason = auditFailed, rerr.Error()
 		}
-		inst.auditExposure(context.Background(), r)
+		inst.auditExposure(context.WithoutCancel(ctx), r)
 	}}
-	return rd, introspect.ExposedOpen
+	return rd, introspect.ExposedStatusOpen
 }
 
 var _ introspect.ExposureSourceI = (*Service)(nil)
@@ -486,12 +485,12 @@ func mayRevoke(e *exposure, by Identity, cc option.Option[app.CallContext]) (ok 
 
 // Exposures lists the live exposures, each marked whether the caller made
 // it; an agent's call is attested first. None carries its token.
-func (inst *Service) Exposures(by Identity, obo *app.OnBehalfOf) (out []ExposureInfo, err error) {
+func (inst *Service) Exposures(ctx context.Context, by Identity, obo *app.OnBehalfOf) (out []ExposureInfo, err error) {
 	cc, err := inst.attest(by, obo)
 	if err != nil {
 		return
 	}
-	inst.sweepExposures(context.Background())
+	inst.sweepExposures(ctx)
 	inst.exp.mu.Lock()
 	es := make([]*exposure, 0, len(inst.exp.byId))
 	for _, e := range inst.exp.byId {

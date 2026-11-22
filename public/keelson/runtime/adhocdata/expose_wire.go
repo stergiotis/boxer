@@ -144,7 +144,7 @@ func (inst *Service) handleExposure(msg *app.Msg) {
 			rep = exposeRefusal(rErr)
 		}
 	case SubjectExposeList:
-		es, lErr := inst.Exposures(sender(msg), obo)
+		es, lErr := inst.Exposures(ctx, sender(msg), obo)
 		if lErr != nil {
 			rep = exposeRefusal(lErr)
 			break

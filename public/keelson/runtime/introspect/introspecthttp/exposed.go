@@ -51,13 +51,13 @@ func (s *Server) serveExposed(w http.ResponseWriter, r *http.Request, format int
 		notExposed(w)
 		return
 	}
-	rd, status := src.OpenExposed(alias, token, introspect.ExposedRequest{
+	rd, status := src.OpenExposed(r.Context(), alias, token, introspect.ExposedRequest{
 		Head: r.Method == http.MethodHead, Format: format, Range: r.Header.Get("Range"),
 		Remote: r.RemoteAddr, UserAgent: r.UserAgent(),
 	})
 	switch status {
-	case introspect.ExposedOpen:
-	case introspect.ExposedBusy:
+	case introspect.ExposedStatusOpen:
+	case introspect.ExposedStatusBusy:
 		w.Header().Set("Retry-After", "1")
 		http.Error(w, "the exposure has as many reads open as it admits; retry", http.StatusServiceUnavailable)
 		return

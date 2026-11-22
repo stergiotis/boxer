@@ -142,13 +142,13 @@ func TestThePersonExposesADatasetAndAReaderFetchesIt(t *testing.T) {
 	assert.Equal(t, http.StatusOK, status)
 	assert.Equal(t, "v\n1\n2\n3\n", string(body))
 
-	list, err := r.svc.Exposures(windowB, nil)
+	list, err := r.svc.Exposures(t.Context(), windowB, nil)
 	require.NoError(t, err)
 	require.Len(t, list, 1)
 	assert.Equal(t, uint64(2), list[0].Reads, "two reads received data; a HEAD is not a read")
 	assert.Equal(t, res.Id, list[0].Id)
 	assert.True(t, list[0].Yours)
-	other, err := r.svc.Exposures(windowA, nil)
+	other, err := r.svc.Exposures(t.Context(), windowA, nil)
 	require.NoError(t, err)
 	assert.False(t, other[0].Yours, "another window did not make it")
 
@@ -213,7 +213,7 @@ func TestAnExposureLapses(t *testing.T) {
 	retracted, err := r.svc.Expose(t.Context(), ExposeInput{Alias: "result", By: windowA})
 	require.NoError(t, err)
 
-	require.Eventually(t, func() bool { list, _ := r.svc.Exposures(windowA, nil); return len(list) == 2 }, 2*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { list, _ := r.svc.Exposures(t.Context(), windowA, nil); return len(list) == 2 }, 2*time.Second, 10*time.Millisecond)
 	status, _, _ := fetch(t, http.MethodGet, short.URL, short.Token)
 	assert.Equal(t, http.StatusNotFound, status, "past its lifetime")
 
@@ -224,7 +224,7 @@ func TestAnExposureLapses(t *testing.T) {
 	require.NoError(t, r.svc.Retract(pub.Handle, windowA))
 	status, _, _ = fetch(t, http.MethodGet, retracted.URL, retracted.Token)
 	assert.Equal(t, http.StatusNotFound, status, "its dataset was retracted")
-	require.Eventually(t, func() bool { list, _ := r.svc.Exposures(windowA, nil); return len(list) == 0 }, 2*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { list, _ := r.svc.Exposures(t.Context(), windowA, nil); return len(list) == 0 }, 2*time.Second, 10*time.Millisecond)
 
 	reasons := map[string]string{}
 	for _, rec := range r.records() {
@@ -257,7 +257,7 @@ func TestARepublishIsServedUntilItsColumnsChange(t *testing.T) {
 	require.Equal(t, http.StatusOK, status)
 	assert.Equal(t, []int64{4, 5}, int64Values(t, body))
 	assert.Equal(t, `"sales__orders-r2"`, etag, "the revision served")
-	list, err := r.svc.Exposures(windowA, nil)
+	list, err := r.svc.Exposures(t.Context(), windowA, nil)
 	require.NoError(t, err)
 	require.Len(t, list, 1)
 	assert.Equal(t, uint64(2), list[0].Revision)
@@ -387,21 +387,21 @@ func TestAnExposureBoundsItsOpenReads(t *testing.T) {
 	require.NoError(t, err)
 	var open []introspect.ExposedRead
 	for range MaxExposureReads {
-		rd, status := r.svc.OpenExposed("result", res.Token, introspect.ExposedRequest{})
-		require.Equal(t, introspect.ExposedOpen, status)
+		rd, status := r.svc.OpenExposed(t.Context(), "result", res.Token, introspect.ExposedRequest{})
+		require.Equal(t, introspect.ExposedStatusOpen, status)
 		open = append(open, rd)
 	}
-	_, status := r.svc.OpenExposed("result", res.Token, introspect.ExposedRequest{})
-	assert.Equal(t, introspect.ExposedBusy, status)
+	_, status := r.svc.OpenExposed(t.Context(), "result", res.Token, introspect.ExposedRequest{})
+	assert.Equal(t, introspect.ExposedStatusBusy, status)
 	open[0].Done(0, nil)
-	rd, status := r.svc.OpenExposed("result", res.Token, introspect.ExposedRequest{})
-	assert.Equal(t, introspect.ExposedOpen, status)
+	rd, status := r.svc.OpenExposed(t.Context(), "result", res.Token, introspect.ExposedRequest{})
+	assert.Equal(t, introspect.ExposedStatusOpen, status)
 	rd.Done(0, nil)
 	for _, o := range open[1:] {
 		o.Done(0, nil)
 	}
-	_, status = r.svc.OpenExposed("result", "bxe_nope", introspect.ExposedRequest{})
-	assert.Equal(t, introspect.ExposedNotFound, status)
+	_, status = r.svc.OpenExposed(t.Context(), "result", "bxe_nope", introspect.ExposedRequest{})
+	assert.Equal(t, introspect.ExposedStatusNotFound, status)
 }
 
 // Over the bus: the window asking is the envelope's, the token comes back

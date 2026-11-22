@@ -36,14 +36,14 @@ type fakeExposures struct {
 	errs  []error
 }
 
-func (inst *fakeExposures) OpenExposed(alias string, token string, req introspect.ExposedRequest) (rd introspect.ExposedRead, status introspect.ExposedStatusE) {
+func (inst *fakeExposures) OpenExposed(_ context.Context, alias string, token string, req introspect.ExposedRequest) (rd introspect.ExposedRead, status introspect.ExposedStatusE) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if alias != inst.alias || token != exposedToken {
-		return rd, introspect.ExposedNotFound
+		return rd, introspect.ExposedStatusNotFound
 	}
 	if inst.busy {
-		return rd, introspect.ExposedBusy
+		return rd, introspect.ExposedStatusBusy
 	}
 	inst.asked = append(inst.asked, req)
 	r := nopSeekCloser{bytes.NewReader(inst.stream)}
@@ -53,7 +53,7 @@ func (inst *fakeExposures) OpenExposed(alias string, token string, req introspec
 		inst.mu.Unlock()
 		_ = r.Close()
 	}}
-	return rd, introspect.ExposedOpen
+	return rd, introspect.ExposedStatusOpen
 }
 
 type nopSeekCloser struct{ *bytes.Reader }
