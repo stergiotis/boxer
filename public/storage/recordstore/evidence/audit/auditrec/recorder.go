@@ -33,6 +33,11 @@ var ErrNotDurable = errors.New("auditrec: the audit rows are not durable")
 // store.
 var errNoStore = errors.New("auditrec: the recorder has no store")
 
+// ErrHeld is what Flush returns, and the cause a write-ahead wraps, while
+// the recorder is held (WithHeld): its rows are buffered and nothing is
+// sent until Release lands them.
+var ErrHeld = errors.New("auditrec: the recorder is held until its store opens")
+
 // Defaults of the options.
 const (
 	DefaultMaxBacklogRows = 50_000
@@ -76,6 +81,7 @@ type config struct {
 	flushInterval  time.Duration
 	flushTimeout   time.Duration
 	sealScope      func(run string) uint64
+	held           bool
 }
 
 // Option configures New.
@@ -146,6 +152,13 @@ func WithFlushInterval(d time.Duration) Option { return func(c *config) { c.flus
 // WithFlushTimeout bounds one flush, and so Close.
 func WithFlushTimeout(d time.Duration) Option { return func(c *config) { c.flushTimeout = d } }
 
+// WithHeld starts the recorder held: it buffers and keeps rows as it
+// would for a server that does not take them, within the backlog cap,
+// sends nothing, and reports not durable until Release lands what it
+// holds. It is for a store whose server did not answer when the recorder
+// was built. A recorder without a store ignores it.
+func WithHeld() Option { return func(c *config) { c.held = true } }
+
 // WithSealScope is the anchor scope of a run's seal stream; the default
 // hashes the scheme's name and the run.
 func WithSealScope(f func(run string) uint64) Option { return func(c *config) { c.sealScope = f } }
@@ -172,6 +185,7 @@ type Recorder[B BatchI] struct {
 	mu                sync.Mutex
 	open              bool
 	closed            bool
+	held              bool
 	cur               B
 	seq               uint64
 	curFirst, curLast time.Time
@@ -254,6 +268,7 @@ func New[B BatchI](st StoreI[B], run string, scheme evidence.Scheme, log zerolog
 		inst.cols = st.Columns()
 		inst.cur = st.NewBatch(inst.cfg.observer)
 		inst.open = true
+		inst.held = inst.cfg.held
 		if inst.cfg.forwarder != nil {
 			inst.queue = make(chan []audit.Event, max(1, inst.cfg.forwardQueue))
 			inst.fwdDone = make(chan struct{})
@@ -285,15 +300,66 @@ func (inst *Recorder[B]) Counts() (c Counts) {
 		Seals: inst.seals.Load(), Forwarded: inst.forwarded.Load(), ForwardDropped: inst.forwardDropped.Load()}
 }
 
-// Durable says rows reach a server: the recorder has a store and is not
-// closed.
+// Durable says rows reach a server: the recorder has a store, is not
+// held and is not closed.
 func (inst *Recorder[B]) Durable() (durable bool) {
 	if inst == nil {
 		return false
 	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	return inst.open && !inst.closed
+	return inst.open && !inst.closed && !inst.held
+}
+
+// Held says the recorder keeps its rows for a store it has not reached
+// yet: built WithHeld, not yet released, not closed.
+func (inst *Recorder[B]) Held() (held bool) {
+	if inst == nil {
+		return false
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.open && !inst.closed && inst.held
+}
+
+// Release ends the hold: it lands what the recorder holds, oldest first,
+// each batch sealed, within ctx, and only once everything held has landed
+// does the recorder report durable. On failure what did not land stays
+// held, the recorder stays held, and Release may be called again. It
+// returns nil on a recorder that is not held, ErrClosed after Close, and
+// an error on one without a store.
+func (inst *Recorder[B]) Release(ctx context.Context) (err error) {
+	if inst == nil {
+		return errNoStore
+	}
+	inst.flushMu.Lock()
+	defer inst.flushMu.Unlock()
+	inst.mu.Lock()
+	switch {
+	case inst.closed:
+		inst.mu.Unlock()
+		return ErrClosed
+	case !inst.open:
+		inst.mu.Unlock()
+		return errNoStore
+	case !inst.held:
+		inst.mu.Unlock()
+		return nil
+	}
+	inst.swapLocked()
+	inst.mu.Unlock()
+	err = inst.drain(ctx)
+	inst.capBacklog()
+	if err != nil {
+		return
+	}
+	inst.mu.Lock()
+	inst.held = false
+	inst.mu.Unlock()
+	// What was buffered while the drain ran, and the gap row for what the
+	// cap dropped while held, follow on the flusher.
+	inst.FlushSoon()
+	return nil
 }
 
 // Event buffers one audit event recorded under ctx: the identity on ctx
@@ -353,7 +419,7 @@ func (inst *Recorder[B]) WriteAhead(ctx context.Context) (durable bool, err erro
 		return false, nil
 	}
 	inst.mu.Lock()
-	open, closed := inst.open, inst.closed
+	open, closed, held := inst.open, inst.closed, inst.held
 	inst.mu.Unlock()
 	var cause error
 	switch {
@@ -361,6 +427,8 @@ func (inst *Recorder[B]) WriteAhead(ctx context.Context) (durable bool, err erro
 		return false, ErrClosed
 	case !open:
 		cause = errNoStore
+	case held:
+		cause = ErrHeld
 	default:
 		if cause = inst.Flush(ctx); cause == nil {
 			return true, nil
@@ -463,7 +531,9 @@ func (inst *Recorder[B]) unique(at time.Time) string {
 // Flush lands what is buffered and what earlier flushes could not, each
 // batch with its seal; after a loss it writes the gap row and lands it in
 // the same call. It returns nil only when every row buffered before the
-// call is on the server; on failure the rows are held for the next.
+// call is on the server; on failure the rows are held for the next. While
+// the recorder is held it sends nothing, applies the backlog cap and
+// returns ErrHeld.
 func (inst *Recorder[B]) Flush(ctx context.Context) (err error) {
 	if inst == nil {
 		return nil
@@ -476,7 +546,12 @@ func (inst *Recorder[B]) Flush(ctx context.Context) (err error) {
 		return nil
 	}
 	inst.swapLocked()
+	held := inst.held
 	inst.mu.Unlock()
+	if held {
+		inst.capBacklog()
+		return ErrHeld
+	}
 	ctx, cancel := context.WithTimeout(ctx, inst.cfg.flushTimeout)
 	defer cancel()
 	err = inst.drain(ctx)
@@ -614,7 +689,7 @@ func (inst *Recorder[B]) flusher() {
 		tick = t.C
 	}
 	flush := func() {
-		if err := inst.Flush(context.Background()); err != nil {
+		if err := inst.Flush(context.Background()); err != nil && !errors.Is(err, ErrHeld) {
 			inst.log.Warn().Err(err).Msg("auditrec: flush (rows stay buffered for the next flush)")
 		}
 	}
