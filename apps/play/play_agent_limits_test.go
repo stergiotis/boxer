@@ -45,6 +45,9 @@ func TestAgentLimits(t *testing.T) {
 		// server would evaluate the quoted alias as code.
 		"a nested block comment":      {"SELECT 1 /* /* */ AS \"x */ , throwIf(1) AS z --\"\nFROM numbers(1)", remote, grant, false},
 		"comments read alike by both": {"SELECT '/*' AS s /* a *//* b */", remote, grant, true},
+		// The aggregate filter's condition is read like any expression.
+		"an aggregate filter":        {"SELECT quantile(0.05)(L) FILTER (WHERE L BETWEEN 177 AND 1502) AS p05 FROM t", remote, grant, true},
+		"an egress read in a filter": {"SELECT count() FILTER (WHERE L IN (SELECT L FROM url('http://x/', 'CSV'))) FROM t", remote, grant, false},
 	} {
 		err := checkAgentLimits(tc.sql, tc.dec, tc.obo, nil)
 		if tc.pass {

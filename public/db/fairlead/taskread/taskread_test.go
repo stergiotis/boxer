@@ -21,6 +21,10 @@ func TestPassLetsATasksReadThroughAndRefusesTheRest(t *testing.T) {
 		{name: "a task's with-select", sql: "WITH x AS (SELECT 1 AS a) SELECT a FROM x", task: "t1"},
 		{name: "a task's explain", sql: "EXPLAIN AST SELECT 1", task: "t1"},
 		{name: "a task's show", sql: "SHOW TABLES", task: "t1"},
+		// The aggregate filter parses, so the read is proven rather than
+		// left to a leading keyword that does not prove one.
+		{name: "a task's select with an aggregate filter", sql: "SELECT quantile(0.05)(L) FILTER (WHERE L BETWEEN 177 AND 1502) AS p05 FROM t", task: "t1"},
+		{name: "a task's filter hiding a nested comment", sql: "SELECT sum(x) FILTER (WHERE /* /* */ y > 0 */ 1) FROM t", task: "t1", refused: true},
 		{name: "a task's insert", sql: "INSERT INTO t VALUES (1)", task: "t1", refused: true},
 		{name: "a task's insert wrapper", sql: "INSERT INTO t SELECT 1", task: "t1", refused: true},
 		{name: "a task's create", sql: "CREATE TABLE t (a UInt8) ENGINE = Memory", task: "t1", refused: true},
