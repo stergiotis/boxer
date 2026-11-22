@@ -41,6 +41,8 @@ public/db/clickhouse/dsl/nanopass_test TestDebugUnionMethods
 public/db/clickhouse/dsl/nanopass_test TestSLLNeverDisagreesWhenItSucceeds/bench_large
 public/db/clickhouse/dsl/nanopass_test TestSLLNeverDisagreesWhenItSucceeds/bench_medium
 public/keelson/runtime/factsstore/chstore TestConfigFromEnvChild
+public/keelson/runtime/factsstore/chstore TestServerWriterChild
+public/keelson/runtime/hostboot TestFactsDeploymentChild
 
 # --- by design: needs a build tag the lane does not pass
 public/keelson/runtime/agent TestUnattendedAcceptsASuggestProposal
