@@ -8,7 +8,7 @@ date: 2026-11-21
 
 > **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
-# ADR-0398: Images beyond a colour model — more sample kinds, declared invalid samples, stacks with axes, a placement, and readers for TIFF, FITS and NPY
+# ADR-0398: Images beyond a colour model — more sample kinds, declared invalid samples, stacks with axes, a placement, and a seam for readers
 
 ## Context
 
@@ -49,7 +49,8 @@ Three lessons from systems that carry such data shape the decision.
   napari carried axis labels and units as inert metadata from 0.5.0 (2024)
   until 0.7.0 (2026) made them effective
   ([release notes](https://napari.org/stable/release/index.html)). What is
-  decided here is the smallest shape the three readers below fill completely.
+  decided here is the smallest shape that readers of the formats above fill
+  completely.
 - **A reader's interpretation is behaviour.** Which georeferencing statement
   a reader used when a file carries several, whether it shifted a half pixel
   ([GDAL RFC 33](https://gdal.org/en/stable/development/rfc/rfc33_gtiff_pixelispoint.html)),
@@ -59,11 +60,13 @@ Three lessons from systems that carry such data shape the decision.
   property as unknown; the same holds for a projection a reader does not
   implement or a compression it does not decode.
 
-The tree's rules bound the readers: no cgo, dependencies that pass the
-licence gate, and a refusal that names what was refused. `golang.org/x/image/tiff`,
-already a dependency, reads unsigned 8- and 16-bit samples from the first
-directory of a classic TIFF and nothing else of what is needed here (its
-package documentation and source, read 2026-11-14).
+A fourth lesson is about where readers live. The formats that hold such
+images are many, each is a parser of untrusted bytes with fixtures and a
+fuzz corpus of its own, and which of them a deployment needs is that
+deployment's business. Readers for three of them were first written in this
+tree, under this decision, and then moved out to the module that uses them:
+what this tree owes a format is a way to be given one, and a check that a
+reader keeps the engine's rules.
 
 ## Design space (QOC)
 
@@ -106,16 +109,18 @@ columns, enter the model?
 Under O1 every tile of a twelve-band scene carries twelve planes to show one,
 and a colour image and a band image differ only by a model that names
 nothing. O3 is what array libraries do and is the larger design: chunking,
-axis order and per-axis transforms are all open at once, and the three
-readers need none of it yet.
+axis order and per-axis transforms are all open at once, and nothing that
+fills the model needs any of it yet.
 
 ## Decision
 
 We will take O2. The engine gains three sample kinds and a declared invalid
 sample on the plane; a **stack** of planes along named axes, from which an
-image is taken; a **placement** that says where pixels are; and three readers
-that fill them. An image remains one to four planes under a colour model, and
-everything that shows or measures an image goes on taking one.
+image is taken; a **placement** that says where pixels are; and a **seam**
+through which a host registers the readers that fill them. An image remains
+one to four planes under a colour model, and everything that shows or
+measures an image goes on taking one. Besides PNG and JPEG, this tree holds
+no reader of its own.
 
 ### Subsidiary design decisions
 
@@ -166,43 +171,73 @@ everything that shows or measures an image goes on taking one.
   alone would then misplace pixels the placement is left empty rather than
   approximated. A reduced level's placement follows from its factor. Images
   and stacks carry one placement; it is not part of the digest.
-- **SD5 — Readers convert conventions and say so.** Each reader delivers the
+- **SD5 — A reader converts conventions and says so.** A reader delivers the
   pixel convention of ADR-0373 §SD3 — row 0 at the top, a pixel covering
   [col, col+1) — whatever its format uses, and records what it did: rows
   flipped, a half-pixel shift for a point-registered raster, an axis order
-  reversed. A reader takes its input as random-access bytes, so that a ranged
+  reversed. It takes its input as random-access bytes, so that a ranged
   source can be put under it later without a new signature. It refuses a
-  file over a pixel or byte limit from the header, before reading samples.
-- **SD6 — TIFF.** Classic TIFF and BigTIFF in either byte order; strips and
-  tiles; chunky and planar layouts; no compression, PackBits, LZW and
-  Deflate; horizontal and floating-point predictors; unsigned 8- and 16-bit,
-  signed 16- and 32-bit, 32- and 64-bit float samples. A greyscale or RGB
-  file, with unassociated alpha or none, is a stack whose band axis is that
-  colour model; any other sample layout is a stack of bands. A palette file
-  is expanded and recorded as such. Directories of the size, kind and layout
-  of the first form a selector axis; reduced-resolution and mask directories
-  are counted and not read. From GeoTIFF: the affine from the pixel scale
-  and tiepoint or from the transformation matrix, the raster-type half
-  pixel, and the reference system's code; from GDAL's private tags: the
-  invalid value, and band names, scales and offsets where stated. Every
-  other compression — JPEG, Zstandard, LERC, JPEG 2000 among them — and
-  every other sample format is refused by name; so are an orientation other
-  than top-left, which the reader does not convert, and a file with strips
-  or tiles left unwritten. A later directory that would be a page and cannot
-  be read refuses the file, so that no position shifts.
-- **SD7 — FITS.** The primary array and image extensions, `BITPIX` 8, 16,
-  32, −32 and −64; `BSCALE` and `BZERO` as the value transform, `BLANK` as
-  the invalid value; axes beyond two as selector axes named by their
-  `CTYPE`; rows flipped so that row 0 is the top. A linear coordinate system
-  and a gnomonic one (`TAN`) become the placement; any other projection, a
-  distortion convention and alternate systems are recorded as declared.
-  64-bit integers, tile-compressed images and random groups are refused by
-  name; table extensions are counted and not read.
-- **SD8 — NPY and NPZ.** The NPY array format, versions 1 to 3, of the six
-  kinds in either byte order and either index order; two dimensions are one
-  plane, further leading dimensions are selector axes. An NPZ archive lists
-  its members and reads the one asked for. An object array, which would need
-  an unpickler, is refused; so is every other element type, by name.
+  file over a pixel, byte or plane limit from the header, before reading
+  samples, and it refuses by name what it does not read; it guesses at
+  nothing. Where one reader's name covers several variants of its format —
+  wider offsets, an archive of arrays, a compressed wrapping — the variant
+  read is recorded in the provenance in the format's own word. A file that
+  ends before what is read is malformed; a read that fails for another
+  reason is no refusal and reaches the caller as it is.
+- **SD6 — The seam.** A reader is a value that states its format — a name,
+  a title for a person, the endings its files usually carry, and a version
+  of its own reading — recognises its files from their first bytes, says
+  what a file holds, and decodes into a stack under the caller's limits.
+  Readers are held in a registry. A host fills the process's registry where
+  it wires its apps, in one visible place, and not by the side effect of an
+  import: a reader that is linked is a parser of untrusted bytes, and which
+  ones a deployment exposes should be readable at one site. A name is
+  registered once. A file that two readers claim is refused, naming both;
+  no order of registration decides. PNG and JPEG are registered as readers
+  too, so that one call opens anything the host reads. The app goes on
+  streaming those two as ADR-0374 §SD7 has it, and recognises them before it
+  asks the registry: a second reader a host registered for their bytes is
+  not asked by the app.
+- **SD7 — A file's entries.** A file may hold several images: the header
+  units of one format, the arrays of an archive of another. A reader lists
+  them as entries — each with an identifier stable for that file, a title,
+  its shape and kind, and whether it can be read or, with the kind of the
+  refusal, why not. Exactly one entry is the default: the one a plain open
+  reads, or, in a file with nothing readable, the one it would have read,
+  whose refusal is then the file's. Decoding names an entry or takes that
+  default. An
+  app that holds a file's bytes can so show another entry without the
+  person opening the file again, and an agent can ask which there are.
+- **SD8 — The refusals are the seam's own.** No reader claims the file, or
+  more than one does; the file uses something its reader does not read; the
+  file is over a limit; the file is malformed; the file has no entry of the
+  name asked for. A reader wraps one of the last four and its message names
+  the feature, the limit, the defect or the entry, so an app shows the
+  reader's sentence and still knows which kind of refusal it is without
+  knowing the reader. A refusal's bare words and its kind can be read back
+  from it. The seam also supplies the reads that keep a failed read apart
+  from a defect, through a decompressor too, by marking the failures of the
+  file's source.
+- **SD9 — A conformance kit.** What SD5 to SD8 ask of a reader is checked by
+  a kit a reader's own tests run against it: that it describes itself
+  completely, recognises what it claims and nothing shorter than its own
+  signature, lists entries that decode to what they announce, refuses over
+  each limit before reading samples, stops when cancelled, wraps the seam's
+  refusals, survives every truncation of a valid file without a panic, and
+  does not report a read that failed as a file that is malformed. It takes
+  a file with nothing readable, too, and holds its default to the refusal it
+  announced.
+  "Before reading samples" is measured against what the reader reads to
+  list a file's entries, so a reader that must read a whole file to list
+  them is not held by it and owes a test of its own; a reader's own working
+  bounds, on a chunk or a tile, are named as its own and set so that a file
+  within the caller's limits still decodes; and the kit cannot know a
+  format's signature, so
+  it offers a reader the empty input, zeros, noise and other formats' first
+  bytes.
+  The kit carries a format of its own, used by this tree's tests only, so
+  that the app's paths for stacks, entries and refusals are exercised
+  without a real format.
 
 ### Milestones
 
@@ -220,39 +255,28 @@ everything that shows or measures an image goes on taking one.
   image of a binned kind — 32-bit integer, either float — is not mapped as a
   composite, as a 32-bit float one was not before: the viewer opens it on its
   first plane (Deferred, with the recipe per band).
-- **M3** ✓ — the TIFF reader, with GeoTIFF
-  ([`decode/tiff`](../../public/science/imaging/decode/tiff/doc.go)). A
-  raster type the file does not state is read as area-registered, and the
-  placement's source says so. Every stack it makes has a band axis, of one
-  position for a greyscale file.
-- **M4** ✓ — the FITS reader
-  ([`decode/fits`](../../public/science/imaging/decode/fits/doc.go)). A
-  cube's axes beyond the second become selector axes slowest first, so the
-  planes keep the file's order and the axis numbering is reversed. Where a
-  header carries both forms of the linear matrix, which the standard
-  forbids, one is used and the reader says which. A celestial axis in
-  arcseconds, arcminutes or radians is converted to degrees, though the
-  standard asks for degrees. A gzip-wrapped file is decompressed in memory
-  under the byte limit.
-- **M5** ✓ — the NPY and NPZ reader
-  ([`decode/npy`](../../public/science/imaging/decode/npy/doc.go)). Native
-  byte order (`=`) is refused by name: the format description promises a
-  file that reads the same on any machine. An archive member is bounded by
-  its own array header, not by the archive's directory.
-- All three readers also bound the number of planes: a byte limit alone
-  admits a shape of a hundred million one-pixel planes.
-- **M6** ✓ — the app opens all three: a band and a position chosen from a
-  stack, the readout in frame coordinates. A stack opens on the image as
-  stored where its bands are a colour model and on its first band otherwise.
-  A change of selection runs off the frame as its own phase, a newer one
-  superseding the one under way; it keeps the view and the marked region,
-  keeps the recipe while the colour model stays the same, and says which
-  limits it recomputed. Every reading and measurement names the selection it
-  was computed on. Three bands of a binned kind were refused with the remedy
-  until [ADR-0401](./0401-showing-bands-together-a-recipe-per-band-an-additive-composite-and-limits-by-zscale.md)
-  gave them a view.
-  What opens through the app is bounded by the file broker's read limit,
-  which is below the readers' own.
+- **M3** ✓ — the seam: the reader contract, the registry, entries, the
+  refusals and the conformance kit with its test format, in
+  [`imaging/decode`](../../public/science/imaging/decode/doc.go). The
+  readers for TIFF, FITS and NPY built under this decision on 2026-11-21
+  leave the tree with it.
+- **M4** ✓ — the app opens what its host registered: a band and a position
+  chosen from a stack, the readout in frame coordinates. A stack opens on
+  the image as stored where its bands are a colour model and on its first
+  band otherwise. A change of selection runs off the frame as its own
+  phase, a newer one superseding the one under way; it keeps the view and
+  the marked region, keeps the recipe while the colour model stays the
+  same, and says which limits it recomputed. Every reading and measurement
+  names the selection it was computed on. Three bands of a binned kind were
+  refused with the remedy until
+  [ADR-0401](./0401-showing-bands-together-a-recipe-per-band-an-additive-composite-and-limits-by-zscale.md)
+  gave them a view. What opens through the app is bounded by the file
+  broker's read limit.
+- **M5** ✓ — the app lists the formats of its host, offers a file's entries,
+  and shows another entry from the bytes it holds. It holds a file's bytes
+  only while the file has more than one entry and is the one open. While an
+  entry is being read, a change of position or bands is refused rather than
+  superseding it.
 
 ## Surfaces — Tier 1
 
@@ -260,9 +284,10 @@ everything that shows or measures an image goes on taking one.
 | --- | --- | --- |
 | Exported Go API: `public/science/imaging` | three sample kinds, a plane's invalid value, `Stack` and its axes, `Placement`; plane labels and a placement on an image | the digest, `samples`, the package-properties table, the image engine how-to |
 | Exported Go API: `imaging/display`, `imaging/stats`, `imaging/levels`, `imaging/tiles` | every kernel takes the six kinds and honours an invalid value | their tests, each against a direct evaluation |
-| Exported Go API: readers under `imaging/decode` | three packages added | fuzz targets; fixtures with their sources and licences |
+| Exported Go API: `imaging/decode` | the reader contract, a registry and the process's own, entries, limits and four refusals; PNG and JPEG as readers | a conformance kit (`decode/decodetest`) with a test format; the image engine how-to |
+| A host's wiring site | registers the readers it exposes | whatever lists what a host mounts |
 | Exported Go API: `widgets/imageview` | the readout and the source description carry the new kinds, an invalid value and plane labels | `widgets/conformance`, the gallery demo |
-| App operations: `apps/imagescope` | reads report the new kinds, invalid samples and labels | its help book |
+| App operations: `apps/imagescope` | reads report the new kinds, invalid samples and labels; the formats of the host and a file's entries are listed, and an entry is chosen | its help book |
 | egui2 IDL, FFFI2 frame, renderers | none | — |
 
 ## Alternatives
@@ -278,21 +303,29 @@ everything that shows or measures an image goes on taking one.
 - **A validity mask plane beside each plane.** Rejected: a byte per sample
   for what the formats here state as one value. A mask a file stores as its
   own raster is a plane of its own and is deferred.
-- **Unsigned 16-bit FITS read as unsigned.** A FITS file stores unsigned
-  16-bit as signed with `BZERO` 32768. Rejected as a special case: the stored
-  sample is the signed one and the value transform already gives the value.
 - **A projection library, or EPSG codes resolved to parameters.** Rejected
   here: a dependency and a registry for what a viewer of one image needs
   only as a name. Coordinates are given in the file's system and labelled
   with it.
-- **`golang.org/x/image/tiff` extended, or a third-party TIFF package.**
-  Rejected: the first decodes through `image.Image`, which has no float,
-  signed or planar form; the pure-Go packages found either stop at the same
-  place or are unmaintained. The reader is written from the TIFF 6.0 and
-  BigTIFF descriptions over the standard library's `compress` packages.
-- **A decoder compiled to WebAssembly and run in-process**, as the tree does
-  for other parsers. Not taken for these three formats, whose containers are
-  simple; it remains the route for codecs that are not.
+- **Readers for TIFF, FITS and NPY in this tree.** Built first, under this
+  decision, and moved out: three parsers of untrusted input, their fixtures
+  and their fuzz corpora are a standing cost to a library whose viewer needs
+  only to be handed a stack, and the next format would have raised the same
+  question again.
+- **Registration by importing a reader's package.** Rejected: it is how the
+  apps of this tree register, and it suits code a host chooses by linking
+  it. A parser of files is better named where the host is wired, where a
+  test can also give an app a registry of its own.
+- **The first registered reader wins a file two of them claim.** Rejected:
+  it makes what a file opens as depend on the order of two lines.
+- **A closed list of formats in the engine.** Rejected: it is what the seam
+  replaces; a format is known by the name its reader registers.
+- **Readers out of process, or compiled to WebAssembly behind one
+  interface.** Not decided here: a reader behind this seam may be built
+  either way, and the seam does not ask.
+- **A registry that recovers a reader's panic.** Not taken: the kit holds a
+  reader to not panicking on truncated input, and a panic that gets past it
+  is a defect to be seen, not a refusal to be shown.
 
 ## Consequences
 
@@ -309,9 +342,10 @@ everything that shows or measures an image goes on taking one.
 - Every kernel has six kinds and an invalid-value branch where it had three
   kinds and NaN; each addition is a place a kind can be handled wrongly, held
   by tests against a direct evaluation.
-- Three readers are code the ecosystem has elsewhere; each is held to
-  fixtures written by a reference implementation, and a difference is a
-  defect of ours.
+- This tree reads no measured-image format itself: out of the box the app
+  opens PNG and JPEG, and what else it opens is the host's doing.
+- A reader's faithfulness is its module's to show; the kit checks the
+  contract, not that a format was read correctly.
 - A stack is resident: a time series or a cube that does not fit in memory
   does not open.
 - Coordinates in a projected system are labelled, not converted: two images
@@ -321,34 +355,44 @@ everything that shows or measures an image goes on taking one.
 
 - A consumer's own `switch` over sample kinds meets three kinds it did not
   list.
-- A FITS image is stored bottom row first and is read top row first; its
-  digest is of the samples in the engine's order.
+- A format that stores its bottom row first is read top row first; an
+  image's digest is of the samples in the engine's order.
 - A reduced level of a plane with an invalid value can differ by one code
   from the mean of its valid samples.
 
 ## Migration — Tier 1
 
-- **Breaks.** Nothing stops compiling. `SampleKindE.IsInteger` is true for
+- **Breaks.** In the model and the kernels nothing stops compiling.
+  `SampleKindE.IsInteger` is true for
   the signed kinds too; a caller that used it to mean "has one histogram bin
   per code" needs `Codes`, which says so. `NominalMax` goes on answering for
   unsigned kinds only, and `NominalRange` answers for every integer kind.
-- **Path.** Re-read each `switch` over `SampleKindE` in consuming code.
-- **Regeneration.** None.
-- **Old shape.** Kept; the additions are beside it.
+  The packages `decode/tiff`, `decode/fits` and `decode/npy`, the four
+  format values named after them and the dispatch that knew them, all
+  published for a day, are removed.
+- **Path.** Re-read each `switch` over `SampleKindE` in consuming code. A
+  module that read those formats through this tree registers readers with
+  the seam; the three packages are in this repository's history at the
+  commit before their removal.
+- **Regeneration.** The package-properties table and the surface document.
+- **Old shape.** The model's is kept, the additions beside it; the
+  readers' is removed outright.
 
 ## Verification plan — Tier 1
 
 - **Lane.** Default `go test`: each kernel over the six kinds, with and
   without an invalid value, against a direct evaluation; a stack's
   selections sharing its planes; the placement against closed-form cases and
-  its own inverse; each reader against fixtures written by a reference
-  implementation of its format, sample for sample, and under the fuzz lane.
+  its own inverse; the registry's refusals; the conformance kit over the
+  test format and over PNG and JPEG; the app opening the test format's
+  stacks, entries and refusals.
 - **What would fail.** A signed sample read as unsigned; an invalid sample
-  counted in a mean or drawn as data; a row order or a half pixel a reader
-  did not convert; a compression or projection applied that the reader does
-  not implement; a digest of an existing image that changed.
-- **Gap.** The fixtures are written outside the lanes, by hand, from scripts
-  kept beside them; no lane re-derives them.
+  counted in a mean or drawn as data; a reader that passes the kit while
+  reading samples over a limit, or ignoring a cancel; a file two readers
+  claim opening as either; a digest of an existing image that changed.
+- **Gap.** No measured-image format is read in this tree, so no lane here
+  holds a placement or an invalid value to a real file; the samples and the
+  test format stand in.
 
 ## Deferred
 
@@ -361,7 +405,8 @@ everything that shows or measures an image goes on taking one.
 - **Other projections, distortion polynomials, resolving a reference
   system's code.**
 - **Mask rasters, and a mask per band.**
-- **JPEG, Zstandard and LERC in TIFF; tile-compressed FITS.**
+- **A reader over a ranged source**, and a registry entry that says a
+  reader can use one.
 
 ## Status
 
@@ -374,6 +419,5 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 - [ADR-0373](./0373-an-image-viewer-samples-apart-from-presentation-mapped-in-go-shipped-as-tiles.md) — the engine this extends; §SD2, §SD3, §SD8 and its Deferred section.
 - [ADR-0374](./0374-imageview-shows-a-tile-source-and-the-decoder-streams-into-one.md) — the tile source and the memory bound.
-- [TIFF 6.0](https://www.itu.int/itudoc/itu-t/com16/tiff-fx/docs/tiff6.pdf), [BigTIFF](https://www.awaresystems.be/imaging/tiff/bigtiff.html), [GeoTIFF 1.1](https://docs.ogc.org/is/19-008r4/19-008r4.html).
+- [GeoTIFF 1.1](https://docs.ogc.org/is/19-008r4/19-008r4.html) and GDAL's [raster data model](https://gdal.org/en/stable/user/raster_data_model.html) — a placement and an invalid value as formats state them.
 - [FITS Standard 4.0](https://fits.gsfc.nasa.gov/fits_standard.html); Greisen & Calabretta 2002 and Calabretta & Greisen 2002, [representations of world coordinates in FITS](https://fits.gsfc.nasa.gov/fits_wcs.html).
-- [NPY format](https://numpy.org/doc/stable/reference/generated/numpy.lib.format.html).

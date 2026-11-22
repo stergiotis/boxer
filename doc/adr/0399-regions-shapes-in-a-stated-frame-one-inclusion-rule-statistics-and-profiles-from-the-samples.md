@@ -18,7 +18,7 @@ measures one kind of region, a rectangle of whole pixels, and defers
 field, a cell or a transect needs a point, a line, an ellipse and a polygon;
 a program working beside them needs the same regions as values it can name,
 store and hand back. Since
-[ADR-0398](./0398-images-beyond-a-colour-model-more-sample-kinds-invalid-samples-stacks-a-placement-and-three-readers.md)
+[ADR-0398](./0398-images-beyond-a-colour-model-more-sample-kinds-invalid-samples-stacks-a-placement-and-a-seam-for-readers.md)
 an image has a placement and may be one selection of a stack, so a region has
 two more things to say: which coordinates it is in, and which positions of a
 stack it belongs to.
@@ -235,4 +235,4 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 ## References
 
 - [ADR-0373](./0373-an-image-viewer-samples-apart-from-presentation-mapped-in-go-shipped-as-tiles.md) §SD3, §SD8, §SD9 — the pixel convention, numbers from samples, results as tables.
-- [ADR-0398](./0398-images-beyond-a-colour-model-more-sample-kinds-invalid-samples-stacks-a-placement-and-three-readers.md) §SD2–§SD4 — invalid samples, the stack's axes, the placement.
+- [ADR-0398](./0398-images-beyond-a-colour-model-more-sample-kinds-invalid-samples-stacks-a-placement-and-a-seam-for-readers.md) §SD2–§SD4 — invalid samples, the stack's axes, the placement.

@@ -17,7 +17,7 @@ date: 2026-11-21
 all its colour planes, "stretching channels separately changes the colours,
 so it is not offered as a display setting", and defers "band selection,
 false colour, a stretch per band". With
-[ADR-0398](./0398-images-beyond-a-colour-model-more-sample-kinds-invalid-samples-stacks-a-placement-and-three-readers.md)
+[ADR-0398](./0398-images-beyond-a-colour-model-more-sample-kinds-invalid-samples-stacks-a-placement-and-a-seam-for-readers.md)
 three bands of a stack can be taken as a colour image, which is false colour
 under that one shared recipe. Three things remain out of reach.
 
@@ -231,5 +231,5 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 ## References
 
 - [ADR-0373](./0373-an-image-viewer-samples-apart-from-presentation-mapped-in-go-shipped-as-tiles.md) §SD4, §SD5 — the recipe and the mapping.
-- [ADR-0398](./0398-images-beyond-a-colour-model-more-sample-kinds-invalid-samples-stacks-a-placement-and-three-readers.md) §SD1–§SD3 — sample kinds, invalid samples, bands of a stack.
+- [ADR-0398](./0398-images-beyond-a-colour-model-more-sample-kinds-invalid-samples-stacks-a-placement-and-a-seam-for-readers.md) §SD1–§SD3 — sample kinds, invalid samples, bands of a stack.
 - [Image upload-cost trial](../trials/image-upload-cost/README.md) — the measured cost of mapping one plane.

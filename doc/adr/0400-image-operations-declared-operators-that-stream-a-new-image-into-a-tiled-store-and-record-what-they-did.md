@@ -284,4 +284,4 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 - [ADR-0373](./0373-an-image-viewer-samples-apart-from-presentation-mapped-in-go-shipped-as-tiles.md) §SD2, §SD8, §SD9 — planes are not modified, numbers from samples, the three rules.
 - [ADR-0374](./0374-imageview-shows-a-tile-source-and-the-decoder-streams-into-one.md) §SD7, §SD9 — the tiled store filled in one pass, and the memory bound.
-- [ADR-0398](./0398-images-beyond-a-colour-model-more-sample-kinds-invalid-samples-stacks-a-placement-and-three-readers.md) §SD1–§SD3 — sample kinds, invalid samples, the stack.
+- [ADR-0398](./0398-images-beyond-a-colour-model-more-sample-kinds-invalid-samples-stacks-a-placement-and-a-seam-for-readers.md) §SD1–§SD3 — sample kinds, invalid samples, the stack.
