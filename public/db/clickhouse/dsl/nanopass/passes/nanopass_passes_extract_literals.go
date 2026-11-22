@@ -268,7 +268,7 @@ func collectCompositeCandidates(pr *nanopass.ParseResult, config *ExtractLiteral
 // `tuple(...)` function calls.
 func classifyCompositeFunction(funcCtx *grammar1.ColumnExprFunctionContext) (kind compositeKind, ok bool) {
 	ident := funcCtx.Identifier()
-	if ident == nil {
+	if ident == nil || funcCtx.FilterClause() != nil {
 		return
 	}
 	switch normalizeFunctionName(ident.GetText()) {

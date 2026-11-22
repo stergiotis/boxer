@@ -149,6 +149,10 @@ func unmarshalFunctionCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprFunc
 		return
 	}
 	funcName := strings.ToLower(ident.GetText())
+	if ctx.FilterClause() != nil {
+		err = eb.Build().Str("funcName", funcName).Errorf("a call with a FILTER clause is not a literal")
+		return
+	}
 	switch funcName {
 	case "array":
 		return unmarshalArrayFunctionCST(pr, ctx, mapType)

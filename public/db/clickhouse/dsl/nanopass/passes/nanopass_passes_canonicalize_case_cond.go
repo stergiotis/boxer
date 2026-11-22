@@ -106,6 +106,9 @@ var _ nanopass.Pass = CanonicalizeMultiIf
 // rewriteMultiIfToIf checks if a function call is multiIf with exactly 3 arguments
 // and rewrites it to if.
 func rewriteMultiIfToIf(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult, ctx *grammar1.ColumnExprFunctionContext) {
+	if ctx.FilterClause() != nil {
+		return
+	}
 	// Find function name
 	var nameIdent *grammar1.IdentifierContext
 	for i := 0; i < ctx.GetChildCount(); i++ {

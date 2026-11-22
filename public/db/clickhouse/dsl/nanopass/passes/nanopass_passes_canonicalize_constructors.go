@@ -70,7 +70,7 @@ func CanonicalizeConstructors(form ConstructorFormE) nanopass.Pass {
 // function calls to their literal spellings.
 func columnFuncToLiteralRule(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (string, bool) {
 	fn, ok := node.(*grammar1.ColumnExprFunctionContext)
-	if !ok {
+	if !ok || fn.FilterClause() != nil {
 		return "", false
 	}
 	switch strings.ToLower(fn.Identifier().GetText()) {

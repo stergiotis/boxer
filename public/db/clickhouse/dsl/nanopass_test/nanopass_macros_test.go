@@ -177,3 +177,15 @@ func TestMacroExpanderErrorPropagation(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "intentional error")
 }
+
+// A FILTER clause makes the server read fIf(args, c); a macro's expansion of
+// f cannot carry it, so the call is refused rather than expanded without it.
+func TestMacroExpanderRefusesFilterClause(t *testing.T) {
+	expander := nanopass.NewMacroExpander()
+	expander.Register("tenantCount", func(args []nanopass.LiteralArg) (string, error) {
+		return "count()", nil
+	})
+	_, err := expander.Pass().Run("SELECT tenantCount(42) FILTER (WHERE y) FROM t")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "FILTER")
+}

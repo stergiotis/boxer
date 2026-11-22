@@ -132,6 +132,12 @@ func (inst *MacroExpander) apply(_ *grammarenv.Environment, body string) (result
 			return true
 		}
 
+		if funcExpr.FilterClause() != nil {
+			// The server would read fIf(args, c); an expansion of f cannot
+			// carry the clause.
+			skips = append(skips, skipped{name: name, reason: eh.Errorf("a macro call takes no FILTER clause")})
+			return true
+		}
 		args, extractErr := ExtractLiteralArgs(funcExpr)
 		if extractErr != nil {
 			skips = append(skips, skipped{name: name, reason: extractErr})

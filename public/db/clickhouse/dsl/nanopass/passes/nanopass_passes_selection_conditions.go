@@ -357,8 +357,9 @@ func containsOr(expr grammar1.IColumnExprContext) (found bool) {
 
 // booleanConnectiveArgs reports the argument expressions of a function call that
 // spells a boolean connective. isConnective is false for any other call — and
-// for a parametric one (`f(p)(x)`) or one carrying DISTINCT, neither of which a
-// connective ever is, so an unexpected shape stays a leaf.
+// for a parametric one (`f(p)(x)`), one carrying DISTINCT or one carrying a
+// FILTER clause, none of which a connective ever is, so an unexpected shape
+// stays a leaf.
 func booleanConnectiveArgs(c *grammar1.ColumnExprFunctionContext) (args []grammar1.IColumnExprContext, isConnective bool) {
 	id := c.Identifier()
 	if id == nil {
@@ -368,7 +369,7 @@ func booleanConnectiveArgs(c *grammar1.ColumnExprFunctionContext) (args []gramma
 	if !known {
 		return
 	}
-	if c.ColumnExprList() != nil || c.DISTINCT() != nil {
+	if c.ColumnExprList() != nil || c.DISTINCT() != nil || c.FilterClause() != nil {
 		return
 	}
 	argList, ok := c.ColumnArgList().(*grammar1.ColumnArgListContext)

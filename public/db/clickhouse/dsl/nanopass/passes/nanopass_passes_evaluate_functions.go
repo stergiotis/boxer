@@ -279,7 +279,8 @@ func (inst *FunctionEvaluator) TryEval(e *grammarenv.Environment, pr *nanopass.P
 
 func (inst *FunctionEvaluator) tryEval(e *grammarenv.Environment, pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext) (outcome evalOutcome) {
 	ident := funcExpr.Identifier()
-	if ident == nil {
+	if ident == nil || funcExpr.FilterClause() != nil {
+		// A call with a FILTER clause is the server's fIf(args, c), not f.
 		return
 	}
 	name := nanopass.NormalizeCallName(ident.GetText())
