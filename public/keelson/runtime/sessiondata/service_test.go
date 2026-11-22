@@ -507,6 +507,65 @@ func TestOneStatementAtATimeInAServerSession(t *testing.T) {
 	require.NoError(t, r.svc.Release(person, b3.Lease))
 }
 
+// TestAStatementWaitsOutASessionTheServerStillRuns: a statement a caller
+// stopped may still run on the server after its lease is released, and the
+// server refuses the next one in its session as locked (373). The service's
+// own statements are sent again with backoff until the session is free; a
+// session that stays busy past the bound, or a caller that stops waiting,
+// ends in an error IsSessionBusy recognises.
+func TestAStatementWaitsOutASessionTheServerStillRuns(t *testing.T) {
+	r := newRig(t, Limits{BusyWait: 5 * time.Second})
+	c := r.fullAgent("t1")
+	r.define(c, "a", "SELECT 1 AS x")
+
+	r.stub.mu.Lock()
+	r.stub.lockedNext = 3
+	r.stub.mu.Unlock()
+	b, err := r.svc.Prepare(context.Background(), PrepareInput{Caller: c, Endpoint: r.endpoint(), SQL: "SELECT * FROM session('a')"})
+	require.NoError(t, err, "the probe waits until the server finished the earlier statement")
+	require.NoError(t, r.svc.Release(person, b.Lease))
+	r.stub.mu.Lock()
+	assert.Equal(t, 3, r.stub.lockedAnswered)
+	r.stub.mu.Unlock()
+
+	r.stub.mu.Lock()
+	r.stub.lockedNext = 1 << 20
+	r.stub.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	_, err = r.svc.Prepare(ctx, PrepareInput{Caller: c, Endpoint: r.endpoint(), SQL: "SELECT * FROM session('a')"})
+	require.Error(t, err)
+	assert.True(t, IsSessionBusy(err), "a caller that stops waiting learns the session was busy: %v", err)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	r.stub.mu.Lock()
+	r.stub.lockedNext = 0
+	r.stub.mu.Unlock()
+
+	short := newRig(t, Limits{BusyWait: 100 * time.Millisecond})
+	sc := short.fullAgent("t2")
+	short.define(sc, "a", "SELECT 1 AS x")
+	short.stub.mu.Lock()
+	short.stub.lockedNext = 1 << 20
+	short.stub.mu.Unlock()
+	started := time.Now()
+	_, err = short.svc.Define(context.Background(), DefineInput{Caller: sc, Endpoint: short.endpoint(), Name: "b", SQL: "SELECT 2 AS y"})
+	require.Error(t, err)
+	assert.True(t, IsSessionBusy(err), "past the bound the define fails as busy: %v", err)
+	assert.Less(t, time.Since(started), 5*time.Second)
+	short.stub.mu.Lock()
+	short.stub.lockedNext = 0
+	short.stub.mu.Unlock()
+
+	once := newRig(t, Limits{BusyWait: -1})
+	oc := once.fullAgent("t3")
+	once.define(oc, "a", "SELECT 1 AS x")
+	once.stub.mu.Lock()
+	once.stub.lockedNext = 1
+	once.stub.mu.Unlock()
+	_, err = once.svc.Prepare(context.Background(), PrepareInput{Caller: oc, Endpoint: once.endpoint(), SQL: "SELECT * FROM session('a')"})
+	assert.True(t, IsSessionBusy(err), "a negative bound sends the statement once: %v", err)
+}
+
 // TestALeaseNotReleasedLapses.
 func TestALeaseNotReleasedLapses(t *testing.T) {
 	r := newRig(t, Limits{LeaseTimeout: 50 * time.Millisecond})

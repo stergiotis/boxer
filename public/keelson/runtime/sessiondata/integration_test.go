@@ -89,8 +89,9 @@ func TestLiveDefinePrepareReplayAndAttach(t *testing.T) {
 	require.NoError(t, svc.Release(person, b.Lease))
 
 	// The server drops the session after its timeout; the next statement
-	// replays both definitions, in order.
-	time.Sleep(3500 * time.Millisecond)
+	// replays both definitions, in order. The server closes sessions in
+	// cycles of a second, so one may outlive its timeout by two.
+	time.Sleep(5500 * time.Millisecond)
 	b, err = svc.Prepare(ctx, PrepareInput{Caller: me, Ticket: ticket, Endpoint: e, SQL: "SELECT sum(n) FROM session('b')"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a@1", "b@1"}, b.Replayed)
@@ -160,4 +161,64 @@ func TestLiveANestedCommentHidesNothingFromTheCheck(t *testing.T) {
 	require.NoError(t, err, "comments both lexers read alike are dropped, not refused")
 	assert.Equal(t, []Column{{Name: "x", Type: "UInt8"}, {Name: "s", Type: "String"}}, res.Dataset.Columns)
 	assert.Equal(t, uint64(2), res.Dataset.Rows)
+}
+
+// TestLiveAStoppedStatementDoesNotFailTheNextPrepare: a caller stops its
+// statement and releases the lease while the server still runs it; the
+// next Prepare in the session waits until the server has finished instead
+// of failing as locked (373), and one that may not wait long enough fails
+// as busy.
+func TestLiveAStoppedStatementDoesNotFailTheNextPrepare(t *testing.T) {
+	e := liveEndpoint(t)
+	svc, err := NewService(Config{Log: zerolog.Nop(), SweepInterval: -1, Limits: Limits{BusyWait: 10 * time.Second}})
+	require.NoError(t, err)
+	ctx := context.Background()
+	defer func() { _ = svc.Close(ctx) }()
+	ticket, err := svc.Open(ctx, person)
+	require.NoError(t, err)
+	me := Caller{By: person}
+	_, err = svc.Define(ctx, DefineInput{Caller: me, Ticket: ticket, Endpoint: e, Name: "a", SQL: "SELECT number AS x FROM numbers(10)"})
+	require.NoError(t, err)
+
+	stop := func() {
+		t.Helper()
+		b, pErr := svc.Prepare(ctx, PrepareInput{Caller: me, Ticket: ticket, Endpoint: e,
+			SQL: "SELECT sum(sleepEachRow(0.5)) + count() FROM (SELECT * FROM session('a') LIMIT 4) SETTINGS max_block_size = 1"})
+		require.NoError(t, pErr)
+		eng, eErr := chserver.New(chserver.Config{Endpoint: e.URL, User: e.User, Password: e.Password, ServesConfined: e.ServesConfined})
+		require.NoError(t, eErr)
+		req := queryengine.Request{SQL: b.SQL, Format: "TabSeparated", Settings: map[string]string{"readonly": "2"}}
+		require.NoError(t, b.Apply(&req))
+		runCtx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+		st, _, dErr := eng.Deliver(runCtx, req)
+		if dErr == nil {
+			for {
+				if _, ok := st.Next(); !ok {
+					break
+				}
+			}
+			_ = st.Close()
+		}
+		cancel()
+		require.NoError(t, svc.Release(person, b.Lease))
+	}
+
+	stop()
+	started := time.Now()
+	b, err := svc.Prepare(ctx, PrepareInput{Caller: me, Ticket: ticket, Endpoint: e, SQL: "SELECT count() FROM session('a')"})
+	require.NoError(t, err, "the probe waits for the stopped statement to finish on the server")
+	t.Logf("the next prepare waited %v", time.Since(started))
+	assert.Equal(t, "10", run(t, e, b))
+	require.NoError(t, svc.Release(person, b.Lease))
+
+	stop()
+	short, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+	_, err = svc.Prepare(short, PrepareInput{Caller: me, Ticket: ticket, Endpoint: e, SQL: "SELECT count() FROM session('a')"})
+	if err != nil {
+		assert.True(t, IsSessionBusy(err), "a caller that stops waiting learns the session was busy: %v", err)
+	} else {
+		t.Log("the server had finished the stopped statement within 100 ms")
+	}
+	time.Sleep(3 * time.Second)
 }

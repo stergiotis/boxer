@@ -33,6 +33,14 @@ var (
 		Description: "idle time after which the ClickHouse server drops a session holding session data sets (session_timeout, whole seconds; the server refuses more than its max_session_timeout); a later statement replays the definitions it reads",
 		Category:    env.CategoryDatabase,
 	})
+	// BusyWaitEnv bounds how long one of the service's statements waits for
+	// its server session to be free.
+	BusyWaitEnv = env.NewDuration(env.Spec{
+		Name:        "BOXER_SESSIONDATA_BUSY_WAIT",
+		Default:     "10s",
+		Description: "how long one of the session data service's own statements (a probe, a create, a replay, a drop) is tried again, with backoff, while the ClickHouse server refuses it because an earlier statement still runs in the session (error 373, SESSION_IS_LOCKED); 0 sends it once",
+		Category:    env.CategoryDatabase,
+	})
 	// LeaseTimeoutEnv bounds a prepared statement's hold on its session.
 	LeaseTimeoutEnv = env.NewDuration(env.Spec{
 		Name:        "BOXER_SESSIONDATA_LEASE_TIMEOUT",

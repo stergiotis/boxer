@@ -2467,6 +2467,18 @@
       }
     },
     {
+      "name": "BOXER_SESSIONDATA_BUSY_WAIT",
+      "type": "duration",
+      "default": "10s",
+      "description": "how long one of the session data service's own statements (a probe, a create, a replay, a drop) is tried again, with backoff, while the ClickHouse server refuses it because an earlier statement still runs in the session (error 373, SESSION_IS_LOCKED); 0 sends it once",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
+      }
+    },
+    {
       "name": "BOXER_SESSIONDATA_LEASE_TIMEOUT",
       "type": "duration",
       "default": "15m",

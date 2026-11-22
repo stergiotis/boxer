@@ -45,7 +45,7 @@ func (inst *Service) stamp(s *session, cc option.Option[app.CallContext]) (st lo
 func (inst *Service) exec(o op, site string, sql string, external []queryengine.ExternalTable) (body []byte, err error) {
 	body, err = o.srv.conn.exec(o.ctx, execSpec{
 		site: site, sessionID: o.srv.id, timeout: inst.limits.SessionTimeout, check: o.srv.established,
-		external: external, stamp: inst.stamp(o.s, o.cc),
+		external: external, stamp: inst.stamp(o.s, o.cc), busyWait: inst.limits.BusyWait,
 	}, sql)
 	if err == nil {
 		o.srv.established = true
@@ -61,7 +61,7 @@ func (inst *Service) exec(o op, site string, sql string, external []queryengine.
 // replaced by one under a new id, which the next statement opens.
 func (inst *Service) probe(o op) (lost bool, err error) {
 	body, err := o.srv.conn.exec(o.ctx, execSpec{site: SiteProbe, sessionID: o.srv.id, timeout: inst.limits.SessionTimeout,
-		check: o.srv.established, stamp: inst.stamp(o.s, o.cc)}, probeStatement)
+		check: o.srv.established, stamp: inst.stamp(o.s, o.cc), busyWait: inst.limits.BusyWait}, probeStatement)
 	switch {
 	case IsSessionLost(err):
 		id, tErr := newToken("sd_")

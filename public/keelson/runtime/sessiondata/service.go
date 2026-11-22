@@ -50,6 +50,9 @@ type Limits struct {
 	MaxAttachBytes uint64
 	SessionTimeout time.Duration
 	LeaseTimeout   time.Duration
+	// BusyWait is how long one of the service's statements is tried again
+	// while the server finds its session busy; negative sends it once.
+	BusyWait time.Duration
 }
 
 // withDefaults is inst with each zero field filled from its environment
@@ -79,6 +82,12 @@ func (inst Limits) withDefaults() (l Limits) {
 	}
 	if l.LeaseTimeout <= 0 {
 		l.LeaseTimeout = 15 * time.Minute
+	}
+	switch {
+	case l.BusyWait < 0:
+		l.BusyWait = 0
+	case l.BusyWait == 0:
+		l.BusyWait = max(BusyWaitEnv.Get(), 0)
 	}
 	return
 }
@@ -508,7 +517,7 @@ func (inst *Service) closeSession(ctx context.Context, s *session, why string) {
 		if srv.established {
 			for _, t := range tables[srv.key] {
 				if _, dErr := srv.conn.exec(dropCtx, execSpec{site: SiteDrop, sessionID: srv.id, timeout: inst.limits.SessionTimeout, check: true,
-					stamp: inst.stamp(s, option.None[app.CallContext]())}, composeDrop(t)); dErr != nil && !IsSessionLost(dErr) {
+					stamp: inst.stamp(s, option.None[app.CallContext]()), busyWait: inst.limits.BusyWait}, composeDrop(t)); dErr != nil && !IsSessionLost(dErr) {
 					inst.log.Warn().Err(dErr).Str("table", t).Msg("sessiondata: drop on close")
 				}
 			}

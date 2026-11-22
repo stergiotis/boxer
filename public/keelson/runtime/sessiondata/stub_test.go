@@ -43,6 +43,11 @@ type stubServer struct {
 	// madeButFailed is how many of the next creates make their table and
 	// then answer an error, as a create the caller stopped waiting for does.
 	madeButFailed int
+	// lockedNext is how many of the next statements naming a session are
+	// refused as locked, as while a statement a caller abandoned still
+	// runs there; lockedAnswered counts them.
+	lockedNext     int
+	lockedAnswered int
 }
 
 type stubSession struct {
@@ -121,6 +126,13 @@ func (inst *stubServer) serve(w http.ResponseWriter, r *http.Request) {
 			}
 			sess = &stubSession{tables: map[string]stubTable{}}
 			inst.sessions[id] = sess
+		}
+		if inst.lockedNext > 0 {
+			inst.lockedNext--
+			inst.lockedAnswered++
+			inst.mu.Unlock()
+			fail(w, 373, "Session "+id+" is locked by a concurrent client. (SESSION_IS_LOCKED)")
+			return
 		}
 		if sess.busy {
 			inst.overlaps++

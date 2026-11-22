@@ -117,17 +117,61 @@ type execSpec struct {
 	check    bool
 	external []queryengine.ExternalTable
 	stamp    logcomment.Stamp
+	// busyWait is how long a statement the server refuses because another
+	// runs in its session is tried again; zero sends it once.
+	busyWait time.Duration
 }
+
+// Backoff of a statement that found its server session busy: the first
+// wait, and the longest.
+const (
+	busyBackoffFirst = 50 * time.Millisecond
+	busyBackoffMax   = time.Second
+)
 
 // exec leads sql through the fairlead and sends it, returning the body.
 // The statement is the capability's own text, so the task mark is cleared
 // on the context Lead sees (ADR-0403 §SD1); the stamp in log_comment names
 // the task whose work it is, for the server's query log.
+//
+// A server that refuses the statement because another is still running in
+// its session — one a caller stopped or abandoned, which the server has not
+// finished — refused it before running it, so it is sent again after a
+// backoff, under ctx, for up to spec.busyWait. The error once that is spent
+// is the server's, which IsSessionBusy recognises.
 func (inst *serverConn) exec(ctx context.Context, spec execSpec, sql string) (body []byte, err error) {
 	sql, err = fairlead.Lead(fairlead.WithTask(ctx, ""), fairlead.ExitServer, spec.site, sql)
 	if err != nil {
 		return
 	}
+	deadline := time.Now().Add(spec.busyWait)
+	wait := busyBackoffFirst
+	for {
+		body, err = inst.send(ctx, spec, sql)
+		if !IsSessionBusy(err) {
+			return
+		}
+		left := time.Until(deadline)
+		if spec.busyWait <= 0 {
+			return
+		}
+		if left <= 0 {
+			return nil, eb.Build().Str("endpoint", env.RedactURL(inst.url)).Stringer("waited", spec.busyWait).
+				Errorf("the server session stayed busy with an earlier statement: %w", err)
+		}
+		t := time.NewTimer(min(wait, left))
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return nil, eb.Build().Str("endpoint", env.RedactURL(inst.url)).Errorf("waiting for the server session to be free: %w", errors.Join(ctx.Err(), err))
+		case <-t.C:
+		}
+		wait = min(2*wait, busyBackoffMax)
+	}
+}
+
+// send sends sql, led already, once.
+func (inst *serverConn) send(ctx context.Context, spec execSpec, sql string) (body []byte, err error) {
 	qs := url.Values{}
 	qs.Set("readonly", "2")
 	qs.Set("default_format", "JSONEachRow")
