@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
+	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
@@ -260,7 +262,26 @@ func TestCeilingNote_namesTheServerToAWindowThatCanReachIt(t *testing.T) {
 	assert.Contains(t, note(nil, agent.ReachData), "destination "+serverDestination(), "the plain chat too")
 	assert.NotContains(t, note(nil, agent.ReachHost), "clickhouse:")
 	assert.Equal(t, "clickhouse:ch.example:8123", destinationOfURL("http://ch.example:8123/"))
+	assert.Equal(t, "clickhouse-session:ch.example:8123", sessionDestinationOfURL("http://ch.example:8123/"))
 	assert.Empty(t, destinationOfURL("not a url"))
+	assert.Empty(t, sessionDestinationOfURL(""))
+}
+
+// The server named to the model is the one a play window opens on:
+// CLICKHOUSE_ENDPOINT before CLICKHOUSE_URL, and the right to keep session
+// data sets on it is named with the same host and port.
+func TestTheServerNamedIsTheOnePlayOpensOn(t *testing.T) {
+	envtest.Set(t, clickhouseenv.URL, "http://localhost:8123/")
+	envtest.Set(t, clickhouseenv.Endpoint, "http://ch.example:9000")
+	assert.Equal(t, "clickhouse:ch.example:9000", serverDestination())
+	assert.Equal(t, "clickhouse-session:ch.example:9000", sessionDestination())
+	coord := newCoordinatorIn(nil, nil, nil, "conv")
+	coord.apps, coord.rounds = true, 24
+	coord.ceiling = agent.Ceiling{Reach: agent.ReachData}
+	note := coord.ceilingNote()
+	assert.Contains(t, note, "destination clickhouse:ch.example:9000")
+	assert.Contains(t, note, "clickhouse-session:ch.example:9000 if it keeps session data sets")
+	assert.NotContains(t, note, "localhost")
 }
 
 func TestJoinDraft(t *testing.T) {

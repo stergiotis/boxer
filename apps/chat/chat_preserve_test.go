@@ -49,10 +49,11 @@ var updatePreserved = flag.Bool("update-preserved", false, "rewrite testdata/pre
 const preservedDir = "testdata/preserve"
 
 // preservedClickHouseURL is the CLICKHOUSE_URL the recordings were made
-// under. The coordinator names the host's ClickHouse server to the model
-// (serverDestination), so the bytes depend on that variable; the harness
-// pins it, and a run under another address — a release run against a server
-// of its own — records the same bytes. Nothing in the harness connects to it.
+// under, with CLICKHOUSE_ENDPOINT empty. The coordinator names the host's
+// ClickHouse server to the model (serverDestination), so the bytes depend on
+// those variables; the harness pins them, and a run under another address —
+// a release run against a server of its own — records the same bytes.
+// Nothing in the harness connects to it.
 const preservedClickHouseURL = "http://localhost:8123/"
 
 // preserveHarness is one scenario's rig: the note host and the coordinator
@@ -392,6 +393,9 @@ func TestThePreservationRecordingIsDeterministic(t *testing.T) {
 func runPreserveScenario(t *testing.T, sc preserveScenario) (recording string) {
 	t.Helper()
 	envtest.Set(t, clickhouseenv.URL, preservedClickHouseURL)
+	// The endpoint variable wins over the URL when set, so a run under a
+	// server of its own pins it empty.
+	envtest.Set(t, clickhouseenv.Endpoint, "")
 	bus := inprocbus.NewInst(zerolog.Nop())
 	model := &scriptedModel{}
 	host, coord, cli, _, ctx := coordRig(t, bus, model, sc.opTools)

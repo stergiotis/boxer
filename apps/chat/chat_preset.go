@@ -9,10 +9,11 @@ import (
 
 	"lukechampine.com/blake3"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
@@ -269,16 +270,37 @@ func (inst permissions) capped(limit permissions) permissions {
 	return inst
 }
 
-// serverDestination is how a grant names the server a play window opens on,
-// empty when that is not a URL with a host.
-func serverDestination() string { return destinationOfURL(clickhouseenv.URL.Get()) }
+// serverDestination is how a grant names the server a play window opens on
+// — the endpoint chclient.ConfigFromEnv gives, CLICKHOUSE_ENDPOINT before
+// CLICKHOUSE_URL — empty when that is not a URL with a host.
+func serverDestination() string { return destinationOfURL(chclient.ConfigFromEnv().URL) }
 
+// sessionDestination is how a grant names the right to keep session data
+// sets on that server, empty when serverDestination is.
+func sessionDestination() string { return sessionDestinationOfURL(chclient.ConfigFromEnv().URL) }
+
+// destinationOfURL is the grant destination of an endpoint URL, spelled
+// with the host the session data service and play's agent limits use,
+// empty when the URL has no host.
 func destinationOfURL(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
+	if !hasHost(raw) {
 		return ""
 	}
-	return "clickhouse:" + u.Host
+	return sessiondata.DestinationServer(sessiondata.EndpointHost(raw))
+}
+
+// sessionDestinationOfURL is destinationOfURL for keeping session data sets.
+func sessionDestinationOfURL(raw string) string {
+	if !hasHost(raw) {
+		return ""
+	}
+	return sessiondata.DestinationSession(sessiondata.EndpointHost(raw))
+}
+
+// hasHost reports whether raw is a URL with a host.
+func hasHost(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u.Host != ""
 }
 
 // owner is the app this window's runs belong to.

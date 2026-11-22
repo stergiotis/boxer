@@ -395,7 +395,11 @@ func (inst *coordinator) ceilingNote() (note string) {
 		// Without it the model learns the name from a window it opened, and
 		// the person answers a second dialog (ADR-0364): in the plain chat
 		// as in a chatlet, the most repeated widening on the record.
-		note += " This host's ClickHouse server is the destination " + d + ": if your plan reads the server, name it in your first request_access."
+		note += " This host's ClickHouse server is the destination " + d + ": if your plan reads the server, name it in your first request_access"
+		if sd := sessionDestination(); sd != "" {
+			note += ", with " + sd + " if it keeps session data sets"
+		}
+		note += "."
 	}
 	if !inst.ceiling.Unpaced && s.Level >= agent.LevelView {
 		note += " The host spaces your changes so the person can follow them: a call that changes a window may take a moment to return."
