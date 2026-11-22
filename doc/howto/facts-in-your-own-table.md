@@ -60,11 +60,12 @@ refuses to produce unless that setting is on (Code 455,
 refused — or, when the session that created the view had the setting on,
 every later read from another session is. The setting inside the view
 travels with it and needs nothing from the server's configuration. It does
-not help a user held at `readonly = 1`, who may not change a setting even
-through a view; for such a user set it in the user's settings profile
-instead, which also covers a view written without the clause. Observed with
-`clickhouse local` 26.8 and 26.9, not against a server with a `readonly = 1`
-user.
+not help a reader held at `readonly = 1`: a 26.8 server answers that reader
+from the view with the view's settings left out, so the read is refused as
+if the clause were not there. For such a reader set it in the user's
+settings profile instead, which also covers a view written without the
+clause. Observed on a 26.8 server with `readonly` set per request, and with
+`clickhouse local` 26.8 and 26.9.
 
 **The carrier's key.** Partition and order the carrier by the column your
 view returns as the facts timestamp, as stored, not by an expression of it.

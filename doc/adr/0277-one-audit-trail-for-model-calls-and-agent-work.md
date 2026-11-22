@@ -653,7 +653,26 @@ writer; a coordinator that keeps no journal leaves it 0. The first consumer
 is a downstream record editor whose patches name the run and the call that
 recorded them.
 
-## References
+### 2026-11-22 — every view closes with a setting ClickHouse 26.8 needs
+
+On the 26.8 floor a statement that filters one of these views and orders
+by the facts timestamp failed with Code 48, "Method createColumn is not
+implemented for data type Function(…): While executing
+VirtualRowTransform", whenever a column it read was decoded with a lambda;
+the reviews mart, which is such a filter over the audit events, failed on
+any ordered read. 26.9 runs the same statements. Each view's `SELECT` now
+closes with `SETTINGS read_in_order_use_virtual_row = 0`
+(`trailviews.ViewsVersion` 18), which reaches every statement that reads
+the view, whoever wrote it; a view over another view inherits it. The read
+stays in order; what is given up is one optimization of the in-order merge
+of parts, not measured here.
+
+Two limits. A deployed view keeps the definition it was created with, so a
+server on 26.8 needs the views re-posted (`boxer keelsonddl`); the stamp
+says which revision a view carries. And a reader held at `readonly = 1`
+does not get a view's settings — a 26.8 server reads the view and leaves
+them out — so such a reader sets the setting in its profile. Other view
+families over the facts table were not examined for the same failure.
 
 - [ADR-0191](./0191-runtime-instance-attribution.md) — the `(run id, instance key)` decision this extends to the generated kinds.
 - [ADR-0254](./0254-model-inference-as-a-keelson-capability.md) §SD4 — the call record.

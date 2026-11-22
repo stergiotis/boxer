@@ -524,9 +524,11 @@ profile of the user that reads. The
 recipe and says when the second is needed. The probe is one statement per
 such relation per check; a table is not probed.
 
-Not verified: the behaviour of a view that carries the setting under a
-server user held at `readonly = 1` — `clickhouse local` refuses that read,
-and no server was asked.
+A reader held at `readonly = 1` does not get the setting from the view: a
+26.8 server, asked with `readonly = 1` on the request, answers from the
+view with its settings left out, so the read is refused with Code 455 and
+the profile is the remedy. `clickhouse local` refuses the same read
+earlier, while loading the view.
 
 ### 2026-11-22 — the query-run capture under a transform
 
