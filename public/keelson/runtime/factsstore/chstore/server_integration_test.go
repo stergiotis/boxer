@@ -386,6 +386,12 @@ func TestServer_ALostLeaseTableContinuesAfterTheLargestId(t *testing.T) {
 	// Counter ids of an older build, and ids of the process-local stream,
 	// are other ranges of the column and do not move the seed.
 	require.NoError(t, s.exec.Exec(ctx, "INSERT INTO "+cfg.Database+".facts (`"+idColumn+"`, `"+factsschema.TsColumn+"`) VALUES (18446744073709551615, now64(9)), (7, now64(9))"))
+	// Neither does another writer's row whose id — a hash of its key —
+	// happens to fall into the stream's range, far above every leased id:
+	// it carries none of the kinds this store writes.
+	tagOfStream := vocab.IdStreamFactsRow.Value().GetTag()
+	stray := tagOfStream.ComposeId(tagOfStream.GetMaxPossibleIdIncl() - 5).Value()
+	require.NoError(t, s.exec.Exec(ctx, "INSERT INTO "+cfg.Database+".facts (`"+idColumn+"`, `"+factsschema.TsColumn+"`, `"+symbolLrColumn+"`) VALUES ("+strconv.FormatUint(stray, 10)+", now64(9), [424242])"))
 
 	require.NoError(t, s.exec.Exec(ctx, "DROP TABLE "+lease+" SYNC"))
 	require.NoError(t, s.SetupTable(ctx, ""))

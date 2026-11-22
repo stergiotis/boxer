@@ -45,9 +45,11 @@ const QueryTextCap = 16384
 const ExceptionTextCap = 4096
 
 // IdBand is the reserved deterministic-id band (ADR-0115 SD2): capture
-// ids carry the top bit so they cannot collide with the in-process
-// counter ids other facts writers mint. ADR-0111 leased ranges are the
-// eventual unification.
+// ids carry the top bit. The ids the facts store leases, and the
+// process-local ones it falls back to, keep that bit clear at every body
+// (ADR-0397 §SD2), so a capture id meets neither. The band does not keep a
+// capture id apart from the ids other writers derive by hashing a key;
+// those are told apart by kind.
 const IdBand uint64 = 1 << 63
 
 // Row is one terminal system.query_log event as the extract SQL selects

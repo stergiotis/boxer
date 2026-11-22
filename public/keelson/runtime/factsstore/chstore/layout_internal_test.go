@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/identity/tagmint"
+	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
@@ -165,4 +167,16 @@ func TestSetupStatements_OmitTheLeaseTableUnderAConfiguredAllocator(t *testing.T
 	assert.Contains(t, strings.Join(withLease, "\n"), leaseTable)
 	assert.NotContains(t, strings.Join(without, "\n"), leaseTable)
 	assert.Less(t, len(without), len(withLease))
+}
+
+// The two streams the store mints under keep the top bit of an id clear, at
+// every body: the query-run rows' reserved band, which sets it
+// (queryrunfacts.IdBand), cannot meet a leased or a process-local id.
+func TestTheRowStreamsStayBelowTheQueryRunBand(t *testing.T) {
+	for _, stream := range []tagmint.ClaimedTagValue{vocab.IdStreamFactsRow, vocab.IdStreamFactsRowLocal} {
+		tag := stream.Value().GetTag()
+		for _, body := range []identifier.UntaggedId{1, tag.GetMaxPossibleIdIncl()} {
+			assert.Zero(t, tag.ComposeId(body).Value()&queryrunfacts.IdBand, "%s body %d", stream.Name(), body)
+		}
+	}
 }

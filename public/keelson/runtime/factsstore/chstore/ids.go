@@ -3,6 +3,7 @@ package chstore
 import (
 	"context"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -115,17 +116,46 @@ func (inst *rowIds) init(exec recordstore.ExecutorI, layout rowalloc.Layout, cfg
 // idColumn is the physical name of the facts envelope's row id.
 const idColumn = "id:id:u64:47::0:"
 
+// symbolLrColumn is the physical name of the symbol section's
+// low-cardinality membership column, where a row's kind sits.
+const symbolLrColumn = "tv:symbol:lr:lr:u64:1247:::0::data"
+
+// ownKinds are the kinds this store writes, and no other writer does. They
+// are what tells its rows apart in a column other writers share.
+func ownKinds() []uint64 {
+	return []uint64{
+		vocab.MembKindGrant.GetId().Value(),
+		vocab.MembKindLog.GetId().Value(),
+		vocab.MembKindRuntimeRun.GetId().Value(),
+		vocab.MembKindRuntimeHeartbeat.GetId().Value(),
+		vocab.MembKindAppLifecycle.GetId().Value(),
+		vocab.MembKindLaunch.GetId().Value(),
+	}
+}
+
 // seedLease gives the stream tagValue a lease row in layout when it has
-// none, continuing after the largest id of the stream that relation holds
-// (ADR-0397 §SD2, rowalloc.Seed). The ids of one stream are one range of
-// the id column — the tag sits above the body — so the largest is one
-// aggregate over that range; it reads the whole id column, which is why it
-// runs at setup, once per lost lease row, and never on a write.
+// none, continuing after the largest id of the stream that this store's
+// rows in relation carry (ADR-0397 §SD2, rowalloc.Seed). The ids of one
+// stream are one range of the id column — the tag sits above the body — so
+// the largest is one aggregate over that range; it reads the id column and
+// the kinds, which is why it runs at setup, once per lost lease row, and
+// never on a write.
+//
+// Only rows of the kinds this store writes count. The id column is shared:
+// the generated stores over the facts table write ids of their own there,
+// most of them a hash of a key, and a hash falls into a stream's range now
+// and then. Taking such a value for the stream's largest would start the
+// stream at a body drawn at random from its whole space.
 func seedLease(ctx context.Context, exec recordstore.ExecutorI, layout rowalloc.Layout, relation string, tagValue identifier.TagValue) (seededAt uint64, err error) {
 	tag := tagValue.GetTag()
 	lo, hi := tag.ComposeId(1), tag.ComposeId(tag.GetMaxPossibleIdIncl())
+	kinds := make([]string, 0, 6)
+	for _, k := range ownKinds() {
+		kinds = append(kinds, strconv.FormatUint(k, 10))
+	}
 	sql := "SELECT max(`" + idColumn + "`) AS m FROM " + relation +
-		" WHERE `" + idColumn + "` >= " + strconv.FormatUint(lo.Value(), 10) + " AND `" + idColumn + "` <= " + strconv.FormatUint(hi.Value(), 10)
+		" WHERE `" + idColumn + "` >= " + strconv.FormatUint(lo.Value(), 10) + " AND `" + idColumn + "` <= " + strconv.FormatUint(hi.Value(), 10) +
+		" AND hasAny(`" + symbolLrColumn + "`, [" + strings.Join(kinds, ", ") + "])"
 	return rowalloc.Seed(ctx, exec, layout, tagValue, func(ctx context.Context) (maxBody uint64, err error) {
 		for rec, qerr := range exec.QueryArrow(ctx, sql) {
 			if qerr != nil {
