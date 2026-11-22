@@ -51,14 +51,16 @@ func canonicalizeKeywordCaseImpl(sql string) (result string, err error) {
 }
 
 // collectIdentifierTokenIndices returns the set of token indices that sit under
-// an IdentifierContext, i.e. tokens the parser bound as names rather than as
-// structural keywords. Per the grammar `identifier: IDENTIFIER | interval | keyword`,
-// such a context wraps exactly one terminal token (directly, or via the single-token
-// `interval` / `keyword` sub-rules).
+// an IdentifierContext or an AliasContext, i.e. tokens the parser bound as
+// names rather than as structural keywords. Per the grammar
+// `identifier: IDENTIFIER | interval | keyword` and `alias: IDENTIFIER | FILTER`,
+// such a context wraps exactly one terminal token (directly, or via the
+// single-token `interval` / `keyword` sub-rules).
 func collectIdentifierTokenIndices(tree antlr.Tree) map[int]bool {
 	indices := make(map[int]bool, 16)
 	nanopass.WalkCST(tree, func(ctx antlr.ParserRuleContext) bool {
-		if _, ok := ctx.(*grammar1.IdentifierContext); ok {
+		switch ctx.(type) {
+		case *grammar1.IdentifierContext, *grammar1.AliasContext:
 			if tok := ctx.GetStart(); tok != nil {
 				indices[tok.GetTokenIndex()] = true
 			}

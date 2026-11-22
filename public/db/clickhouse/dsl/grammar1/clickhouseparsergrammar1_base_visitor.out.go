@@ -431,6 +431,10 @@ func (v *BaseClickHouseParserGrammar1Visitor) VisitColumnExprAsterisk(ctx *Colum
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseClickHouseParserGrammar1Visitor) VisitFilterClause(ctx *FilterClauseContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseClickHouseParserGrammar1Visitor) VisitColumnArgList(ctx *ColumnArgListContext) interface{} {
 	return v.VisitChildren(ctx)
 }

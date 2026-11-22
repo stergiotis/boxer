@@ -109,6 +109,11 @@ func predictionCorpus() []struct {
 		// `view(SELECT x)`, is an island fixture below.
 		{"table_arg_paren_query", "SELECT * FROM f((SELECT x), 1)"},
 		{"table_arg_select_name", "SELECT * FROM f(SELECT, 1)"},
+		// FILTER after a call starts the aggregate filter; followed by
+		// anything but `(` it is a bare alias.
+		{"aggregate_filter", "SELECT quantile(0.05)(x) FILTER (WHERE x > 1) AS p FROM t"},
+		{"aggregate_filter_window", "SELECT sum(x) FILTER (WHERE y) OVER (ORDER BY z) FROM t"},
+		{"filter_as_alias", "SELECT count() filter FROM t filter"},
 	}
 }
 

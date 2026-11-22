@@ -234,9 +234,9 @@ columnExpr
     // Ambiguity resolves to the lowest alternative, so the dynamic selection
     // must stay ahead of them.
     | dynamicColumnSelection                                                              # ColumnExprDynamic
-    | identifier (LPAREN columnExprList? RPAREN) OVER LPAREN windowExpr RPAREN            # ColumnExprWinFunction
-    | identifier (LPAREN columnExprList? RPAREN) OVER identifier                          # ColumnExprWinFunctionTarget
-    | identifier (LPAREN columnExprList? RPAREN)? LPAREN DISTINCT? columnArgList? RPAREN  # ColumnExprFunction
+    | identifier (LPAREN columnExprList? RPAREN) filterClause? OVER LPAREN windowExpr RPAREN  # ColumnExprWinFunction
+    | identifier (LPAREN columnExprList? RPAREN) filterClause? OVER identifier                # ColumnExprWinFunctionTarget
+    | identifier (LPAREN columnExprList? RPAREN)? LPAREN DISTINCT? columnArgList? RPAREN filterClause?  # ColumnExprFunction
     | literal                                                                             # ColumnExprLiteral
     | paramSlot                                                                           # ColumnExprParamSlot
 
@@ -277,6 +277,12 @@ columnExpr
     | LBRACKET columnExprList? RBRACKET                                                   # ColumnExprArray
     | columnIdentifier                                                                    # ColumnExprIdentifier
     ;
+// `f(args) FILTER (WHERE c)` is the aggregate filter. ClickHouse accepts it
+// after a call, parametric or not, and before OVER, never after it; its own
+// parser rewrites it to the -If combinator, `fIf(args, c)`, which
+// CanonicalizeSugar mirrors. The clause is a rule of its own so that its
+// parentheses are not tokens of the call.
+filterClause: FILTER LPAREN WHERE columnExpr RPAREN;
 columnArgList: columnArgExpr (COMMA columnArgExpr)*;
 columnArgExpr: columnLambdaExpr | columnExpr;
 columnLambdaExpr:
@@ -361,7 +367,7 @@ keyword
     : AFTER | ALIAS | ALL | ALTER | AND | ANTI | ANY | ARRAY | AS | ASCENDING | ASOF | AST | ASYNC | ATTACH | BETWEEN | BOTH | BY | CASE
     | CAST | CHECK | CLEAR | CLUSTER | CODEC | COLLATE | COLUMN | COLUMNS | COMMENT | CONSTRAINT | CREATE | CROSS | CUBE | CURRENT | DATABASE
     | DATABASES | DATE | DEDUPLICATE | DEFAULT | DELAY | DELETE | DESCRIBE | DESC | DESCENDING | DETACH | DICTIONARIES | DICTIONARY | DISK
-    | DISTINCT | DISTRIBUTED | DROP | ELSE | END | ENGINE | EVENTS | EXISTS | EXPLAIN | EXPRESSION | EXTRACT | FETCHES | FINAL | FIRST
+    | DISTINCT | DISTRIBUTED | DROP | ELSE | END | ENGINE | EVENTS | EXISTS | EXPLAIN | EXPRESSION | EXTRACT | FETCHES | FILTER | FINAL | FIRST
     | FLUSH | FOR | FOLLOWING | FORMAT | FREEZE | FROM | FULL | FUNCTION | GLOBAL | GRANULARITY | GROUP | HAVING | HIERARCHICAL | ID
     | IF | ILIKE | IN | INDEX | INJECTIVE | INNER | INSERT | INTERVAL | INTO | IS | IS_OBJECT_ID | JOIN | JSON_FALSE | JSON_TRUE | KEY
     | KILL | LAST | LAYOUT | LEADING | LEFT | LIFETIME | LIKE | LIMIT | LIVE | LOCAL | LOGS | MATERIALIZE | MATERIALIZED | MAX | MERGES
@@ -383,8 +389,12 @@ keyword
 // The original grammar comment noted: "|interval| can't be an alias, otherwise
 // 'INTERVAL 1 SOMETHING' becomes ambiguous." The same principle now applies
 // to all keywords uniformly.
+//
+// FILTER is the one exception: the word became a token only for the
+// aggregate filter, and ClickHouse still reads `SELECT 1 filter` and
+// `FROM t filter` as aliases. After a call, `FILTER (` starts the clause.
 // ==========================================================================
-alias: IDENTIFIER;
+alias: IDENTIFIER | FILTER;
 identifier: IDENTIFIER | interval | keyword;
 identifierOrNull: identifier | NULL_SQL;
 enumValue: STRING_LITERAL EQ_SINGLE numberLiteral;

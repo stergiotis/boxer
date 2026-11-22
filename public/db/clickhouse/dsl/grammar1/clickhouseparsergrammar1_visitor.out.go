@@ -325,6 +325,9 @@ type ClickHouseParserGrammar1Visitor interface {
 	// Visit a parse tree produced by ClickHouseParserGrammar1#ColumnExprAsterisk.
 	VisitColumnExprAsterisk(ctx *ColumnExprAsteriskContext) interface{}
 
+	// Visit a parse tree produced by ClickHouseParserGrammar1#filterClause.
+	VisitFilterClause(ctx *FilterClauseContext) interface{}
+
 	// Visit a parse tree produced by ClickHouseParserGrammar1#columnArgList.
 	VisitColumnArgList(ctx *ColumnArgListContext) interface{}
 
