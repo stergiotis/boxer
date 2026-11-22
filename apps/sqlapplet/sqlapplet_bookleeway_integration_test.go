@@ -13,8 +13,46 @@ import (
 
 	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/chviews"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 )
+
+// leewayBookFixtureDatabase holds the one leeway table the book tests bring
+// with them, created and dropped by seedLeewayBookFixture.
+const leewayBookFixtureDatabase = "sqlapplet_it_leeway"
+
+// seedLeewayBookFixture gives the server a leeway table with stored bytes and
+// drops it when the test ends. The chapters that price storage (lw-aspects,
+// lw-bytes) read data sizes out of system.columns and leave out columns
+// storing nothing, and a server that never held a facts row — the run's own,
+// freshly provisioned one — has no such column. The table is the facts DDL
+// pointed at a scratch database: it is the leeway table every host carries,
+// and its columns declare all three aspect vocabularies the knob test walks.
+//
+// system.columns reports per-column sizes for wide parts only, and a one-row
+// insert lands in a compact part, so the fixture makes every part wide. The
+// row is all defaults: an empty array still stores its offsets.
+func seedLeewayBookFixture(t *testing.T, client *chclient.Client, ctx context.Context) {
+	t.Helper()
+	drop := func() {
+		_ = client.Exec(context.Background(), "DROP DATABASE IF EXISTS "+leewayBookFixtureDatabase+" SYNC")
+	}
+	drop()
+	t.Cleanup(drop)
+	cfg := chstore.Config{Database: leewayBookFixtureDatabase, Table: factsschema.TableName}
+	ddl, err := chstore.ComposeSetupSQL(cfg, "")
+	require.NoError(t, err)
+	for _, stmt := range strings.Split(ddl, ";\n") {
+		if strings.TrimSpace(stmt) == "" {
+			continue
+		}
+		require.NoError(t, client.Exec(ctx, stmt))
+	}
+	table := cfg.Database + "." + cfg.Table
+	require.NoError(t, client.Exec(ctx, "ALTER TABLE "+table+" MODIFY SETTING min_bytes_for_wide_part = 0"))
+	require.NoError(t, client.Exec(ctx, "INSERT INTO "+table+" FORMAT JSONEachRow {}"))
+}
 
 // TestLeewayBookQueries_LiveServer runs every chapter buffer verbatim against a
 // real ClickHouse. These chapters read the ADR-0226 views on the configured
@@ -25,7 +63,8 @@ import (
 // It skips when the surface is not installed rather than installing it: an
 // install writes functions and a database into somebody's server, which is not
 // a side effect a test lane should have. `boxer leeway sqlsurface install` is
-// the one-liner the skip names.
+// the one-liner the skip names. The data the chapters read it brings itself
+// (seedLeewayBookFixture), in a scratch database it drops again.
 func TestLeewayBookQueries_LiveServer(t *testing.T) {
 	client := chclient.New(chclient.ConfigFromEnv(), nil)
 	ctx := context.Background()
@@ -59,6 +98,10 @@ func TestLeewayBookQueries_LiveServer(t *testing.T) {
 		t.Skipf("%s carries %s of %d views; run `boxer leeway sqlsurface install` first",
 			target.Name(), present, len(names))
 	}
+	seedLeewayBookFixture(t, client, ctx)
+	// The chapters with a row per table, section or column draw the fixture
+	// whatever else the server holds; the rest aggregate across tables.
+	perTable := map[string]bool{"lw-tables": true, "lw-anatomy": true, "lw-bytes": true}
 
 	bySlug := leewayDefsBySlug(t)
 	for slug, def := range bySlug {
@@ -71,10 +114,13 @@ func TestLeewayBookQueries_LiveServer(t *testing.T) {
 			require.NoError(t, exErr)
 			out, qErr := query(residual+"\nFORMAT TabSeparated", stripParamPrefix(params))
 			require.NoErrorf(t, qErr, "%s failed:\n%s", slug, def.SQL)
-			// Every chapter describes the server's own schema, and a server
-			// carrying the views carries at least the views' own columns — so
-			// unlike a book over derived data, empty here is a defect.
+			// Every chapter describes the server's own schema, and the server
+			// carries at least the fixture's leeway table with stored bytes —
+			// so unlike a book over derived data, empty here is a defect.
 			assert.NotEmptyf(t, out, "%s produced no rows", slug)
+			if perTable[slug] {
+				assert.Containsf(t, out, leewayBookFixtureDatabase, "%s did not draw the fixture table", slug)
+			}
 		})
 	}
 }
@@ -98,6 +144,7 @@ func TestLeewayBookKnobs_LiveServer(t *testing.T) {
 	if strings.TrimSpace(string(raw)) != "1" {
 		t.Skip("the leeway views are not installed; run `boxer leeway sqlsurface install` first")
 	}
+	seedLeewayBookFixture(t, client, ctx)
 
 	bySlug := leewayDefsBySlug(t)
 	run := func(t *testing.T, slug string, overrides map[string]string) (out string) {
