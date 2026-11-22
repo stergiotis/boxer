@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-20
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-22
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0391: What a tab link may decide
 
@@ -128,7 +128,7 @@ which credentials, which server is reached, or where code comes from**.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-11-22.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.

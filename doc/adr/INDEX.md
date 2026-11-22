@@ -404,7 +404,7 @@ withdrawn, deferred — is described in the
 | [0388](./0388-contract-snapshots-what-is-compared-against-the-last-release.md) | Contract snapshots — what is compared against the last release | proposed | 2026-11-20 |  |
 | [0389](./0389-stability-tiers-per-package-and-what-a-version-number-promises.md) | Stability tiers per package, and what a version number promises | proposed | 2026-11-20 |  |
 | [0390](./0390-a-gate-that-tests-the-commit-and-a-ref-that-names-the-last-green-main.md) | A gate that tests the commit, and a ref that names the last green main | proposed | 2026-11-20 |  |
-| [0391](./0391-what-a-tab-link-may-decide.md) | What a tab link may decide | proposed | 2026-11-20 |  |
+| [0391](./0391-what-a-tab-link-may-decide.md) | What a tab link may decide | accepted | 2026-11-20 |  |
 | [0394](./0394-library-packages-do-not-import-the-app-platform.md) | Library packages do not import the app platform; where generated code finds its runtime | proposed | 2026-11-20 |  |
 | [0395](./0395-io-takes-a-context.md) | I/O takes a context: the store, persist, bus-request and trail interfaces | proposed | 2026-11-20 |  |
 | [0396](./0396-the-app-contract-a-host-promises.md) | The app contract a host promises: identity, registration, context capabilities, subjects | proposed | 2026-11-21 |  |
