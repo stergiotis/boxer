@@ -44,7 +44,7 @@ func carrierOf(t *testing.T, skip string) (setup []string, tr recordstore.Insert
 	setup = []string{
 		"CREATE DATABASE IF NOT EXISTS carrier",
 		"SET allow_suspicious_low_cardinality_types = 1; CREATE TABLE carrier.rows (" + strings.Join(cols, ", ") + ") ENGINE = MergeTree ORDER BY tenant SETTINGS " + recordstore.DedupWindowSetting + " = 100",
-		"CREATE VIEW carrier.facts_view AS SELECT " + strings.Join(sel, ", ") + " FROM carrier.rows WHERE tenant = 'one'",
+		"CREATE VIEW carrier.facts_view AS SELECT " + strings.Join(sel, ", ") + " FROM carrier.rows WHERE tenant = 'one' SETTINGS allow_suspicious_low_cardinality_types = 1",
 	}
 	alloc := memory.NewGoAllocator()
 	tr = recordstore.InsertTransformFunc(func(table string, records []arrow.RecordBatch) (string, []arrow.RecordBatch, error) {

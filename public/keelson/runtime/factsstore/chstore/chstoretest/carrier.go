@@ -90,7 +90,10 @@ func (inst *Carrier) SetupStatements() (stmts []string) {
 }
 
 // ViewStatement creates or replaces the view back: the tenant's rows under
-// the facts columns' names. A facts column named in skip is left out, for
+// the facts columns' names. The view's SELECT closes with the setting the
+// facts table is created under, since it returns the table's LowCardinality
+// columns over non-string types and a server refuses to produce those
+// without it. A facts column named in skip is left out, for
 // a test of a view that does not return every column; one named in retype
 // is returned as that type instead of its own.
 func (inst *Carrier) ViewStatement(skip []string, retype map[string]string) (stmt string) {
@@ -108,7 +111,8 @@ next:
 		}
 		sel = append(sel, expr+" AS "+quoteIdent(col.Name))
 	}
-	return "CREATE OR REPLACE VIEW " + inst.View + " AS SELECT " + strings.Join(sel, ", ") + " FROM " + inst.Table + " WHERE tenant = " + quoteString(inst.Tenant)
+	return "CREATE OR REPLACE VIEW " + inst.View + " AS SELECT " + strings.Join(sel, ", ") + " FROM " + inst.Table + " WHERE tenant = " + quoteString(inst.Tenant) +
+		" SETTINGS allow_suspicious_low_cardinality_types = 1"
 }
 
 // Transform is the insert transform into the carrier: each facts column

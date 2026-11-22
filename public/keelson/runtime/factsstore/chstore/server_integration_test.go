@@ -524,7 +524,7 @@ func TestServer_AViewUnderTheWrittenNameFailsSetup(t *testing.T) {
 	for _, stmt := range stmts {
 		require.NoError(t, s.exec.Exec(ctx, stmt))
 	}
-	require.NoError(t, s.exec.Exec(ctx, "CREATE VIEW "+cfg.Database+".facts AS SELECT * FROM "+cfg.Database+".rows"))
+	require.NoError(t, s.exec.Exec(ctx, "CREATE VIEW "+cfg.Database+".facts AS SELECT * FROM "+cfg.Database+".rows SETTINGS allow_suspicious_low_cardinality_types = 1"))
 
 	err = s.SetupTable(ctx, "")
 	require.ErrorIs(t, err, ErrFactsTableTakesNoInsert)
