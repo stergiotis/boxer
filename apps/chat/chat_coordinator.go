@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
@@ -609,16 +610,79 @@ func (inst *coordinator) changesNote(ctx context.Context, turn string) (note str
 	if err != nil || len(changes) == 0 {
 		return
 	}
+	lines := changeLines(changes)
+	if len(lines) == 0 {
+		return
+	}
 	var b strings.Builder
 	b.WriteString("Since your last turn, others changed things in your windows:")
-	for _, ch := range changes {
-		b.WriteString("\n- " + ch.Writer + " changed " + strings.Join(ch.Resources, ", ") + " in window " + strconv.FormatUint(ch.Instance, 10))
-		if ch.Op != "" {
-			b.WriteString(" (" + ch.Op + ")")
-		}
+	for _, l := range lines {
+		b.WriteString("\n- " + l)
 	}
 	b.WriteString("\nRead again before you write there.")
 	return b.String()
+}
+
+// changesMaxLines bounds the lines of the changes note.
+const changesMaxLines = 12
+
+// changeLines is the changes note's lines: the same change by the same
+// writer in the same window is one line with its count, and the app's own
+// changes — results landing, the consequences of runs, this task's
+// included — are one line per window, since they say only that the
+// window's state moved. Past changesMaxLines the rest is counted.
+func changeLines(changes []agent.Change) (lines []string) {
+	type groupKey struct {
+		writer   string
+		instance uint64
+		op       string
+		res      string
+	}
+	type group struct {
+		key   groupKey
+		res   []string
+		count int
+	}
+	var groups []*group
+	byKey := make(map[groupKey]*group, len(changes))
+	for _, ch := range changes {
+		k := groupKey{writer: ch.Writer, instance: ch.Instance, op: ch.Op, res: strings.Join(ch.Resources, ", ")}
+		if ch.Writer == opwire.WriterApp {
+			k.op, k.res = "", ""
+		}
+		g, seen := byKey[k]
+		if !seen {
+			g = &group{key: k}
+			byKey[k] = g
+			groups = append(groups, g)
+		}
+		g.count++
+		for _, r := range ch.Resources {
+			if !slices.Contains(g.res, r) {
+				g.res = append(g.res, r)
+			}
+		}
+	}
+	for i, g := range groups {
+		if i == changesMaxLines {
+			lines = append(lines, "and "+strconv.Itoa(len(groups)-i)+" more kinds of change")
+			break
+		}
+		window := " in window " + strconv.FormatUint(g.key.instance, 10)
+		if g.key.writer == opwire.WriterApp {
+			lines = append(lines, "the app's own work updated "+strings.Join(g.res, ", ")+window+" ("+plural(g.count, "change")+"; it follows runs, yours included)")
+			continue
+		}
+		l := g.key.writer + " changed " + g.key.res + window
+		if g.key.op != "" {
+			l += " (" + g.key.op + ")"
+		}
+		if g.count > 1 {
+			l += ", " + strconv.Itoa(g.count) + " times"
+		}
+		lines = append(lines, l)
+	}
+	return
 }
 
 // toolOrigin says where a tool call came from: the turn, the model call
