@@ -1,6 +1,7 @@
 package play
 
 import (
+	"errors"
 	"net/url"
 	"slices"
 	"strings"
@@ -54,6 +55,12 @@ func syntaxDetail(err error) (detail string) {
 // dataset handle to the names a grant lists it by: its global alias, and
 // its bundle when it belongs to one.
 func checkAgentLimits(residual string, dec dispatchDecision, obo *app.OnBehalfOf, aliasOf map[string]datasetName) (err error) {
+	// A statement no endpoint may serve is refused for that reason, not for
+	// a destination: its decision names no endpoint a grant could list.
+	if dec.class == dispatchClassRefused {
+		_, err = dec.target()
+		return
+	}
 	pr, perr := nanopass.Parse(residual)
 	if perr != nil {
 		return &AgentLimitError{Reason: "boxer's grammar does not parse the statement, so it cannot be classified and an agent cannot run it" + syntaxDetail(perr)}
@@ -95,6 +102,11 @@ func checkAgentLimits(residual string, dec dispatchDecision, obo *app.OnBehalfOf
 		return
 	}
 	host := endpointHost(dec.targetURL)
+	if host == "" {
+		// No grant entry names a run without an endpoint, and none is asked
+		// for: "clickhouse:" would cover nothing.
+		return &AgentLimitError{Reason: "the run names no endpoint, so no grant destination covers it"}
+	}
 	if !slices.Contains(obo.Destinations, DestinationClickHouse(host)) {
 		return &AgentLimitError{Reason: "the grant does not list " + DestinationClickHouse(host), Destination: DestinationClickHouse(host)}
 	}
@@ -129,6 +141,9 @@ func refuseAgentStatement(client *Client, obo *app.OnBehalfOf, sql string) (err 
 			return app.RefuseForDestinations(lerr.Error(), limit.Destination)
 		}
 		return app.RefuseOperation(lerr.Error())
+	}
+	if nd, ok := errors.AsType[*NotDispatchedError](lerr); ok {
+		return app.RefuseOperation("play does not send the statement: " + nd.Reason)
 	}
 	return
 }

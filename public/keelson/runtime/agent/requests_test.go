@@ -478,6 +478,18 @@ func TestAPublishPrefixNoNameCanMatchIsRefusedAtRequest(t *testing.T) {
 	assert.Empty(t, unmatchableConsents([]string{"publish:wolfram", "publish:_x", "keelson-bundle:a-b", "clickhouse:127.0.0.1:8123"}))
 }
 
+// A ClickHouse destination without a host covers no run, so a request for
+// one is refused with the shape to ask for instead.
+func TestADestinationWithoutAHostIsRefusedAtRequest(t *testing.T) {
+	r, g := approvedRig(t, ModeAct)
+	for _, dest := range []string{"clickhouse:", "clickhouse-session:", "clickhouse: "} {
+		_, err := r.cli.Request(context.Background(), GrantRequest{Handle: g.Handle, Plan: "query", Destinations: []string{"clickhouse:127.0.0.1:8123", dest}})
+		require.Error(t, err, dest)
+		assert.Contains(t, err.Error(), "names no endpoint", dest)
+	}
+	assert.Empty(t, unmatchableConsents([]string{"clickhouse-session:127.0.0.1:8123"}))
+}
+
 // Unattended, a consequential call a publish destination could cover is
 // refused with that destination as the remedy rather than left for a person
 // nobody is there to be; without a named value it says what to name.

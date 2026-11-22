@@ -118,18 +118,32 @@ func (inst dispatchDecision) killTarget() (endpoint string, err error) {
 	return
 }
 
+// NotDispatchedError is a statement a dispatch decision refused, or a
+// decision that names no endpoint. It is the error ExecuteArrowStream and
+// the other issuers return for such a decision; the dispatchReason fact on
+// the wrapping error carries the reason as well.
+type NotDispatchedError struct {
+	// Class is the decision's class by name, "refused" for a statement it
+	// refused.
+	Class string
+	// Reason is why the statement was not sent.
+	Reason string
+}
+
+func (inst *NotDispatchedError) Error() string { return inst.Reason }
+
 // target returns the endpoint the request goes to, or an error explaining
 // why it must not be sent. Every issuer calls this rather than reading
 // targetURL, so both refusal and the unresolved zero value are handled in
 // one place.
 func (inst dispatchDecision) target() (targetURL string, err error) {
 	if inst.class == dispatchClassRefused {
-		err = eb.Build().Str("dispatchReason", inst.reason).Errorf("play: not dispatched")
+		err = eb.Build().Str("dispatchReason", inst.reason).Errorf("play: not dispatched: %w", &NotDispatchedError{Class: inst.class.String(), Reason: inst.reason})
 		return
 	}
 	if inst.targetURL == "" {
 		// A resolver never returns this; an unresolved zero value does.
-		err = eh.Errorf("play: dispatch decision names no endpoint")
+		err = eh.Errorf("play: dispatch decision names no endpoint: %w", &NotDispatchedError{Class: inst.class.String(), Reason: "the decision names no endpoint"})
 		return
 	}
 	targetURL = inst.targetURL

@@ -66,7 +66,7 @@ func (inst *PlayApp) paramControlsNow() (out paramControls) {
 func snapshotState(p *PlayApp) (st PlayState) {
 	st = PlayState{Sql: p.sql, Live: p.liveMain}
 	if p.client != nil {
-		st.Destination = DestinationClickHouse(endpointHost(p.client.URL()))
+		st.Destination = endpointDestination(p.client)
 	}
 	if slug, ok := p.tabs.slugForDockID(p.raisedTab); ok {
 		st.RaisedPane = slug

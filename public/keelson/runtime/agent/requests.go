@@ -777,14 +777,20 @@ func overCeiling(ceiling *Ceiling, req wireGrantRequest) (why string) {
 	return ceiling.refuseRequest(modes, len(req.Launches) > 0, ParseMode(req.Desktop), req.Destinations)
 }
 
-// unmatchableConsents is why a requested publish:<prefix> destination can
-// never cover a call, "" when every one can: the names a publish consent
-// covers — bundle aliases, dataset names — are at most 64 bytes of letters,
-// digits and underscores that do not start with a digit, so a prefix
-// outside that shape matches none. The reason names the prefix to ask for
-// instead when one is left.
+// unmatchableConsents is why a requested destination can never cover a
+// call, "" when every one can. A clickhouse: or clickhouse-session:
+// destination names an endpoint by its host and port, so one without a host
+// covers no run. The names a publish consent covers — bundle aliases,
+// dataset names — are at most 64 bytes of letters, digits and underscores
+// that do not start with a digit, so a publish:<prefix> outside that shape
+// matches none. The reason names what to ask for instead.
 func unmatchableConsents(destinations []string) (why string) {
 	for _, d := range destinations {
+		for _, class := range []string{"clickhouse:", "clickhouse-session:"} {
+			if host, ok := strings.CutPrefix(d, class); ok && strings.TrimSpace(host) == "" {
+				return d + " names no endpoint, so it covers no run: ask for " + class + "<host:port>, as a refusal or the window's state names it"
+			}
+		}
 		prefix, ok := strings.CutPrefix(d, app.ConsentClassPublish+":")
 		if !ok {
 			continue

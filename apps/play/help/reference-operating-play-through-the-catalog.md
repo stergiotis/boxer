@@ -113,7 +113,13 @@ before sending when:
   `keelson-bundle:<alias>` (a task runs without an entry on a dataset it
   published itself);
 - the endpoint is not in the grant as `clickhouse:<host>`, unless the run
-  goes to the host's introspection engine.
+  goes to the host's introspection engine. `<host>` is the endpoint's host
+  and port, as `get_state` names it; a destination without one covers no
+  run, and the host refuses to grant it.
+
+A statement no endpoint may serve — an ad-hoc dataset joined with a server
+table on an endpoint that has not shown it may see sealed data, say — is
+refused with that reason, not with a destination to ask for.
 
 The limits fail a run; they never change it. The person's own Run is not
 judged by them. A window opened with a security class ceiling (an applet's

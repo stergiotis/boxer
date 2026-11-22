@@ -181,7 +181,11 @@ func (inst *ClickHouseDocsSource) LookupNow(ctx context.Context, name string, ob
 		return nil, app.RefuseOperation("the window has no endpoint")
 	}
 	if obo != nil {
-		if dest := endpointDestination(inst.client); !slices.Contains(obo.Destinations, dest) {
+		dest := endpointDestination(inst.client)
+		switch {
+		case dest == "":
+			return nil, app.RefuseOperation("the window has no endpoint")
+		case !slices.Contains(obo.Destinations, dest):
 			return nil, app.RefuseForDestinations("the grant does not list "+dest+", whose documentation this reads", dest)
 		}
 	}

@@ -184,8 +184,8 @@ func traceRewrite(client *Client, obo *app.OnBehalfOf, stmt string, costs bool) 
 	out.Confined = dec.sensitivity == queryengine.SensitivityConfined
 	// As validate_sql: a statement dispatch sends to the introspection plane
 	// does not ask for the endpoint.
-	if !catalog && dec.class != dispatchClassIntrospection {
-		out.Needs = []string{endpointDestination(client)}
+	if dest := endpointDestination(client); !catalog && dec.class != dispatchClassIntrospection && dest != "" {
+		out.Needs = []string{dest}
 	}
 	return
 }

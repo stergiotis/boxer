@@ -705,9 +705,21 @@ func RefuseOperation(reason string) (err error) {
 }
 
 // RefuseForDestinations declines a call whose task's grant does not list
-// the destinations it would reach.
+// the destinations it would reach. A destination that names nothing after
+// its class — "clickhouse:", an endpoint without a host — is left out: no
+// grant entry of that shape covers a call, so it is never asked for.
 func RefuseForDestinations(reason string, destinations ...string) (err error) {
-	return &OperationRefusal{Reason: reason, Destinations: destinations}
+	named := make([]string, 0, len(destinations))
+	for _, d := range destinations {
+		if class, rest, ok := strings.Cut(d, ":"); d == "" || (ok && class != "" && strings.TrimSpace(rest) == "") {
+			continue
+		}
+		named = append(named, d)
+	}
+	if len(named) == 0 {
+		named = nil
+	}
+	return &OperationRefusal{Reason: reason, Destinations: named}
 }
 
 // ConflictOperation declines a call the caller can retry after reading

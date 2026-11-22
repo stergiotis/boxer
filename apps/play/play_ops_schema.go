@@ -213,9 +213,13 @@ func addSchemaOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		})
 }
 
-// endpointDestination is how a grant names the pinned endpoint.
+// endpointDestination is how a grant names the pinned endpoint, empty when
+// the client pins none: no destination names an endpoint without a host.
 func endpointDestination(client *Client) (dest string) {
-	return DestinationClickHouse(endpointHost(client.URL()))
+	if host := endpointHost(client.URL()); host != "" {
+		dest = DestinationClickHouse(host)
+	}
+	return
 }
 
 // schemaReadable refuses a catalog probe the window cannot make: no endpoint,
@@ -227,7 +231,11 @@ func schemaReadable(sn opsSnap, obo *app.OnBehalfOf) (err error) {
 	case sn.client == nil:
 		return app.RefuseOperation("the window has no endpoint")
 	}
-	if dest := endpointDestination(sn.client); obo != nil && !slices.Contains(obo.Destinations, dest) {
+	dest := endpointDestination(sn.client)
+	switch {
+	case dest == "":
+		return app.RefuseOperation("the window has no endpoint")
+	case obo != nil && !slices.Contains(obo.Destinations, dest):
 		return app.RefuseForDestinations("the grant does not list "+dest+", whose catalog this reads", dest)
 	}
 	return
@@ -277,8 +285,8 @@ func validateStatement(client *Client, obo *app.OnBehalfOf, stmt string) (out Va
 	}
 	dec := client.dispatchResidual(residual, "")
 	out.Confined = dec.sensitivity == queryengine.SensitivityConfined
-	if !catalog && dec.class != dispatchClassIntrospection {
-		out.Needs = []string{endpointDestination(client)}
+	if dest := endpointDestination(client); !catalog && dec.class != dispatchClassIntrospection && dest != "" {
+		out.Needs = []string{dest}
 	}
 	if obo == nil {
 		return

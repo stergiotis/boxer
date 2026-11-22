@@ -188,3 +188,13 @@ func TestADirectOperationIsAnAgentOperationAndFew(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "operation get_doc_too: a catalog declares at most 2 direct operations")
 }
+
+// A refusal never asks for a destination that names nothing after its
+// class: no grant entry of that shape covers a call.
+func TestARefusalAsksForNoDestinationWithoutAName(t *testing.T) {
+	var refusal *OperationRefusal
+	require.ErrorAs(t, RefuseForDestinations("why", "clickhouse:", "clickhouse-session: ", ""), &refusal)
+	assert.Nil(t, refusal.Destinations)
+	require.ErrorAs(t, RefuseForDestinations("why", "clickhouse:", "clickhouse:127.0.0.1:8123", "llm"), &refusal)
+	assert.Equal(t, []string{"clickhouse:127.0.0.1:8123", "llm"}, refusal.Destinations)
+}
