@@ -41,3 +41,14 @@ func TestRenderTrailNotDurable(t *testing.T) {
 	})
 	assert.Contains(t, trailWarning(s.TrailNotDurable), "audit trail not durable: this host has no durable backend for boxer.facts")
 }
+
+// A reason read each frame wins over the one captured at boot, and an
+// empty one clears the row.
+func TestTrailWhyIsReadEachFrame(t *testing.T) {
+	why := "held"
+	s := &Snapshot{TrailNotDurable: "at boot", TrailWhy: func() string { return why }}
+	assert.Equal(t, "held", s.trailNotDurable())
+	why = ""
+	assert.Empty(t, s.trailNotDurable())
+	assert.Equal(t, "at boot", (&Snapshot{TrailNotDurable: "at boot"}).trailNotDurable())
+}

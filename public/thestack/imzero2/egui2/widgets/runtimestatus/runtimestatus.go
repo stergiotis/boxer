@@ -97,6 +97,19 @@ type Snapshot struct {
 	// (ADR-0330's Update of 2026-10-30). Set, it leads the row in the
 	// warning tone.
 	TrailNotDurable string
+	// TrailWhy, when set, is read each frame in place of TrailNotDurable:
+	// for a host whose trail is held at boot and becomes durable while it
+	// runs (ADR-0408 §SD6). It is called on the render goroutine and must
+	// be cheap and safe for concurrent use.
+	TrailWhy func() (why string)
+}
+
+// trailNotDurable is the reason the row leads with, "" for none.
+func (inst *Snapshot) trailNotDurable() (why string) {
+	if inst.TrailWhy != nil {
+		return inst.TrailWhy()
+	}
+	return inst.TrailNotDurable
 }
 
 // trailWarning is the segment a non-durable trail shows.
@@ -139,10 +152,10 @@ func Render(in Input) (res Result) {
 
 func (in Input) render(ids *c.WidgetIdStack, res *Result) {
 	s := in.Snapshot
-	if s.TrailNotDurable != "" {
+	if why := s.trailNotDurable(); why != "" {
 		// Plain text in the warning tone, as UNATTENDED below: a state the
 		// person should not miss, not a capability to inspect.
-		warningLabel(trailWarning(s.TrailNotDurable))
+		warningLabel(trailWarning(why))
 		monoSpacer()
 	}
 	renderSegment(ids, "run:"+s.RunIdShort, CapRun, res)
