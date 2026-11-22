@@ -567,6 +567,71 @@ table, and chstore still leaves deleting data to the operator. The
 explanation page now gives the operator's form, a row TTL on `boxer.facts`
 that deletes only `KindQueryRun` rows.
 
+## Update — 2026-11-22: under an insert transform the extract deduplicates and the view only appends
+
+A deployment may keep the facts in a table of its own, behind an insert
+transform and a read relation
+([ADR-0402](./0402-facts-stored-in-a-deployments-own-table-a-write-transform-at-the-insert-seam-and-one-read-table-setting.md)).
+There `/pull` serves the transform's output, and the view appends it to
+the transform's target (ADR-0402, update of 2026-11-22). SD2's anti-join
+cannot follow. Its left side would be the target's columns, which boxer
+does not know: which column carries the id, and how, is the deployment's
+choice.
+
+**Under a transform, the extract's filter of already-stored events is the
+deduplication, and the view only appends.** The filter is the one the
+update of 2026-10-08 added before the `LIMIT`. It drops every event whose
+`(query_id, event microsecond)` pair is stored as `(naturalKey, ts)` of a
+query-run fact at or after the extract's lower bound. It reads the read
+relation. That makes it exact, for four reasons:
+
+- **Pair and id.** The id hashes `(query_id, event microsecond, event
+  type)` (`DeterministicId`), and the fact stores the first two as its
+  natural key and its timestamp. So a row whose id is stored has its pair
+  stored, and the filter serves no row the id anti-join would have
+  dropped. The filter drops more than the anti-join: a second terminal
+  event with the same pair and another type. That loss holds with or
+  without a transform, as before.
+- **Window.** A re-served event is no older than the lower bound, so its
+  stored copy is inside the window the filter reads. This is the argument
+  of 2026-10-08.
+- **Time.** The refreshes of one view do not overlap. Every GET a refresh
+  makes, the extra reads of url() included, is answered before that
+  refresh appends. The anti-join was evaluated inside the same refresh,
+  so it saw no row the filter does not.
+- **Partial appends.** A refresh that failed after committing some of its
+  rows leaves them visible to the next extract, which serves the rest.
+
+These are the anti-join's preconditions plus one. One view appends query
+runs to the target (the single-owner check of 2026-10-08). The read
+relation must show a committed insert to the next query: a view or a
+`Merge` over the target does, but a copy refreshed on a schedule does
+not, nor does a target written with asynchronous inserts. The transform
+and the view back must keep the id, the natural key, the timestamp and
+the kind membership, which is what `boxer schema roundtrip` checks.
+
+**Without a transform the view keeps its anti-join.** The filter runs on
+every deployment. What a transform removes is only the backstop behind it.
+One code path for both would save one scan of the destination per refresh,
+but it would change a deployment that changed nothing, and the tests named
+in the update of 2026-10-08 are written against the view as it is.
+
+Alternatives not taken:
+
+- **An anti-join over the target's id column.** This needs the deployment
+  to say which column holds the id and how it is encoded. That is a second
+  description of the mapping, beside the transform.
+- **A second read by id in the service, after encoding.** It adds a third
+  read of the read relation per refresh. It guards only against a carrier
+  that changes the id, natural key or timestamp, and the round trip
+  already checks that.
+
+The `integration` lane runs the capture under the reference carrier of
+ADR-0402 (`TestLivePipelineUnderATransform`). With the filter disabled,
+that test stores a re-served event several times, while the test without a
+transform still passes behind its anti-join. Agreed with the code owner on
+2026-11-22.
+
 ## References
 
 - [doc/explanation/query-observability.md](../explanation/query-observability.md)

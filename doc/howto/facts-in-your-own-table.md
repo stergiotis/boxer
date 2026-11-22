@@ -20,8 +20,8 @@ query, retain and delete. The decision and its limits are
 [ADR-0402](../adr/0402-facts-stored-in-a-deployments-own-table-a-write-transform-at-the-insert-seam-and-one-read-table-setting.md);
 this page is the order of work.
 
-It costs something. Capturing query runs stops working, and removing kept
-conversation text does unless your transform answers it (see
+It costs something. Removing kept conversation text stops working unless
+your transform answers it (see
 [What stops working](#what-stops-working)); every binary that writes facts
 has to carry your transform; and the mapping exists twice — once in Go,
 once in SQL.
@@ -147,9 +147,21 @@ exercised.
    `keelson('schema_tables')`, and fails the start under
    `BOXER_SCHEMA_STRICT`.
 
-A query-run view installed before the switch is dropped by the first
-start of the query-run service under the transform. Where that service
-does not run, drop it by hand: `DROP TABLE IF EXISTS boxer.mv_queryruns`.
+**Query-run capture** (`queryrunsd`) needs the transform registered in its
+binary too. At start it transforms one query-run row to learn your table
+and the columns you write, and installs a view that appends the
+transform's output to that table. It reads stored query runs through your
+view, which must show a committed insert to the next query: a plain view
+or a `Merge` over your table does; a copy refreshed on a schedule does
+not, and the capture then stores events more than once. The capture
+supports a transform that sends every insert to one table; one that picks
+the table by what the rows say fails each pull, which
+`system.view_refreshes` shows. Where the capture cannot be set up, its
+start fails and names the reason, after dropping a query-run view an
+earlier binary left behind. Where the service does not run, drop such a
+view by hand: `DROP TABLE IF EXISTS boxer.mv_queryruns`. The design is in
+[ADR-0115](../adr/0115-query-observability-data-plane-strategy.md), update
+of 2026-11-22.
 
 ## What a binary without the transform does
 
@@ -175,8 +187,6 @@ only the executors apply the transform. An `INSERT` typed against
   section and the rows meant, and the app filter as an argument. The trail
   then runs yours and records the ditch. Without it the removal is refused
   and recorded as a failed ditch.
-- **Query-run capture.** The view that appends query runs is not
-  installed: it inserts on the server, where no transform runs.
 - **`Truncate` and `DropTable` of the facts store**, which are test
   helpers, are refused.
 - **A capture to an Arrow IPC stream** holds the facts shape, not your

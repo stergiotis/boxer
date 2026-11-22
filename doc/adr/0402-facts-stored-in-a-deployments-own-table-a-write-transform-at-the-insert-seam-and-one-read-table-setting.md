@@ -528,6 +528,54 @@ Not verified: the behaviour of a view that carries the setting under a
 server user held at `readonly = 1` — `clickhouse local` refuses that read,
 and no server was asked.
 
+### 2026-11-22 — the query-run capture under a transform
+
+The last deferral is built, and SD5's sentence "the query-run view is not
+installed" no longer holds. Under a registered transform the reconcile
+installs the view, which appends the transform's output to the
+transform's target. The deduplication this needs is recorded on
+[ADR-0115](./0115-query-observability-data-plane-strategy.md) (update of
+2026-11-22).
+
+- **The target is found by asking the transform.** The reconcile encodes
+  one query-run row as a pull would and transforms it
+  (`recordstore.TransformInsert`). The table and the Arrow schema it gets
+  back are what the view is composed against. The url() structure lists
+  the returned columns, in their order, with the types the server reports
+  for them in the target. A target column the transform does not return
+  keeps its default. The target must be database-qualified, must take
+  inserts (`recordstore.TakesNoInsert`), and must have a column for every
+  column the transform returns.
+- **Every pull is held to what was reconciled.** A pull transforms its
+  rows the same way. A batch for another table, or in another schema,
+  fails the pull, so the refresh fails and says so in
+  `system.view_refreshes`, nothing is appended, and the events wait in
+  `query_log`. The capture therefore supports a transform that sends
+  every insert to one table. A transform that picks its table by what the
+  rows say cannot be captured, and the failure is loud.
+- **The capture reads through the read relation.** The watermark, the
+  extract's filter of already-stored events and the check before the view
+  is created all go to the read relation (SD3; `queryrunsvc.Config.ReadTable`,
+  which follows `BOXER_FACTS_READ_TABLE` for `boxer.facts`). The check
+  judges that relation as the schema check does (`chstore.SchemaContracts`):
+  by its columns, and by the one read of the entry above.
+- **Where the capture cannot be set up, the reconcile refuses.** That
+  covers a transform that fails on the probe row or names no qualified
+  table, a target that is missing, takes no insert or lacks a returned
+  column, and a read relation that lacks a facts column. Each refusal
+  wraps `recordstore.ErrTransformedTable`, after dropping a view an
+  earlier binary left behind, as before.
+- **Without a transform nothing changes.** The view, the extract and their
+  SQL are as they were.
+
+The `integration` lane checks this on one server release (26.9), with the
+reference carrier registered as the transform
+(`TestLivePipelineUnderATransform`). A stamped query lands once in the
+carrier and is read back through the view. Re-served rows do not land
+again, and the catch-up after the endpoint was down lands once. The
+default lane covers the refusals and a pull for another table or schema.
+Agreed with the code owner on 2026-11-22.
+
 ## References
 
 - [ADR-0296](./0296-audit-events-as-a-trail-component.md) §SD8, §SD9 — the read table on generated stores and what keeps `boxer.facts` dispatchable.
