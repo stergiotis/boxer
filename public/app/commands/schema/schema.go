@@ -124,29 +124,65 @@ func Contracts() (cs []recordstore.TableContract, err error) {
 	return
 }
 
-// builtin are boxer's own stored tables under their owners. None carries a
-// Provision: the store that owns each creates it when it starts.
+// builtin are boxer's own stored tables under their owners. The state
+// table, the journal's three and the watchbill pair carry the statements
+// that create them, so `apply --create` makes them where they are missing;
+// the facts table and the snapshot store's tables do not, since what they
+// are created as depends on the host that owns them (its engine clause, its
+// profile), and that host creates them when it starts.
 func builtin() (ts []recordstore.StoredTable, err error) {
 	facts, err := chstore.SchemaContracts(chstore.ConfigFromEnv())
 	if err != nil {
 		return
 	}
-	add := func(owner string, cs ...recordstore.TableContract) {
-		for _, c := range cs {
-			ts = append(ts, recordstore.StoredTable{Owner: owner, Contract: c})
-		}
+	add := func(owner string, c recordstore.TableContract, provision func(ctx context.Context, exec recordstore.ExecutorI) error) {
+		ts = append(ts, recordstore.StoredTable{Owner: owner, Contract: c, Provision: provision})
 	}
+	for _, c := range facts {
+		add("facts", c, nil)
+	}
+	add("persist", persiststore.PersistSchemaContract(""), func(ctx context.Context, exec recordstore.ExecutorI) error {
+		st := persiststore.NewPersistStore(exec, nil, persiststore.PersistStoreConfig{})
+		defer st.Close()
+		return st.EnsureTable(ctx)
+	})
+
+	journal := agentrunstore.Layout{}
+	journalTables := journal.SchemaContracts()
+	add("agentrun", journalTables[0], func(ctx context.Context, exec recordstore.ExecutorI) error {
+		st := agentrunstore.NewStores(exec, journal, nil)
+		defer st.Close()
+		return st.Run.EnsureTable(ctx)
+	})
+	add("agentrun", journalTables[1], func(ctx context.Context, exec recordstore.ExecutorI) error {
+		st := agentrunstore.NewStores(exec, journal, nil)
+		defer st.Close()
+		return st.Entry.EnsureTable(ctx)
+	})
+	add("agentrun", journalTables[2], func(ctx context.Context, exec recordstore.ExecutorI) error {
+		st := agentrunstore.NewStores(exec, journal, nil)
+		defer st.Close()
+		return st.Vault.EnsureTable(ctx)
+	})
+
+	jobs := watchbillstore.Layout{}
+	jobTables := jobs.SchemaContracts()
+	add("watchbill", jobTables[0], func(ctx context.Context, exec recordstore.ExecutorI) error {
+		st := watchbillstore.NewStores(exec, jobs)
+		defer st.Close()
+		return st.Job.EnsureTable(ctx)
+	})
+	add("watchbill", jobTables[1], func(ctx context.Context, exec recordstore.ExecutorI) error {
+		st := watchbillstore.NewStores(exec, jobs)
+		defer st.Close()
+		return st.Event.EnsureTable(ctx)
+	})
+
 	lading := ladingschema.Layout{}
-	add("facts", facts...)
-	add("persist", persiststore.PersistSchemaContract(""))
-	add("agentrun", agentrunstore.Layout{}.SchemaContracts()...)
-	add("watchbill", watchbillstore.Layout{}.SchemaContracts()...)
-	add("lading",
-		ladingmeta.MetaSchemaContract(lading.MetaTable()),
-		ladingdata.DataSchemaContract(lading.DataTable()),
-		// The snapshot index decodes through the entry store's columns.
-		ladingmeta.MetaSchemaContract(lading.SnapTable()),
-	)
+	add("lading", ladingmeta.MetaSchemaContract(lading.MetaTable()), nil)
+	add("lading", ladingdata.DataSchemaContract(lading.DataTable()), nil)
+	// The snapshot index decodes through the entry store's columns.
+	add("lading", ladingmeta.MetaSchemaContract(lading.SnapTable()), nil)
 	return
 }
 

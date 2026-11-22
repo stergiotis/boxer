@@ -336,9 +336,11 @@ deployment can run it unattended and say what it allows.
   judges the tables again and exits as `check` does, so `apply --create` on
   a server whose table needs an ALTER ends with 3 and has altered nothing.
 
-An absent table of boxer's own is still refused: none of boxer's
-declarations carries a creating function yet, and the store that owns the
-table creates it when it starts. No host applies a plan on its own; the
+Of boxer's own tables the state table, the journal's three and the
+watchbill pair carry a creating function. The facts table and the snapshot
+store's three do not, and an absent one is still refused: what they are
+created as depends on the host that owns them (its engine clause, its
+profile), and that host creates them when it starts. No host applies a plan on its own; the
 alternative rejected above, auto-applying at boot, stays rejected. A unit
 that runs `schema apply` before its service starts does so because its
 deployment description says so.

@@ -2,7 +2,9 @@ package schema
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -124,4 +126,29 @@ func TestCheckAcceptsWhatTheNamedKindsWouldBringInLine(t *testing.T) {
 	assert.Equal(t, []string{"db.bad"}, names(Unaccepted(all, true, true)))
 	assert.Zero(t, ExitCode(Unaccepted([]schemaplan.Plan{ok, absent}, true, false)))
 	assert.Equal(t, ExitPending, ExitCode(Unaccepted([]schemaplan.Plan{ok, absent, older}, true, false)))
+}
+
+// The tables whose creation needs nothing from the host that owns them
+// carry the statements that create them, each naming its own table; the
+// facts table and the snapshot store's stay with their hosts.
+func TestBoxersOwnTablesCarryTheirCreatingStatements(t *testing.T) {
+	ts, err := Tables()
+	require.NoError(t, err)
+	created := map[string]int{}
+	for _, st := range ts {
+		if st.Provision == nil {
+			assert.Contains(t, []string{"facts", "lading"}, st.Owner, st.Contract.Table)
+			continue
+		}
+		stmts, perr := recordstore.ProvisioningSQL(context.Background(), st.Provision)
+		require.NoError(t, perr, st.Contract.Table)
+		require.NotEmpty(t, stmts, st.Contract.Table)
+		named := false
+		for _, s := range stmts {
+			named = named || strings.Contains(s, "CREATE TABLE IF NOT EXISTS "+st.Contract.Table+" (")
+		}
+		assert.True(t, named, "%s: its creating statements name it", st.Contract.Table)
+		created[st.Owner]++
+	}
+	assert.Equal(t, map[string]int{"persist": 1, "agentrun": 3, "watchbill": 2}, created)
 }
