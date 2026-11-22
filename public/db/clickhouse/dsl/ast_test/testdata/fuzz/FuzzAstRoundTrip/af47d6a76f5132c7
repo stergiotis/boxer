@@ -1,0 +1,2 @@
+go test fuzz v1
+string("SET A=0;SET A='';SET A='';SELECT{Id:A}")

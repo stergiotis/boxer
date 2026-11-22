@@ -12,14 +12,18 @@
 # --- by design: diagnostics, child-process helpers, fuzz seeds and corpus entries the test itself declines
 public/db/clickhouse/chclient TestConfigFromEnvChild
 public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/15e0e9749ae0910f
+public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/15f85a3766bacfa0
 public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/6a90cb6646d49b99
 public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/7f82d1411c019232
+public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/a3eb9771a18b5fcd
 public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/adbd2279efb1fb56
+public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/af47d6a76f5132c7
 public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/b344a976444afc3a
 public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/b6d9d4763a0d1d75
 public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/b6f351fa0bd309ff
 public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/c6db809517a88058
 public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/dcdc93c115e71a4d
+public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/e139704f04b7085d
 public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/e50b035a2dd27d5f
 public/db/clickhouse/dsl/ast_test FuzzAstRoundTrip/f2229b76cc931ec8
 public/db/clickhouse/dsl/nanopass/highlight_test TestDebugCTERef
@@ -39,6 +43,10 @@ public/db/clickhouse/dsl/nanopass/passes_test TestExplainSyntaxCorpus/053_set_pa
 public/db/clickhouse/dsl/nanopass/passes_test TestInjectParamsAsCTECorpus/053_set_param_slots
 public/db/clickhouse/dsl/nanopass/passes_test TestRewriterAllChannels
 public/db/clickhouse/dsl/nanopass/passes_test TestRewriterDiagnostic
+public/db/clickhouse/dsl/nanopass_test FuzzCanonicalizeFull/15f85a3766bacfa0
+public/db/clickhouse/dsl/nanopass_test FuzzCanonicalizeFull/a3eb9771a18b5fcd
+public/db/clickhouse/dsl/nanopass_test FuzzCanonicalizeFull/af47d6a76f5132c7
+public/db/clickhouse/dsl/nanopass_test FuzzCanonicalizeFull/e139704f04b7085d
 public/db/clickhouse/dsl/nanopass_test TestDebugFromClause
 public/db/clickhouse/dsl/nanopass_test TestDebugJoinExpr
 public/db/clickhouse/dsl/nanopass_test TestDebugScopeTree

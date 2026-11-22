@@ -1,0 +1,2 @@
+go test fuzz v1
+string("SELECT n.number FROM numbers(1A)A0000 WHERE 000000000%00")

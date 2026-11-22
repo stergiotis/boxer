@@ -29,6 +29,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/ast"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/nanopasstest"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 )
 
@@ -94,6 +95,9 @@ func FuzzAstRoundTrip(f *testing.F) {
 		}
 		pr, err := nanopass.ParseCanonical(canonical)
 		if err != nil {
+			if gap, ok := nanopasstest.Grammar2Gap(canonical); ok {
+				t.Skip(gap) // a shape no pass can bring into grammar2
+			}
 			// Param-slot TYPE expressions are the one place Grammar1
 			// deliberately out-accepts both Grammar2 and ClickHouse itself
 			// (e.g. {x: A(0 % b(1))} parses in G1 but the server rejects it

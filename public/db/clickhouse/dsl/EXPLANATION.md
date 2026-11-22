@@ -197,6 +197,15 @@ must not be "fixed" without re-checking the server:
   unit. (The server parses `INTERVAL` as a column there instead.)
 - Keyword-named param slots (`{date: UInt64}`) parse in Grammar1 but not
   Grammar2 — slot names there are bare IDENTIFIER tokens.
+- Table-function arguments that are expressions other than a literal, an
+  identifier, a function call or a query (`numbers(1 + 1)`,
+  `numbers({n:UInt64})`, `f((0))`) parse in Grammar1, and ClickHouse runs
+  them, but Grammar2's `tableArgExpr` has no expression alternative. The
+  pipeline passes them through, so the canonical form fails
+  `ParseCanonical`. This gap and the previous one close in Grammar2's `.g4`;
+  until then the pipeline fuzz targets skip them through
+  `nanopasstest.Grammar2Gap`, and `TestGrammar2KnownGaps` fails once
+  Grammar2 takes them.
 
 **AST / unparser:**
 
