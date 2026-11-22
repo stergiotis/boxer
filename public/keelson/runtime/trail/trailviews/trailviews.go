@@ -118,9 +118,10 @@ import (
 )
 
 // ViewsVersion is the revision of the views this package composes. Bump it
-// whenever a view's columns or meaning change, so the stamp a deployed view
-// carries tells an operator it predates the build.
-const ViewsVersion = 17
+// whenever a view's columns or meaning change, or a statement that reads it
+// would be answered differently, so the stamp a deployed view carries tells
+// an operator it predates the build.
+const ViewsVersion = 18
 
 // agenticTag marks the views over what the agentic side of keelson writes —
 // model calls and their messages, and what agents did under a grant. The
@@ -837,11 +838,26 @@ func kindViewNames() (names []string) {
 	return names
 }
 
-// createView wraps an expanded SELECT and stamps it. The SELECT is what was
-// expanded; the DDL around it is not part of the grammar the passes read.
+// createView wraps an expanded SELECT, closes it with [viewSettings] and
+// stamps it. The SELECT is what was expanded; the DDL around it is not part
+// of the grammar the passes read.
 func (inst *composer) createView(name string, sel string) (sql string) {
-	return fmt.Sprintf("CREATE OR REPLACE VIEW %s.%s AS\n%s\nCOMMENT %s", inst.database, name, sel, Stamp().Literal())
+	return fmt.Sprintf("CREATE OR REPLACE VIEW %s.%s AS\n%s\nSETTINGS %s\nCOMMENT %s", inst.database, name, sel, viewSettings, Stamp().Literal())
 }
+
+// viewSettings closes every view's SELECT, so it applies to any statement
+// that reads the view, whoever wrote it.
+//
+// read_in_order_use_virtual_row = 0: ClickHouse 26.8 fails a read of these
+// views that filters and orders by the facts timestamp — Code 48, "Method
+// createColumn is not implemented for data type Function(…): While
+// executing VirtualRowTransform" — when the columns it reads are decoded
+// with a lambda; 26.9 runs the same statement. The virtual row is an
+// optimization of the in-order merge of parts, and the read is in order
+// without it. A reader held at readonly = 1 does not get a view's settings
+// (the server reads the view and leaves them out), so such a reader on 26.8
+// sets it in its profile.
+const viewSettings = "read_in_order_use_virtual_row = 0"
 
 // backboneColumns are the facts backbone a data mart passes through, under
 // the facts table's physical names.

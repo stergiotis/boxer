@@ -50,6 +50,10 @@ func TestComposeShape(t *testing.T) {
 		names = append(names, v.Name)
 		require.True(t, strings.HasPrefix(v.Sql, "CREATE OR REPLACE VIEW boxer."+v.Name+" AS\n"), v.Name)
 		require.True(t, strings.HasSuffix(v.Sql, stamp), "every view is stamped: %s", v.Name)
+		// The setting closes the SELECT, where it applies to any statement
+		// that reads the view: ClickHouse 26.8 fails a filtered, ordered
+		// read of a view without it.
+		require.True(t, strings.HasSuffix(v.Sql, "\nSETTINGS read_in_order_use_virtual_row = 0"+stamp), "every view closes with its settings: %s", v.Name)
 		// No semicolon anywhere: a naive statement splitter (chstore's
 		// splitOnSemicolon is one) must not be able to cut a view apart.
 		require.NotContains(t, v.Sql, ";", v.Name)
@@ -187,7 +191,7 @@ func TestFunctionsPrecedeTheViews(t *testing.T) {
 		require.False(t, lwsqlsurface.InNamespace(names[i]), "the LW_ namespace is leeway's: %s", names[i])
 	}
 	require.Equal(t, "CREATE OR REPLACE FUNCTION "+FuncViewsVersion+" AS () -> "+strconv.Itoa(ViewsVersion), fns[3])
-	require.Equal(t, 17, ViewsVersion, "the entity column, the audit entities and the reviews (ADR-0350 §SD2)")
+	require.Equal(t, 18, ViewsVersion, "every view closes with the setting ClickHouse 26.8 needs for a filtered, ordered read")
 
 	views, err := Compose("", "")
 	require.NoError(t, err)
