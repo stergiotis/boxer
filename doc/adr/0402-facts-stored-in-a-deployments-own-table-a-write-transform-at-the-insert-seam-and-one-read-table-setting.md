@@ -501,6 +501,33 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
   serve transformed batches and drop the rows already stored itself, and
   the view would append them to the deployment's table as they come.
 
+### 2026-11-22 — the read relation is also read once
+
+SD4 judged the read relation by its columns as `system.columns` lists
+them. The catalogue lists a view's columns whether or not a `SELECT` from
+it is accepted, so a view could pass the check and fail every read: the
+case met is a view returning the facts table's `LowCardinality` columns
+over numbers, which a server refuses to produce without
+`allow_suspicious_low_cardinality_types` (Code 455). A release run on the
+pinned 26.8 build refused such a view at `CREATE VIEW`; a view that casts
+to those types and was created in a session with the setting on is created
+and then refused at each read, on 26.8 and 26.9 alike.
+
+A relation whose engine computes its rows when read — a view, a Merge —
+is now read once for no row when its facts are gathered
+(`recordstore.ReadTableFacts`, `recordstore.ComputesOnRead`). A failed
+read makes the verdict `incompatible` with the server's refusal as the
+reason (`SchemaVerdict.ReadError`), and for the refusal above the reason
+names the two remedies: the setting closing the view's `SELECT`, or in the
+profile of the user that reads. The
+[how-to](../howto/facts-in-your-own-table.md) shows the first as the
+recipe and says when the second is needed. The probe is one statement per
+such relation per check; a table is not probed.
+
+Not verified: the behaviour of a view that carries the setting under a
+server user held at `readonly = 1` — `clickhouse local` refuses that read,
+and no server was asked.
+
 ## References
 
 - [ADR-0296](./0296-audit-events-as-a-trail-component.md) §SD8, §SD9 — the read table on generated stores and what keeps `boxer.facts` dispatchable.

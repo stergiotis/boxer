@@ -62,6 +62,13 @@ the DDL the generator composes) and its stamp. A live table, read from
 | `absent` | no table | creates it, when it provisions |
 | `unchecked` | the shape could not be read | — |
 
+A relation that computes its rows when read — a view, a Merge over other
+tables — is also read once for no row, since the catalogue lists its
+columns whether or not a `SELECT` from it is accepted; a refused read is
+`incompatible` with the server's refusal as the reason
+([ADR-0402](./0402-facts-stored-in-a-deployments-own-table-a-write-transform-at-the-insert-seam-and-one-read-table-setting.md),
+update of 2026-11-22).
+
 Types are compared with the whitespace outside literals removed; a
 difference only in `LowCardinality` wrappers is a note, since the Arrow
 output the stores ask for decodes both alike. Codecs are not compared.

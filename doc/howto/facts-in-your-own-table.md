@@ -45,6 +45,27 @@ sitting.
 its type; columns beyond those are ignored. `boxer keelsonddl` prints the
 facts table's DDL, which is where the names and types come from.
 
+Close the view's `SELECT` with the setting the facts table is created
+under:
+
+```sql
+CREATE VIEW mydb.facts_view AS
+SELECT … FROM mydb.carrier
+SETTINGS allow_suspicious_low_cardinality_types = 1;
+```
+
+Several facts columns are `LowCardinality` over a number, a type ClickHouse
+refuses to produce unless that setting is on (Code 455,
+`SUSPICIOUS_TYPE_FOR_LOW_CARDINALITY`). Without it the `CREATE VIEW` is
+refused — or, when the session that created the view had the setting on,
+every later read from another session is. The setting inside the view
+travels with it and needs nothing from the server's configuration. It does
+not help a user held at `readonly = 1`, who may not change a setting even
+through a view; for such a user set it in the user's settings profile
+instead, which also covers a view written without the clause. Observed with
+`clickhouse local` 26.8 and 26.9, not against a server with a `readonly = 1`
+user.
+
 **The carrier's key.** Partition and order the carrier by the column your
 view returns as the facts timestamp, as stored, not by an expression of it.
 The [read-cost trial](../trials/facts-read-through-a-view/README.md) states
@@ -120,8 +141,9 @@ exercised.
    (`chstore.RowIds`, `hostboot.Options.FactsRowIds`).
 7. **Start the deployment's binaries.** Setup creates no facts table and
    still creates the `boxer` database, the lease table and the SQL read
-   surface. The schema check judges the view by its columns; a column it
-   lacks or returns under another type is reported at start and in
+   surface. The schema check judges the view by its columns and by one
+   read of it that returns no row; a column it lacks or returns under
+   another type, or a read the server refuses, is reported at start and in
    `keelson('schema_tables')`, and fails the start under
    `BOXER_SCHEMA_STRICT`.
 
