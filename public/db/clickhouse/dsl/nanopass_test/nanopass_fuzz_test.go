@@ -137,6 +137,9 @@ func FuzzCanonicalizeFull(f *testing.F) {
 		if _, err := nanopass.Parse(sql); err != nil {
 			t.Skip() // only Grammar1-parseable inputs are in-contract
 		}
+		if nanopasstest.ContainsEmptyIdentifier(sql) {
+			t.Skip() // grammar1 takes an empty identifier, ClickHouse does not
+		}
 		out, err := pipeline.Run(sql)
 		if err != nil {
 			if strings.Contains(err.Error(), "panicked") {

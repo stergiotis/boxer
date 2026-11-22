@@ -25,35 +25,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/ast"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/nanopasstest"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 )
-
-// containsEmptyIdentifier reports whether sql contains an empty quoted or
-// backquoted identifier (`""` / “). Grammar1's IDENTIFIER lexer rule
-// permits a zero-length quoted name, but ClickHouse rejects empty
-// identifiers in every position (column, alias, window reference, table —
-// verified against the server). Such input is G1-over-accepted and has no
-// meaningful round trip, so the fuzzer skips it.
-func containsEmptyIdentifier(sql string) bool {
-	lexer := grammar1.NewClickHouseLexer(antlr.NewInputStream(sql))
-	lexer.RemoveErrorListeners()
-	for {
-		tok := lexer.NextToken()
-		if tok.GetTokenType() == antlr.TokenEOF {
-			return false
-		}
-		if tok.GetTokenType() == grammar1.ClickHouseLexerIDENTIFIER {
-			if nanopass.DecodeIdentifier(tok.GetText()) == "" {
-				return true
-			}
-		}
-	}
-}
 
 const fuzzMaxInput = 4 << 10
 
@@ -83,7 +59,7 @@ func FuzzAstRoundTrip(f *testing.F) {
 		if _, err := nanopass.Parse(sql); err != nil {
 			t.Skip() // only Grammar1-parseable inputs are in-contract
 		}
-		if containsEmptyIdentifier(sql) {
+		if nanopasstest.ContainsEmptyIdentifier(sql) {
 			t.Skip() // empty identifiers are G1-over-accepted; server rejects them
 		}
 		canonical, err := fullPipeline(sql)

@@ -44,6 +44,7 @@ public/db/clickhouse/dsl/nanopass/passes_test TestInjectParamsAsCTECorpus/053_se
 public/db/clickhouse/dsl/nanopass/passes_test TestRewriterAllChannels
 public/db/clickhouse/dsl/nanopass/passes_test TestRewriterDiagnostic
 public/db/clickhouse/dsl/nanopass_test FuzzCanonicalizeFull/15f85a3766bacfa0
+public/db/clickhouse/dsl/nanopass_test FuzzCanonicalizeFull/51e80f1e4f0c0273
 public/db/clickhouse/dsl/nanopass_test FuzzCanonicalizeFull/a3eb9771a18b5fcd
 public/db/clickhouse/dsl/nanopass_test FuzzCanonicalizeFull/af47d6a76f5132c7
 public/db/clickhouse/dsl/nanopass_test FuzzCanonicalizeFull/e139704f04b7085d
