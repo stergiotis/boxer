@@ -441,6 +441,8 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 	if err = registration.Err(); err != nil {
 		return nil, eh.Errorf("hostboot: refusing to start; registrations failed:\n%w", err)
 	}
+	// Before the facts store sends its first statement (ADR-0403).
+	installStatementPasses()
 	// A run row that cannot carry the take it was started for would pass
 	// for another run's (ADR-0344 §SD5).
 	take, err := runinfo.BenchTakeFromEnv()
