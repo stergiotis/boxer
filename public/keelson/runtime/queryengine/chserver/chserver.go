@@ -188,8 +188,14 @@ func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st qu
 		}
 		reqURL = reqURL + sep + qs.Encode()
 	}
-	// The engine's exit point (ADR-0367 §SD1).
-	sql, err := fairlead.Lead(ctx, fairlead.ExitServer, "chserver.deliver", req.SQL)
+	// The engine's exit point (ADR-0367 §SD1), told which task supplied the
+	// text (ADR-0403). The mark goes on the context Lead sees and nowhere
+	// else: the request below and its cancellation are the caller's.
+	leadCtx := ctx
+	if req.Task != "" {
+		leadCtx = fairlead.WithTask(ctx, req.Task)
+	}
+	sql, err := fairlead.Lead(leadCtx, fairlead.ExitServer, "chserver.deliver", req.SQL)
 	if err != nil {
 		return
 	}
@@ -311,8 +317,11 @@ func (inst *Engine) Kill(ctx context.Context, runID string) (err error) {
 		return
 	}
 	// The id is interpolated as a literal, which is safe only because the
-	// charset check above rejected everything a quote could hide in.
-	sql, err := fairlead.Lead(ctx, fairlead.ExitServer, "chserver.kill", "KILL QUERY WHERE query_id='"+runID+"' ASYNC")
+	// charset check above rejected everything a quote could hide in. The
+	// text is this adapter's own, so it is led without a task's mark even
+	// when the caller's context carries one (ADR-0403): stopping a task's
+	// run is not a statement the task wrote.
+	sql, err := fairlead.Lead(fairlead.WithTask(ctx, ""), fairlead.ExitServer, "chserver.kill", "KILL QUERY WHERE query_id='"+runID+"' ASYNC")
 	if err != nil {
 		return
 	}

@@ -107,6 +107,17 @@ type Request struct {
 	// registry lookup, not a guess over SQL text — and rides here so the
 	// engine can refuse independently of whatever placed the run.
 	Sensitivity SensitivityE
+	// Task is the agent task whose call supplied the statement's text, empty
+	// for the person's statement and for one the caller composed itself — a
+	// write an app makes on a task's behalf included (ADR-0403).
+	//
+	// It is declared by whoever knows where the text came from, and rides
+	// here so the engine's exit point can hand it to the fairlead
+	// ([github.com/stergiotis/boxer/public/db/fairlead.WithTask]), where a
+	// host-installed pass refuses what it must not send, independently of
+	// the checks the caller made. An engine whose request crosses a wire
+	// carries it across. Empty leaves whatever mark the context carries.
+	Task string
 	// Cacheable is the caller asserting that the statement is
 	// deterministic, so an engine holding a result cache may answer from it
 	// instead of executing. The assertion is the caller's to get right —
