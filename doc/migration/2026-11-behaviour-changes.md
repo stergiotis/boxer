@@ -126,6 +126,17 @@ relied on the old behaviour.
   deduplication window and a stamp comment; a retried insert carries the
   token of its first attempt, so a wrapper executor must pass
   `InsertArrowWith` through (ADR-0387).
+- **`schema apply` names what it may run.** `--yes` is removed: pass
+  `--alter` where a script passed `--yes`, and `--create` to create a table
+  that does not exist where its declaration carries the statements. The
+  command then judges the tables again and exits 0 only when all are in
+  line (3 pending, 4 refused, 5 unreadable), as the new `schema check`
+  does; a script that ran `apply` and ignored a table left migratable now
+  sees a non-zero exit
+  ([ADR-0387](../adr/0387-what-a-binary-does-when-a-stored-table-is-older-or-newer-than-its-schema.md),
+  update of 2026-11-22).
+
+  contract: cli/boxer schema apply --yes
 - **ClickHouse floor.** The facts store, `storeexec.Connect` and the
   `clickhouse local` pool refuse a server or binary older than 26.8
   (`chversion.Floor`; no ADR beyond the README's stated floor).

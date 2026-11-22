@@ -1,10 +1,13 @@
 package schemaplan
 
 import (
+	"context"
+	"iter"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -157,4 +160,78 @@ func TestADifferingLayoutIsNotStamped(t *testing.T) {
 	assert.True(t, p.Verdict.LayoutDiffers)
 	assert.Equal(t, []string{"ALTER TABLE `boxer`.`persiststate` MODIFY SETTING non_replicated_deduplication_window = 1000"}, p.Statements)
 	assert.Contains(t, strings.Join(p.Verdict.Notes, "\n"), "not stamped")
+}
+
+// absentExec answers every read with no row, as a server that holds none of
+// the tables asked for, and keeps the statements it is told to run.
+type absentExec struct{ ran []string }
+
+func (inst *absentExec) Exec(_ context.Context, sql string) error {
+	inst.ran = append(inst.ran, sql)
+	return nil
+}
+
+func (inst *absentExec) QueryArrow(context.Context, string) iter.Seq2[arrow.RecordBatch, error] {
+	return func(func(arrow.RecordBatch, error) bool) {}
+}
+
+func (inst *absentExec) InsertArrow(context.Context, string, []arrow.RecordBatch) error { return nil }
+
+// A table that does not exist is refused for a bare contract and planned
+// for a declaration that can create it; creating is a kind of its own, and
+// the altering Apply runs none of it.
+func TestAnAbsentTableIsCreatedOnlyThroughItsDeclaration(t *testing.T) {
+	ctx := context.Background()
+	c := recordstore.TableContract{Kind: "t", Table: "db.t", Columns: []recordstore.ColumnSpec{{Name: "a", Type: "UInt8"}}}
+	exec := &absentExec{}
+
+	bare := PlanStored(ctx, exec, recordstore.StoredTable{Owner: "o", Contract: c})
+	require.True(t, bare.IsRefused())
+	assert.Equal(t, OutcomeBlocked, bare.Outcome())
+
+	creates := []string{"CREATE DATABASE IF NOT EXISTS db", "CREATE TABLE IF NOT EXISTS db.t (a UInt8) ENGINE = MergeTree ORDER BY a"}
+	p := PlanStored(ctx, exec, recordstore.StoredTable{Owner: "o", Contract: c, Provision: func(ctx context.Context, e recordstore.ExecutorI) error {
+		for _, s := range creates {
+			if err := e.Exec(ctx, s); err != nil {
+				return err
+			}
+		}
+		return nil
+	}})
+	require.False(t, p.IsRefused())
+	assert.Equal(t, "o", p.Owner)
+	assert.Equal(t, creates, p.Creates)
+	assert.Empty(t, p.Statements)
+	assert.Equal(t, OutcomePending, p.Outcome())
+	assert.Empty(t, exec.ran, "planning runs nothing")
+
+	n, err := Apply(ctx, exec, p)
+	require.NoError(t, err)
+	assert.Zero(t, n)
+	assert.Empty(t, exec.ran, "the altering apply creates nothing")
+
+	n, err = ApplyCreates(ctx, exec, p)
+	require.NoError(t, err)
+	assert.Equal(t, 2, n)
+	assert.Equal(t, creates, exec.ran)
+}
+
+func TestOutcome(t *testing.T) {
+	v := func(verdict recordstore.SchemaVerdictE) recordstore.SchemaVerdict {
+		return recordstore.SchemaVerdict{Table: "db.t", Verdict: verdict}
+	}
+	for name, tc := range map[string]struct {
+		plan Plan
+		want OutcomeE
+	}{
+		"ok":                        {Plan{Verdict: v(recordstore.SchemaVerdictOk)}, OutcomeInSync},
+		"ok, the stamp is pending":  {Plan{Verdict: v(recordstore.SchemaVerdictOk), Statements: []string{"ALTER"}}, OutcomePending},
+		"columns to add":            {Plan{Verdict: v(recordstore.SchemaVerdictMigratable), Statements: []string{"ALTER"}}, OutcomePending},
+		"a type changed":            {Plan{Verdict: v(recordstore.SchemaVerdictIncompatible), Refused: []string{"r"}}, OutcomeBlocked},
+		"refused, a window offered": {Plan{Verdict: v(recordstore.SchemaVerdictMigratable), Statements: []string{"ALTER"}, Refused: []string{"r"}}, OutcomeBlocked},
+		"unreadable":                {Plan{Verdict: v(recordstore.SchemaVerdictUnchecked), Refused: []string{"r"}}, OutcomeUnchecked},
+		"not ok, nothing planned":   {Plan{Verdict: v(recordstore.SchemaVerdictMigratable)}, OutcomeBlocked},
+	} {
+		assert.Equal(t, tc.want, tc.plan.Outcome(), name)
+	}
 }

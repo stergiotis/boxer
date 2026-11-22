@@ -310,6 +310,39 @@ aspect-only rename keeps the column's values under the new name, and the
 column carries the generated codec. A type a generator adds later is still
 judged only against the spellings the server gives it then.
 
+### 2026-11-22 — declared tables, a check that exits, and kinds of statement named
+
+*Not yet reviewed by the owner.* Three changes to the CLI of SD3, made so a
+deployment can run it unattended and say what it allows.
+
+- **Tables are declared.** A package registers the tables it stores records
+  in with `recordstore.DeclareStoredTables`, each under an owner and
+  optionally with the function that creates it. `boxer schema` covers
+  boxer's own tables and every declared one; `--owner` selects by owner as
+  `--table` does by name. A binary downstream gets its tables into the same
+  command by linking the packages that declare them.
+- **`schema check`.** It prints what `plan` prints and exits 0 only when
+  every selected table is in line: 3 when statements are pending, 4 when a
+  change is refused, 5 when a table could not be read. `--json` prints the
+  report (`boxer.schema-report/1`) with each table's outcome, `in-sync`,
+  `pending`, `blocked` or `unchecked`, and verdicts by name. With `--create`
+  or `--alter` it also accepts a table an apply of those kinds would bring
+  in line, so it answers, without running anything, whether that apply
+  would end in line.
+- **`schema apply` names what it may run.** `--yes` is gone. `--alter` runs
+  the ALTER statements of SD3; `--create` runs the statements that create a
+  table that does not exist, for a declaration that carries them, and
+  changes no table that exists. Without either the command refuses. It then
+  judges the tables again and exits as `check` does, so `apply --create` on
+  a server whose table needs an ALTER ends with 3 and has altered nothing.
+
+An absent table of boxer's own is still refused: none of boxer's
+declarations carries a creating function yet, and the store that owns the
+table creates it when it starts. No host applies a plan on its own; the
+alternative rejected above, auto-applying at boot, stays rejected. A unit
+that runs `schema apply` before its service starts does so because its
+deployment description says so.
+
 ## References
 
 - [ADR-0100](./0100-recordstore-generated-leeway-clickhouse-store.md) — the generated record store.

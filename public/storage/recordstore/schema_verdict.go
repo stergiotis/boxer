@@ -53,6 +53,25 @@ func (inst SchemaVerdictE) String() string {
 	return "invalid"
 }
 
+// MarshalText writes the verdict by its name, so a report in JSON reads
+// without the numbering.
+func (inst SchemaVerdictE) MarshalText() (text []byte, err error) {
+	text = []byte(inst.String())
+	return
+}
+
+// UnmarshalText reads a verdict by its name.
+func (inst *SchemaVerdictE) UnmarshalText(text []byte) (err error) {
+	for _, v := range AllSchemaVerdicts {
+		if v.String() == string(text) {
+			*inst = v
+			return
+		}
+	}
+	err = eb.Build().Str("verdict", string(text)).Errorf("unknown schema verdict")
+	return
+}
+
 // StampAgeE relates a table's COMMENT stamp to the one this build writes.
 type StampAgeE uint8
 
@@ -85,6 +104,24 @@ func (inst StampAgeE) String() string {
 		return "other"
 	}
 	return "invalid"
+}
+
+// MarshalText writes the age by its name.
+func (inst StampAgeE) MarshalText() (text []byte, err error) {
+	text = []byte(inst.String())
+	return
+}
+
+// UnmarshalText reads an age by its name.
+func (inst *StampAgeE) UnmarshalText(text []byte) (err error) {
+	for _, a := range []StampAgeE{StampAgeUnstamped, StampAgeSame, StampAgeOlder, StampAgeNewer, StampAgeOther} {
+		if a.String() == string(text) {
+			*inst = a
+			return
+		}
+	}
+	err = eb.Build().Str("age", string(text)).Errorf("unknown stamp age")
+	return
 }
 
 // TableContract is what a store declares about the table it binds: enough

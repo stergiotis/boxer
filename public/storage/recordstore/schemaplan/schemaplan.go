@@ -7,8 +7,14 @@
 // generating schema. Anything else is refused with the reason; doc/migration
 // holds the recipes for those.
 //
-// It only derives. `boxer schema plan` prints a plan and `boxer schema
-// apply` executes one; no host applies a plan on its own.
+// A table that does not exist is planned from its declaration
+// (recordstore.StoredTable): the statements that create it, when the
+// declaration can.
+//
+// It only derives. `boxer schema plan` prints a plan, `boxer schema check`
+// answers whether every table is in line, and `boxer schema apply` executes
+// the kinds of statement it is told to, --create and --alter; no host
+// applies a plan on its own.
 package schemaplan
 
 import (
@@ -27,7 +33,13 @@ const MigrationDocs = "doc/migration/README.md"
 
 // Plan is the outcome for one table.
 type Plan struct {
+	// Owner is the subsystem that declared the table; empty for a plan made
+	// from a bare contract.
+	Owner   string                    `json:"owner,omitempty"`
 	Verdict recordstore.SchemaVerdict `json:"verdict"`
+	// Creates make a table that does not exist, and its database, in order;
+	// set only for an absent table whose declaration can create it.
+	Creates []string `json:"creates,omitempty"`
 	// Statements bring the table in line, in order; empty when nothing is
 	// to do or the plan is refused.
 	Statements []string `json:"statements,omitempty"`
@@ -38,6 +50,43 @@ type Plan struct {
 
 // IsRefused reports whether the plan declines a change the table needs.
 func (inst Plan) IsRefused() bool { return len(inst.Refused) > 0 }
+
+// OutcomeE is where a plan leaves its table.
+type OutcomeE string
+
+const (
+	// OutcomeInSync: the table is as this build reads and writes it, and
+	// the plan holds no statement.
+	OutcomeInSync OutcomeE = "in-sync"
+	// OutcomePending: the plan's statements bring the table in line; nothing
+	// is refused.
+	OutcomePending OutcomeE = "pending"
+	// OutcomeBlocked: the table needs a change the plan declines to make.
+	OutcomeBlocked OutcomeE = "blocked"
+	// OutcomeUnchecked: the table could not be read, so nothing is known.
+	OutcomeUnchecked OutcomeE = "unchecked"
+)
+
+// Outcome classifies the plan: unchecked when the table could not be read,
+// blocked when a needed change is refused, pending when statements remain,
+// and in sync otherwise.
+func (inst Plan) Outcome() (o OutcomeE) {
+	switch {
+	case inst.Verdict.Verdict == recordstore.SchemaVerdictUnchecked:
+		o = OutcomeUnchecked
+	case inst.IsRefused():
+		o = OutcomeBlocked
+	case len(inst.Creates) > 0 || len(inst.Statements) > 0:
+		o = OutcomePending
+	case inst.Verdict.IsOk():
+		o = OutcomeInSync
+	default:
+		// A verdict that is not ok with nothing offered and nothing refused
+		// is a change nobody planned.
+		o = OutcomeBlocked
+	}
+	return
+}
 
 // Derive plans c's table from facts.
 func Derive(c recordstore.TableContract, facts recordstore.TableFacts) (p Plan) {
@@ -133,8 +182,40 @@ func PlanTable(ctx context.Context, exec recordstore.ExecutorI, c recordstore.Ta
 	return Derive(c, facts)
 }
 
-// Apply executes a plan's statements in order and stops at the first that
-// fails. A refused plan's statements are not run.
+// PlanStored reads t's table through exec and derives its plan. For a table
+// that does not exist and that t can create, the plan holds the creating
+// statements in place of the refusal a bare contract gets.
+func PlanStored(ctx context.Context, exec recordstore.ExecutorI, t recordstore.StoredTable) (p Plan) {
+	p = PlanTable(ctx, exec, t.Contract)
+	p.Owner = t.Owner
+	if p.Verdict.Verdict != recordstore.SchemaVerdictAbsent || t.Provision == nil || t.Contract.ColumnsOnly {
+		return
+	}
+	creates, err := recordstore.ProvisioningSQL(ctx, t.Provision)
+	if err != nil {
+		p.Refused = []string{"the table does not exist, and the statements that create it cannot be listed: " + err.Error()}
+		return
+	}
+	p.Refused, p.Creates = nil, creates
+	return
+}
+
+// ApplyCreates executes a plan's creating statements in order and stops at
+// the first that fails. They create what is missing and change nothing that
+// exists, so running them again is harmless.
+func ApplyCreates(ctx context.Context, exec recordstore.ExecutorI, p Plan) (applied int, err error) {
+	for _, stmt := range p.Creates {
+		if err = exec.Exec(ctx, stmt); err != nil {
+			err = eb.Build().Str("table", p.Verdict.Table).Int("statement", applied+1).Str("sql", stmt).Errorf("schema apply: create: %w", err)
+			return
+		}
+		applied++
+	}
+	return
+}
+
+// Apply executes a plan's altering statements in order and stops at the
+// first that fails. A refused plan's statements are not run.
 func Apply(ctx context.Context, exec recordstore.ExecutorI, p Plan) (applied int, err error) {
 	if p.IsRefused() {
 		return

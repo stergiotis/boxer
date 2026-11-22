@@ -30,9 +30,9 @@ nothing. A host shows the same verdicts as `keelson('schema_tables')`.
 | Verdict | Meaning | What to do |
 |---|---|---|
 | `ok` | every generated column present with its type; extra columns are read past | nothing; the plan may still offer the deduplication window and the stamp |
-| `migratable` | generated columns missing, or present under an older aspect spelling | `boxer schema apply --yes`, or run the printed SQL by hand |
+| `migratable` | generated columns missing, or present under an older aspect spelling | `boxer schema apply --alter`, or run the printed SQL by hand |
 | `incompatible` | a column the store reads has another type, or is computed | a recipe in this directory |
-| `absent` | no table | nothing; the owning store creates it when it starts |
+| `absent` | no table | nothing where the owning store creates it when it starts; `boxer schema apply --create` where the plan prints the creating statements |
 | `unchecked` | the table's shape could not be read | the reason is printed |
 
 `apply` refuses a table whose plan is refused and stops at the first statement

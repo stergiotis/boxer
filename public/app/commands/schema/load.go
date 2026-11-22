@@ -22,6 +22,7 @@ const (
 	flagUntil      = "until"
 	flagBlockRows  = "block-rows"
 	flagAppend     = "append"
+	flagYes        = "yes"
 )
 
 // loadCommand is `schema load`: facts-shaped rows of another relation, or
