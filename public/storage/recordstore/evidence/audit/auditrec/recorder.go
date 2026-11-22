@@ -12,6 +12,7 @@ import (
 	"github.com/zeebo/xxh3"
 
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
@@ -59,6 +60,8 @@ type Counts struct {
 }
 
 type config struct {
+	// ids mints row ids; nil derives them from the row's key.
+	ids            identifier.IdGeneratorI
 	forwarder      audit.ForwarderI
 	forwardQueue   int
 	forwardTimeout time.Duration
@@ -111,6 +114,14 @@ func WithOrigin(app string, instance uint64) Option {
 // WithOriginBy says how an event's origin was established when the context
 // carries no attestation; the default, self, is a process stating its own.
 func WithOriginBy(o evidence.OriginByE) Option { return func(c *config) { c.originBy = o } }
+
+// WithRowIds makes the recorder draw each row's id from ids instead of
+// deriving it from the row's key: a row's id then names the row, and its
+// key, which stays its natural key, names what it is about. It is what a
+// recorder over a table whose every row carries a minted id is given
+// (the facts table's generator, for the trail). Without it, or with nil,
+// an id is the hash of the key, as before.
+func WithRowIds(ids identifier.IdGeneratorI) Option { return func(c *config) { c.ids = ids } }
 
 // WithRequired makes a write-ahead whose rows did not land an error
 // wrapping ErrNotDurable, which the caller must not act past.
@@ -366,12 +377,30 @@ func (inst *Recorder[B]) WriteAhead(ctx context.Context) (durable bool, err erro
 // add is handed the batch and the row's id, buffers the row, and returns
 // its canonical item, which the batch's seal names. It is how a store's
 // kinds other than the audit event share the recorder's buffer, seals and
-// backlog. id is the hash of key; zero when nothing was recorded.
+// backlog. id is the row's: minted under [WithRowIds], else the hash of
+// key; zero when nothing was recorded.
 func (inst *Recorder[B]) Write(ctx context.Context, key string, at time.Time, add func(b B, id uint64) (item []byte, err error)) (id uint64, err error) {
 	if inst == nil {
 		return 0, nil
 	}
-	return inst.write(at, xxh3.HashString(key), false, add, option.None[audit.Event]())
+	id, err = inst.rowId(ctx, key)
+	if err != nil {
+		return 0, err
+	}
+	return inst.write(at, id, false, add, option.None[audit.Event]())
+}
+
+// rowId is the id of the row keyed key: minted from the configured
+// generator, or the hash of key when the recorder has none.
+func (inst *Recorder[B]) rowId(ctx context.Context, key string) (id uint64, err error) {
+	if inst.cfg.ids == nil {
+		return xxh3.HashString(key), nil
+	}
+	t, _, err := inst.cfg.ids.GetId(ctx, []byte(key))
+	if err != nil {
+		return 0, eb.Build().Str("key", key).Errorf("auditrec: row id: %w", err)
+	}
+	return t.Value(), nil
 }
 
 // writeEvent buffers an audit event under a key of this run. own is set
@@ -379,7 +408,10 @@ func (inst *Recorder[B]) Write(ctx context.Context, key string, at time.Time, ad
 func (inst *Recorder[B]) writeEvent(ctx context.Context, at time.Time, o audit.Origin, row audit.AuditEvent, own bool) (err error) {
 	at = at.UTC()
 	key := "event|" + row.Domain + "|" + row.Action + "|" + strconv.FormatUint(row.Subject, 10) + "|" + inst.unique(at)
-	id := xxh3.HashString(key)
+	id, err := inst.rowId(ctx, key)
+	if err != nil {
+		return
+	}
 	o.Id = id
 	row.Id, row.Kind = id, "auditEvent"
 	ev := audit.Event{Id: id, At: at, Origin: o, Row: row}
@@ -514,7 +546,10 @@ func (inst *Recorder[B]) seal(ctx context.Context, b *heldBatch[B]) (err error) 
 	}
 	at := time.Now().UTC()
 	key := "seal|" + inst.unique(at)
-	id := xxh3.HashString(key)
+	id, err := inst.rowId(ctx, key)
+	if err != nil {
+		return eh.Errorf("auditrec: seal: %w", err)
+	}
 	spec := SealSpec{Scheme: inst.scheme, Stream: inst.run, Prev: inst.lastSeal.Id, PrevDigest: inst.lastSeal.Digest, Rows: b.sealed}
 	digest, err := b.batch.Seal(ctx, id, at, key, audit.Origin{Id: id, Run: inst.run}, spec)
 	if err != nil {

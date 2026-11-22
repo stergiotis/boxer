@@ -15,6 +15,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/stergiotis/boxer/public/identity/identgen/leased"
+	"github.com/stergiotis/boxer/public/identity/identgen/leased/memalloc"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
@@ -168,4 +172,50 @@ func TestRetriedBatchIsNotAFork(t *testing.T) {
 	assert.Empty(t, unnamed)
 	assert.Empty(t, unanchored)
 	assert.Len(t, anchors.All(), 1)
+}
+
+// With the facts table's id generator the trail's rows carry minted ids —
+// events, calls, messages and the seals alike — each its own, with the key
+// as the natural key; and the seals, which name row ids, hold over them as
+// they hold over derived ones (ADR-0405 §SD1).
+func TestTheTrailMintsItsRowIds(t *testing.T) {
+	exec, ctx := localFacts(t)
+	const tag identifier.TagValue = 57314
+	keys, err := leased.NewSequence(memalloc.NewAllocator(), tag, 64)
+	require.NoError(t, err)
+	rec := trail.NewRecorder(exec, "run-mint", zerolog.Nop(), trail.WithAnchors(anchor.NewMemStore()), trail.WithRowIds(keys))
+	t.Cleanup(rec.Close)
+	e := trail.AuditEvent{Domain: "dmdm", Action: "vault-resolve", Outcome: trail.OutcomeOk, PrincipalBy: trail.PrincipalByNone, Subject: 7, Retention: "disclosure"}
+	require.NoError(t, rec.Event(ctx, time.Now(), trail.Context{Origin: rec.OriginOf("apps/dmdm", 1)}, e))
+	require.NoError(t, rec.LlmCall(ctx, time.Now(), trail.Context{}, trail.LlmCall{CallId: "c1"}))
+	// The same call id again: once the same id, now another row.
+	require.NoError(t, rec.LlmCall(ctx, time.Now(), trail.Context{}, trail.LlmCall{CallId: "c1"}))
+	require.NoError(t, rec.Flush(ctx))
+
+	seen := map[uint64]string{}
+	for r, qerr := range exec.QueryArrow(ctx, "SELECT `id:id:u64:47::0:` AS id, `id:naturalKey:y:4::0:` AS nk FROM boxer.facts ORDER BY id SETTINGS output_format_arrow_string_as_string=1") {
+		require.NoError(t, qerr)
+		ids := r.Column(0).(*array.Uint64)
+		for i := range int(r.NumRows()) {
+			id := ids.Value(i)
+			assert.Equal(t, tag, identifier.TaggedId(id).GetTag().GetValue(), "id %d is minted from the stream", id)
+			_, dup := seen[id]
+			assert.False(t, dup, "an id names one row")
+			seen[id] = r.Column(1).(*array.String).Value(i)
+		}
+		r.Release()
+	}
+	require.Len(t, seen, 4, "the event, the two call rows and the seal")
+	calls := 0
+	for _, nk := range seen {
+		if nk == "c1" {
+			calls++
+		}
+	}
+	assert.Equal(t, 2, calls, "the natural key is the row's key, shared by the two rows of one call")
+
+	broken, unnamed, _, err := rec.VerifySeals(ctx, "run-mint")
+	require.NoError(t, err)
+	assert.Equal(t, evidence.SealBreak{}, broken)
+	assert.Empty(t, unnamed)
 }

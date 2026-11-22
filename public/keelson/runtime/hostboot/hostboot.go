@@ -688,7 +688,10 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	// It flushes on an interval too: the bus requests it records are rows
 	// nothing asks to land.
 	rt.Trail = trail.NewRecorder(rt.PersistExec, runId, logger, trail.WithOriginBy(evidence.OriginByHost), trail.WithAnchors(rt.Anchors),
-		trail.WithFlushInterval(trailFlushInterval))
+		trail.WithFlushInterval(trailFlushInterval),
+		// Every row of the facts table carries an id minted from its
+		// stream (ADR-0405): the trail mints from the facts store's.
+		trail.WithRowIds(chstore.RowIdsOf(rt.Facts)))
 	rt.onClose(rt.Trail.Close)
 	// The settings the trail starts under, as its first row: the baseline
 	// its later rows are read against (ADR-0296, the Update of 2026-10-31).

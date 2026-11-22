@@ -3,6 +3,7 @@ package trail
 import (
 	"context"
 	"encoding/hex"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"iter"
 	"strconv"
 	"sync/atomic"
@@ -88,7 +89,9 @@ type recorderConfig struct {
 	forwarder     audit.ForwarderI
 	originBy      evidence.OriginByE
 	anchors       anchor.StoreI
-	maxBacklog    int
+	// ids mints row ids from the facts table's stream; nil derives them.
+	ids        identifier.IdGeneratorI
+	maxBacklog int
 }
 
 // Counts are the recorder's counters (ADR-0296 §SD4), over every verb:
@@ -158,6 +161,15 @@ func WithOriginBy(o evidence.OriginByE) RecorderOption {
 	return func(inst *Recorder) { inst.cfg.originBy = o }
 }
 
+// WithRowIds hands the recorder the facts table's id generator
+// (chstore.RowIdsOf), from which every row's id is minted (ADR-0405 §SD1);
+// the row's key stays its natural key. A recorder given none — a nil
+// generator included — derives each id from the key, as a recorder did
+// before that decision.
+func WithRowIds(ids identifier.IdGeneratorI) RecorderOption {
+	return func(inst *Recorder) { inst.cfg.ids = ids }
+}
+
 // WithForwarder attaches f (ADR-0296 §SD6). The prompt path hands f each
 // durable batch's audit events, on a goroutine of the recorder's own,
 // behind a queue of DefaultForwardQueue batches. The backstop is
@@ -209,6 +221,9 @@ func NewRecorder(exec recordstore.ExecutorI, run string, log zerolog.Logger, opt
 	}
 	if inst.cfg.anchors != nil {
 		ropts = append(ropts, auditrec.WithAnchors(inst.cfg.anchors, ""))
+	}
+	if inst.cfg.ids != nil {
+		ropts = append(ropts, auditrec.WithRowIds(inst.cfg.ids))
 	}
 	// A nil interface, not a nil *auditStore, is a recorder without a store.
 	var st auditrec.StoreI[*auditBatch]

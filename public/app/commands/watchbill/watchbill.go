@@ -25,6 +25,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/coveragebus"
@@ -40,6 +41,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/runinfo"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/factsschema"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 )
@@ -347,7 +349,15 @@ func startCoverageTrail(ctx context.Context, exec recordstore.ExecutorI, runInst
 	pub := bus.NewClient(coveragebus.ServiceAppId, []app.SubjectFilter{
 		{Pattern: coveragebus.SubjectWildcard, Direction: app.CapDirectionPub},
 	})
-	rec := trail.NewRecorder(exec, runInst.RunId, logger, trail.WithOriginBy(evidence.OriginBySelf))
+	// The trail's rows carry ids minted from the facts table's stream
+	// (ADR-0405); a generator that cannot be built leaves them derived.
+	var rowIds identifier.IdGeneratorI
+	if gen, gerr := chstore.NewRowIdGenerator(exec, chstore.Config{Database: factsschema.DatabaseName}); gerr == nil {
+		rowIds = gen
+	} else {
+		logger.Warn().Err(gerr).Msg("watchbill: no row id generator for the coverage trail; its rows' ids are derived from their keys")
+	}
+	rec := trail.NewRecorder(exec, runInst.RunId, logger, trail.WithOriginBy(evidence.OriginBySelf), trail.WithRowIds(rowIds))
 	covTrail := covtrail.New(ctx, covtrail.Options{Trail: rec, Run: runInst, Log: logger})
 	sampler, stopSampler, err := covscrape.StartCoverageSampler(ctx, pub, covscrape.DefaultHostToken(), interval, logger, covTrail.OnUpdate)
 	if err != nil {
