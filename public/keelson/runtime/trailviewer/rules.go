@@ -94,10 +94,11 @@ var Rules = []Rule{
 	{Name: RuleGrantWidened, Description: "a grant widened during its task",
 		Predicate: "{kind} = " + sqlString(kindAgentGrant) + " AND {status} = " + sqlString(trail.GrantEventWidened),
 		Reason:    "concat('grant of task ', {task}, ' widened')"},
-	{Name: RuleTrailRow, Description: "the trail's own rows: a gap, an invalid row, the recorder's configuration, a ditch",
+	{Name: RuleTrailRow, Description: "the trail's own rows: a gap, an invalid row, the recorder's configuration, a ditch, a span held for a store that had not opened",
 		Predicate: "{kind} = " + sqlString(kindAuditEvent) + " AND {subject} IN " + sqlList(
 			audit.TrailDomain+"."+audit.ActionAuditGap, audit.TrailDomain+"."+audit.ActionAuditInvalid,
-			audit.TrailDomain+"."+audit.ActionAuditConfig, audit.TrailDomain+"."+audit.ActionAuditDitch),
+			audit.TrailDomain+"."+audit.ActionAuditConfig, audit.TrailDomain+"."+audit.ActionAuditDitch,
+			audit.TrailDomain+"."+audit.ActionAuditHeld),
 		Reason: "concat({subject}, ' row')"},
 	{Name: RuleUnsealed, Description: "a row of a writer run whose chain is broken, forks, or has rows no seal names",
 		Held: "the row's writer run reads broken, fork or gap on the evidence line; computed from the verdict lines the window holds"},
