@@ -106,9 +106,6 @@ const (
 	// DefaultFactsPingTimeout is how long the facts store waits for ClickHouse
 	// before falling back to memory.
 	DefaultFactsPingTimeout = 2 * time.Second
-	// persistOpenTimeout bounds the persist store backend's DDL over HTTP: a
-	// server that answered the ping and then stalls must not hang boot.
-	persistOpenTimeout = 15 * time.Second
 	// trailFlushInterval is how often the host's trail lands rows nothing
 	// asked to land, such as bus requests; it bounds both their delay and
 	// the seals they add, one per flush that lands rows.
@@ -118,6 +115,14 @@ const (
 	// sysmetricsInterval is the co-located scraper's sampling period.
 	sysmetricsInterval = time.Second
 )
+
+// persistOpenTimeout bounds the persist store backend's DDL over HTTP at
+// boot, and each retry of a store the boot could not open (ADR-0408
+// §SD7): a server that answered the ping and then stalls must not hang
+// boot. App state does not move to a store that opens later, so the bound
+// is what decides whether a slow server's run keeps its state; a variable
+// so the package's tests can shorten it.
+var persistOpenTimeout = 15 * time.Second
 
 // Services selects the optional bus-backed services Boot wires (ADR-0211
 // §SD2). The zero value boots identity, facts, heartbeat, the bus with its
@@ -344,9 +349,15 @@ type Runtime struct {
 	// PersistExec the executor behind a store backend, nil otherwise.
 	PersistBackend string
 	PersistExec    recordstore.ExecutorI
+	// storeRetry retries, in the background, a store the boot reached and
+	// could not open, until the held trail lands (ADR-0408); nil when the
+	// boot opened it or never reached a server.
+	storeRetry *storeRetry
 	// Trail is the audit trail's one writer (ADR-0277): the model service,
 	// the dispatcher and the egress service record through it. Durable where
-	// PersistExec is set; never nil once the services have booted.
+	// PersistExec is set, held until the store retry releases it where the
+	// server answered and the state table did not open (ADR-0408 §SD1);
+	// never nil once the services have booted.
 	Trail *trail.Recorder
 	// AppState is the app-state manager's delete seam (ADR-0185 §SD3); nil
 	// when the service is off or failed to start.
@@ -629,6 +640,7 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 	}
 
 	rt.bootIntrospect()
+	rt.startStoreRetry()
 	return
 }
 
@@ -661,7 +673,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	if scene && rt.IsChStore {
 		logger.Info().Msg("persist: a scene's host keeps app state in memory, away from the live state table")
 	}
-	backend, label, backendClose, exec := selectPersistBackend(persistCtx, factsCfg, rt.IsChStore && !scene, logger)
+	backend, label, backendClose, exec, unopened, openErr := selectPersistBackend(persistCtx, factsCfg, rt.IsChStore && !scene, logger)
 	persistCancel()
 	rt.onClose(backendClose)
 	rt.State = stateStoreFor(backend)
@@ -696,12 +708,33 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	// established by the host (ADR-0327 §SD6), and its seals anchor.
 	// It flushes on an interval too: the bus requests it records are rows
 	// nothing asks to land.
-	rt.Trail = trail.NewRecorder(rt.PersistExec, runId, logger, trail.WithOriginBy(evidence.OriginByHost), trail.WithAnchors(rt.Anchors),
+	trailExec := rt.PersistExec
+	trailOpts := []trail.RecorderOption{trail.WithOriginBy(evidence.OriginByHost), trail.WithAnchors(rt.Anchors),
 		trail.WithFlushInterval(trailFlushInterval),
 		// Every row of the facts table carries an id minted from its
 		// stream (ADR-0405): the trail mints from the facts store's.
-		trail.WithRowIds(chstore.RowIdsOf(rt.Facts)))
+		trail.WithRowIds(chstore.RowIdsOf(rt.Facts))}
+	switch {
+	case trailExec == nil && svc.Persist && unopened != nil:
+		// The server answered and the store did not open within the
+		// bound (ADR-0408 §SD1): the trail is built over the server held,
+		// keeps its rows, and is released by the retry Boot starts once
+		// the host is up.
+		trailExec = unopened
+		cause := openErr.Error()
+		trailOpts = append(trailOpts, trail.WithHeld(heldReason(time.Now(), cause, 0, nil, time.Time{})))
+		rt.storeRetry = &storeRetry{exec: unopened, cause: cause, log: logger,
+			first: storeRetryFirst, ceiling: storeRetryCeiling, bound: persistOpenTimeout}
+	case !rt.IsChStore && rt.opts.Facts == nil:
+		// The facts store did not reach the server at boot, and nothing
+		// built on it moves later (ADR-0408 §SD8).
+		trailOpts = append(trailOpts, trail.WithNoBackendReason(noServerAtBoot))
+	}
+	rt.Trail = trail.NewRecorder(trailExec, runId, logger, trailOpts...)
 	rt.onClose(rt.Trail.Close)
+	if rt.storeRetry != nil {
+		rt.storeRetry.trail = rt.Trail
+	}
 	// The settings the trail starts under, as its first row: the baseline
 	// its later rows are read against (ADR-0296, the Update of 2026-10-31).
 	recordTrailConfig(ctx, rt.Trail, trailSettingsOf(rt.Anchors, rt.RunInfo), logger)
@@ -715,8 +748,12 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	sinks = append(sinks, auditSink)
 	sinks = append(sinks, rt.opts.ExtraAuditSinks...)
 	rt.Bus.SetAuditSink(sinks)
-	if trail.RequiredEnv.Get() && !rt.Trail.Durable() {
-		logger.Warn().Msg("trail: BOXER_TRAIL_REQUIRED is set and this host has no durable backend; model calls and egress fetches will be refused")
+	switch {
+	case !trail.RequiredEnv.Get() || rt.Trail.Durable():
+	case rt.Trail.Held():
+		logger.Warn().Msg("trail: BOXER_TRAIL_REQUIRED is set and the host's store has not opened; model calls and egress fetches are refused until the background retry opens it, with no restart")
+	default:
+		logger.Warn().Str("why", rt.Trail.NotDurable()).Msg("trail: BOXER_TRAIL_REQUIRED is set and this host has no durable backend; model calls and egress fetches will be refused")
 	}
 	// runtime.audit.{app}: an app's audit events, their origin the
 	// envelope's sender (ADR-0327 §SD8).
@@ -859,14 +896,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		}
 	}
 	rt.Introspect = introspect.NewRegistry()
-	// The trail viewer reads the trail marts through the persist executor,
-	// verifies runs through the recorder, and reads the current run's
-	// verdict from keelson('evidence_checks') in this registry (ADR-0350
-	// §SD3, §SD6, proposed).
-	trailviewer.Register(&trailviewer.Source{
-		Exec: rt.PersistExec, Trail: rt.Trail, Run: func() string { return runId }, Registry: rt.Introspect,
-		NotPersisted: "the persist service is off, or its backend is not ClickHouse",
-	})
+	rt.registerTrailViewer(rt.PersistExec)
 	if svc.AdhocData {
 		adhocSvc, adhocErr := adhocdata.NewService(adhocdata.Config{
 			Bus:      rt.Bus,
@@ -1715,9 +1745,12 @@ func (rt *Runtime) statusSnapshot() (s *runtimestatus.Snapshot) {
 	if rt.Persist != nil {
 		s.PersistBackend = rt.PersistBackend
 	}
-	// A trail whose rows do not land — no ClickHouse, no run id — says so
-	// where the person looks (ADR-0330's Update of 2026-10-30).
+	// A trail whose rows do not land — no ClickHouse, no run id, a store
+	// still being opened — says so where the person looks (ADR-0330's
+	// Update of 2026-10-30), read each frame since a held trail becomes
+	// durable while the host runs (ADR-0408 §SD6).
 	s.TrailNotDurable = rt.Trail.NotDurable()
+	s.TrailWhy = rt.Trail.NotDurable
 	return
 }
 
@@ -1891,6 +1924,42 @@ func (rt *Runtime) bootWatchbillLane(store *watchbill.SqlStore) {
 	rt.onClose(coord.Stop)
 }
 
+// registerTrailViewer hands the trail viewer its source: it reads the
+// trail marts through exec, verifies runs through the recorder, and reads
+// the current run's verdict from keelson('evidence_checks') in this
+// registry (ADR-0350 §SD3, §SD6, proposed). The store retry registers it
+// again with the executor the trail reached the server through (ADR-0408
+// §SD6).
+func (rt *Runtime) registerTrailViewer(exec recordstore.ExecutorI) {
+	runId := ""
+	if rt.RunInfo != nil {
+		runId = rt.RunInfo.RunId
+	}
+	trailviewer.Register(&trailviewer.Source{
+		Exec: exec, Trail: rt.Trail, Run: func() string { return runId }, Registry: rt.Introspect,
+		NotPersisted: "the persist service is off, or its backend is not ClickHouse",
+	})
+}
+
+// startStoreRetry starts the retry of a store the boot could not open
+// (ADR-0408 §SD3), once the host is up, and stops it first at Close.
+func (rt *Runtime) startStoreRetry() {
+	r := rt.storeRetry
+	if r == nil || !rt.Trail.Held() {
+		return
+	}
+	if rt.LLM != nil {
+		r.ledger = rt.LLM.RebuildLedger
+	}
+	r.opened = rt.registerTrailViewer
+	r.start(rt.ctx)
+	rt.onClose(r.stop)
+}
+
+// noServerAtBoot is what a trail says when the facts store did not reach
+// ClickHouse at boot.
+const noServerAtBoot = "ClickHouse did not answer when this host started, so this run keeps its facts and its trail in memory; the host does not retry them, and only a restart reaches the server once it answers"
+
 // stateStoreFor is the workingset and column-width store over the persist
 // backend's choice: the durable backend serves every kind of state, and the
 // in-memory fallback pairs with statestore's own in-memory twin — neither
@@ -1906,8 +1975,9 @@ func stateStoreFor(backend persist.StorageBackendI) (state statestore.StoreI) {
 // gets the store backend on boxer.persiststate so app state outlives the
 // process; otherwise memory, since a durable path that cannot reach a server
 // gains nothing. The labels are the ones the status bar and the capability
-// inspector show.
-func selectPersistBackend(ctx context.Context, cfg chstore.Config, isChStore bool, logger zerolog.Logger) (backend persist.StorageBackendI, label string, closeFn func(), exec recordstore.ExecutorI) {
+// inspector show. When the executor was built and the store did not open,
+// unopened is that executor and openErr why (ADR-0408 §SD1).
+func selectPersistBackend(ctx context.Context, cfg chstore.Config, isChStore bool, logger zerolog.Logger) (backend persist.StorageBackendI, label string, closeFn func(), exec recordstore.ExecutorI, unopened recordstore.ExecutorI, openErr error) {
 	closeFn = func() {}
 	if isChStore {
 		storeExec, err := storeexec.New(chclient.New(chclient.Config{
@@ -1923,6 +1993,7 @@ func selectPersistBackend(ctx context.Context, cfg chstore.Config, isChStore boo
 				exec = storeExec
 				return
 			}
+			unopened, openErr = storeExec, err
 		}
 		logger.Error().Err(err).
 			Msg("persist: store backend construction failed; falling back to in-memory (app state will not survive restart); keelson('schema_tables') shows the state table's verdict")
@@ -2042,7 +2113,7 @@ func (rt *Runtime) bootServiceHost(ctx context.Context, reg *app.Registry, alloc
 // (proposed) §SD5): the predicate, the count, and the selected ids as refs
 // up to the row's cap.
 func recordServicesSelected(rec *trail.Recorder, where string, ids []app.AppIdT, log zerolog.Logger) {
-	if !rec.Durable() {
+	if !keeps(rec) {
 		return
 	}
 	row := trail.AuditEvent{Domain: "services", Action: "selected", Outcome: trail.OutcomeOk, Retention: trail.RetentionTrail,
@@ -2263,7 +2334,7 @@ func (inst windowNotices) WindowGone(key windowhost.WindowKeyT) { inst.n.SeenWin
 // recordPause writes a window's pause or resume on the trail as the
 // person's, its origin the window.
 func recordPause(rec *trail.Recorder, ev windowhost.PauseEvent, log zerolog.Logger) {
-	if !rec.Durable() {
+	if !keeps(rec) {
 		return
 	}
 	row := pauseRow(ev)

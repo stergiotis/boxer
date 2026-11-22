@@ -85,14 +85,20 @@ func trailConfigRow(s trailSettings) (row trail.AuditEvent) {
 
 // recordTrailConfig writes the config event as the host's own row: the
 // recorder's origin, established by the host. It is the baseline a reader
-// of the trail's later rows reads them against. A trail that is not
-// durable records nothing.
+// of the trail's later rows reads them against. A trail that neither lands
+// nor holds its rows records nothing.
 func recordTrailConfig(ctx context.Context, rec *trail.Recorder, s trailSettings, log zerolog.Logger) {
-	if !rec.Durable() {
+	if !keeps(rec) {
 		return
 	}
 	if err := rec.Event(ctx, time.Now().UTC(), trail.Context{Origin: rec.OriginOf("", 0)}, trailConfigRow(s)); err != nil {
 		log.Warn().Err(err).Msg("trail: write the config event")
 	}
 	rec.FlushSoon()
+}
+
+// keeps says rows the host writes to rec are kept: they land, or rec holds
+// them until the host's store opens (ADR-0408 §SD2).
+func keeps(rec *trail.Recorder) (yes bool) {
+	return rec.Durable() || rec.Held()
 }
