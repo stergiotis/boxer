@@ -709,12 +709,14 @@ func waitsOnPerson(out agent.Outcome) bool {
 // person it waits as long as the turn runs, as ask_user does: the host
 // expires an undecided widening, and the person can stop the turn.
 // Otherwise it waits at most the profile's CallWait, counted from when the person last
-// decided. A call still waiting on the person when the wait ends — the turn
+// decided; under a grant the host decided unattended it waits as long as the
+// profile follows a pending call, PendingMax, since no turn would start for
+// the work's end. A call still waiting on the person when the wait ends — the turn
 // stopped, the host did not answer — is withdrawn, so nobody can approve
 // later a call whose outcome no turn reads.
 func (inst *coordinator) settle(ctx context.Context, h string, key string, out agent.Outcome) (last agent.Outcome, err error) {
 	last = out
-	callWait, _, _ := inst.callLimits()
+	callWait := inst.settleWait()
 	deadline := time.Now().Add(callWait)
 	personDone := func() {}
 	waiting := false
@@ -756,6 +758,22 @@ func (inst *coordinator) settle(ctx context.Context, h string, key string, out a
 		last = next
 	}
 	return
+}
+
+// settleWait is how long a call waits for its operation to settle: the
+// profile's CallWait, or under a grant the host decided unattended its
+// PendingMax. Unattended, nobody resumes the conversation once a turn ends,
+// so long work is waited for in the call rather than followed past the
+// turn, and the model has nothing to poll.
+func (inst *coordinator) settleWait() (wait time.Duration) {
+	callWait, pendingMax, _ := inst.callLimits()
+	inst.mu.Lock()
+	unattended := inst.grant.Unattended
+	inst.mu.Unlock()
+	if unattended {
+		return max(callWait, pendingMax)
+	}
+	return callWait
 }
 
 // dropGrant forgets a task that ended; it reports whether there was one.
