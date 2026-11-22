@@ -35,8 +35,8 @@ type SelectScope struct {
 	UnionMembers []*SelectScope
 
 	// Subqueries are scopes for expression-level subqueries (projection,
-	// WHERE, HAVING, IN, function arguments, …) — one entry per UNION
-	// branch of each subquery. FROM-clause subqueries are NOT listed here;
+	// WHERE, HAVING, IN, function arguments, a table function's query
+	// argument, …) — one entry per UNION branch of each subquery. FROM-clause subqueries are NOT listed here;
 	// they hang off Tables[i].Scopes.
 	Subqueries []*SelectScope
 
@@ -380,8 +380,10 @@ func buildScopeFromSelectStmt(stmt *grammar1.SelectStmtContext, parent *SelectSc
 
 // findSubqueryScopes walks one SELECT's subtree and builds scopes for
 // expression-level subqueries: scalar/IN subqueries (ColumnExprSubquery)
-// and subqueries in projection or function-argument position
-// (ColumnsExprSubquery). FROM-clause subqueries are excluded — they are
+// subqueries in projection or function-argument position
+// (ColumnsExprSubquery), and a query as a table function's argument —
+// `view(SELECT …)`, `f((SELECT …))` (TableArgExpr). FROM-clause subqueries
+// are excluded — they are
 // owned by Tables[i].Scopes. CTE bodies (namedQuery) are excluded — they
 // are owned by CTEDefs.
 func findSubqueryScopes(stmt *grammar1.SelectStmtContext, parent *SelectScope, defaultDB string) (subqueries []*SelectScope) {
@@ -416,6 +418,12 @@ func findSubqueryScopes(stmt *grammar1.SelectStmtContext, parent *SelectScope, d
 		case *grammar1.ColumnsExprSubqueryContext:
 			subqueries = append(subqueries, buildNestedUnionScopes(c, parent, defaultDB)...)
 			return false
+
+		case *grammar1.TableArgExprContext:
+			if c.SelectUnionStmt() != nil {
+				subqueries = append(subqueries, buildNestedUnionScopes(c, parent, defaultDB)...)
+				return false
+			}
 		}
 		return true
 	})

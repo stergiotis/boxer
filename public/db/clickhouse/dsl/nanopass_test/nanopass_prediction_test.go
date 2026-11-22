@@ -104,6 +104,11 @@ func predictionCorpus() []struct {
 		{"bench_medium", benchMediumSQL},
 		{"bench_large", benchLargeSQL},
 		{"applet_9kb", runtimeTimelineAppletSQL},
+		// A table function's argument reads as a query, a name or an
+		// expression; the query alternative comes first.
+		{"table_arg_query", "SELECT * FROM view(SELECT x)"},
+		{"table_arg_paren_query", "SELECT * FROM f((SELECT x), 1)"},
+		{"table_arg_select_name", "SELECT * FROM f(SELECT, 1)"},
 	}
 }
 

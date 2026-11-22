@@ -321,15 +321,22 @@ tableArgList: tableArgExpr (COMMA tableArgExpr)*;
 // ordinary column contexts, so CanonicalizeConstructors' existing rules lower
 // tuples/arrays to tuple(…)/array(…) calls, which both grammars accept as
 // nested table functions.
-// A bare query is admitted LAST for the same reason: `view(SELECT …)` takes a
-// query as its argument (a parenthesised one already parses, as columnExpr's
-// subquery), and before this alternative such a buffer did not parse at all.
+// A bare query — `view(SELECT …)` — is the FIRST alternative, so it wins
+// wherever an argument reads both as a query and as something else. Read as
+// an expression, `SELECT x` is the column `SELECT` with the alias `x`, which
+// is not what `view` means, and the canonical form of the query reads back
+// only as a query: its identifiers are quoted, so a leading SELECT or WITH
+// there is always the keyword. ClickHouse reads a `view` argument the same
+// way. It differs for other functions, where it reads a bare SELECT keyword
+// as a name (`numbers(SELECT - 1)`) and refuses `f(SELECT x)`; here both are
+// queries. A parenthesised query, `f((SELECT …))`, is a query too rather than
+// columnExpr's scalar subquery; scopes treat the two alike.
 tableArgExpr
-    : nestedIdentifier
+    : selectUnionStmt
+    | nestedIdentifier
     | tableFunctionExpr
     | literal
     | columnExpr
-    | selectUnionStmt
     ;
 
 // Databases

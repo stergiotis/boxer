@@ -617,8 +617,8 @@ func clickhouseparsergrammar1ParserInit() {
 		0, 1065, 1066, 5, 213, 0, 0, 1066, 1068, 3, 128, 64, 0, 1067, 1065, 1,
 		0, 0, 0, 1068, 1071, 1, 0, 0, 0, 1069, 1067, 1, 0, 0, 0, 1069, 1070, 1,
 		0, 0, 0, 1070, 127, 1, 0, 0, 0, 1071, 1069, 1, 0, 0, 0, 1072, 1078, 3,
-		118, 59, 0, 1073, 1078, 3, 122, 61, 0, 1074, 1078, 3, 138, 69, 0, 1075,
-		1078, 3, 106, 53, 0, 1076, 1078, 3, 18, 9, 0, 1077, 1072, 1, 0, 0, 0, 1077,
+		18, 9, 0, 1073, 1078, 3, 118, 59, 0, 1074, 1078, 3, 122, 61, 0, 1075, 1078,
+		3, 138, 69, 0, 1076, 1078, 3, 106, 53, 0, 1077, 1072, 1, 0, 0, 0, 1077,
 		1073, 1, 0, 0, 0, 1077, 1074, 1, 0, 0, 0, 1077, 1075, 1, 0, 0, 0, 1077,
 		1076, 1, 0, 0, 0, 1078, 129, 1, 0, 0, 0, 1079, 1082, 3, 146, 73, 0, 1080,
 		1082, 3, 132, 66, 0, 1081, 1079, 1, 0, 0, 0, 1081, 1080, 1, 0, 0, 0, 1082,
@@ -18413,11 +18413,11 @@ type ITableArgExprContext interface {
 	GetParser() antlr.Parser
 
 	// Getter signatures
+	SelectUnionStmt() ISelectUnionStmtContext
 	NestedIdentifier() INestedIdentifierContext
 	TableFunctionExpr() ITableFunctionExprContext
 	Literal() ILiteralContext
 	ColumnExpr() IColumnExprContext
-	SelectUnionStmt() ISelectUnionStmtContext
 
 	// IsTableArgExprContext differentiates from other interfaces.
 	IsTableArgExprContext()
@@ -18454,6 +18454,22 @@ func NewTableArgExprContext(parser antlr.Parser, parent antlr.ParserRuleContext,
 }
 
 func (s *TableArgExprContext) GetParser() antlr.Parser { return s.parser }
+
+func (s *TableArgExprContext) SelectUnionStmt() ISelectUnionStmtContext {
+	var t antlr.RuleContext
+	for _, ctx := range s.GetChildren() {
+		if _, ok := ctx.(ISelectUnionStmtContext); ok {
+			t = ctx.(antlr.RuleContext)
+			break
+		}
+	}
+
+	if t == nil {
+		return nil
+	}
+
+	return t.(ISelectUnionStmtContext)
+}
 
 func (s *TableArgExprContext) NestedIdentifier() INestedIdentifierContext {
 	var t antlr.RuleContext
@@ -18519,22 +18535,6 @@ func (s *TableArgExprContext) ColumnExpr() IColumnExprContext {
 	return t.(IColumnExprContext)
 }
 
-func (s *TableArgExprContext) SelectUnionStmt() ISelectUnionStmtContext {
-	var t antlr.RuleContext
-	for _, ctx := range s.GetChildren() {
-		if _, ok := ctx.(ISelectUnionStmtContext); ok {
-			t = ctx.(antlr.RuleContext)
-			break
-		}
-	}
-
-	if t == nil {
-		return nil
-	}
-
-	return t.(ISelectUnionStmtContext)
-}
-
 func (s *TableArgExprContext) GetRuleContext() antlr.RuleContext {
 	return s
 }
@@ -18567,35 +18567,35 @@ func (p *ClickHouseParserGrammar1) TableArgExpr() (localctx ITableArgExprContext
 		p.EnterOuterAlt(localctx, 1)
 		{
 			p.SetState(1072)
-			p.NestedIdentifier()
+			p.SelectUnionStmt()
 		}
 
 	case 2:
 		p.EnterOuterAlt(localctx, 2)
 		{
 			p.SetState(1073)
-			p.TableFunctionExpr()
+			p.NestedIdentifier()
 		}
 
 	case 3:
 		p.EnterOuterAlt(localctx, 3)
 		{
 			p.SetState(1074)
-			p.Literal()
+			p.TableFunctionExpr()
 		}
 
 	case 4:
 		p.EnterOuterAlt(localctx, 4)
 		{
 			p.SetState(1075)
-			p.columnExpr(0)
+			p.Literal()
 		}
 
 	case 5:
 		p.EnterOuterAlt(localctx, 5)
 		{
 			p.SetState(1076)
-			p.SelectUnionStmt()
+			p.columnExpr(0)
 		}
 
 	case antlr.ATNInvalidAltNumber:

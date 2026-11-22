@@ -36,3 +36,47 @@ func TestParse_ViewTakesAQuery(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, analysis.ExtractTables(pr), analysis.TableRef{Database: "db", Table: "t"})
 }
+
+// A query argument wins over the expression reading of the same tokens:
+// `view(SELECT x)` is a query, not the column `SELECT` aliased `x`. The
+// canonical form quotes every identifier, so it reads back as the same query
+// and canonicalising it again changes nothing.
+func TestParse_TableArgumentQueryBeforeExpression(t *testing.T) {
+	canonical := passes.CanonicalizeFull(10)
+	for _, tc := range []struct{ sql, want string }{
+		{"SELECT * FROM view(SELECT x)", `SELECT * FROM "view"(SELECT "x")`},
+		{"SELECT 0 FROM A0(SELECT WHERE)", `SELECT 0 FROM "A0"(SELECT "WHERE")`},
+		{`SELECT 0 FROM A0(SELECT "WHERE")`, `SELECT 0 FROM "A0"(SELECT "WHERE")`},
+		{"SELECT * FROM view(SELECT x, 1)", `SELECT * FROM "view"(SELECT "x", 1)`},
+		{"SELECT * FROM f((SELECT x))", `SELECT * FROM "f"((SELECT "x"))`},
+		// A bare SELECT keyword that cannot start a query stays a name.
+		{"SELECT * FROM numbers(SELECT)", `SELECT * FROM "numbers"("SELECT")`},
+	} {
+		t.Run(tc.sql, func(t *testing.T) {
+			out, err := canonical.Run(tc.sql)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, out)
+			_, err = nanopass.ParseCanonical(out)
+			require.NoError(t, err)
+			again, err := canonical.Run(out)
+			require.NoError(t, err)
+			assert.Equal(t, out, again)
+		})
+	}
+}
+
+// The query argument is a scope of its own, so passes that work per scope
+// reach the tables inside it.
+func TestScopes_TableArgumentQuery(t *testing.T) {
+	for _, tc := range []struct{ sql, want string }{
+		{"SELECT * FROM view(SELECT a FROM t)", "SELECT * FROM view(SELECT a FROM db.t)"},
+		{"SELECT * FROM f((SELECT a FROM t))", "SELECT * FROM f((SELECT a FROM db.t))"},
+		{"SELECT * FROM view(SELECT a FROM t UNION ALL SELECT a FROM u)", "SELECT * FROM view(SELECT a FROM db.t UNION ALL SELECT a FROM db.u)"},
+	} {
+		t.Run(tc.sql, func(t *testing.T) {
+			out, err := passes.QualifyTables("db").Run(tc.sql)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, out)
+		})
+	}
+}
