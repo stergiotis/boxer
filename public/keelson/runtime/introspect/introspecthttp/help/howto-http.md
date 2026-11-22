@@ -88,3 +88,27 @@ default.
 
 `/query` answers `503` when the shell has no `clickhouse-local` available, since
 there is then nothing to run the statement.
+
+## Exposed datasets
+
+An ad-hoc dataset is sealed and is not listed here. One the person, or a
+task under its grant, has exposed is served under its alias to a request
+that presents the exposure's token in a header:
+
+```bash
+curl -s -H 'Authorization: Bearer <token>' http://127.0.0.1:8097/exposed/<alias> > result.arrows
+curl -s -H 'Authorization: Bearer <token>' http://127.0.0.1:8097/exposed/<alias>/csv
+```
+
+The first is the dataset's Arrow stream, the second the same rows as CSV
+with a header line. A ClickHouse server on this machine reads the stream
+with `url()`, passing the token with `headers()`:
+
+```sql
+SELECT * FROM url('http://127.0.0.1:8097/exposed/<alias>', 'ArrowStream',
+  '<structure>', headers('Authorization' = 'Bearer <token>'));
+```
+
+The exposure's answer gives the URL, the structure and this expression
+ready to paste. Every request that opens nothing — no token, a wrong one, a
+lapsed or revoked exposure, an alias not exposed — is answered `404` alike.

@@ -152,6 +152,9 @@ func (s *Server) Start() (err error) {
 		return lnErr
 	}
 	s.ln = ln
+	// The registry learns where it is served, so a dataset exposed through
+	// it can say where a reader fetches it (ADR-0407).
+	s.reg.SetServedAt(s.BaseURL())
 	go func() {
 		if serveErr := s.srv.Serve(ln); serveErr != nil && serveErr != http.ErrServerClosed {
 			s.log.Warn().Err(serveErr).Msg("introspecthttp: serve")
@@ -173,7 +176,12 @@ func (s *Server) Addr() (a string) {
 func (s *Server) BaseURL() string { return "http://" + s.Addr() }
 
 // Stop gracefully shuts the server down.
-func (s *Server) Stop(ctx context.Context) error { return s.srv.Shutdown(ctx) }
+func (s *Server) Stop(ctx context.Context) error {
+	if s.ln != nil {
+		s.reg.ClearServedAt(s.BaseURL())
+	}
+	return s.srv.Shutdown(ctx)
+}
 
 // Handler is the server's routes, for serving them without a listener — in
 // process, as a browser tab does through [InProcess] (ADR-0290 §SD4). It
@@ -224,6 +232,10 @@ func (s *Server) handler() http.Handler {
 	// whether a minted nonce was fetched, which is what makes locality
 	// provable rather than inferred from an address.
 	mux.HandleFunc("GET /probe/{nonce}", s.handleProbe)
+	// Exposed datasets (exposed.go, ADR-0407): by alias and token, never by
+	// handle; /table and /query never open one.
+	mux.HandleFunc("GET "+ExposedPathPrefix+"{alias}", s.handleExposed)
+	mux.HandleFunc("GET "+ExposedPathPrefix+"{alias}/csv", s.handleExposedCSV)
 	return mux
 }
 

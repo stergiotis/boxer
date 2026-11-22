@@ -3,6 +3,7 @@ package introspect
 import (
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -12,6 +13,9 @@ import (
 type Registry struct {
 	mu     sync.RWMutex
 	byName map[string]Provider
+	// exposures and servedAt are the exposure seam (exposed.go).
+	exposures atomic.Pointer[ExposureSourceI]
+	servedAt  atomic.Pointer[string]
 }
 
 // NewRegistry returns an empty registry.
