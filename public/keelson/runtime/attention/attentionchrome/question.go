@@ -3,9 +3,11 @@ package attentionchrome
 import (
 	"strconv"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/decision"
 )
 
 // questionCards draws the cards of questions apps post (ADR-0324 §SD5). The
@@ -46,71 +48,101 @@ func (inst *questionCards) RenderCard(key string, ids *c.WidgetIdStack) (decided
 	} else {
 		head += " asks — the model's words follow"
 	}
-	c.Label(head).Wrap().Send()
-	if q.Tainted {
-		c.Label("This conversation has read untrusted content: what the model writes may have been steered by it.").Wrap().Send()
-	}
+	const taintedText = "This conversation has read untrusted content: what the model writes may have been steered by it."
 	form := q.Form()
 	quick := q.Quick()
 	picked := inst.pickedOf(key, form)
-	for qi, fq := range form {
-		for range c.Frame(ids.PrepareStr("attention-q-frame-" + key + "-" + strconv.Itoa(qi))).KeepIter() {
-			if fq.Header != "" {
-				for rt := range c.RichTextLabel(fq.Header) {
-					rt.Weak().Italics()
+	drawForm := func() {
+		for qi, fq := range form {
+			for range c.Frame(ids.PrepareStr("attention-q-frame-" + key + "-" + strconv.Itoa(qi))).KeepIter() {
+				if fq.Header != "" {
+					for rt := range c.RichTextLabel(fq.Header) {
+						rt.Weak().Italics()
+					}
 				}
-			}
-			for rt := range c.RichTextLabel(fq.Text) {
-				rt.Italics()
-			}
-			if !quick {
-				continue
-			}
-			for i, o := range fq.Options {
-				text := o.Label
-				if o.Description != "" {
-					text += " — " + o.Description
+				for rt := range c.RichTextLabel(fq.Text) {
+					rt.Italics()
 				}
-				id := ids.PrepareStr("attention-q-opt-" + key + "-" + strconv.Itoa(qi) + "-" + strconv.Itoa(i))
-				if fq.Multi {
-					// Bound to the pick itself: the value comes back at the
-					// next sync, into the variable given here, so it must
-					// outlive the frame.
-					c.Checkbox(id, picked[qi][i], text).SendRespVal(&picked[qi][i])
+				if !quick {
 					continue
 				}
-				clicked := picked[qi][i]
-				if c.RadioButton(id, c.Atoms().Text(text).Keep(), picked[qi][i]).SendRespVal(&clicked).HasPrimaryClicked() {
-					for j := range picked[qi] {
-						picked[qi][j] = j == i
+				for i, o := range fq.Options {
+					text := o.Label
+					if o.Description != "" {
+						text += " — " + o.Description
+					}
+					id := ids.PrepareStr("attention-q-opt-" + key + "-" + strconv.Itoa(qi) + "-" + strconv.Itoa(i))
+					if fq.Multi {
+						// Bound to the pick itself: the value comes back at the
+						// next sync, into the variable given here, so it must
+						// outlive the frame.
+						c.Checkbox(id, picked[qi][i], text).SendRespVal(&picked[qi][i])
+						continue
+					}
+					clicked := picked[qi][i]
+					if c.RadioButton(id, c.Atoms().Text(text).Keep(), picked[qi][i]).SendRespVal(&clicked).HasPrimaryClicked() {
+						for j := range picked[qi] {
+							picked[qi][j] = j == i
+						}
 					}
 				}
 			}
 		}
 	}
 	if !quick {
+		// No answer is given on the card, so there is no decision to draw:
+		// the card says where the form is answered.
+		c.Label(head).Wrap().Send()
+		if q.Tainted {
+			c.Label(taintedText).Wrap().Send()
+		}
+		drawForm()
 		c.Label("This form is answered in its window.").Wrap().Send()
+		inst.renderOpen(key, instance, ids)
+		return
 	}
-	for range c.HorizontalTop().KeepIter() {
-		if quick {
-			choices := choicesOf(picked)
-			ready := q.ValidChoices(choices)
-			for range c.EnabledUi(ready).KeepIter() {
-				if c.Button(ids.PrepareStr("attention-q-answer-"+key), c.Atoms().Text("Answer").Keep()).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() && ready {
-					decided = inst.q.Decide(key, false, choices)
-				}
-			}
-			if c.Button(ids.PrepareStr("attention-q-skip-"+key), c.Atoms().Text("Skip").Keep()).SendResp().HasPrimaryClicked() {
-				decided = inst.q.Decide(key, true, nil)
-			}
-		}
-		if inst.raise != nil && instance != 0 {
-			if c.Button(ids.PrepareStr("attention-q-open-"+key), c.Atoms().Text("Open").Keep()).SendResp().HasPrimaryClicked() {
-				inst.raise(instance)
-			}
-		}
+	// The model asks; answering is not the person's own act, so no option
+	// is primary (ADR-0404 SD4). Whether Answer is enabled is read before
+	// the form draws, so it follows a pick one frame late; the click is
+	// checked against the picks after the form has drawn.
+	in := decision.Input{
+		Ids:      ids,
+		ScopeKey: "attention-q-" + key,
+		Origin:   decision.OriginRequest,
+		Title:    head,
+		Form:     drawForm,
+		Unframed: true,
+		Options: []decision.Option{
+			{Key: "answer", Label: "Answer", Role: decision.RoleAffirm,
+				Disabled: !q.ValidChoices(choicesOf(picked)),
+				Why:      "Answer is off until each question above has a choice."},
+			{Key: "skip", Label: "Skip", Role: decision.RoleDecline},
+		},
 	}
+	if q.Tainted {
+		in.Notes = []decision.Note{{Text: taintedText, Tone: styletokens.ToneWarning}}
+	}
+	switch decision.Render(in).Chosen {
+	case "answer":
+		if choices := choicesOf(picked); q.ValidChoices(choices) {
+			decided = inst.q.Decide(key, false, choices)
+		}
+	case "skip":
+		decided = inst.q.Decide(key, true, nil)
+	}
+	// Open is a card-level act, not an answer: it stays outside the
+	// decision.
+	inst.renderOpen(key, instance, ids)
 	return
+}
+
+// renderOpen draws Open, which raises the window that asked.
+func (inst *questionCards) renderOpen(key string, instance uint64, ids *c.WidgetIdStack) {
+	if inst.raise != nil && instance != 0 {
+		if c.Button(ids.PrepareStr("attention-q-open-"+key), c.Atoms().Text("Open").Keep()).SendResp().HasPrimaryClicked() {
+			inst.raise(instance)
+		}
+	}
 }
 
 // pickedOf is the card's picks, shaped to its form.

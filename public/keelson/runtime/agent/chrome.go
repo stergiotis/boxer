@@ -9,12 +9,14 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/decision"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
@@ -370,7 +372,7 @@ func (inst *Chrome) RenderDialogs(ids *c.WidgetIdStack) (modal bool) {
 	var approve, decline bool
 	for range c.Modal(ids.PrepareStr("agent-request-" + r.key)).KeepIter() {
 		dialogHeading(title, requestWidth)
-		approve, decline = inst.renderRequest(r, windows, len(open), ids)
+		approve, decline = inst.renderRequest(r, windows, len(open), "", ids)
 	}
 	if !approve && !decline {
 		return
@@ -408,38 +410,55 @@ func (inst *Chrome) renderConfirmation(p proposalRef, waiting int, ids *c.Widget
 }
 
 // renderConfirmationBody is a confirmation's text and buttons, in a modal
-// or a card.
+// or a card. The model asks for the call, so it is a request; Confirm is
+// Danger because the write cannot be undone from here (ADR-0404 SD4).
 func (inst *Chrome) renderConfirmationBody(p proposalRef, waiting int, ids *c.WidgetIdStack) (confirm bool, decline bool) {
 	svc := inst.svc
 	rec := p.rec
 	who := svc.display(p.t.actor) + " (window " + strconv.FormatUint(p.t.actorInstance, 10) + ")"
-	c.Label(who + " asks to " + rec.spec.Summary + " (" + rec.spec.Name + ") in window " +
-		strconv.FormatUint(rec.instance, 10) + ", with these arguments, as the model wrote them:").Wrap().Send()
-	bounded(ids.PrepareStr("agent-confirm-args-"+rec.key), modelTextHeight, func() {
-		for rt := range c.RichTextLabel(confirmationArgs(rec.req.Args)) {
-			rt.Monospace()
-		}
-	})
-	c.Label("This writes outside the app and cannot be undone from here.").Wrap().Send()
-	if svc.Unattended() {
-		c.Label("The host runs unattended, and still asks a person to confirm every change outside the app (ADR-0298).").Wrap().Send()
+	in := decision.Input{
+		Ids:      ids,
+		ScopeKey: "agent-confirm-decision-" + rec.key,
+		Origin:   decision.OriginRequest,
+		Unframed: true,
+		Title: who + " asks to " + rec.spec.Summary + " (" + rec.spec.Name + ") in window " +
+			strconv.FormatUint(rec.instance, 10) + ".",
+		Follows: []string{"This writes outside the app and cannot be undone from here."},
+		// The person confirms what the call carries, so the arguments come
+		// before the options.
+		Form: func() {
+			c.Label("Its arguments, as the model wrote them:").Wrap().Send()
+			bounded(ids.PrepareStr("agent-confirm-args-"+rec.key), modelTextHeight, func() {
+				for rt := range c.RichTextLabel(confirmationArgs(rec.req.Args)) {
+					rt.Monospace()
+				}
+			})
+		},
+		Options: []decision.Option{
+			{Key: "confirm", Label: "Confirm", Role: decision.RoleAffirm, Destroys: true},
+			{Key: "decline", Label: "Decline", Role: decision.RoleDecline},
+		},
 	}
-	if rec.req.Reason != "" {
-		bounded(ids.PrepareStr("agent-confirm-reason-"+rec.key), modelTextHeight, func() {
-			for rt := range c.RichTextLabel("its reason, as the model wrote it: " + rec.req.Reason) {
-				rt.Weak()
-			}
-		})
+	if svc.Unattended() {
+		in.Follows = append(in.Follows, "The host runs unattended, and still asks a person to confirm every change outside the app (ADR-0298).")
 	}
 	if waiting > 1 {
-		c.Label(strconv.Itoa(waiting-1) + " more waiting").Send()
+		in.Notes = append(in.Notes, decision.Note{Text: strconv.Itoa(waiting-1) + " more waiting", Tone: styletokens.ToneNeutral})
 	}
-	c.Separator().Send()
-	// Right-aligned, the decision at the edge: a right-to-left row
-	// places its first child rightmost.
-	for range c.UiWithLayout().MainDirRightToLeft().CrossAlignMin().KeepIter() {
-		confirm = c.Button(ids.PrepareStr("agent-confirm-yes-"+rec.key), c.Atoms().Text("Confirm").Keep()).Kind(c.ButtonKindDanger).SendResp().HasPrimaryClicked()
-		decline = c.Button(ids.PrepareStr("agent-confirm-no-"+rec.key), c.Atoms().Text("Decline").Keep()).SendResp().HasPrimaryClicked()
+	if rec.req.Reason != "" {
+		in.Detail = func() {
+			bounded(ids.PrepareStr("agent-confirm-reason-"+rec.key), modelTextHeight, func() {
+				for rt := range c.RichTextLabel("its reason, as the model wrote it: " + rec.req.Reason) {
+					rt.Weak()
+				}
+			})
+		}
+	}
+	switch decision.Render(in).Chosen {
+	case "confirm":
+		confirm = true
+	case "decline":
+		decline = true
 	}
 	return
 }
@@ -449,32 +468,69 @@ type windowRow struct {
 	title string
 }
 
-func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, ids *c.WidgetIdStack) (approve bool, decline bool) {
+// renderRequest draws a request through the decision widget. A request is
+// asked by an agent, so Approve is not the primary (ADR-0404 SD4). stale,
+// when not empty, says why Approve cannot be given.
+func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, stale string, ids *c.WidgetIdStack) (approve bool, decline bool) {
 	svc := inst.svc
 	who := svc.display(r.actor) + " (window " + strconv.FormatUint(r.actorInstance, 10) + ")"
+	in := decision.Input{
+		Ids:      ids,
+		ScopeKey: "agent-request-decision-" + r.key,
+		Origin:   decision.OriginRequest,
+		Unframed: true,
+	}
 	// Host-derived facts first; the model's words come last, as its claim
 	// (ADR-0269 §SD5).
 	switch {
 	case r.held != nil:
-		c.Label(who + " asks to call " + r.held.req.Operation + " in window " + strconv.FormatUint(r.held.req.Instance, 10) + ".").Wrap().Send()
-		c.Label(needText(r.held)).Wrap().Send()
+		in.Title = who + " asks to call " + r.held.req.Operation + " in window " + strconv.FormatUint(r.held.req.Instance, 10) + "."
+		in.Follows = append(in.Follows, needText(r.held))
 	case r.task != nil:
-		for range c.HoverText("task " + r.task.id).KeepIter() {
-			c.Label(who + " asks for more in the task it holds. What it already holds is folded below; what is new is listed.").Wrap().Send()
-		}
+		in.Title = who + " asks for more in the task it holds."
+		in.Subject = "task " + r.task.id
+		in.Follows = append(in.Follows, "What it already holds is folded below; what is new is listed.")
 	default:
-		c.Label(who + " asks to start a task.").Wrap().Send()
+		in.Title = who + " asks to start a task."
+	}
+	if r.rounds > 0 {
+		in.Follows = append(in.Follows, "The running turn may take "+strconv.FormatUint(uint64(r.rounds), 10)+" more rounds of model calls.")
 	}
 	svc.mu.Lock()
 	taintedConv := r.task != nil && svc.tainted(r.task)
 	left := svc.leftToPerson(r)
 	svc.mu.Unlock()
 	if left != "" {
-		c.Label("The host runs unattended and left this to you: " + left + " (ADR-0298).").Wrap().Send()
+		in.Notes = append(in.Notes, decision.Note{Text: "The host runs unattended and left this to you: " + left + " (ADR-0298).", Tone: styletokens.ToneInfo})
 	}
 	if taintedConv {
-		c.Label("This conversation has read untrusted content: what the model writes may have been steered by it.").Wrap().Send()
+		in.Notes = append(in.Notes, decision.Note{Text: "This conversation has read untrusted content: what the model writes may have been steered by it.", Tone: styletokens.ToneWarning})
 	}
+	if waiting > 1 {
+		in.Notes = append(in.Notes, decision.Note{Text: strconv.Itoa(waiting-1) + " more waiting", Tone: styletokens.ToneNeutral})
+	}
+	in.Form = func() { inst.renderRequestTerms(r, windows, ids) }
+	if (r.held != nil && r.held.req.Reason != "") || (r.held == nil && (r.purpose != "" || r.plan != "")) {
+		in.Detail = func() { inst.renderRequestWords(r, ids) }
+	}
+	in.Options = []decision.Option{
+		{Key: "approve", Label: "Approve", Role: decision.RoleAffirm, Disabled: stale != "", Why: stale},
+		{Key: "decline", Label: "Decline", Role: decision.RoleDecline},
+	}
+	switch decision.Render(in).Chosen {
+	case "approve":
+		approve = true
+	case "decline":
+		decline = true
+	}
+	return
+}
+
+// renderRequestTerms draws what a request asks for and the person sets
+// before answering: what the task holds, the windows to share and their
+// modes, the apps it may open, the desktop, the destinations and the budget.
+func (inst *Chrome) renderRequestTerms(r *request, windows []windowRow, ids *c.WidgetIdStack) {
+	svc := inst.svc
 	if r.task != nil {
 		inst.renderHeldTerms(r, windows, ids)
 	}
@@ -506,9 +562,6 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 				c.Label("the task may " + launchText(l, svc.display(app.AppIdT(l.App)))).Wrap().Send()
 			}
 		})
-	}
-	if r.rounds > 0 {
-		c.Label("The running turn may take " + strconv.FormatUint(uint64(r.rounds), 10) + " more rounds of model calls.").Wrap().Send()
 	}
 	if r.desktop == ModeAct {
 		// The desktop as a whole (ADR-0276 §SD4): arranging moves every
@@ -546,6 +599,13 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 			inst.renderBudget(r, ids)
 		}
 	}
+}
+
+// renderRequestWords draws what the model and the app wrote in support of a
+// request — its reason, the app's purpose, the model's plan — after the
+// options, as the decision's detail.
+func (inst *Chrome) renderRequestWords(r *request, ids *c.WidgetIdStack) {
+	svc := inst.svc
 	if r.held != nil && r.held.req.Reason != "" {
 		bounded(ids.PrepareStr("agent-reason-"+r.key), modelTextHeight, func() {
 			for rt := range c.RichTextLabel("its reason, as the model wrote it: " + r.held.req.Reason) {
@@ -566,17 +626,6 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 			}
 		})
 	}
-	if waiting > 1 {
-		c.Label(strconv.Itoa(waiting-1) + " more waiting").Send()
-	}
-	c.Separator().Send()
-	// Right-aligned, Approve at the edge: a right-to-left row places its
-	// first child rightmost.
-	for range c.UiWithLayout().MainDirRightToLeft().CrossAlignMin().KeepIter() {
-		approve = c.Button(ids.PrepareStr("agent-approve-"+r.key), c.Atoms().Text("Approve").Keep()).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked()
-		decline = c.Button(ids.PrepareStr("agent-decline-"+r.key), c.Atoms().Text("Decline").Keep()).SendResp().HasPrimaryClicked()
-	}
-	return
 }
 
 // renderShareGrid is one grid of window rows; part keeps the ids of a

@@ -8,9 +8,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/decision"
 )
 
 // The moderator's levers on agent tasks (ADR-0300 §SD8) and its questions
@@ -275,21 +277,38 @@ func (inst *Chrome) renderQuestion(ids *c.WidgetIdStack) (shown bool) {
 }
 
 // renderQuestionBody is a moderator's question and its buttons, in a modal
-// or a card.
+// or a card. The moderator asks, so neither answer is primary (ADR-0404
+// SD4).
 func (inst *Chrome) renderQuestionBody(q *question, waiting int, ids *c.WidgetIdStack) (allow bool, decline bool) {
 	svc := inst.svc
-	c.Label(svc.display(q.moderator) + " asks:").Wrap().Send()
-	bounded(ids.PrepareStr("agent-moderator-question-text-"+q.key), modelTextHeight, func() {
-		c.Label(q.text).Wrap().Send()
-	})
-	c.Label("Allowing it sets this rule, with you as its author: " + q.rule).Wrap().Send()
-	if waiting > 1 {
-		c.Label(strconv.Itoa(waiting-1) + " more waiting").Send()
+	in := decision.Input{
+		Ids:      ids,
+		ScopeKey: "agent-moderator-decision-" + q.key,
+		Origin:   decision.OriginRequest,
+		Unframed: true,
+		Title:    svc.display(q.moderator) + " asks:",
+		// The moderator's words are what is answered, bounded as the
+		// model's text is elsewhere; what allowing does follows them, so
+		// both are drawn in the form, in that order, before the options.
+		Form: func() {
+			bounded(ids.PrepareStr("agent-moderator-question-text-"+q.key), modelTextHeight, func() {
+				c.Label(q.text).Wrap().Send()
+			})
+			c.Label("Allowing it sets this rule, with you as its author: " + q.rule).Wrap().Send()
+		},
+		Options: []decision.Option{
+			{Key: "allow", Label: "Allow", Role: decision.RoleAffirm},
+			{Key: "decline", Label: "Decline", Role: decision.RoleDecline},
+		},
 	}
-	c.Separator().Send()
-	for range c.UiWithLayout().MainDirRightToLeft().CrossAlignMin().KeepIter() {
-		allow = c.Button(ids.PrepareStr("agent-moderator-allow-"+q.key), c.Atoms().Text("Allow").Keep()).SendResp().HasPrimaryClicked()
-		decline = c.Button(ids.PrepareStr("agent-moderator-decline-"+q.key), c.Atoms().Text("Decline").Keep()).SendResp().HasPrimaryClicked()
+	if waiting > 1 {
+		in.Notes = []decision.Note{{Text: strconv.Itoa(waiting-1) + " more waiting", Tone: styletokens.ToneNeutral}}
+	}
+	switch decision.Render(in).Chosen {
+	case "allow":
+		allow = true
+	case "decline":
+		decline = true
 	}
 	return
 }

@@ -4,6 +4,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/decision"
 )
 
 // urgencyCards draw a window's request to make a conversation urgent, or to
@@ -36,29 +37,38 @@ func (inst *urgencyCards) RenderCard(key string, ids *c.WidgetIdStack) (decided 
 	if name == "" {
 		name = "conversation " + conv
 	}
+	// A request from the window, not the person's own act: no option is
+	// primary (ADR-0404 SD4).
+	in := decision.Input{
+		Ids:      ids,
+		ScopeKey: "attention-u-" + key,
+		Origin:   decision.OriginRequest,
+		Unframed: true,
+	}
 	if on {
-		c.Label(who + " asks to make " + name + " urgent.").Wrap().Send()
-		c.Label("What it asks of you would open at once, as critical — also while you are Busy — until you stop it. " +
-			"Nothing changes unless you choose Make urgent here.").Wrap().Send()
+		in.Title = who + " asks to make " + name + " urgent."
+		in.Follows = []string{"What it asks of you would open at once, as critical — also while you are Busy — until you stop it. " +
+			"Nothing changes unless you choose Make urgent here."}
+		in.Options = []decision.Option{
+			{Key: "accept", Label: "Make urgent", Role: decision.RoleAffirm},
+			{Key: "decline", Label: "Decline", Role: decision.RoleDecline},
+		}
 	} else {
-		c.Label(who + " asks to stop treating " + name + " as urgent.").Wrap().Send()
-		c.Label("What it asks of you would wait in the queue again, at its usual level.").Wrap().Send()
-	}
-	accept, decline := "Make urgent", "Decline"
-	if !on {
-		accept, decline = "Stop urgency", "Keep urgent"
-	}
-	for range c.HorizontalTop().KeepIter() {
-		if c.Button(ids.PrepareStr("attention-u-accept-"+key), c.Atoms().Text(accept).Keep()).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
-			decided, _ = inst.u.Decide(key, true)
+		in.Title = who + " asks to stop treating " + name + " as urgent."
+		in.Follows = []string{"What it asks of you would wait in the queue again, at its usual level."}
+		in.Options = []decision.Option{
+			{Key: "accept", Label: "Stop urgency", Role: decision.RoleAffirm},
+			{Key: "decline", Label: "Keep urgent", Role: decision.RoleDecline},
 		}
-		if c.Button(ids.PrepareStr("attention-u-decline-"+key), c.Atoms().Text(decline).Keep()).SendResp().HasPrimaryClicked() {
-			decided, _ = inst.u.Decide(key, false)
-		}
-		if inst.raise != nil && instance != 0 {
-			if c.Button(ids.PrepareStr("attention-u-open-"+key), c.Atoms().Text("Open").Keep()).SendResp().HasPrimaryClicked() {
-				inst.raise(instance)
-			}
+	}
+	if res := decision.Render(in); res.Has {
+		decided, _ = inst.u.Decide(key, res.Chosen == "accept")
+	}
+	// Open is a card-level act, not an answer: it stays outside the
+	// decision.
+	if inst.raise != nil && instance != 0 {
+		if c.Button(ids.PrepareStr("attention-u-open-"+key), c.Atoms().Text("Open").Keep()).SendResp().HasPrimaryClicked() {
+			inst.raise(instance)
 		}
 	}
 	return

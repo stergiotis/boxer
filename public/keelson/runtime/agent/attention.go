@@ -224,10 +224,8 @@ func (inst *Chrome) renderRequestCard(reqKey string, ids *c.WidgetIdStack) (deci
 			}
 		}
 	}
-	if stale != "" {
-		c.Label(stale).Wrap().Send()
-	}
-	approve, decline := inst.renderRequest(r, windows, 1, ids)
+	// A stale card's Approve is drawn disabled, with the reason beside it.
+	approve, decline := inst.renderRequest(r, windows, 1, stale, ids)
 	if stale != "" {
 		approve = false
 	}
