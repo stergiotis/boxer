@@ -2,13 +2,12 @@ package watchbill
 
 import (
 	"context"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"os"
 	"sort"
 	"strconv"
 	"sync"
 	"time"
-
-	"github.com/zeebo/xxh3"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillpresence"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -67,13 +66,15 @@ var (
 )
 
 // NewPresence opens the store over exec, which must reach the server that
-// holds boxer.facts; chstore has provisioned the table. Its reads go to the
-// read table BOXER_FACTS_READ_TABLE names (ADR-0402 §SD3); a malformed
-// setting, which the host refuses at boot, leaves them on the table written
-// to. The caller closes.
-func NewPresence(exec recordstore.ExecutorI) (inst *Presence) {
+// holds boxer.facts; chstore has provisioned the table. ids is the facts
+// table's id generator (chstore.RowIdsOf), which every row's id is minted
+// from (ADR-0405); without one a write fails. Its reads go to the read
+// table BOXER_FACTS_READ_TABLE names (ADR-0402 §SD3); a malformed setting,
+// which the host refuses at boot, leaves them on the table written to. The
+// caller closes.
+func NewPresence(exec recordstore.ExecutorI, ids identifier.IdGeneratorI) (inst *Presence) {
 	readTable, _ := factsschema.ReadTableFor(watchbillpresence.PresenceTableName)
-	inst = &Presence{st: watchbillpresence.NewPresenceStore(exec, nil, watchbillpresence.PresenceStoreConfig{ReadTable: readTable}), host: hostname()}
+	inst = &Presence{st: watchbillpresence.NewPresenceStore(exec, nil, watchbillpresence.PresenceStoreConfig{ReadTable: readTable, Keys: ids}), host: hostname()}
 	return
 }
 
@@ -99,6 +100,11 @@ func (inst *Presence) write(ctx context.Context, phase string, s Status) (err er
 	row := PresenceRow(phase, s, inst.host, time.Now())
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	// The row's id names the row (ADR-0405 §SD1); what ties a run's rows
+	// together is the run id, which is the natural key and a field.
+	if row.Id, err = inst.st.MintKey(ctx); err != nil {
+		return eb.Build().Str("runId", s.RunId).Str("phase", phase).Errorf("presence row id: %w", err)
+	}
 	// The row carries the shared origin (ADR-0330 §SD3): the worker's run,
 	// which is this process's; a worker has no window, so app and instance
 	// stay unattributed (ADR-0191 §SD3).
@@ -113,23 +119,11 @@ func (inst *Presence) write(ctx context.Context, phase string, s Status) (err er
 	return
 }
 
-// presenceKeyPrefix scopes the hash a presence row is keyed by. The facts
-// table's id column is shared, and other writers key their rows by the
-// same hash of a string of their own — the trail by a model call's id. A
-// bare run id would give the row the id such a writer gives a row whose
-// key happens to be the same string.
-const presenceKeyPrefix = "watchbill-presence|"
-
-// PresenceKey is the id the presence rows of run carry.
-func PresenceKey(run string) uint64 {
-	return xxh3.HashString(presenceKeyPrefix + run)
-}
-
-// PresenceRow is the row a worker writes: keyed by the run id so a run's
-// rows form one series, the natural key the run id itself.
+// PresenceRow is the row a worker writes, less its id, which the writer
+// mints: the natural key is the run id, so a run's rows are found by it.
 func PresenceRow(phase string, s Status, host string, at time.Time) (row watchbillpresence.WorkerPresence) {
 	row = watchbillpresence.WorkerPresence{
-		Id: PresenceKey(s.RunId), NaturalKey: []byte(s.RunId), Ts: at.UTC(),
+		NaturalKey: []byte(s.RunId), Ts: at.UTC(),
 		Kind: kindLabel, RunId: s.RunId, Host: host, Phase: phase,
 		Kinds: append([]string(nil), s.Kinds...), Queues: append([]string(nil), s.Queues...),
 		MaxWorkers: uint32(max(s.MaxWorkers, 0)),

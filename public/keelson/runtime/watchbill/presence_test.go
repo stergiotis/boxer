@@ -2,7 +2,6 @@ package watchbill
 
 import (
 	"context"
-	"github.com/zeebo/xxh3"
 	"testing"
 	"time"
 
@@ -110,16 +109,12 @@ func TestWorkerDeclaresPresenceAndTableMergesIt(t *testing.T) {
 	assert.Equal(t, "run-p", pres.Rows[4].RunId)
 }
 
-// A run's rows share one id, another run's differ, and the id is not the
-// bare hash of the run id: another writer of the facts table that hashes
-// the same string for a row of its own gets another id.
-func TestPresenceRow_IsKeyedByTheRunUnderItsOwnPrefix(t *testing.T) {
+// A presence row is found by its run: the natural key is the run id, and the
+// row leaves its id to the writer, which mints it (ADR-0405).
+func TestPresenceRow_NamesItsRunAndNoId(t *testing.T) {
 	started := PresenceRow(watchbillpresence.PhaseStarted, Status{RunId: "run-1"}, "box", t0)
 	stopped := PresenceRow(watchbillpresence.PhaseStopped, Status{RunId: "run-1"}, "box", t0.Add(time.Minute))
-	other := PresenceRow(watchbillpresence.PhaseStarted, Status{RunId: "run-2"}, "box", t0)
-	assert.Equal(t, started.Id, stopped.Id)
-	assert.NotEqual(t, started.Id, other.Id)
-	assert.Equal(t, PresenceKey("run-1"), started.Id)
-	assert.NotEqual(t, xxh3.HashString("run-1"), started.Id)
-	assert.Equal(t, []byte("run-1"), started.NaturalKey, "the natural key stays the run id")
+	assert.Equal(t, []byte("run-1"), started.NaturalKey)
+	assert.Equal(t, started.NaturalKey, stopped.NaturalKey)
+	assert.Zero(t, started.Id, "the id is the writer's to mint")
 }

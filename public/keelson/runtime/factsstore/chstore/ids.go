@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowalloc"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/identity/tagmint"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -102,6 +103,18 @@ func NewRowIdGenerator(exec recordstore.ExecutorI, cfg Config) (inst *RowIdGener
 // RowIds is the generator this store mints its row ids from, for the
 // generated stores over the same table to mint from too.
 func (inst *Store) RowIds() *RowIdGenerator { return &inst.ids }
+
+// RowIdsOf is the facts table's id generator of a facts store, for the code
+// that builds a generated store over the same table beside it: store's own
+// when it is the ClickHouse-backed one, and nil when it is not — the
+// in-memory store reaches no table for another store to write. A generated
+// store handed nil refuses to mint, which is the right answer there.
+func RowIdsOf(store factsstore.FactsStoreI) identifier.IdGeneratorI {
+	if st, ok := store.(*Store); ok && st != nil {
+		return st.RowIds()
+	}
+	return nil
+}
 
 // GetId mints the next row id; naturalKey is ignored, as by every
 // sequential generator, and fresh is always true.

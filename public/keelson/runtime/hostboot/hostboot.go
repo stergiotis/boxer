@@ -1791,7 +1791,7 @@ func (rt *Runtime) bootWatchbill(ctx context.Context) {
 	// executor reaches on the same server (ADR-0237 §SD1); with the facts
 	// store fallen back to memory there is no such table to write.
 	if rt.IsChStore {
-		presence := watchbill.NewPresence(rt.PersistExec)
+		presence := watchbill.NewPresence(rt.PersistExec, chstore.RowIdsOf(rt.Facts))
 		cfg.Presence = presence
 		rt.WatchbillPresence = presence
 		rt.onClose(presence.Close)

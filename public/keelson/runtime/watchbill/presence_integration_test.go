@@ -11,7 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillpresence"
 )
 
@@ -24,9 +26,8 @@ func TestPresenceRoundTripOnTheServer(t *testing.T) {
 	exec := serverExec(t)
 	facts, isCh := chstore.NewWithFallback(chstore.ConfigFromEnv(), zerolog.Nop(), 2*time.Second)
 	require.True(t, isCh, "the facts store must reach the server the executor reaches")
-	_ = facts
 
-	pres := NewPresence(exec)
+	pres := NewPresence(exec, chstore.RowIdsOf(facts))
 	defer pres.Close()
 	runId := "presence-it-" + time.Now().UTC().Format("150405.000")
 	started := Status{RunId: runId, Kinds: []string{"it.kind"}, Queues: []string{"bulk"}, MaxWorkers: 3}
@@ -41,6 +42,7 @@ func TestPresenceRoundTripOnTheServer(t *testing.T) {
 		}
 	}
 	require.Len(t, mine, 1)
+	assert.Equal(t, vocab.IdStreamFactsRow.Value(), identifier.TaggedId(mine[0].Id).GetTag().GetValue(), "the row's id is minted from the facts table's stream (ADR-0405)")
 	assert.Equal(t, watchbillpresence.PhaseStarted, mine[0].Phase)
 	assert.Equal(t, []string{"it.kind"}, mine[0].Kinds)
 	assert.Equal(t, []string{"bulk"}, mine[0].Queues)
