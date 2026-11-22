@@ -29,7 +29,6 @@ public/db/clickhouse/dsl/nanopass/passes_test TestDebugTupleArray
 public/db/clickhouse/dsl/nanopass/passes_test TestDebugWithClause
 public/db/clickhouse/dsl/nanopass/passes_test TestExplainSmokeCanonicalizedSQLValid/053_set_param_slots
 public/db/clickhouse/dsl/nanopass/passes_test TestExplainSyntaxCorpus/053_set_param_slots
-public/db/clickhouse/dsl/nanopass/passes_test TestExplainSyntaxEquivalence/combined
 public/db/clickhouse/dsl/nanopass/passes_test TestInjectParamsAsCTECorpus/053_set_param_slots
 public/db/clickhouse/dsl/nanopass/passes_test TestRewriterAllChannels
 public/db/clickhouse/dsl/nanopass/passes_test TestRewriterDiagnostic
