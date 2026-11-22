@@ -31,6 +31,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine/chserver"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runid"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -168,6 +169,11 @@ type Client struct {
 	// those, never by a local name, which means another dataset in
 	// another window. Guarded by mu.
 	datasetOrigins map[string]datasetOrigin
+
+	// session is the link to the session data service (ADR-0406,
+	// play_sessiondata.go): the window's bus and the ticket of the
+	// person's data session the window holds.
+	session sessionState
 }
 
 // datasetOrigin is where a dataset bound under a local name comes from.
@@ -1281,7 +1287,43 @@ func (inst *Client) resetSchemaCaches() {
 // Client.Dispatch. It is a parameter rather than something read here so that
 // every issuer of a request is enumerated by the compiler, and so a run and
 // the diagnostic probe describing it provably share one decision.
+//
+// A decision of class session — a statement reading session('…'), or an
+// ad-hoc dataset joined with server tables — is prepared with the session
+// data service first and sent inside its data session (play_sessiondata.go);
+// the result stream then holds the session until it is closed, and its
+// Confined reports the label the binding gave the run.
 func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc memory.Allocator, opts *ExecOptions, signals map[string]string, dec dispatchDecision) (rdr *ipc.Reader, rs *resultStream, summary Summary, err error) {
+	if dec.class != dispatchClassSession {
+		return inst.executeArrowStream(ctx, sql, sql, alloc, opts, signals, dec, nil)
+	}
+	// A statement in a data session (play_sessiondata.go): prepared on the
+	// text as written, then rewritten and gated as any statement. A run
+	// that met a session the server lost after the prepare is prepared
+	// once more, which replays what it reads. The lease is the result
+	// stream's to release; a run that failed releases it here.
+	for attempt := 0; ; attempt++ {
+		var hold *sessionHold
+		hold, err = inst.prepareSession(ctx, sql, opts, dec)
+		if err != nil {
+			return
+		}
+		rdr, rs, summary, err = inst.executeArrowStream(ctx, sql, hold.b.SQL, alloc, opts, signals, dec, hold)
+		if err == nil {
+			return
+		}
+		hold.release()
+		if attempt > 0 || ctx.Err() != nil || !sessiondata.IsSessionLost(err) {
+			return
+		}
+	}
+}
+
+// executeArrowStream is one delivery of ExecuteArrowStream: authored is the
+// statement as written, for the stamp; send is what is rewritten and sent,
+// the binding's statement when hold places it in a data session.
+func (inst *Client) executeArrowStream(ctx context.Context, authored string, send string, alloc memory.Allocator, opts *ExecOptions, signals map[string]string, dec dispatchDecision, hold *sessionHold) (rdr *ipc.Reader, rs *resultStream, summary Summary, err error) {
+	sql := send
 	// The decision was resolved before the request, so a concurrent SetURL
 	// cannot tear it.
 	eng, err := inst.engineFor(dec)
@@ -1379,8 +1421,15 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	// fingerprints} as compact JSON, so the server's query_log row is
 	// attributable and the capture pipeline lifts the identity. Endpoints
 	// that don't know the setting ignore the parameter, like query_id.
-	if lc := inst.composeLogComment(sql, q, params, signals, opts, agent); lc != "" {
+	if lc := inst.composeLogComment(authored, q, params, signals, opts, agent); lc != "" {
 		req.Settings["log_comment"] = lc
+	}
+	if hold != nil {
+		// The data session's settings, the ad-hoc datasets as external
+		// data, and the binding's label.
+		if err = hold.b.Apply(&req); err != nil {
+			return
+		}
 	}
 	// A server holding this user read-only refuses some of the above; what
 	// it refused before is not sent again (play_readonly.go).
@@ -1416,6 +1465,10 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		rs = nil
 		err = eh.Errorf("unable to create arrow ipc reader: %w", err)
 		return
+	}
+	rs.sensitivity = req.Sensitivity
+	if hold != nil {
+		rs.onClose = hold.release
 	}
 	return
 }

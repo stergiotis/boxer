@@ -119,7 +119,15 @@ before sending when:
 
 A statement no endpoint may serve — an ad-hoc dataset joined with a server
 table on an endpoint that has not shown it may see sealed data, say — is
-refused with that reason, not with a destination to ask for.
+refused with that reason, not with a destination to ask for. The
+demonstration starts with the refusal, so the same statement runs once it
+has succeeded.
+
+A statement that reads `session('<name>')` is judged with each data set as
+the table it becomes; the session data service then checks the bound
+statement again before it is sent. Keeping a data set needs
+`clickhouse-session:<host>` beside `clickhouse:<host>`, with the same host
+and port; reading one needs only `clickhouse:<host>`.
 
 The limits fail a run; they never change it. The person's own Run is not
 judged by them. A window opened with a security class ceiling (an applet's

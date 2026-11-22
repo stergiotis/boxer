@@ -2,7 +2,6 @@ package play
 
 import (
 	"errors"
-	"net/url"
 	"slices"
 	"strings"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
 )
 
 // Play's agent limits (ADR-0270 §SD2): a run an agent's work causes is
@@ -37,8 +37,9 @@ func DestinationKeelsonBundle(bundle string) (name string) {
 	return adhocdata.DestinationBundle(bundle)
 }
 
-// DestinationClickHouse is how a grant names an endpoint, by host.
-func DestinationClickHouse(host string) (name string) { return "clickhouse:" + host }
+// DestinationClickHouse is how a grant names an endpoint, by host as
+// endpointHost gives it; the session data service spells it alike.
+func DestinationClickHouse(host string) (name string) { return sessiondata.DestinationServer(host) }
 
 // syntaxDetail is ": " and the parser's line:column diagnostics for a
 // statement the grammar rejected, or "" when err carries none.
@@ -61,7 +62,14 @@ func checkAgentLimits(residual string, dec dispatchDecision, obo *app.OnBehalfOf
 		_, err = dec.target()
 		return
 	}
-	pr, perr := nanopass.Parse(residual)
+	classified := residual
+	if dec.class == dispatchClassSession {
+		// The session data service replaces session('…') by its table
+		// before the statement is sent, and checks the bound statement
+		// again; the classifiers here judge it as the table it becomes.
+		classified = sessionStandIn(residual)
+	}
+	pr, perr := nanopass.Parse(classified)
 	if perr != nil {
 		return &AgentLimitError{Reason: "boxer's grammar does not parse the statement, so it cannot be classified and an agent cannot run it" + syntaxDetail(perr)}
 	}
@@ -185,11 +193,6 @@ func statementBounds(stmt string) (err error) {
 }
 
 // endpointHost is the host:port of an endpoint URL, or the URL itself when
-// it does not parse.
-func endpointHost(raw string) (host string) {
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
-		return strings.TrimSpace(raw)
-	}
-	return u.Host
-}
+// it does not parse: the one host every grant destination of an endpoint
+// is spelled with, here and in the session data service.
+func endpointHost(raw string) (host string) { return sessiondata.EndpointHost(raw) }

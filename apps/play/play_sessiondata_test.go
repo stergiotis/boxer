@@ -1,0 +1,332 @@
+package play
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/db/fairlead"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
+)
+
+// runAll runs sql through ExecuteArrowStream and drains it, as a lane does.
+func runAll(t *testing.T, ctx context.Context, c *Client, sql string, opts *ExecOptions) (rows int64, confined bool, err error) {
+	t.Helper()
+	var agent *app.OnBehalfOf
+	if opts != nil {
+		agent = opts.Agent
+	}
+	dec := c.dispatchFor(agent, sql, "")
+	rdr, rs, _, err := c.ExecuteArrowStream(ctx, sql, memory.NewGoAllocator(), opts, nil, dec)
+	if err != nil {
+		return
+	}
+	defer func() {
+		rdr.Release()
+		_ = rs.Close()
+	}()
+	batches, _, err := drainRun(rdr, rs)
+	for _, b := range batches {
+		rows += b.NumRows()
+		b.Release()
+	}
+	return rows, rs.Confined(), err
+}
+
+// quickly bounds a run that would wait on a lease left held.
+func quickly(t *testing.T) context.Context {
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	t.Cleanup(cancel)
+	return ctx
+}
+
+func TestDispatchPlacesTheFourKindsOfStatement(t *testing.T) {
+	r := newSdRig(t)
+	c := r.client("github.com/x/play", 1)
+	c.SetResolver(keelsonResolver{localEndpoint: func() string { return "http://127.0.0.1:1/query" }})
+
+	dec := c.Dispatch("SELECT * FROM keelson('items')", "")
+	assert.Equal(t, dispatchClassIntrospection, dec.class, "keelson tables alone stay on the plane")
+
+	dec = c.Dispatch("SELECT * FROM db.message", "")
+	assert.Equal(t, dispatchClassManual, dec.class)
+
+	dec = c.Dispatch("SELECT * FROM session('msgs') JOIN db.message USING id", "")
+	assert.Equal(t, dispatchClassSession, dec.class)
+	assert.Equal(t, r.stub.url(), dec.targetURL)
+
+	dec = c.Dispatch("SELECT * FROM keelson('items') JOIN db.message USING id", "")
+	assert.Equal(t, dispatchClassSession, dec.class, "an ad-hoc dataset joined with a server table runs on the server")
+
+	bare := NewClient(ClientConfig{URL: r.stub.url()}, nil)
+	bare.SetResolver(autoResolver)
+	dec = bare.Dispatch("SELECT * FROM keelson('items') JOIN db.message USING id", "")
+	assert.Equal(t, dispatchClassRefused, dec.class)
+	assert.Contains(t, dec.reason, "no endpoint serves")
+	assert.Contains(t, dec.reason, "not")
+	dec = bare.Dispatch("SELECT * FROM session('msgs')", "")
+	assert.Equal(t, dispatchClassRefused, dec.class, "a client without the service cannot read a data set")
+	assert.Contains(t, dec.reason, "session data service")
+}
+
+func TestARunReadsADataSetInItsSessionAndReleasesItsLease(t *testing.T) {
+	r := newSdRig(t)
+	c := r.client("github.com/x/play", 1)
+	res, err := c.defineSession(t.Context(), nil, "msgs", "SELECT 1 AS x", nil)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(1), res.Dataset.Revision)
+	assert.NotEmpty(t, c.windowTicket(), "the window's first definition opened its data session")
+
+	for range 3 {
+		// A lease left held would make the next run wait out the timeout.
+		rows, confined, err := runAll(t, quickly(t), c, "SELECT * FROM session('msgs') WHERE x > 0", nil)
+		require.NoError(t, err)
+		assert.Equal(t, int64(3), rows)
+		assert.False(t, confined)
+	}
+	run := r.stub.lastRun()
+	assert.Contains(t, run.SQL, "`__sd_msgs_r1`")
+	assert.NotContains(t, run.SQL, "session(")
+	assert.Equal(t, "1", run.Params["session_check"])
+	assert.NotEmpty(t, run.Params["session_id"])
+	assert.Equal(t, "2", run.Params["readonly"])
+
+	// A failed run releases its lease too.
+	r.stub.mu.Lock()
+	r.stub.failRuns = true
+	r.stub.mu.Unlock()
+	_, _, err = runAll(t, quickly(t), c, "SELECT * FROM session('msgs')", nil)
+	require.Error(t, err)
+	r.stub.mu.Lock()
+	r.stub.failRuns = false
+	r.stub.mu.Unlock()
+	_, _, err = runAll(t, quickly(t), c, "SELECT * FROM session('msgs')", nil)
+	require.NoError(t, err, "the failed run released its lease")
+
+	// So does a cancelled one.
+	hold := make(chan struct{})
+	r.stub.mu.Lock()
+	r.stub.hold = hold
+	r.stub.mu.Unlock()
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := runAll(t, ctx, c, "SELECT * FROM session('msgs')", nil)
+		done <- err
+	}()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	require.Error(t, <-done)
+	r.stub.mu.Lock()
+	r.stub.hold = nil
+	r.stub.mu.Unlock()
+	close(hold)
+	_, _, err = runAll(t, quickly(t), c, "SELECT * FROM session('msgs')", nil)
+	require.NoError(t, err, "the cancelled run released its lease")
+
+	// A statement naming a data set the session lacks names what it holds.
+	_, _, err = runAll(t, quickly(t), c, "SELECT * FROM session('nope')", nil)
+	require.ErrorContains(t, err, "msgs")
+}
+
+func TestARunThatMetALostSessionIsSentOnceMore(t *testing.T) {
+	r := newSdRig(t)
+	c := r.client("github.com/x/play", 1)
+	_, err := c.defineSession(t.Context(), nil, "msgs", "SELECT 1 AS x", nil)
+	require.NoError(t, err)
+	r.stub.mu.Lock()
+	r.stub.loseOnRun = 1
+	r.stub.mu.Unlock()
+	rows, _, err := runAll(t, quickly(t), c, "SELECT * FROM session('msgs')", nil)
+	require.NoError(t, err, "the second prepare replays the data set in a new session")
+	assert.Equal(t, int64(3), rows)
+	r.stub.mu.Lock()
+	n := len(r.stub.runs)
+	first, second := r.stub.runs[n-2].Params["session_id"], r.stub.runs[n-1].Params["session_id"]
+	r.stub.loseOnRun = 2
+	r.stub.mu.Unlock()
+	assert.NotEqual(t, first, second, "the retry went to the reopened session")
+
+	_, _, err = runAll(t, quickly(t), c, "SELECT * FROM session('msgs')", nil)
+	require.Error(t, err, "a run is sent once more, not twice")
+	assert.True(t, sessiondata.IsSessionLost(err))
+	r.stub.mu.Lock()
+	r.stub.loseOnRun = 0
+	r.stub.mu.Unlock()
+	_, _, err = runAll(t, quickly(t), c, "SELECT * FROM session('msgs')", nil)
+	require.NoError(t, err, "and released its lease")
+}
+
+func TestAnAgentsRunIsHeldToTheGrantAndMarkedWithItsTask(t *testing.T) {
+	r := newSdRig(t)
+	c := r.client("github.com/x/play", 1)
+	obo := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: []string{DestinationClickHouse(r.host)}}
+	r.grant("t1", DestinationClickHouse(r.host))
+
+	_, err := c.defineSession(t.Context(), obo, "msgs", "SELECT 1 AS x", nil)
+	var limit *AgentLimitError
+	require.ErrorAs(t, err, &limit)
+	assert.Equal(t, sessiondata.DestinationSession(r.host), limit.Destination, "keeping a data set needs its own destination")
+
+	r.grant("t1", sessiondata.DestinationSession(r.host))
+	_, err = c.defineSession(t.Context(), obo, "msgs", "SELECT 1 AS x", nil)
+	require.NoError(t, err)
+
+	_, _, err = runAll(t, quickly(t), c, "SELECT * FROM session('msgs')", &ExecOptions{Agent: obo})
+	require.NoError(t, err, "reading needs only the endpoint")
+
+	ungranted := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c2"}
+	_, _, err = runAll(t, quickly(t), c, "SELECT * FROM session('msgs')", &ExecOptions{Agent: ungranted})
+	require.ErrorAs(t, err, &limit)
+	assert.Equal(t, DestinationClickHouse(r.host), limit.Destination, "a missing endpoint names it, as for any run")
+
+	c.reach.record(r.stub.url())
+	_, _, err = runAll(t, quickly(t), c, "SELECT * FROM session('msgs') JOIN keelson('items') USING x", &ExecOptions{Agent: obo})
+	require.ErrorAs(t, err, &limit, "an ad-hoc dataset the grant does not list, refused by the dataset service's rule")
+	assert.Equal(t, DestinationKeelson("items"), limit.Destination)
+	p0 := &PlayApp{client: c, sql: "SELECT * FROM session('msgs') JOIN keelson('items') USING x"}
+	err = p0.refuseAgentRun(obo)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), DestinationKeelson("items"), "the check at the call names it too")
+
+	// The agent's statement is a read, checked before the service binds it.
+	p := &PlayApp{client: c, sql: "SELECT * FROM session('msgs')"}
+	require.NoError(t, p.refuseAgentRun(obo))
+	p.sql = "INSERT INTO t SELECT * FROM session('msgs')"
+	require.Error(t, p.refuseAgentRun(obo))
+}
+
+func TestAnAdhocDatasetJoinsAServerTableAsConfinedData(t *testing.T) {
+	r := newSdRig(t)
+	c := r.client("github.com/x/play", 1)
+	c.SetResolver(autoResolver)
+	_, err := c.defineSession(t.Context(), nil, "msgs", "SELECT 1 AS x", nil)
+	require.NoError(t, err)
+
+	_, _, err = runAll(t, quickly(t), c, "SELECT * FROM session('msgs') JOIN keelson('items') USING x", nil)
+	require.ErrorContains(t, err, "sealed", "an endpoint that has not shown it may see sealed data is refused")
+
+	c.reach.record(r.stub.url())
+	rows, confined, err := runAll(t, quickly(t), c, "SELECT * FROM session('msgs') JOIN keelson('items') USING x", nil)
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), rows)
+	assert.True(t, confined, "the binding's label reaches the result")
+	run := r.stub.lastRun()
+	assert.Equal(t, []string{"__adhoc_0"}, run.Files)
+
+	// A data set defined from one is confined, and so is what reads it.
+	_, err = c.defineSession(t.Context(), nil, "joined", "SELECT * FROM keelson('items')", nil)
+	require.NoError(t, err)
+	_, confined, err = runAll(t, quickly(t), c, "SELECT * FROM session('joined')", nil)
+	require.NoError(t, err)
+	assert.True(t, confined)
+}
+
+// TestTwoAppsOfOneTaskShareItsDataSession: a second app — a client with
+// another window identity, as a downstream app holds — reads what the first
+// defined for the same task, through the on-behalf-of context alone.
+func TestTwoAppsOfOneTaskShareItsDataSession(t *testing.T) {
+	r := newSdRig(t)
+	r.grant("t1", DestinationClickHouse(r.host), sessiondata.DestinationSession(r.host))
+	dests := []string{DestinationClickHouse(r.host), sessiondata.DestinationSession(r.host)}
+	play := r.client("github.com/x/play", 1)
+	other := r.client("github.com/x/kernel", 9)
+
+	_, err := play.defineSession(t.Context(), &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: dests}, "msgs", "SELECT 1 AS x", nil)
+	require.NoError(t, err)
+	obo := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c7", Destinations: dests}
+	rows, _, err := runAll(t, quickly(t), other, "SELECT * FROM session('msgs')", &ExecOptions{Agent: obo, Label: "kernel-input"})
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), rows)
+	infos, err := other.listSession(t.Context(), obo)
+	require.NoError(t, err)
+	require.Len(t, infos, 1)
+	assert.Equal(t, "msgs", infos[0].Name)
+
+	// Another task does not see it.
+	r.grant("t2", dests...)
+	_, _, err = runAll(t, quickly(t), other, "SELECT * FROM session('msgs')", &ExecOptions{Agent: &app.OnBehalfOf{Task: "t2", Epoch: 1, Call: "c1", Destinations: dests}})
+	require.Error(t, err)
+}
+
+func TestSessionStandInClassifiesTheMacroAsATable(t *testing.T) {
+	assert.Equal(t, "SELECT * FROM `__sd_msgs` AS m", sessionStandIn("SELECT * FROM session('msgs') AS m"))
+	assert.Equal(t, "SELECT 1", sessionStandIn("SELECT 1"))
+}
+
+func TestAGrantErrorBecomesAnAgentLimit(t *testing.T) {
+	err := sessionError("x", &sessiondata.GrantError{Destination: "clickhouse-session:h", Reason: "no"})
+	var limit *AgentLimitError
+	require.True(t, errors.As(err, &limit))
+	assert.Equal(t, "clickhouse-session:h", limit.Destination)
+}
+
+// TestACheckRestsOnAResultThatReadADataSet: a citation's check over a
+// result whose statement read session('msgs') may read the data set, runs
+// in the data session, and holds no lease afterwards.
+func TestACheckRestsOnAResultThatReadADataSet(t *testing.T) {
+	r := newSdRig(t)
+	c := r.client("github.com/x/play", 1)
+	dests := []string{DestinationClickHouse(r.host), sessiondata.DestinationSession(r.host)}
+	r.grant("t1", dests...)
+	obo := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: dests}
+	_, err := c.defineSession(t.Context(), obo, "msgs", "SELECT 1 AS x", nil)
+	require.NoError(t, err)
+	cs := checkSnap{checkSource: checkSource{resultId: 12, source: "SELECT * FROM session('msgs') LIMIT 20"}}
+	for range 2 {
+		out, err := runCheck(quickly(t), c, cs, obo, CheckArgs{ResultId: 12, Statement: "SELECT count() = 3 FROM session('msgs')"})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"3"}, out.Cells)
+		assert.Equal(t, statementDigest(cs.source), out.SourceDigest)
+	}
+	assert.Contains(t, r.stub.lastRun().SQL, "`__sd_msgs_r1`")
+	_, err = runCheck(quickly(t), c, cs, obo, CheckArgs{ResultId: 12, Statement: "SELECT count() FROM session('other')"})
+	require.ErrorContains(t, err, "did not read")
+}
+
+// TestASessionRunCarriesTheTaskAndTheServicesStatementsDoNot: a run reading
+// a data set leaves marked with the task whose text it is (ADR-0403); the
+// service's own create and probe leave with the mark cleared.
+func TestASessionRunCarriesTheTaskAndTheServicesStatementsDoNot(t *testing.T) {
+	r := newSdRig(t)
+	rec := &siteRecorder{}
+	t.Cleanup(fairlead.Install(rec))
+	dests := []string{DestinationClickHouse(r.host), sessiondata.DestinationSession(r.host)}
+	r.grant("t1", dests...)
+	obo := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: dests}
+	c := r.client("github.com/x/play", 1)
+	_, err := c.defineSession(t.Context(), obo, "msgs", "SELECT 1 AS x", nil)
+	require.NoError(t, err)
+	_, _, err = runAll(t, quickly(t), c, "SELECT x FROM session('msgs')", &ExecOptions{Agent: obo})
+	require.NoError(t, err)
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	assert.Equal(t, "t1", rec.bySite["chserver.deliver"])
+	assert.Contains(t, rec.bySite, sessiondata.SiteCreate)
+	assert.Empty(t, rec.bySite[sessiondata.SiteCreate])
+	assert.Empty(t, rec.bySite[sessiondata.SiteProbe])
+}
+
+// siteRecorder is a fairlead pass that keeps the task of the last statement
+// each site led.
+type siteRecorder struct {
+	mu     sync.Mutex
+	bySite map[string]string
+}
+
+func (inst *siteRecorder) Lead(_ context.Context, st fairlead.Statement) (string, error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.bySite == nil {
+		inst.bySite = map[string]string{}
+	}
+	inst.bySite[st.Site] = st.Task
+	return st.SQL, nil
+}

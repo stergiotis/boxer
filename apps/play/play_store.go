@@ -286,6 +286,13 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 				rdr.Release()
 				_ = rs.Close()
 			}()
+			if rs.Confined() {
+				// A run in a data session learns its label from the
+				// binding, after the decision (play_sessiondata.go).
+				inst.mu.Lock()
+				inst.runConfined = true
+				inst.mu.Unlock()
+			}
 
 			// Consume all batches and concatenate into a single record batch so
 			// the renderer sees one continuous column per field. The drain runs

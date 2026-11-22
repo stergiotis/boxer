@@ -4,6 +4,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
@@ -93,6 +94,14 @@ type resultStream struct {
 	pending []byte
 	term    runstream.Terminal
 	hasTerm bool
+	// sensitivity is the label the request was sent with: a run that read
+	// a confined session data set or attached an ad-hoc dataset carries it
+	// although its dispatch decision could not know.
+	sensitivity queryengine.SensitivityE
+	// onClose runs once when the stream closes: the release of the data
+	// session's lease the run held.
+	onClose   func()
+	closeOnce sync.Once
 }
 
 var _ io.Reader = (*resultStream)(nil)
@@ -144,7 +153,19 @@ func (inst *resultStream) Read(p []byte) (n int, err error) {
 // Close releases the delivered stream. Safe to call more than once.
 func (inst *resultStream) Close() (err error) {
 	err = inst.st.Close()
+	inst.closeOnce.Do(func() {
+		if inst.onClose != nil {
+			inst.onClose()
+		}
+	})
 	return
+}
+
+// Confined reports whether the run read sealed data (ADR-0145): the label a
+// result of it carries, whatever the dispatch decision said before the
+// run was prepared.
+func (inst *resultStream) Confined() (confined bool) {
+	return inst != nil && inst.sensitivity == queryengine.SensitivityConfined
 }
 
 // terminal reports how the engine said the run ended, or ErrIncomplete when

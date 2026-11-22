@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json/v2"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -32,7 +33,9 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine/chserver"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
 )
 
 const opCheck = "check"
@@ -109,6 +112,10 @@ func checkScope(assertion string, source string) (err error) {
 			allowed["keelson('"+t+"')"] = true
 		}
 	}
+	sourceSets, _ := sessiondata.References(source)
+	for _, t := range sourceSets {
+		allowed["session('"+t+"')"] = true
+	}
 	ctes := map[string]bool{}
 	if scopes, serr := nanopass.BuildScopes(apr, ""); serr == nil {
 		for _, sc := range scopes {
@@ -135,6 +142,13 @@ func checkScope(assertion string, source string) (err error) {
 		named++
 		if !allowed["keelson('"+t+"')"] {
 			return app.RefuseOperation("the assertion names keelson('" + t + "'), which the result's statement did not read")
+		}
+	}
+	assertionSets, _ := sessiondata.References(assertion)
+	for _, t := range assertionSets {
+		named++
+		if !allowed["session('"+t+"')"] {
+			return app.RefuseOperation("the assertion names session('" + t + "'), which the result's statement did not read")
 		}
 	}
 	if named == 0 {
@@ -248,7 +262,7 @@ func runCheck(ctx context.Context, client *Client, cs checkSnap, obo *app.OnBeha
 		return out, app.ConflictOperation("another result is held now: " + strconv.FormatUint(cs.resultId, 10) +
 			"; result " + strconv.FormatUint(in.ResultId, 10) + " is not among the last " + strconv.Itoa(checkHistoryMax) + " the window remembers")
 	}
-	residual, params, _ := client.rewriteFor(obo, in.Statement, nil)
+	residual, _, _ := client.rewriteFor(obo, in.Statement, nil)
 	dec := client.dispatchResidual(residual, "")
 	if obo != nil {
 		if lerr := checkAgentLimits(residual, dec, obo, client.datasetAliasOf()); lerr != nil {
@@ -264,6 +278,36 @@ func runCheck(ctx context.Context, client *Client, cs checkSnap, obo *app.OnBeha
 	eng, err := client.engineFor(dec)
 	if err != nil {
 		return out, app.RefuseOperation("the check cannot be dispatched: " + err.Error())
+	}
+	if dec.class == dispatchClassSession {
+		// An assertion over a session data set runs in the data session
+		// (play_sessiondata.go), once more when the server lost the
+		// session after the prepare.
+		for attempt := 0; ; attempt++ {
+			out, err = runCheckOnce(ctx, client, eng, dec, src, superseded, obo, in)
+			if attempt > 0 || !sessiondata.IsSessionLost(err) {
+				return
+			}
+		}
+	}
+	return runCheckOnce(ctx, client, eng, dec, src, superseded, obo, in)
+}
+
+// runCheckOnce sends the assertion once: bound in its data session first
+// when dec places it in one.
+func runCheckOnce(ctx context.Context, client *Client, eng *chserver.Engine, dec dispatchDecision, src checkSource, superseded bool, obo *app.OnBehalfOf, in CheckArgs) (out CheckResult, err error) {
+	residual, params, _ := client.rewriteFor(obo, in.Statement, nil)
+	var hold *sessionHold
+	if dec.class == dispatchClassSession {
+		hold, err = client.prepareSession(ctx, in.Statement, &ExecOptions{Agent: obo}, dec)
+		if err != nil {
+			if limit, ok := errors.AsType[*AgentLimitError](err); ok && limit.Destination != "" {
+				return out, app.RefuseForDestinations(err.Error(), limit.Destination)
+			}
+			return out, app.RefuseOperation("the check cannot be prepared: " + err.Error())
+		}
+		defer hold.release()
+		residual, params, _ = client.rewriteFor(obo, hold.b.SQL, nil)
 	}
 	// The row bound is in the statement itself — a wrapper that keeps two
 	// rows, so a second row is seen and refused and no block of a wide
@@ -284,6 +328,11 @@ func runCheck(ctx context.Context, client *Client, cs checkSnap, obo *app.OnBeha
 		// The assertion is the task's text inside play's wrapper (ADR-0403).
 		req.Task = obo.Task
 	}
+	if hold != nil {
+		if err = hold.b.Apply(&req); err != nil {
+			return out, app.RefuseOperation("the check cannot be bound to its data session: " + err.Error())
+		}
+	}
 	target, _ := dec.target()
 	sentLevel := client.knownReadonlyLevel(target)
 	degradeForReadonly(&req, sentLevel)
@@ -293,6 +342,9 @@ func runCheck(ctx context.Context, client *Client, cs checkSnap, obo *app.OnBeha
 		body, derr = deliverBody(ctx, eng, req)
 	}
 	if derr != nil {
+		if sessiondata.IsSessionLost(derr) {
+			return out, derr
+		}
 		return out, app.RefuseOperation("the check failed: " + derr.Error())
 	}
 	var parsed struct {
@@ -306,7 +358,7 @@ func runCheck(ctx context.Context, client *Client, cs checkSnap, obo *app.OnBeha
 		return out, app.RefuseOperation("the check's result does not parse: " + jerr.Error())
 	}
 	out.ResultId, out.StatementDigest, out.SourceDigest = src.resultId, statementDigest(in.Statement), statementDigest(src.source)
-	out.Endpoint, out.Confined = DestinationClickHouse(endpointHost(target)), src.confined || dec.sensitivity == queryengine.SensitivityConfined
+	out.Endpoint, out.Confined = DestinationClickHouse(endpointHost(target)), src.confined || req.Sensitivity == queryengine.SensitivityConfined
 	out.Superseded = superseded
 	out.Rows = max(parsed.Rows, int64(len(parsed.Data)))
 	for _, m := range parsed.Meta {

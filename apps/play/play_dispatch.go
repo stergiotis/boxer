@@ -50,10 +50,15 @@ const (
 	// dispatchClassRefused means no endpoint may serve the statement, and
 	// the reason says why. The run does not happen.
 	dispatchClassRefused
+	// dispatchClassSession is the pinned server endpoint, inside a data
+	// session of the session data service (ADR-0406): the statement reads
+	// session data sets or attaches ad-hoc datasets as external data, and
+	// the service binds it before it is sent (play_sessiondata.go).
+	dispatchClassSession
 )
 
 var allDispatchClasses = []dispatchClassE{
-	dispatchClassUnknown, dispatchClassManual, dispatchClassIntrospection, dispatchClassRefused,
+	dispatchClassUnknown, dispatchClassManual, dispatchClassIntrospection, dispatchClassRefused, dispatchClassSession,
 }
 
 func (inst dispatchClassE) String() (name string) {
@@ -64,6 +69,8 @@ func (inst dispatchClassE) String() (name string) {
 		name = "introspection"
 	case dispatchClassRefused:
 		name = "refused"
+	case dispatchClassSession:
+		name = "session"
 	default:
 		name = "unresolved"
 	}
@@ -227,6 +234,14 @@ func (inst *Client) dispatchResidual(residual string, affinity string) (dec disp
 	if r == nil {
 		r = staticResolver{}
 	}
+	// A statement the session data service serves goes to the pinned
+	// server inside the data session, whatever the resolver would say: a
+	// session lives on one server (ADR-0406). The wall below applies to it
+	// as to any run.
+	if sd, ok := inst.sessionRoute(residual, base); ok {
+		dec = inst.confine(residual, sd)
+		return
+	}
 	dec = inst.confine(residual, r.resolve(residual, base, affinity))
 	return
 }
@@ -278,6 +293,16 @@ func (inst *Client) confine(residual string, in dispatchDecision) (out dispatchD
 		sensitivity: queryengine.SensitivityConfined,
 		reason: "names sealed data (" + nameList(sealed) + ") that must not leave this box, and " +
 			describeTarget(in.targetURL) + " has not demonstrated it can reach this process's introspection plane",
+	}
+	if in.class == dispatchClassSession {
+		// The session data service would send the dataset to the server as
+		// external data; the reach proof is the declaration that the
+		// server may see it (ADR-0406 §SD7).
+		out.reason = "attaches ad-hoc datasets (" + nameList(sealed) + "), which are sealed data, to a statement on " +
+			describeTarget(in.targetURL) + ", which has not demonstrated it may see sealed data (it has not reached this process's introspection plane)"
+	}
+	if in.targetURL != "" {
+		out.reason += "; the demonstration has started, and the same statement runs once it succeeds"
 	}
 	return
 }

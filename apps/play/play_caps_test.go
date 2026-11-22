@@ -192,8 +192,11 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// starts, which run as keelson tasks owned by it. runtime.externaledit.offer,
 	// .wait and .close for the Editor's buffer handed to the host's editor
 	// app (the window open is the applet creator's). runtime.audio.out.open for the
-	// audio/wav gloss's play button (ADR-0372).
-	require.Len(t, m.Caps, 19)
+	// audio/wav gloss's play button (ADR-0372). runtime.sessiondata.define,
+	// .prepare, .release, .list, .drop and .open for session data sets
+	// (ADR-0406): the client defines, reads, lists and drops them, and a
+	// window opens its own data session.
+	require.Len(t, m.Caps, 25)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {
 		patterns = append(patterns, cap.Pattern)

@@ -84,6 +84,7 @@ func (inst clientExecutor) executeLabelled(ctx context.Context, c compiledNode, 
 		rdr.Release()
 		_ = rs.Close()
 	}()
+	confined = confined || rs.Confined()
 	// Same frame drain as the main lane (play_runstream.go): a stream that
 	// dies part-way is a failed terminal, never a short result.
 	batches, _, rErr := drainRun(rdr, rs)

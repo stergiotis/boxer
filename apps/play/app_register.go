@@ -25,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -277,6 +278,12 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 			adhocdata.BundleEventsCap("and follows the bundle's republish and retract"),
 			adhocdata.BundlePublishCap("publish_result and the Publish menu publish the main result as an ad-hoc bundle (ADR-0288 §SD4)"),
 			adhocdata.ReadCap("list_bundles reads a bundle's column values as a read of the data, held to the task's grant (ADR-0288 §SD5)"),
+			sessiondata.DefineCap("the client keeps a statement's result as a session data set (ADR-0406)"),
+			sessiondata.PrepareCap("a run reading session('…'), or joining an ad-hoc dataset with server tables, is bound to its data session"),
+			sessiondata.ReleaseCap("and frees the data session once the run's result is read"),
+			sessiondata.ListCap("the client lists the data session's data sets"),
+			sessiondata.DropCap("and drops one"),
+			sessiondata.OpenCap("a window opens the person's data session at its first definition"),
 			// list_bundles reads the bundle catalog (ADR-0288 §SD4).
 			keelsonquery.ClientCaps(adhocdata.BundleCatalogTableName)[0],
 			{
@@ -433,6 +440,9 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	client.SetStampIdentity(ctx.RunId(), string(inst.Manifest().Id), ctx.InstanceKey())
 	client.SetTasks(task.ForApp(ctx))
 	client.SetLifetime(ctx.Lifetime())
+	// The session data service (ADR-0406): the window's runs reach its
+	// data sets over the window's own bus.
+	client.SetSessionBus(ctx.Bus())
 	// NewLivePlayApp installs the pre-execute SQL pipeline on the client
 	// (standard passes + schema-aware leeway name resolver, ADR-0108/0116) and
 	// wires the resolver into the Diagnostics pane. The carousel-embedded play
