@@ -147,6 +147,7 @@ func (inst *App) applyLaunch(cfg launchcfg.TallyLaunch) {
 	inst.focus = inst.target
 	inst.querySql = strings.TrimSpace(cfg.Sql)
 	inst.queryLabel = cfg.SqlLabel
+	inst.queryTask = ""
 	// Which tab opens: what the config asked for, or the Results tab when it
 	// carried a query and said nothing — a caller that passes a query wants
 	// to see what it returned.

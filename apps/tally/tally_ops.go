@@ -669,7 +669,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		Effect:  app.OperationEffectDocument, Writes: []string{resQuery}, Agents: true,
 		Rebuild: app.OperationRebuildVolatile,
 		Follows: []string{"nothing runs until run_query; a changed query drops the last result"}},
-		func(inst *App, _ app.OperationCall, in SetQueryArgs) (out appops.None, err error) {
+		func(inst *App, call app.OperationCall, in SetQueryArgs) (out appops.None, err error) {
 			sql := strings.TrimSpace(in.Sql)
 			if sql == "" {
 				err = app.RefuseOperation("sql is the query; an empty one would remove the Results tab, which the window keeps")
@@ -683,6 +683,11 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 				inst.resultLane.Invalidate()
 			}
 			inst.querySql, inst.queryLabel = sql, in.Label
+			// Whose text it is rides with it to the store's exit (ADR-0403).
+			inst.queryTask = ""
+			if call.OnBehalfOf != nil {
+				inst.queryTask = call.OnBehalfOf.Task
+			}
 			return
 		})
 

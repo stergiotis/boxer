@@ -105,6 +105,10 @@ type App struct {
 	// rebuilt when the lane answers.
 	querySql   string
 	queryLabel string
+	// queryTask is the task whose call set querySql, empty when the person
+	// or a launch config did; a run of the query is marked with it at the
+	// fairlead (ADR-0403).
+	queryTask  string
 	resultLane bgjob.Keyed[resultSet]
 	resultSet  resultSet
 	resultFS   *resultFS

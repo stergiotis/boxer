@@ -12,6 +12,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
+	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -352,8 +353,9 @@ func (inst *App) renderResults(sc *storeConn) {
 	if hasAnchor {
 		key += "@" + anchor.key()
 	}
+	sql, task := inst.querySql, inst.queryTask
 	rs, done, qerr, busy := inst.resultLane.Demand(key, func(ctx context.Context) (resultSet, error) {
-		return runPathSet(ctx, sc.exec, sc.sql, inst.querySql, anchor, inst.mountLabel)
+		return runPathSet(fairlead.WithTask(ctx, task), sc.exec, sc.sql, sql, anchor, inst.mountLabel)
 	})
 	if busy {
 		inst.waiting(&inst.resultLane, "resultLane", "Running the query…")

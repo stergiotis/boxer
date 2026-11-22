@@ -248,3 +248,18 @@ func TestFindBatterySQL(t *testing.T) {
 	assert.Contains(t, findBatterySQL(loc, findScopeAll, "doc", b, "", 0, 10), "fs('*')")
 	assert.NotContains(t, findBatterySQL(loc, findScopeMount, "doc", search.ParseQuery(""), "", 0, 10), "match(")
 }
+
+// ADR-0403: the query an agent's call sets is the task's text, and a run of
+// it is marked with the task; the person's set_query and a launch config
+// leave no mark.
+func TestSetQueryRemembersWhoseTextItIs(t *testing.T) {
+	inst := opsFixture(t)
+	args, err := buscodec.Encode(SetQueryArgs{Sql: "SELECT path FROM fs('*')"})
+	require.NoError(t, err)
+	_, err = inst.Operations().ApplyCommand(app.OperationCall{OnBehalfOf: &app.OnBehalfOf{Task: "task-1"}}, opSetQuery, args)
+	require.NoError(t, err)
+	assert.Equal(t, "task-1", inst.queryTask)
+
+	require.NoError(t, command(t, inst, opSetQuery, SetQueryArgs{Sql: "SELECT path FROM fs('*') LIMIT 1"}))
+	assert.Empty(t, inst.queryTask, "the person's text")
+}
