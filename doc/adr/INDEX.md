@@ -414,3 +414,4 @@ withdrawn, deferred — is described in the
 | [0400](./0400-image-operations-declared-operators-that-stream-a-new-image-into-a-tiled-store-and-record-what-they-did.md) | Image operations — declared operators that stream a new image into a tiled store and record what they did | proposed | 2026-11-21 |  |
 | [0401](./0401-showing-bands-together-a-recipe-per-band-an-additive-composite-and-limits-by-zscale.md) | Showing bands together — a recipe per band, an additive composite, and limits by zscale | proposed | 2026-11-21 |  |
 | [0402](./0402-facts-stored-in-a-deployments-own-table-a-write-transform-at-the-insert-seam-and-one-read-table-setting.md) | Facts stored in a deployment's own table — a write transform at the insert seam, and one read-table setting | accepted | 2026-11-21 |  |
+| [0403](./0403-a-statement-a-task-wrote-leaves-only-as-a-read.md) | A statement a task wrote leaves only as a read — the task rides to the fairlead | proposed | 2026-11-22 |  |

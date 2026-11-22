@@ -417,6 +417,22 @@ is a change to the query request and to what the fairlead promises, so it is
 left for its own decision; [agentic-layer](../explanation/agentic-layer.md)
 gives the server-side bound that holds meanwhile.
 
+### 2026-11-22 — the task reaches the fairlead, and a host refuses a task's non-read
+
+The deferral above is taken up by
+[ADR-0403](0403-a-statement-a-task-wrote-leaves-only-as-a-read.md), proposed.
+A statement carries the task whose call supplied its text
+(`Statement.Task`, from a context mark the sender sets), the engine request
+and the local broker's wire request carry it to the exit, and a host
+installs a pass that lets a marked statement leave only as a read. The key
+is the task that wrote the text, not the agent that caused the run, so an
+app's own writes on a task's behalf are not judged. Two things here move
+with it: the local broker's prelude is led apart from the request's
+statement, under a site of its own, and that path now leads under the
+broker's request context rather than the background one, which narrows the
+*local-worker pool's context* deferral without closing it. A journal line
+still records no task.
+
 ## References
 
 - [ADR-0117](0117-passthrough-table-classifier.md) — passthrough tables.

@@ -303,12 +303,27 @@ other windows that run SQL for an agent classify the statement first
 (`analysis.ClassifyQuerySecurity`) and refuse a write or an egress. Both are
 checks in the client. `readonly=2` stops writes and DDL; it is not relied on
 to stop table functions — `url()`, `s3()`, `remote()`, `file()` — which read
-from, and send to, places the person did not name. The fairlead
-([ADR-0367](../adr/0367-sql-statements-leave-through-one-fairlead-and-each-is-placed-in-a-stratum.md))
-is where a process-wide refusal would go, but the statement reaches it
-without the task that caused it: a run is delivered to the query engine over
-the bus, and the engine's context does not say on whose behalf. Carrying
-that identity to the exit is a design step of its own and is not taken.
+from, and send to, places the person did not name.
+
+Behind those checks is a second one, in the process but outside the app.
+An app that runs text a task supplied names the task on the run, and the
+name travels with the statement to the fairlead
+([ADR-0367](../adr/0367-sql-statements-leave-through-one-fairlead-and-each-is-placed-in-a-stratum.md)),
+where every statement leaves the process — over the bus to a local query
+process too. A host installs a pass there that lets a statement carrying a
+task leave only when the statement-kind classifier proves it a read
+([ADR-0403](../adr/0403-a-statement-a-task-wrote-leaves-only-as-a-read.md),
+proposed). The key is who wrote the text, not who caused the run: a write
+an app composes itself on a task's behalf carries no task and is bounded by
+the grant, not by this pass.
+
+That pass has the limits of where it sits. The name is the app's
+declaration, so an app that runs a task's SQL without checking or naming it
+is not stopped. It asks read or not-read and nothing else; a table function
+that reaches another host stays with the app's security classification. And
+a run that leaves the process — play's runs against the host's own
+introspection endpoint — is judged once, at play's exit, and arrives at the
+far side as that side's own.
 
 The barrier that does not depend on the client is the server's. Run the
 host whose agent work should be bounded under a ClickHouse user that holds
@@ -329,8 +344,9 @@ GRANT SELECT ON analytics.* TO boxer_agent;   -- the tables agent work may read
 Point the host at it with `CLICKHOUSE_USER` and `CLICKHOUSE_PASSWORD_FILE`.
 A host has one ClickHouse identity, so the person's own runs on that host
 are bounded the same way; a deployment that wants the person unbounded and
-the agent bounded runs them on separate hosts until runs carry their task to
-the exit.
+the agent bounded runs them on separate hosts: the pass above refuses a
+task's non-read in the client, and only a second identity bounds it at the
+server.
 
 ## What is deliberately not there
 
