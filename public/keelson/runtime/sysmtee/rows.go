@@ -27,7 +27,7 @@ const (
 	// domainCpuInfo is the series of the per-host CPU descriptor, beside
 	// the sample's.
 	domainCpuInfo = domainCpu + "/info"
-	domainMem = string(sysmsnap.DomainMem)
+	domainMem     = string(sysmsnap.DomainMem)
 )
 
 // entityKey is the store Key for one (host, domain) series: every sample of
