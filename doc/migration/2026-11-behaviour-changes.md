@@ -140,6 +140,47 @@ relied on the old behaviour.
   then holds across pin and workspace changes
   ([ADR-0394](../adr/0394-library-packages-do-not-import-the-app-platform.md)).
 
+## Windows, widgets and scenes
+
+- **A dock tab that appears later.** A `c.DockArea` tab declared only on
+  some frames is placed in the leaf of its declared group, and that group's
+  split is made again when none of the group is shown; it used to join the
+  first leaf. A dock that counted on a late tab landing beside the root
+  declares it in the root's group
+  ([ADR-0404](../adr/0404-what-a-person-reads-in-a-window-a-stated-reader-one-way-to-draw-a-decision-and-the-chat-window-as-the-first-case.md)
+  §SD8).
+- **Segmented bars.** `selector.StyleSegmented` draws its options under one
+  outline, and the options' widget ids sit under that outline's scope: a
+  test or a scene that reached an option by id reaches it by name. Captures
+  and SVG goldens of every such bar change (ADR-0404 §SD5).
+- **Questions on the host's cards.** The agent's request and confirmation,
+  the moderator's question and the queue's cards are drawn by
+  `widgets/decision`: the options run left to right with the affirmative
+  first, an asker's stated reason sits below them, and a stale request
+  shows its affirmative disabled with the reason. The buttons keep their
+  names, so a scene that clicks one by name needs nothing (ADR-0404 §SD3,
+  §SD4).
+- **The phase chip's popup.** An auto-anchored `fsmview` popup opens beside
+  its toggle, not over it; a scene that reached into the popup by position
+  moves with it (no ADR; `popupAutoOffset` in `fsmview` holds the offset).
+- **The chat window.** For a module that embeds the chat, mints chatlets or
+  drives the window in a scene: the Simple view setting, its `simple-view`
+  persisted key and the bar's Details fold are gone, and a chatlet
+  document's `view` key is read and changes nothing; side views open and
+  close from the View menu or from their tab, where there was a fixed
+  column of tabs; a step in the transcript reads in words, so a scene that
+  waited on a tool's name or on the endpoint line waits on the new wording
+  or on the Send button; a menu item is pressed with `"pointer":true`
+  (ADR-0404 §SD7;
+  [ADR-0364](../adr/0364-chatlets-the-chat-specialised-by-a-committed-markdown-document.md),
+  update of 2026-11-22).
+- **A closable dock tab's close button.** It is named `Close <title>`, so a
+  scene that finds the tab by a part of its title finds two nodes; match
+  the name whole (ADR-0404 §SD8).
+- **Layout invariant `cut`.** A scene run reports text that reaches past
+  its window's right edge. The finding is advisory and fails no scene
+  (ADR-0404 §SD6).
+
 ## The gate a depending module runs
 
 - **DL013, CS018, CS019.** A package-qualified identifier in a Go fence of a
