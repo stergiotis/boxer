@@ -1587,6 +1587,25 @@ func (inst *RunStore) MintKey(ctx context.Context) (key uint64, err error) {
 	return
 }
 
+// MintKeyFor resolves naturalKey to its Key through cfg.Keys: with a
+// keyed generator there, the same natural key gives the same Key, so
+// the rows of one entity share it; with a sequential one the natural
+// key is ignored and every call mints, as MintKey does. Which of the
+// two a store is given says whether its Key names an entity or a row.
+func (inst *RunStore) MintKeyFor(ctx context.Context, naturalKey []byte) (key uint64, err error) {
+	if inst.cfg.Keys == nil {
+		err = eh.Errorf("mint key: the store has no key stream (RunStoreConfig.Keys)")
+		return
+	}
+	id, _, err := inst.cfg.Keys.GetId(ctx, naturalKey)
+	if err != nil {
+		err = eh.Errorf("mint key: %w", err)
+		return
+	}
+	key = id.Value()
+	return
+}
+
 // UpdateIf is the compare-and-set on key's row: one
 // lightweight update, guarded by where on the row's current values, that
 // applies sets. It does not report whether it won — the caller reads the

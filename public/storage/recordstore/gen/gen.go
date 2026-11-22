@@ -298,8 +298,10 @@ type Input struct {
 	// KeyStream mints the Key from a tagged id stream (ADR-0319 §SD2): the
 	// store's config gains Keys, an identifier.IdGeneratorI — typically a
 	// rowalloc sequence leasing blocks from the deployment's one server —
-	// and the store gains MintKey. The Key must derive to uint64; a string
-	// Key is refused at generation.
+	// and the store gains MintKey and MintKeyFor, which hands the generator
+	// the row's natural key: a keyed generator then resolves an entity's
+	// rows to one Key. The Key must derive to uint64; a string Key is
+	// refused at generation.
 	KeyStream bool
 
 	// CanonWire emits the table's canonical wire encoder (ADR-0210) beside
