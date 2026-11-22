@@ -140,6 +140,12 @@ type TableFacts struct {
 	Comment      string
 	CreateQuery  string
 	Columns      []LiveColumn
+	// ReadError is the failure of a read of the relation that returns no
+	// row, tried for an engine that computes its rows when read
+	// ([ComputesOnRead]); empty when the read was answered or not tried.
+	// system.columns lists such a relation's columns whether or not a
+	// SELECT from it is accepted.
+	ReadError string
 }
 
 // SchemaVerdict is the judgement of one table.
@@ -170,6 +176,10 @@ type SchemaVerdict struct {
 	// table has another. It is informational and leaves the verdict as it
 	// is: the store reads and writes either layout (ADR-0397).
 	LayoutDiffers bool `json:"layoutDiffers,omitempty"`
+	// ReadError is the server's refusal of a read of the relation, set
+	// with an incompatible verdict when the columns are listed and a
+	// SELECT from the relation fails all the same ([TableFacts.ReadError]).
+	ReadError string `json:"readError,omitempty"`
 }
 
 // IsOk reports whether the store reads and writes the table as it is.
@@ -194,7 +204,7 @@ func (inst SchemaVerdict) Summary() string {
 		if len(inst.Reasons) > 0 {
 			b.WriteString(" — " + strings.Join(inst.Reasons, "; "))
 		}
-		if inst.Verdict == SchemaVerdictIncompatible {
+		if inst.Verdict == SchemaVerdictIncompatible && inst.ReadError == "" {
 			b.WriteString("; see doc/migration/")
 		}
 	case SchemaVerdictOk:
@@ -346,6 +356,14 @@ func JudgeFacts(c TableContract, facts TableFacts) (v SchemaVerdict) {
 	v = JudgeColumns(c.Columns, facts.Columns)
 	v.Kind, v.Table = c.Kind, c.Table
 	v.Engine = facts.Engine
+	if facts.ReadError != "" {
+		// The columns are judged from the catalogue, which lists a view's
+		// whether or not a read of it is accepted; every read the store
+		// makes would fail as this one did.
+		v.ReadError = facts.ReadError
+		v.Reasons = append(v.Reasons, readRefusalReason(facts))
+		v.Verdict = SchemaVerdictIncompatible
+	}
 	if c.ColumnsOnly {
 		return
 	}
@@ -433,6 +451,31 @@ func TakesNoInsert(engine string) bool {
 	return false
 }
 
+// ComputesOnRead reports an engine whose relation evaluates a query when it
+// is read — a view, a Merge over other tables — so that the catalogue's
+// column list does not say whether a read of it is accepted.
+func ComputesOnRead(engine string) bool {
+	switch engine {
+	case "View", "LiveView", "WindowView", "Merge":
+		return true
+	}
+	return false
+}
+
+// suspiciousLowCardinalityCode is the name ClickHouse gives its refusal to
+// produce a LowCardinality column over a type it expects no gain from.
+const suspiciousLowCardinalityCode = "SUSPICIOUS_TYPE_FOR_LOW_CARDINALITY"
+
+// readRefusalReason words a failed read of a relation whose columns the
+// catalogue lists, with the remedy where the refusal is a known one.
+func readRefusalReason(facts TableFacts) (reason string) {
+	reason = "the catalogue lists the " + facts.Engine + "'s columns and a read of it fails: " + facts.ReadError
+	if strings.Contains(facts.ReadError, suspiciousLowCardinalityCode) {
+		reason += " — a view that returns a LowCardinality column over a non-string type needs `SETTINGS allow_suspicious_low_cardinality_types = 1` closing its SELECT, or that setting in the profile of the user that reads it (doc/howto/facts-in-your-own-table.md)"
+	}
+	return
+}
+
 // IsPlainMergeTree reports a non-replicated engine of the MergeTree family,
 // the engines the non-replicated deduplication window applies to.
 func IsPlainMergeTree(engine string) bool {
@@ -450,7 +493,9 @@ func SplitTableRef(ref string) (db string, name string) {
 
 // ReadTableFacts reads one table's engine, keys, comment, CREATE statement
 // and columns from system.tables and system.columns. A bare reference resolves
-// in the executor's current database.
+// in the executor's current database. A relation that computes its rows when
+// read ([ComputesOnRead]) is also read once, for no row; that read's failure
+// is [TableFacts.ReadError] and not an error of this call.
 func ReadTableFacts(ctx context.Context, exec ExecutorI, table string) (facts TableFacts, err error) {
 	if err = CheckTableRef(table); err != nil {
 		return
@@ -476,6 +521,16 @@ func ReadTableFacts(ctx context.Context, exec ExecutorI, table string) (facts Ta
 		[]string{"name", "type", "default_kind", "compression_codec"}, func(vals []string) {
 			facts.Columns = append(facts.Columns, LiveColumn{Name: vals[0], Type: vals[1], DefaultKind: vals[2], Codec: vals[3]})
 		})
+	if err != nil || !ComputesOnRead(facts.Engine) {
+		return
+	}
+	for rec, rerr := range exec.QueryArrow(ctx, "SELECT * FROM "+table+" LIMIT 0") {
+		if rerr != nil {
+			facts.ReadError = rerr.Error()
+			break
+		}
+		rec.Release()
+	}
 	return
 }
 
