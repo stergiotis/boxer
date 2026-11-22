@@ -1,0 +1,2 @@
+go test fuzz v1
+string("SELECT A%0 A%0 A%0 A%0 A%0 A%0 A%9 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%GA%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0 A%0")

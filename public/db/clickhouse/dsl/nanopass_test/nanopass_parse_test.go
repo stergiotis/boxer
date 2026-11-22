@@ -343,3 +343,40 @@ func TestTokenTypesCompatibleAcrossGrammars(t *testing.T) {
 			"token[%d] text mismatch", i)
 	}
 }
+
+// TestParseRefusesANumberGluedToAWord: ClickHouse reads `1A` as one
+// identifier, `0b101` as 5 and `1_000` as 1000, where the shared lexer reads
+// a number and then a word — `1 A`, an aliased 1. Both grammars refuse the
+// spelling rather than run another query; a space, or a token that is not a
+// word, keeps the number apart.
+func TestParseRefusesANumberGluedToAWord(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT 1A",
+		"SELECT 0b101",
+		"SELECT 1_000",
+		"SELECT 1e5x",
+		"SELECT 0x1G",
+		"SELECT 00FROM t",
+		"SELECT 1 FROM numbers(1A) AS n",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			_, err := nanopass.Parse(sql)
+			require.Error(t, err)
+			assert.NotEmpty(t, nanopass.SyntaxErrorDiagnostics(err))
+			_, err = nanopass.ParseCanonical(sql)
+			assert.Error(t, err)
+		})
+	}
+	for _, sql := range []string{
+		"SELECT 1 A",
+		`SELECT 1"A"`,
+		"SELECT 0x1F, 1e5, 1.5, .5, 1.5e-3, 0x1p3, 08",
+		"SELECT 1 FROM t LIMIT 1,2",
+		"SELECT x.1 FROM t",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			_, err := nanopass.Parse(sql)
+			assert.NoError(t, err)
+		})
+	}
+}

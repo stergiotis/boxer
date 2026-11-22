@@ -214,3 +214,6 @@ must not be "fixed" without re-checking the server:
 ANTLR stream would otherwise transcode invalid bytes to U+FFFD and corrupt
 string literals on rewrite); bracket/CASE nesting is capped at
 `MaxNestingDepth` and total size at `MaxInputBytes`. See `nanopass_guard.go`.
+A number written against a word (`1A`, `0b101`, `1_000`) is refused too:
+ClickHouse reads it as one token, the shared lexer as a number and a word,
+which a pass would then write apart as an alias. See `nanopass_lexical.go`.

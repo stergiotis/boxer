@@ -197,8 +197,10 @@ func parseGrammar2(sql string, predictionMode int) (a attempt, ok bool) {
 //
 // Both lexer and parser diagnostics are collected: input that fails to lex
 // (stray control characters, unterminated strings) is rejected instead of
-// being silently dropped from the token stream. The error message includes
-// line:column positions for up to five diagnostics.
+// being silently dropped from the token stream, and so is a number written
+// against a word (`1A`, `0b101`), which ClickHouse reads as one token and the
+// lexer as two (nanopass_lexical.go). The error message includes line:column
+// positions for up to five diagnostics.
 //
 // Prediction is two-stage (ADR-0196): SLL first, then full-context LL if SLL
 // reports anything. The reported diagnostics are always LL's, so a genuine
@@ -231,6 +233,9 @@ func Parse(sql string) (pr *ParseResult, err error) {
 	recordTwoStage(&g1Hits, &g1Fallbacks, fellBack)
 	if !ok {
 		err = a.listener.buildError("syntax error")
+		return
+	}
+	if err = refuseNumberGluedToWord(a.pr, grammar1NumberTokens, "syntax error"); err != nil {
 		return
 	}
 	pr = a.pr
@@ -277,6 +282,9 @@ func ParseCanonical(sql string) (pr *ParseResult, err error) {
 	recordTwoStage(&g2Hits, &g2Fallbacks, fellBack)
 	if !ok {
 		err = a.listener.buildError("canonical parse failed, non-canonical SQL")
+		return
+	}
+	if err = refuseNumberGluedToWord(a.pr, grammar2NumberTokens, "canonical parse failed, non-canonical SQL"); err != nil {
 		return
 	}
 	pr = a.pr
