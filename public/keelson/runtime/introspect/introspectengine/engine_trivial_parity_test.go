@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -88,6 +89,16 @@ func TestTrivialSQL_AnswersAsClickHouseDoes(t *testing.T) {
 	require.NoError(t, e.reg.Register(seqProvider{}))
 	require.NoError(t, e.reg.Register(mixProvider{}))
 	params := map[string]string{"k": "4", "f": "0.1", "b": "Yes", "u": "+5", "fl": "-1e400", "s": `a\=b\%`, "g": ".5"}
+	// What the oldest supported ClickHouse build refuses and the build the
+	// spellings were measured on answers, by the error the older one gives.
+	// The evaluator follows the newer build there, so it answers a text the
+	// older engine would refuse; the comparison has nothing to hold it to.
+	refusedByTheFloor := map[string]string{
+		// 26.8 reads a leading plus on an unsigned parameter as an error.
+		"SELECT {b:Bool} AS b, {u:UInt8} AS u, {fl:Float64} AS fl, {s:String} AS s, {g:Float32} AS g FORMAT TabSeparated": "BAD_QUERY_PARAMETER",
+		// And on a string converted to an unsigned column.
+		"SELECT * FROM values('a UInt8, b Bool, c Float64, d Int8', ('+5', 'off', '1e400', '-0'), ('05', 'T', 'nan', '+7')) FORMAT TabSeparated": "TYPE_MISMATCH",
+	}
 	for _, sql := range []string{
 		"SELECT * FROM keelson('seq', n = 3) FORMAT TabSeparated",
 		"SELECT * FROM keelson('seq', n = {k:UInt64}) LIMIT 2 OFFSET 1 FORMAT TabSeparated",
@@ -144,6 +155,10 @@ func TestTrivialSQL_AnswersAsClickHouseDoes(t *testing.T) {
 		"WITH 5 AS v SELECT * FROM values('v UInt8', 1) FORMAT TabSeparatedWithNames",
 	} {
 		want, _, err := e.QueryParams(context.Background(), sql, "", params)
+		if code, known := refusedByTheFloor[sql]; known && err != nil && strings.Contains(err.Error(), code) {
+			t.Logf("not compared, this ClickHouse build refuses it (%s): %s", code, sql)
+			continue
+		}
 		require.NoError(t, err, sql)
 		got, err := trivialsql.Run(context.Background(), e.reg, sql, params)
 		require.NoError(t, err, sql)
