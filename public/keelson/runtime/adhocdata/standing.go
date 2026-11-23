@@ -7,8 +7,8 @@ import (
 )
 
 // standingE is how a published revision stands to a task: whether it is the
-// task's own work at the lowest tier, which is what a task may release by
-// an exposure.
+// task's own work at the lowest tier. One rule decides what a task may
+// release by an exposure and what it reads back without a label.
 type standingE uint8
 
 const (

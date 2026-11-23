@@ -251,17 +251,34 @@ func (inst *record) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
 // Open returns a reader over the plaintext and the revision it belongs to,
 // taken together under the record's lock so a republish cannot split them.
 func (inst *record) Open() (rc io.ReadSeekCloser, revision uint64, err error) {
+	rc, pub, err := inst.openPublished()
+	return rc, pub.revision, err
+}
+
+// published is how the revision a reader was opened on came to be: its
+// number, the attested call that published it and whether it derives from
+// sealed data.
+type published struct {
+	revision uint64
+	context  option.Option[app.CallContext]
+	derived  bool
+}
+
+// openPublished returns a reader over the plaintext and how the revision it
+// reads was published, taken together under the record's lock: whatever
+// judges the publication judges the bytes the reader hands out.
+func (inst *record) openPublished() (rc io.ReadSeekCloser, pub published, err error) {
 	// Opened under the lock: the reader is counted before a republish
 	// can swap the file out and retire it, which closes an unread file
 	// at once.
 	inst.mu.RLock()
-	rev := inst.revision
+	pub = published{revision: inst.revision, context: inst.context, derived: inst.derived}
 	r, err := inst.file.Open()
 	inst.mu.RUnlock()
 	if err != nil {
-		return nil, 0, err
+		return nil, published{}, err
 	}
-	return r, rev, nil
+	return r, pub, nil
 }
 
 // Service owns the live datasets: it validates and seals published data,

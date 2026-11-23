@@ -23,7 +23,9 @@ type AdhocDataset struct {
 	Operation string `lw:"adhocDatasetOperation,symbol"`
 	Outcome   string `lw:"adhocDatasetOutcome,symbol"`
 	// Reason is the refusal or failure: one element when there is one. An
-	// applied publish carries one when its rows derive from sealed data.
+	// applied row carries one where a label rests on it: a publish whose
+	// rows derive from sealed data, a read taken as the reading task's own
+	// publication at TLP:CLEAR.
 	Reason []string `lw:"adhocDatasetReason,stringArray"`
 
 	Bundle        string `lw:"adhocDatasetBundle,symbol"`

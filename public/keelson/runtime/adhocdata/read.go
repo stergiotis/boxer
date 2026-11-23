@@ -77,6 +77,14 @@ type ReadResult struct {
 	// PublisherTask is the task whose attested call published the
 	// dataset's live revision; empty when no agent's call did.
 	PublisherTask string
+	// OwnClear is the service's answer for the call that read: the
+	// revision in ArrowIPCStream was published by an attested call of the
+	// reading task at TLP:CLEAR and derives from no sealed data, so what
+	// the reader makes of it need not be labelled as derived from sealed
+	// data for that task. False — for the person, an app's own read,
+	// another task, a labelled or derived publication, and a reader that
+	// does not look — leaves the read sealed.
+	OwnClear bool
 }
 
 // Read returns the newest live dataset under alias, whole. A read leaves
@@ -84,10 +92,15 @@ type ReadResult struct {
 // audited, and one an agent's call caused is attested first and then held
 // to the task's grant as a run in play is: it needs the bundle, or the
 // dataset's alias, among the grant's destinations.
+//
+// The answer says whether the revision read is the reading task's own
+// publication at TLP:CLEAR (ReadResult.OwnClear), judged against the
+// publication the stream was opened on.
 func (inst *Service) Read(ctx context.Context, alias string, by Identity, obo *app.OnBehalfOf) (res ReadResult, err error) {
 	cc, err := inst.attest(by, obo)
+	var pub published
 	if err == nil {
-		res, err = inst.read(alias)
+		res, pub, err = inst.read(alias)
 	}
 	if err == nil && cc.Has {
 		err = inst.checkGrant(obo, res)
@@ -99,11 +112,75 @@ func (inst *Service) Read(ctx context.Context, alias string, by Identity, obo *a
 	if err != nil {
 		r.Outcome, r.Reason = AuditRefused, err.Error()
 	} else {
+		res.OwnClear = cc.Has && standingOf(pub.context, pub.derived, cc.Val.Task) == standingOwnClear
 		r.Outcome, r.Revision = AuditApplied, res.Revision
 		r.Handles, r.Rows = []string{res.Handle}, []uint64{res.Rows}
 		r.Bytes, r.StreamDigests = []uint64{uint64(len(res.ArrowIPCStream))}, []string{res.StreamDigest}
+		if res.OwnClear {
+			r.Reason = ownClearReason(pub)
+		}
 	}
 	inst.audit(ctx, r)
+	return
+}
+
+// AuditReadLabel is the audited answer that a dataset a task reads by its
+// handle is that task's own publication at TLP:CLEAR.
+const AuditReadLabel = "read-label"
+
+// ownClearReason is what the trail row of a read says when the read was
+// taken as the reading task's own publication: why sealed data was read
+// and no label followed.
+func ownClearReason(pub published) (reason string) {
+	return "read as the task's own publication at TLP:CLEAR (published by its call " + pub.context.Val.Call + ", from no sealed data): the read is not labelled"
+}
+
+// LabelResult is the service's answer about a dataset a call reads by its
+// handle.
+type LabelResult struct {
+	Handle   string
+	Alias    string
+	Bundle   string
+	Revision uint64
+	// OwnClear is as ReadResult.OwnClear, for the dataset registered under
+	// Handle.
+	OwnClear bool
+}
+
+// ReadLabel answers, for a call that reads the dataset registered under
+// handle through this process's plane, whether that dataset is the reading
+// task's own publication at TLP:CLEAR. A bundle's dataset keeps its handle,
+// its bytes and its publication for as long as it is registered — a
+// republish registers new handles — so the answer holds for every read of
+// the handle, whenever it is made; a dataset published on its own, which a
+// republish replaces under its handle, has no attested publisher and is
+// never a task's own. The call is attested; only an own-clear answer and a
+// refusal are audited, since every other answer leaves a read as it was.
+func (inst *Service) ReadLabel(ctx context.Context, handle string, by Identity, obo *app.OnBehalfOf) (res LabelResult, err error) {
+	res.Handle = handle
+	cc, err := inst.attest(by, obo)
+	if err != nil {
+		inst.audit(ctx, AuditRecord{Operation: AuditReadLabel, Outcome: AuditRefused, Reason: err.Error(), By: by, Handles: []string{handle}})
+		return
+	}
+	var rec *record
+	if p, ok := inst.reg.Lookup(handle); ok {
+		rec, _ = p.(*record)
+	}
+	if rec == nil || !cc.Has {
+		return
+	}
+	rec.mu.RLock()
+	pub := published{revision: rec.revision, context: rec.context, derived: rec.derived}
+	res.Alias, res.Bundle, res.Revision = rec.alias, rec.bundle, rec.revision
+	digest, rows, plain := rec.streamDigest, rec.rows, rec.plainBytes
+	rec.mu.RUnlock()
+	res.OwnClear = res.Bundle != "" && standingOf(pub.context, pub.derived, cc.Val.Task) == standingOwnClear
+	if res.OwnClear {
+		inst.audit(ctx, AuditRecord{Operation: AuditReadLabel, Outcome: AuditApplied, Reason: ownClearReason(pub), Bundle: res.Bundle,
+			Revision: res.Revision, By: by, Context: cc, Aliases: []string{res.Alias}, Handles: []string{handle},
+			Rows: []uint64{rows}, Bytes: []uint64{plain}, StreamDigests: []string{digest}})
+	}
 	return
 }
 
@@ -150,7 +227,7 @@ func (inst *Service) soleDataset(alias string) (sole string, several []string) {
 
 // read reads the dataset under alias, or the one dataset of the bundle
 // named alias.
-func (inst *Service) read(alias string) (res ReadResult, err error) {
+func (inst *Service) read(alias string) (res ReadResult, pub published, err error) {
 	best, err := inst.newest(alias)
 	if errors.Is(err, ErrNoLiveDataset) {
 		switch sole, several := inst.soleDataset(alias); {
@@ -158,34 +235,36 @@ func (inst *Service) read(alias string) (res ReadResult, err error) {
 			alias = sole
 			best, err = inst.newest(alias)
 		case len(several) > 0:
-			return res, eb.Build().Str("bundle", alias).Strs("datasets", several).Errorf("the bundle holds several datasets; name one of %s", strings.Join(several, ", ")) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text; the dataset names are what the reader picks from"
+			return res, pub, eb.Build().Str("bundle", alias).Strs("datasets", several).Errorf("the bundle holds several datasets; name one of %s", strings.Join(several, ", ")) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text; the dataset names are what the reader picks from"
 		}
 	}
 	if err != nil {
-		return
+		return res, pub, err
 	}
-	rc, revision, err := best.Open()
+	// The stream and the publication it belongs to are taken together:
+	// what judges the publication judges the bytes read.
+	rc, pub, err := best.openPublished()
 	if err != nil {
-		return res, eb.Build().Str("alias", alias).Errorf("open dataset: %w", err)
+		return res, pub, eb.Build().Str("alias", alias).Errorf("open dataset: %w", err)
 	}
 	defer func() { _ = rc.Close() }()
 	stream, err := io.ReadAll(rc)
 	if err != nil {
-		return res, eb.Build().Str("alias", alias).Errorf("read dataset: %w", err)
+		return res, pub, eb.Build().Str("alias", alias).Errorf("read dataset: %w", err)
 	}
 	best.mu.RLock()
-	res = ReadResult{Alias: alias, Bundle: best.bundle, Handle: best.handle, Revision: revision, Rows: best.rows,
+	res = ReadResult{Alias: alias, Bundle: best.bundle, Handle: best.handle, Revision: pub.revision, Rows: best.rows,
 		ArrowIPCStream: stream, StreamDigest: best.streamDigest}
-	if best.context.Has {
-		res.PublisherTask = best.context.Val.Task
+	if pub.context.Has {
+		res.PublisherTask = pub.context.Val.Task
 	}
-	if best.revision != revision {
+	if best.revision != pub.revision {
 		// A republish swapped the file between Open and the stats; the
 		// digest and rows are the new revision's. Hash what was read.
 		res.StreamDigest = streamDigest(stream)
 	}
 	best.mu.RUnlock()
-	return res, nil
+	return res, pub, nil
 }
 
 // streamDigest is the content digest of a sealed stream, the form
@@ -205,6 +284,16 @@ func (inst *Service) handleRead(msg *app.Msg) {
 		inst.handleReadColumns(msg, req)
 		return
 	}
+	if req.LabelOnly {
+		res, lErr := inst.ReadLabel(context.WithoutCancel(msg.Context()), req.Handle, sender(msg), callContextFields(req.OboTask, req.OboEpoch, req.OboCall))
+		if lErr != nil {
+			inst.reply(msg.Reply, readRefusal(lErr))
+			return
+		}
+		inst.reply(msg.Reply, adhocreply.AdhocReply{At: time.Now().UTC(), Ok: true, Handle: res.Handle, Alias: res.Alias, Bundle: res.Bundle,
+			Revision: res.Revision, OwnClear: res.OwnClear})
+		return
+	}
 	res, rErr := inst.Read(context.WithoutCancel(msg.Context()), req.Alias, sender(msg), callContextFields(req.OboTask, req.OboEpoch, req.OboCall))
 	if rErr != nil {
 		inst.reply(msg.Reply, readRefusal(rErr))
@@ -213,7 +302,7 @@ func (inst *Service) handleRead(msg *app.Msg) {
 	inst.reply(msg.Reply, adhocreply.AdhocReply{
 		At: time.Now().UTC(), Ok: true, Handle: res.Handle, Bundle: res.Bundle, Revision: res.Revision, Rows: res.Rows,
 		Bytes: uint64(len(res.ArrowIPCStream)), ArrowStream: res.ArrowIPCStream, StreamDigest: res.StreamDigest,
-		PublisherTask: res.PublisherTask,
+		PublisherTask: res.PublisherTask, OwnClear: res.OwnClear,
 	})
 }
 
@@ -266,11 +355,40 @@ func ReadAll(ctx context.Context, bus app.BusI, alias string, obo *app.OnBehalfO
 		return res, readReplyError(alias, rep)
 	}
 	res = ReadResult{Alias: alias, Bundle: rep.Bundle, Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows,
-		ArrowIPCStream: rep.ArrowStream, StreamDigest: rep.StreamDigest, PublisherTask: rep.PublisherTask}
+		ArrowIPCStream: rep.ArrowStream, StreamDigest: rep.StreamDigest, PublisherTask: rep.PublisherTask, OwnClear: rep.OwnClear}
 	if got := streamDigest(res.ArrowIPCStream); got != res.StreamDigest {
 		return ReadResult{}, eb.Build().Str("alias", alias).Str("want", res.StreamDigest).Str("got", got).Errorf("%w", ErrDigestMismatch)
 	}
 	return res, nil
+}
+
+// ReadLabelRequest asks the dataset service, over runtime.adhoc.read,
+// whether the dataset registered under handle is the own publication at
+// TLP:CLEAR of the task obo names (Service.ReadLabel). It is how an app
+// that reads a dataset through this process's plane, where the stream does
+// not pass through its hands, learns the label of what it read. Without an
+// obo, or when the service cannot attest it, nothing is the caller's own:
+// OwnClear is false or err is set, and the read stays sealed.
+func ReadLabelRequest(ctx context.Context, bus app.BusI, handle string, obo *app.OnBehalfOf) (res LabelResult, err error) {
+	payload, err := buscodec.Encode(adhocrequest.AdhocRequest{
+		At: time.Now().UTC(), Op: adhocrequest.OpRead, Handle: handle, LabelOnly: true,
+		OboTask: oboTask(obo), OboEpoch: oboEpoch(obo), OboCall: oboCall(obo),
+	})
+	if err != nil {
+		return res, eh.Errorf("encode label read: %w", err)
+	}
+	raw, err := bus.Request(ctx, SubjectRead, payload)
+	if err != nil {
+		return res, eb.Build().Str("handle", handle).Errorf("label read request: %w", err)
+	}
+	rep, err := buscodec.Decode[adhocreply.AdhocReply](raw)
+	if err != nil {
+		return res, eh.Errorf("decode label read reply: %w", err)
+	}
+	if !rep.Ok {
+		return res, readReplyError(handle, rep)
+	}
+	return LabelResult{Handle: handle, Alias: rep.Alias, Bundle: rep.Bundle, Revision: rep.Revision, OwnClear: rep.OwnClear}, nil
 }
 
 // checkGrant asks the dispatcher whether the task's grant lists the
