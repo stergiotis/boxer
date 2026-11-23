@@ -131,3 +131,35 @@ func TestAGrammarRefusalSaysHowToWriteAScalarWithItem(t *testing.T) {
 	assert.Contains(t, err.Error(), "boxer's grammar does not parse the statement")
 	assert.Contains(t, err.Error(), "hint: WITH name AS (…) names a subquery; a scalar or an array is written WITH <expression> AS name")
 }
+
+// DESCRIBE is not a statement the grammar reads, so an agent's is refused;
+// the refusal names the catalog operation that answers it, with the table as
+// that operation takes it when the statement names one.
+func TestADescribeRefusalNamesDescribeTable(t *testing.T) {
+	remote := dispatchDecision{targetURL: "http://db.example:8123/", class: dispatchClassManual}
+	grant := &app.OnBehalfOf{Task: "t", Destinations: []string{DestinationClickHouse("db.example:8123")}}
+	for sql, want := range map[string]string{
+		"DESCRIBE sales.orders":                  `the describe_table operation reads a table's columns: call it with table "sales.orders"; list_tables lists the endpoint's tables`,
+		"DESC system.tables":                     `call it with table "system.tables"`,
+		"describe table orders;":                 `call it with table "orders"`,
+		"DESC `sales`.\"order lines\"":           `call it with table "sales.order lines"`,
+		"DESCRIBE TABLE sales.orders FORMAT TSV": "reads a table's columns when called with a table's name, and get_schema the columns of a result",
+		"DESCRIBE (SELECT 1 AS a)":               "reads a table's columns when called with a table's name, and get_schema the columns of a result",
+		"DESCRIBE TABLE url('http://x/')":        "reads a table's columns when called with a table's name, and get_schema the columns of a result",
+		"DESCRIBE `a.b`":                         "reads a table's columns when called with a table's name",
+	} {
+		err := checkAgentLimits(sql, remote, grant, nil)
+		var limit *AgentLimitError
+		require.ErrorAs(t, err, &limit, sql)
+		assert.Contains(t, err.Error(), "boxer's grammar does not parse the statement, so it cannot be classified and an agent cannot run it: DESCRIBE is not a statement an agent runs", sql)
+		assert.Contains(t, err.Error(), want, sql)
+		assert.Empty(t, limit.Destination, sql)
+	}
+	// Any other statement the grammar does not read keeps the parser's
+	// diagnostics, and a statement that only mentions the word is not hinted.
+	for _, sql := range []string{"SHOW TABLES", "EXISTS TABLE t", "SELEC describe", "SELECT 1 FROM describe WHERE"} {
+		err := checkAgentLimits(sql, remote, grant, nil)
+		require.Error(t, err, sql)
+		assert.NotContains(t, err.Error(), "describe_table", sql)
+	}
+}

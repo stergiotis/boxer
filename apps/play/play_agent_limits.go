@@ -7,6 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/antlr4-go/antlr/v4"
+
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
@@ -53,6 +56,75 @@ func syntaxDetail(err error) (detail string) {
 	return
 }
 
+// describeHint says what to call instead of a DESCRIBE statement, or "" for
+// any other text. The grammar reads queries, and a DESCRIBE is not one: the
+// server takes it neither as a subquery nor under the wrappers a run adds,
+// so it has no place among the statements the limits classify. What it asks
+// for is in the catalog: describe_table reads a table's columns under the
+// same grant entry a run needs. For `DESCRIBE [TABLE] name` the hint
+// carries the name as describe_table takes it.
+func describeHint(sql string) (hint string) {
+	lexer := grammar1.NewClickHouseLexer(antlr.NewInputStream(sql))
+	lexer.RemoveErrorListeners()
+	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
+	stream.Fill()
+	var toks []antlr.Token
+	for _, tok := range stream.GetAllTokens() {
+		if tok.GetChannel() == antlr.TokenDefaultChannel && tok.GetTokenType() != antlr.TokenEOF {
+			toks = append(toks, tok)
+		}
+	}
+	if len(toks) == 0 {
+		return ""
+	}
+	if t := toks[0].GetTokenType(); t != grammar1.ClickHouseLexerDESCRIBE && t != grammar1.ClickHouseLexerDESC {
+		return ""
+	}
+	hint = "DESCRIBE is not a statement an agent runs; the " + opDescribeTable + " operation reads a table's columns"
+	rest := toks[1:]
+	if len(rest) > 0 && rest[0].GetTokenType() == grammar1.ClickHouseLexerTABLE {
+		rest = rest[1:]
+	}
+	if len(rest) > 0 && rest[len(rest)-1].GetTokenType() == grammar1.ClickHouseLexerSEMICOLON {
+		rest = rest[:len(rest)-1]
+	}
+	// A name is an identifier, quoted or bare, or a keyword written where
+	// a name stands (`system`, `tables`).
+	name := func(tok antlr.Token) (decoded string, ok bool) {
+		decoded = tok.GetText()
+		if tok.GetTokenType() == grammar1.ClickHouseLexerIDENTIFIER {
+			decoded = nanopass.DecodeIdentifier(decoded)
+			return decoded, decoded != "" && !strings.ContainsAny(decoded, ".\"\n")
+		}
+		for _, r := range decoded {
+			if r != '_' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') {
+				return "", false
+			}
+		}
+		return decoded, decoded != ""
+	}
+	var table string
+	switch len(rest) {
+	case 1:
+		if n, ok := name(rest[0]); ok {
+			table = n
+		}
+	case 3:
+		db, dbOk := name(rest[0])
+		n, ok := name(rest[2])
+		if dbOk && ok && rest[1].GetTokenType() == grammar1.ClickHouseLexerDOT {
+			table = db + "." + n
+		}
+	}
+	if table != "" {
+		hint += ": call it with table \"" + table + "\""
+	} else {
+		hint += " when called with a table's name, and " + opGetSchema + " the columns of a result"
+	}
+	hint += "; " + opListTables + " lists the endpoint's tables"
+	return
+}
+
 // checkAgentLimits checks a residual against the grant's destinations:
 // a plain read, keelson() tables it lists, and an endpoint it lists unless
 // the run goes to the host's introspection engine. aliasOf maps a bound
@@ -74,6 +146,9 @@ func checkAgentLimits(residual string, dec dispatchDecision, obo *app.OnBehalfOf
 	}
 	pr, perr := nanopass.Parse(classified)
 	if perr != nil {
+		if hint := describeHint(classified); hint != "" {
+			return &AgentLimitError{Reason: "boxer's grammar does not parse the statement, so it cannot be classified and an agent cannot run it: " + hint}
+		}
 		return &AgentLimitError{Reason: "boxer's grammar does not parse the statement, so it cannot be classified and an agent cannot run it" + syntaxDetail(perr)}
 	}
 	class, witnesses, cerr := analysis.ClassifyQuerySecurity(pr)
