@@ -198,7 +198,14 @@ binding for the statement they send.
   every data set that reads it, and a statement reading a confined data set
   is refused on an undeclared endpoint and bound as confined, so the server
   engine's backstop applies too. The declaration is per call, not per
-  session. A handle instead of an alias, and a call with named arguments,
+  session. The label has one exception, the wall none
+  ([ADR-0407](./0407-an-exposed-dataset-a-program-on-this-machine-reads-an-ad-hoc-dataset-by-alias-and-token.md),
+  proposed, decided 2026-11-23): where everything sealed a statement or a
+  definition reads is the reading task's own publication at TLP:CLEAR, as
+  the dataset service answers with each read, the binding says so
+  (`Binding.OwnClear`) and the data set records for which task
+  (`DatasetInfo.OwnClear`), judged again at every replay; it is refused on
+  an undeclared endpoint and sent as confined all the same. A handle instead of an alias, and a call with named arguments,
   are refused.
 - **SD8 — The seam is a binding, not a run.** ✓ `Prepare` returns a
   `Binding`: the statement with its macros replaced; the settings that put
@@ -247,9 +254,11 @@ binding for the statement they send.
   and sends it; the result stream's `Close` releases the lease, and a run
   that fails — refused, cancelled or broken — releases it before it
   returns. A run that met a lost session is prepared and sent once more.
-  The binding's label reaches the result (`resultStream.Confined`) and the
-  window's label, and `Endpoint.ServesConfined` is play's reach proof of
-  the target (ADR-0145 §SD5). Play's classifiers judge a statement before
+  The binding's label reaches the result and the window's label
+  (`resultStream.Confined`; `Sealed` says the run read sealed data at all,
+  which a result of the task's own clear publications does without being
+  labelled), and `Endpoint.ServesConfined` is play's reach proof of the
+  target (ADR-0145 §SD5). Play's classifiers judge a statement before
   the binding with each `session('name')` as a table; a check (`check`,
   the citation's) runs in the data session too, and its scope admits the
   data sets its source read; a check naming a table outside that scope is
@@ -613,7 +622,9 @@ ADR as a whole still awaits review.
   known state.
 - The ServesConfined declaration is the caller's, per call; a data set
   derived from sealed data is confined, and confinement is the only label
-  carried.
+  carried. A data set made only of the reading task's own publications at
+  TLP:CLEAR is held behind the wall alike and reads back unlabelled for
+  that task (ADR-0407, proposed).
 - An ad-hoc dataset is named by alias only.
 - Prepare checks an agent's statement is a read after replacing its macros,
   in addition to the caller's checks.

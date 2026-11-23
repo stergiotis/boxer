@@ -6,7 +6,7 @@ date: 2026-11-23
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted. SD1–SD8 are built (2026-11-23) in [`public/keelson/runtime/adhocdata`](../../public/keelson/runtime/adhocdata), [`public/keelson/runtime/introspect/introspecthttp`](../../public/keelson/runtime/introspect/introspecthttp), the agent runtime and play, and SD9 in play's run path. They have run against one ClickHouse 26.9 server on loopback and against stubs; no model has called the operations yet.
+> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted. SD1–SD8 are built (2026-11-23) in [`public/keelson/runtime/adhocdata`](../../public/keelson/runtime/adhocdata), [`public/keelson/runtime/introspect/introspecthttp`](../../public/keelson/runtime/introspect/introspecthttp), the agent runtime and play, and SD9 in play's run path. They have run against one ClickHouse 26.9 server on loopback and against stubs. One live run of a model has called `expose_dataset`; it was refused for the call's label, which the section *Decided with the owner, 2026-11-23: a task reads back its own clear work* answers.
 
 # ADR-0407: An exposed dataset — a program on this machine reads an ad-hoc dataset by alias and token
 
@@ -130,8 +130,9 @@ to a request presenting the token, until the exposure lapses.
   short: an exposure places nothing outside the cell, so ADR-0145's
   placement wall is unchanged; it is an explicit, attested, audited act by
   the person or by a task on its own work; a task may not expose what was
-  published, or asked for, under a label above TLP:CLEAR; and on a host the
-  organisation manages an exposure above the export clearance is refused.
+  published, or asked for, under a label above TLP:CLEAR, nor what derives
+  from sealed data; and on a host the organisation manages an exposure
+  above the export clearance is refused.
 - **SD6 — The listener's route.** ✓ `GET /exposed/{alias}` serves the
   Arrow stream from a seekable reader, so a `HEAD` answers its length and a
   `Range` its part, as `url()` needs; `GET /exposed/{alias}/csv` serves CSV
@@ -226,13 +227,19 @@ route. Where does an exposure stand?
 3. **A task exposes only its own work, at the lowest tier.** Every ad-hoc
    dataset is sealed, so the confinement bit cannot separate what a task may
    release from what it may not. What can: who published the live revision
-   (the attested call, ADR-0288 §SD5), and the TLP tier the coordinator
-   declared on that call and on the exposing one (ADR-0312 §SD4). A task's
-   exposure is refused unless its own call published the dataset and
-   neither call declared a tier above CLEAR; a republish declared above
-   CLEAR ends a task's exposure. A dataset the task may read under
+   (the attested call, ADR-0288 §SD5), the TLP tier the coordinator
+   declared on that call and on the exposing one (ADR-0312 §SD4), and
+   whether the revision derives from sealed data. A task's exposure is
+   refused unless its own call published the dataset, neither call declared
+   a tier above CLEAR and the revision derives from nothing sealed; a
+   republish declared above CLEAR, or one that derives from sealed data,
+   ends a task's exposure. A dataset the task may read under
    `keelson:<alias>` but did not publish — another task's, or data a person
-   published — is not the task's to release; the person exposes it.
+   published — is not the task's to release; the person exposes it. The
+   same facts about a revision decide what a task reads back without a
+   label: a dataset is sealed to every reader but the task whose own call
+   published it at TLP:CLEAR from nothing sealed (*Decided with the owner,
+   2026-11-23: a task reads back its own clear work*).
 4. **The label of a reader's result is the reader's business.** A
    same-machine server that reads an exposure through `url()` holds an
    ordinary table as far as boxer can tell; boxer does not follow it.
@@ -245,7 +252,8 @@ route. Where does an exposure stand?
 
 The default is refusal wherever the rules above do not clearly admit the
 act: a task's exposure of what it did not publish, a labelled call, a
-managed host above clearance, no listener, no grant.
+revision derived from sealed data, a managed host above clearance, no
+listener, no grant.
 
 ### What it does not cover
 
@@ -395,9 +403,10 @@ server's reading user `READ ON URL` and admits `127.0.0.1` in
   destination; a non-loopback reader; the run retrying a statement that
   should have waited.
 - **Gap.** One 26.9 server on loopback. The query-log masking was measured
-  with `clickhouse local` of the same version, not on that server. No model
-  has used the operations; the person's Expose was drawn headless, not
-  seen on a screen.
+  with `clickhouse local` of the same version, not on that server. One
+  model's live run has called `expose_dataset`, and was refused; none has
+  yet had an exposure admitted. The person's Expose was drawn headless,
+  not seen on a screen.
 
 ## Decided with the owner, 2026-11-23
 
@@ -416,6 +425,128 @@ recorded here as decided; the ADR as a whole still awaits review.
   approves it by its settings, as it does the others. Publishing does not
   imply exposing.
 - **Loopback only, a token per exposure, ending with the dataset.**
+
+## Decided with the owner, 2026-11-23: a task reads back its own clear work
+
+A fourth decision of the same day, made after a live run met the wall
+where it was not meant to stand. A model working as a task computed a
+table in another app's kernel; the app published it as a bundle on the
+task's behalf; the task read it in play with `keelson('<bundle>__result')`
+to check and cast it, published the play result and called
+`expose_dataset`. The exposure was refused: the publish was labelled
+AMBER. Every ad-hoc dataset is sealed, so the read had come back confined,
+the coordinator had labelled the conversation, and every later call of the
+task declared the confined tier. Nothing takes a label off again, and
+every byte involved was the task's own work at TLP:CLEAR.
+
+- **The rule.** A dataset that the same task's own call published at
+  TLP:CLEAR does not label that task's conversation when it reads it back.
+  Everything else stays sealed: a dataset a person or another task
+  published, anything published under a label above CLEAR, and the rule
+  that a server must have shown it may see sealed data before a dataset
+  is attached to a statement sent to it.
+- **Why it reveals nothing new.** The label marks what a conversation
+  holds that it may not send on. What the rule leaves unlabelled is what
+  item 3 of *The wall* already lets that task release by an exposure: its
+  own publication at the lowest tier, from nothing sealed. The predicate
+  is one (`standingOf` in `adhocdata`), asked by the exposure rule and by
+  a read.
+- **Who decides, and where.** The dataset service, against the revision
+  it hands out. A read (`Service.Read`, `runtime.adhoc.read`) answers
+  `OwnClear` when the reading call is an attested call of a task and the
+  revision in the stream was published by an attested call of that task
+  at TLP:CLEAR from nothing sealed; the stream and its publication are
+  taken under one lock, so no republish fits between the judgement and
+  the bytes. A reader cannot assert it: the session data service passes
+  the answer on (`Binding.OwnClear`), and play takes it from the binding.
+  A run on this process's plane does not receive the bytes from the
+  service; it names the dataset by its handle and asks about the handle
+  (`Service.ReadLabel`, a read with `LabelOnly`). A bundle's dataset keeps
+  its handle, bytes and publication for as long as it is registered, and a
+  republish registers new handles, so the answer for a handle holds for
+  every read of it. False is the zero value everywhere: a reader that does
+  not look, an older one, an app's own read, the person's, another task's
+  all stay sealed.
+- **The wall does not move.** The rule changes a label and nothing else.
+  A statement that names or attaches an ad-hoc dataset is placed, refused
+  and sent as before, whoever published the dataset: the dispatch
+  decision is confined, an endpoint other than this process's plane needs
+  the reach proof, the session data service refuses an endpoint not
+  declared for sealed data before it reads the dataset, the binding and
+  the request are confined and the engine's own refusal applies. Play
+  keeps the two apart: *sealed* (the run read sealed data) is what the
+  wall, play's own writes and the person's history go by; *confined* (the
+  result is labelled) is what an operation's outcome carries.
+- **Mixed statements.** One sealed input that is not the task's own clear
+  publication — another dataset, a confined data set — labels the
+  statement.
+- **What a publication derives from.** The tier a call declares is its
+  conversation's when the model asked for it. A model that asks for a
+  query over sealed data and for the publish of its result in one round
+  has both declared at the tier before either outcome arrived, so the
+  publish was recorded at TLP:CLEAR. This weakened item 3 as it stood: an
+  exposure asked for in the same round was admitted, and released rows
+  derived from a dataset a person published. A revision now records
+  whether it derives from sealed data. The publisher says so from the
+  label of the result it publishes (`BundleProvenance.DerivedFromSealed`;
+  play's `publish_result` sets it from the main result's label, which
+  carries a kept data set's confinement too), and the service adds what
+  it sees itself: an input handle that is not the publishing task's own
+  clear publication, or that it no longer holds, makes the revision
+  derived whatever the publisher said. A derived revision is neither read
+  back unlabelled nor exposed by the task, and a republish that derives
+  ends a task's exposure. A publisher that states nothing and names no
+  inputs is still judged by its call's tier; an app that computes from
+  sealed data outside play has to set the field.
+- **Kept data sets.** A session data set a task keeps from a statement
+  whose only sealed inputs are its own clear publications is held behind
+  the wall like any data set derived from sealed data, and reads back
+  unlabelled for that task (`DatasetInfo.OwnClear`). Its table is a cache
+  of its definition, and a replay reads the dataset again: each build
+  judges on what it reads then. A replay that finds the dataset
+  republished by someone else, or above CLEAR, or that the person rather
+  than the task causes, leaves the data set confined for every reader,
+  and only a later replay that reads the task's own clear publication
+  again lifts that. Between replays the label is that of the rows the
+  table holds.
+- **A run that fails.** Its error is read as its result would be, so it is
+  judged the same way: a wrong column name over the task's own table does
+  not label the conversation. A statement refused before it is placed —
+  no reach proof — keeps the statement's label, as before.
+- **The trail.** The dataset service's row of a read taken as the task's
+  own says so and names the call that published the revision; an answer by
+  handle is a row of its own (`read-label`), written only when it is
+  own-clear. A publish's row says when the revision derives from sealed
+  data. The session data service's attach, define and replay rows name
+  the attachments read as the task's own (`own-clear`) and the label that
+  followed (`label`).
+- **Chat needs no rule.** It labels from what an outcome carries: the
+  dispatcher's confined flag and `check`'s `confined`.
+
+Surfaces, Tier 1, all additive: `adhocdata.ReadResult.OwnClear`,
+`LabelResult`, `Service.ReadLabel`, `ReadLabelRequest`, `AuditReadLabel`,
+`BundleProvenance.DerivedFromSealed`, `BundleResult.DerivedFromSealed`;
+the wire fields `adhocDerivedFromSealed`, `adhocOwnClear` and
+`adhocLabelOnly` (memberships 281 to 283) on the ad-hoc request and reply;
+`playground.BundleSpec.DerivedFromSealed`; `sessiondata.Binding.OwnClear`,
+`DatasetInfo.OwnClear`, `AuditRecord.OwnClear` and `Label`; the result
+stream's `Sealed` beside `Confined`, which now reports the label; a
+reason on applied `adhocDataset` trail rows. Changed in meaning, not in
+shape: `list_datasets`' and `keep_as`' `confined`, which say whether
+reading the dataset confines the task that asks.
+
+Verified by the default lane of `adhocdata` (who reads back as its own
+and who does not, a derived publication, the answer under concurrent
+republishes, the answer by handle, the bus), of `sessiondata` (the
+binding, mixed statements, kept data sets across replays, the wall) and
+of play, through the agent dispatcher with the dispatcher attesting each
+call at the tier it declared: the sequence above ends exposed and
+unlabelled; over a dataset a person published it is labelled at the read
+and refused at the exposure; a result published in the round it arrived
+in is not exposed. `publish_result` is consequential and a test grant has
+nobody to confirm it, so those tests hand it to the window's engine under
+an attested call instead of through the dispatcher. The change has run
+against stubs only; no live run of a model is behind it.
 
 ## Choices for review
 
@@ -459,6 +590,26 @@ recorded here as decided; the ADR as a whole still awaits review.
 - The reach wait's bound (5 s); a check at a call that starts a run lets
   the run decide, against the brief's reading that the call-side check
   keeps refusing.
+- Reading back (2026-11-23): a dataset read on this process's plane is
+  judged by its handle rather than routed through a read of the service.
+- The publisher states what its rows derive from, the service adds what
+  the named inputs show, and a publisher that does neither is judged by
+  its call's tier.
+- A task's exposure ends on a republish that derives from sealed data; a
+  republish by the person under the same owner still does not end it, as
+  before.
+- A failed run is judged as a successful one; a statement refused before
+  it is placed keeps the statement's label.
+- A replay the person causes leaves a kept data set confined; the label
+  lifts again only on a replay by the task that reads its own clear
+  publication.
+- A run of a window under the task's mark is the task's read, as play's
+  agent limits take it.
+- The operator's `keelson('session_datasets')` shows a data set made of a
+  task's own clear publications as confined; `OwnClear` is shown only to
+  the task that asks.
+- `validate_sql`'s and `rewrite_trace`'s `confined` stay a statement's
+  property — it names sealed data — since they run nothing.
 
 ## Status
 
