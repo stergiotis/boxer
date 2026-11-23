@@ -924,28 +924,30 @@ func (inst *App) openAsk() (o *openAsk) {
 	return inst.coord.ask.current()
 }
 
-// renderTask is the coordinator's row (ADR-0269) while it holds a task:
-// whether its conversation read untrusted content and holds confined
-// content, and Stop task. The task's id is in the state chip's inspector
-// (ADR-0404 §SD7). A conversation that read untrusted content without a
-// task — an image the person sent (ADR-0385 §SD5) — says so too.
+// renderTask is the coordinator's row (ADR-0269): whether its conversation
+// read untrusted content and holds confined content, and, while it holds a
+// task, Stop task. The task's id and the label behind the two marks are in
+// the state chip's inspector (ADR-0404 §SD7). The marks are the
+// conversation's, not the task's: they stay when the task ends, and a
+// conversation that never held one — an image the person sent (ADR-0385
+// §SD5) — carries them too.
 func (inst *App) renderTask() {
 	if inst.coord == nil {
 		return
 	}
 	task, tainted, confined := inst.coord.state()
-	if task == "" && !tainted {
+	if task == "" && !tainted && !confined {
 		return
 	}
 	for range inst.barRow() {
 		if tainted {
 			badge.New(inst.ids.PrepareStr("tainted"), "read untrusted content").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipTainted).Send()
 		}
-		if task == "" {
-			continue
-		}
 		if confined {
 			badge.New(inst.ids.PrepareStr("confined"), "holds confined content").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipConfined).Send()
+		}
+		if task == "" {
+			continue
 		}
 		for range c.HoverText(tipStopTask).KeepIter() {
 			if c.Button(inst.ids.PrepareStr("stop-task"), c.Atoms().Text(icons.PhStop+" Stop task").Keep()).SendResp().HasPrimaryClicked() {
