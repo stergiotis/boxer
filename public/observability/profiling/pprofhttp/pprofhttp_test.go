@@ -70,7 +70,7 @@ func TestListenAddressFailedBindDoesNotEndTheCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("hold a port: %v", err)
 	}
-	defer held.Close()
+	defer func() { _ = held.Close() }()
 	if err = run("--pprofHttpListenAddress", held.Addr().String()); err != nil {
 		t.Fatalf("address in use: want the command to run on, got %v", err)
 	}

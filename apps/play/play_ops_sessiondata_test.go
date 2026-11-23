@@ -72,7 +72,7 @@ func TestQueryKeepAsKeepsADataSetAndSamplesIt(t *testing.T) {
 	if !ok {
 		assert.Equal(t, "a data set is being kept", why)
 	}
-	settleUntil(t, h, call, opQuery, args, func(bool) bool { return l.inner.queryRuns[call.Key].kept != nil })
+	_, _, _ = settleUntil(t, h, call, opQuery, args, func(bool) bool { return l.inner.queryRuns[call.Key].kept != nil })
 	q := l.inner.queryRuns[call.Key]
 	assert.Equal(t, "msgs", q.kept.Name)
 	assert.Equal(t, "session('msgs')", q.kept.ReadWith)
@@ -110,7 +110,7 @@ func TestQueryKeepAsKeepsADataSetAndSamplesIt(t *testing.T) {
 	args2 := mustEncode(t, QueryArgs{Sql: "SELECT 2 AS x", KeepAs: "msgs"})
 	_, err = h.ApplyCommand(call2, opQuery, args2)
 	require.NoError(t, err)
-	settleUntil(t, h, call2, opQuery, args2, func(bool) bool { return l.inner.queryRuns[call2.Key].kept != nil })
+	_, _, _ = settleUntil(t, h, call2, opQuery, args2, func(bool) bool { return l.inner.queryRuns[call2.Key].kept != nil })
 	q = l.inner.queryRuns[call2.Key]
 	assert.Equal(t, uint64(2), q.kept.Revision)
 	assert.Equal(t, []string{"top"}, q.kept.Stale)

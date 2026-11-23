@@ -60,6 +60,7 @@ public/keelson/runtime/factsstore/chstore TestServerWriterChild
 public/keelson/runtime/hostboot TestFactsDeploymentChild
 
 # --- by design: needs a build tag the lane does not pass
+apps/chat TestADirectCallUnattended
 public/keelson/runtime/agent TestUnattendedAcceptsASuggestProposal
 public/keelson/runtime/agent TestUnattendedApprovesAGrant
 public/keelson/runtime/agent TestUnattendedApprovesAWidening

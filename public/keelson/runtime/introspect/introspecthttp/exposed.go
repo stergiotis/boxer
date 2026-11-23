@@ -147,7 +147,9 @@ func writeExposedCSV(w *countingResponseWriter, r *http.Request, rc io.Reader) (
 			return errors.Join(errCSVColumn, err)
 		}
 	}
-	cw.Flush()
+	if err = cw.Flush(); err != nil {
+		return
+	}
 	return cw.Error()
 }
 

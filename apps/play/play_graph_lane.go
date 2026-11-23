@@ -191,12 +191,6 @@ func (inst *nodeLane) peek() (view laneView) {
 	return inst.viewLocked()
 }
 
-// servesConfined reports the label of the result the lane serves.
-func (inst *nodeLane) servesConfined() (confined bool) {
-	confined, _ = inst.servesLabel()
-	return
-}
-
 // servesLabel reports the label of the result the lane serves and, when it
 // was read from sealed data and is not confined, the task it is unlabelled
 // for.
