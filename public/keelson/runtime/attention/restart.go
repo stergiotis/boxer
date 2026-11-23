@@ -45,7 +45,7 @@ var RestartSnoozeEnv = env.NewDuration(env.Spec{
 })
 
 // restartAskApp is the sender the restart question is posted as.
-const restartAskApp app.AppIdT = "keelson/restart"
+const restartAskApp app.AppIdT = "keelson/restart" // designlint:ignore=L12 (the host asking in its own words; no app package carries this id)
 
 // IsHostQuestion reports whether sender is the host asking in its own
 // words, not an app asking for a model: a card then names no model.
