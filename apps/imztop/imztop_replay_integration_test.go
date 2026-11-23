@@ -55,8 +55,13 @@ func teeBundles(t *testing.T, host string, bundles []*sysmsnap.BundleSnapshot) {
 		Store:         store,
 		Host:          host,
 		FlushInterval: 50 * time.Millisecond,
+		Log:           zerolog.New(zerolog.NewTestWriter(t)),
 	})
 	require.NoError(t, err)
+	// Registered after the store's Close, so it runs first: the writer
+	// goroutine is gone before the store it owns is closed, on a failed
+	// run too.
+	defer func() { _ = tee.Stop() }()
 
 	codec := sysmetricsbus.NewCBORCodec()
 	pub := bus.NewClient("producer", []app.SubjectFilter{{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionPub}})
@@ -65,8 +70,9 @@ func teeBundles(t *testing.T, host string, bundles []*sysmsnap.BundleSnapshot) {
 		require.NoError(t, encErr)
 		require.NoError(t, pub.Publish(sysmetricsbus.BundleSubject(host), payload))
 	}
-	require.Eventually(t, func() bool { return tee.Stats().Flushed > 0 },
-		10*time.Second, 50*time.Millisecond, "rows never became durable: %+v", tee.Stats())
+	if !assert.Eventually(t, func() bool { return tee.Stats().Flushed > 0 }, 10*time.Second, 50*time.Millisecond) {
+		t.Fatalf("rows never became durable: %+v", tee.Stats())
+	}
 	require.NoError(t, tee.Stop())
 }
 
