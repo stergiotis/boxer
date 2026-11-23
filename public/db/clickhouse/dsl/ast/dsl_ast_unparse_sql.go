@@ -97,7 +97,11 @@ func writeCTE(b *strings.Builder, cte CTE) {
 		}
 		b.WriteByte(')')
 	}
-	b.WriteString(" AS (")
+	b.WriteString(" AS ")
+	if cte.Materialized {
+		b.WriteString("MATERIALIZED ")
+	}
+	b.WriteByte('(')
 	b.WriteString(cte.Body.ToSQL())
 	b.WriteByte(')')
 }

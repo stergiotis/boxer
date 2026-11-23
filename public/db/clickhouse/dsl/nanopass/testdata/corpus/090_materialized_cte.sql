@@ -1,0 +1,1 @@
+WITH a AS MATERIALIZED (SELECT k, v FROM t WHERE v > 0), b AS materialized (SELECT k, sum(v) AS s FROM a GROUP BY k), c AS (SELECT k FROM a WHERE k IN (SELECT k FROM b)) SELECT b.k, b.s FROM b INNER JOIN (WITH d AS MATERIALIZED (SELECT k FROM c) SELECT k FROM d) AS e ON e.k = b.k

@@ -129,7 +129,11 @@ type SettingPair struct {
 type CTE struct {
 	Name          string   `cbor:"name"`
 	ColumnAliases []string `cbor:"col_aliases,omitempty"`
-	Body          Query    `cbor:"body"`
+	// Materialized marks the definition `name AS MATERIALIZED (query)`:
+	// the server may evaluate the query once and keep its rows for every
+	// reference.
+	Materialized bool  `cbor:"materialized,omitempty"`
+	Body         Query `cbor:"body"`
 }
 
 // ============================================================================

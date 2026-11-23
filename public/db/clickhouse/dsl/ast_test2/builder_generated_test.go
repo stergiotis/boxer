@@ -1139,3 +1139,65 @@ func TestGenerated_T087_table_function_tuple_args(t *testing.T) {
 	_, err = nanopass.Parse(sql)
 	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
 }
+
+// Source: 088_aggregate_filter
+// SQL: SELECT a, quantile(0.05)(x) FILTER (WHERE x BETWEEN 1 AND 10) AS p05, count() FILTER (WHERE b IN (SELECT b FROM u)) A...
+func TestGenerated_T088_aggregate_filter(t *testing.T) {
+	q, err := Select(Col("a"), Func("quantileIf", Col("x"), Col("x").Between(Raw("1"), Raw("10"))).As("p05"), Func("countIf", Col("b").In(Sub(Select(Col("b")).
+		From("u")))).As("n"), Func("sumIf", Col("x"), Col("c").Gt(Raw("0"))). /* OVER window */ As("s")).
+		From("t").
+		GroupBy(Col("a"), Col("x"), Col("c")).
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 089_exists
+// SQL: SELECT a, EXISTS (SELECT 1 FROM u WHERE u.k = t.k) AS e FROM t WHERE NOT exists(SELECT 1 FROM v WHERE v.k = t.k AND e...
+func TestGenerated_T089_exists(t *testing.T) {
+	q, err := Select(Col("a"), Func("exists", Sub(Select(Raw("1")).
+		From("u").
+		Where(Col("u", "k").Eq(Col("t", "k"))))).As("e")).
+		From("t").
+		Where(Func("exists", Sub(Select(Raw("1")).
+			From("v").
+			Where(Col("v", "k").Eq(Col("t", "k")).And(Func("exists", Sub(Select(Raw("1")).
+				From("w").
+				UnionAll(Select(Raw("2")).
+					From("w")))))))).Not().And(Func("exists", Sub(Select(Star()).
+			From("c").
+			With("c", Select(Col("k")).
+				From("u")))))).
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 090_materialized_cte
+// SQL: WITH a AS MATERIALIZED (SELECT k, v FROM t WHERE v > 0), b AS materialized (SELECT k, sum(v) AS s FROM a GROUP BY k),...
+func TestGenerated_T090_materialized_cte(t *testing.T) {
+	q, err := Select(Col("b", "k"), Col("b", "s")).
+		FromExpr(ast.JoinExpr{Kind: ast.JoinExprOp, Op: &ast.JoinOpData{Left: ast.JoinExpr{Kind: ast.JoinExprTable, Table: &ast.JoinTableData{TableKind: ast.TableKindRef, Table: "b"}}, Right: ast.JoinExpr{Kind: ast.JoinExprTable, Table: &ast.JoinTableData{TableKind: ast.TableKindSubquery, Subquery: buildUnionPtr(Select(Col("k")).
+			From("d").
+			WithMaterialized("d", Select(Col("k")).
+				From("c"))), Alias: "e"}}, Kind: ast.JoinKindInner, Constraint: ast.JoinConstraint{Kind: ast.JoinConstraintOn, Exprs: []ast.Expr{Col("e", "k").Eq(Col("b", "k")).Expr}}}}).
+		WithMaterialized("a", Select(Col("k"), Col("v")).
+			From("t").
+			Where(Col("v").Gt(Raw("0")))).
+		WithMaterialized("b", Select(Col("k"), Func("sum", Col("v")).As("s")).
+			From("a").
+			GroupBy(Col("k"))).
+		With("c", Select(Col("k")).
+			From("a").
+			Where(Col("k").In(Sub(Select(Col("k")).
+				From("b"))))).
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}

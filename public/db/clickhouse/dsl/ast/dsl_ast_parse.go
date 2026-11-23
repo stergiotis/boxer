@@ -198,6 +198,7 @@ func convertCTEs(pr *nanopass.ParseResult, ctx *grammar2.CtesContext) (ctes []CT
 
 func convertNamedQuery(pr *nanopass.ParseResult, ctx *grammar2.NamedQueryContext) (cte CTE, err error) {
 	nameFound := false
+	cte.Materialized = ctx.MATERIALIZED() != nil
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {

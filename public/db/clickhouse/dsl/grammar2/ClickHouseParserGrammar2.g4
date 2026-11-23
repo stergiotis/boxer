@@ -82,8 +82,10 @@ ctes
     : WITH RECURSIVE? withItem (COMMA withItem)*
     ;
 
+// MATERIALIZED is part of the definition (see grammar1's namedQuery);
+// canonical form keeps it verbatim.
 namedQuery
-    : name=IDENTIFIER (columnAliases)? AS LPAREN query RPAREN
+    : name=IDENTIFIER (columnAliases)? AS MATERIALIZED? LPAREN query RPAREN
     ;
 
 columnAliases

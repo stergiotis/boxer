@@ -86,8 +86,14 @@ ctes
     : WITH RECURSIVE? withItem (COMMA withItem)*
     ;
 
+// MATERIALIZED after AS asks the server to evaluate the common table
+// expression once and keep its rows for every reference (ClickHouse reads
+// the keyword there and nowhere else: not ahead of the name or of AS, and
+// there is no NOT MATERIALIZED). It is part of the definition, not sugar,
+// and canonical form keeps it. MATERIALIZED is a keyword that is also a
+// name, so `1 AS materialized` stays a scalar item with that alias.
 namedQuery
-    : name=identifier (columnAliases)? AS LPAREN query RPAREN
+    : name=identifier (columnAliases)? AS MATERIALIZED? LPAREN query RPAREN
     ;
 
 columnAliases

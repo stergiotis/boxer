@@ -120,6 +120,12 @@ func predictionCorpus() []struct {
 		{"exists_predicate", "SELECT a FROM t WHERE EXISTS (SELECT 1 FROM u WHERE u.k = t.k)"},
 		{"exists_call_spelling", "SELECT exists(SELECT * FROM u), exists((SELECT 1))"},
 		{"exists_as_name", "SELECT exists, exists(a) FROM t"},
+		// MATERIALIZED after AS marks a named query; the item is decided
+		// against a scalar aliased `materialized` only past the
+		// parenthesis that follows.
+		{"cte_materialized", "WITH c AS MATERIALIZED (SELECT a FROM t), d AS (SELECT a FROM c) SELECT a FROM d"},
+		{"cte_materialized_nested", "WITH o AS MATERIALIZED (WITH i AS MATERIALIZED (SELECT a FROM t) SELECT a FROM i) SELECT a FROM o"},
+		{"with_scalar_named_materialized", "WITH 1 AS materialized SELECT materialized"},
 	}
 }
 

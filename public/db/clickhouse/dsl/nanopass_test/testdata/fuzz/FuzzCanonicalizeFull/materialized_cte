@@ -1,0 +1,2 @@
+go test fuzz v1
+string("with a as materialized (select 1 as k), b(k) as MATERIALIZED ((select k from a)) select k from b union all with c as materialized (select 2 as k) select k from c")

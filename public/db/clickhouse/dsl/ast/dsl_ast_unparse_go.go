@@ -23,7 +23,7 @@ func (inst Query) ToGoCodeWithPrefix(p string) string {
 		b.WriteString(".\n\tRecursive()")
 	}
 	for _, cte := range inst.CTEs {
-		b.WriteString(".\n\tWith(")
+		b.WriteString(".\n\t" + cteBuilderCall(cte) + "(")
 		b.WriteString(goStr(cte.Name))
 		b.WriteString(", ")
 		g.emitSelectUnion(cte.Body.Body)
@@ -179,7 +179,7 @@ func (inst *goEmitter) emitSelect(sel Select) {
 		inst.w(".\n\tRecursive()")
 	}
 	for _, cte := range sel.CTEs {
-		inst.w(".\n\tWith(")
+		inst.w(".\n\t" + cteBuilderCall(cte) + "(")
 		inst.w(goStr(cte.Name))
 		inst.w(", ")
 		inst.emitSelectUnion(cte.Body.Body)
@@ -558,6 +558,14 @@ func (inst *goEmitter) emitExpr(e Expr) {
 
 func goStr(s string) string {
 	return strconv.Quote(s)
+}
+
+// cteBuilderCall names the builder method that adds cte.
+func cteBuilderCall(cte CTE) string {
+	if cte.Materialized {
+		return "WithMaterialized"
+	}
+	return "With"
 }
 
 func extractLitInt(e Expr) string {

@@ -421,6 +421,15 @@ func (inst SelectBuilder) With(name string, body SelectBuilder) SelectBuilder {
 	return inst
 }
 
+// WithMaterialized adds the CTE `name AS MATERIALIZED (body)`: the server
+// may evaluate body once and keep its rows for every reference.
+func (inst SelectBuilder) WithMaterialized(name string, body SelectBuilder) SelectBuilder {
+	inst = inst.absorbSB(body)
+	bq := body.buildQuery()
+	inst.ctes = append(copyCTEs(inst.ctes), ast.CTE{Name: name, Materialized: true, Body: bq})
+	return inst
+}
+
 // Recursive marks the WITH clause as `WITH RECURSIVE …`: CTEs added via With
 // may then reference themselves. It applies to the whole clause and is a
 // no-op without any With() CTEs.

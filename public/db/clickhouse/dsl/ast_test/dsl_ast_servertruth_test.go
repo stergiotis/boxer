@@ -329,3 +329,50 @@ func TestServerTruthExists(t *testing.T) {
 		})
 	}
 }
+
+// TestServerTruthMaterializedCTE: the server prints a definition marked
+// MATERIALIZED with its marker, as the canonical form and the canonical AST's
+// rendering keep it, and the three evaluate alike, with the setting that
+// makes the server materialize off (its default) and on.
+func TestServerTruthMaterializedCTE(t *testing.T) {
+	requireClickhouse(t)
+
+	queries := []string{
+		"WITH a AS MATERIALIZED (SELECT number AS k FROM numbers(10)), b AS MATERIALIZED (SELECT k, k * 2 AS d FROM a) SELECT count() AS n, sum(d) AS s FROM b",
+		"WITH a AS materialized (SELECT number AS k FROM numbers(4)) SELECT count() FROM a AS x CROSS JOIN a AS y WHERE x.k < y.k",
+		"WITH a(v) AS MATERIALIZED (SELECT number FROM numbers(5)), 3 AS materialized SELECT sum(v) + materialized FROM a",
+		"SELECT * FROM (WITH a AS MATERIALIZED (SELECT 1 AS k UNION ALL SELECT 2) SELECT sum(k) FROM a)",
+		"WITH a AS MATERIALIZED (SELECT number AS k FROM numbers(6)), b AS (SELECT k FROM a WHERE k % 2 = 0) SELECT (SELECT count() FROM a), (SELECT count() FROM b), exists(SELECT 1 FROM a WHERE k > 4)",
+	}
+
+	for _, sql := range queries {
+		t.Run(sql, func(t *testing.T) {
+			formatted, err := chFormat(sql)
+			require.NoError(t, err)
+			assert.Contains(t, formatted, "AS MATERIALIZED")
+			canonical, err := fullPipeline(sql)
+			require.NoError(t, err)
+			assert.Contains(t, canonical, "AS MATERIALIZED")
+			pr, err := nanopass.ParseCanonical(canonical)
+			require.NoError(t, err)
+			query, err := ast.ConvertCSTToAST(pr)
+			require.NoError(t, err)
+			rendered := query.ToSQL()
+			assert.Contains(t, rendered, "AS MATERIALIZED")
+			renderedFormat, err := chFormat(rendered)
+			require.NoError(t, err)
+			assert.Equal(t, formatted, renderedFormat, "the server parses the original and the AST's rendering differently:\n  rendered: %s", rendered)
+
+			for _, setting := range []string{"0", "1"} {
+				want, err := chLocal(t, sql, "--enable_materialized_cte", setting)
+				require.NoError(t, err)
+				got, err := chLocal(t, canonical, "--enable_materialized_cte", setting)
+				require.NoError(t, err)
+				assert.Equal(t, want, got, "canonical: %s", canonical)
+				got, err = chLocal(t, rendered, "--enable_materialized_cte", setting)
+				require.NoError(t, err)
+				assert.Equal(t, want, got, "rendered: %s", rendered)
+			}
+		})
+	}
+}

@@ -1,0 +1,2 @@
+go test fuzz v1
+string("WITH a AS MATERIALIZED (SELECT 1 AS k), 2 AS materialized, materialized AS materialized (SELECT k FROM a) SELECT k, materialized FROM materialized")
