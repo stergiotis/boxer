@@ -77,10 +77,12 @@ maturity_rank >= 2 OR kind = 'applet' -- see SD6
 ```
 
 **SD4 — The launcher filters by grade, and marks the grade that warns.** A
-row of chips selects grades, with none selected meaning no restriction: the
-topic chips' polarity (ADR-0158 §SD6), since the gesture is "show me only
-these". The row is drawn only when the launchable apps carry more than one
-grade, so a host where nothing is graded looks as before. A list row carries
+row of checkboxes selects grades, with none ticked meaning no restriction:
+the topic chips' polarity (ADR-0158 §SD6), since the gesture is "show me only
+these". The row sits with the kind checkboxes in a fold that starts closed,
+whose title names the grades selected, and is drawn only when the launchable
+apps carry more than one grade, so a host where nothing is graded looks as
+before. A list row carries
 a badge only for `incubating`; the detail pane names any stated grade. The
 launcher's `set_filter` and `get_view`
 ([ADR-0345](./0345-system-apps-join-the-operations-contract-the-log-viewer-first.md))
@@ -89,7 +91,7 @@ carry the selected grades.
 **SD5 — The launch limit stays a limit.** `KEELSON_LAUNCHABLE_APPS_WHERE`
 decides what may be opened, by anyone. Naming a grade there removes the other
 apps from the host, the launcher and help among them, and any app an admitted
-app hands work to. Looking at one grade is SD4's chips; SD3's predicates are
+app hands work to. Looking at one grade is SD4's checkboxes; SD3's predicates are
 for what a host permits.
 
 **SD6 — A minted app is `unstated`.** No minter reads a grade from its

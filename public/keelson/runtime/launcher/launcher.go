@@ -86,9 +86,14 @@ type Inst struct {
 	// topicFilter is held as the mask itself: its chips are SelectableLabels,
 	// whose click response is read within the frame.
 	topicFilter topicFilterT
-	// maturityFilter is held as the mask too, for the same reason: its chips
-	// are SelectableLabels (ADR-0375).
+	// maturityFilter is held as the mask too: its checkboxes are drawn from
+	// it and a click is read through the response within the frame
+	// (ADR-0375).
 	maturityFilter maturityFilterT
+	// maturityClick receives the maturity checkboxes' bound values, which
+	// are not read: a checkbox's state is drawn from maturityFilter, and a
+	// change is acted on through its response (renderMaturityChecks).
+	maturityClick bool
 
 	// selected is the app whose detail the right pane shows. Written from the
 	// cursor once per frame (see renderRows) rather than assigned by each
@@ -132,6 +137,11 @@ type Inst struct {
 	// built without it, and the launcher's job is not to know which app reads
 	// help. Empty hides the action.
 	helpAppId app.AppIdT
+	// helpRef queues the document the Help center should show when the
+	// launcher next raises it, injected for the reason helpAppId is. nil
+	// opens the Help center where it was, and leaves the help page titles
+	// as text.
+	helpRef func(ref help.RefT)
 
 	// inspect opens the app center on an app (ADR-0260 §SD1), injected for
 	// the reason helpAppId is: the launcher does not know which app
@@ -200,6 +210,13 @@ func (inst *Inst) SetHelpApp(id app.AppIdT) {
 	inst.helpAppId = id
 }
 
+// SetHelpRef installs how the detail pane tells the Help center which
+// document to show: fn queues ref for the help window the launcher raises
+// next. nil means the Help action opens the Help center where it was.
+func (inst *Inst) SetHelpRef(fn func(ref help.RefT)) {
+	inst.helpRef = fn
+}
+
 // SetInspect installs the detail pane's "Inspect" action: fn opens a window
 // showing target (ADR-0260 §SD1). nil hides the action, which is the state of
 // a host that registers no app center.
@@ -254,9 +271,7 @@ func (inst *Inst) renderListPane(ids *c.WidgetIdStack) {
 		return
 	}
 	fieldId := inst.renderSearchBox(ids)
-	inst.renderKindToggles(ids, "pane")
-	inst.renderMaturityChips(ids)
-	inst.renderTopicChips(ids)
+	inst.renderFilters(ids, "pane")
 	c.Separator().Horizontal().Send()
 
 	visible := inst.visibleManifests()
@@ -429,34 +444,69 @@ func (inst *Inst) ensureKindShown() {
 	}
 }
 
+// renderFilters draws the fold that holds the kind, maturity and topic
+// filters, closed by default: most visits are a search or a scroll, and three
+// rows of controls above the list are space taken from the apps every time.
+// The list is already sectioned by topic, so the topic chips are a way to
+// narrow it, not the way to find the sections.
+//
+// The fold's title says what the filters narrow, so a narrowed list is
+// visible with the fold closed — the same failure emptyResultHint guards
+// against. The kind change is noticed before the fold is drawn, so a command
+// that set the kinds while it was closed still lands.
+//
+// scope keys the widget ids so several surfaces can draw the same fold.
+func (inst *Inst) renderFilters(ids *c.WidgetIdStack, scope string) {
+	inst.ensureKindShown()
+	inst.noticeKindToggles()
+	for range c.CollapsingHeader(ids.PrepareStr("filters-"+scope+"-fold"), c.WidgetText().Text(inst.filtersTitle()).Keep()).KeepIter() {
+		inst.renderKindToggles(ids, scope)
+		inst.renderMaturityChecks(ids)
+		inst.renderTopicChips(ids)
+	}
+}
+
+// filtersTitle is the fold's title: "Filters", followed by what the filters
+// inside it narrow.
+func (inst *Inst) filtersTitle() (s string) {
+	s = "Filters"
+	if n := inst.hiddenKindCount(); n == 1 {
+		s += " · 1 kind hidden"
+	} else if n > 1 {
+		s += " · " + strconv.Itoa(n) + " kinds hidden"
+	}
+	if !inst.maturityFilter.isInert() {
+		var names []string
+		for _, g := range app.AllMaturities {
+			if inst.maturityFilter.selected(g) {
+				names = append(names, maturityLabel(g))
+			}
+		}
+		s += " · only " + strings.Join(names, ", ")
+	}
+	if !inst.topicFilter.isInert() {
+		var names []string
+		for i, t := range app.Topics() {
+			if inst.topicFilter.selectedAt(i) {
+				names = append(names, topicLabel(t))
+			}
+		}
+		s += " · topics " + strings.Join(names, ", ")
+	}
+	return
+}
+
 // renderKindToggles draws the provenance filter (ADR-0158 §SD5): one checkbox
 // per kind, all on by default. These exist because §SD3 retired "Applets" and
 // "Demos" as browse sections — provenance is a filter over a subject-organised
 // list, not a place an app lives — and without them that retirement would
 // simply delete two views people use.
-//
-// The checkboxes sit in a fold, closed by default: most people never narrow
-// by kind, and a row of seven checkboxes above the list is space taken from
-// the apps on every visit. The fold's title carries how many kinds are
-// hidden, so a narrowed list is visible with the fold closed — the same
-// failure emptyResultHint guards against. The change is noticed before the
-// fold is drawn, so a command that set the kinds while it was closed still
-// lands.
-//
-// scope keys the widget ids so several surfaces can draw the same toggles.
 func (inst *Inst) renderKindToggles(ids *c.WidgetIdStack, scope string) {
-	inst.ensureKindShown()
-	inst.noticeKindToggles()
-	title := "Kinds"
-	if n := inst.hiddenKindCount(); n > 0 {
-		title += " · " + strconv.Itoa(n) + " hidden"
-	}
-	for range c.CollapsingHeader(ids.PrepareStr("kind-"+scope+"-fold"), c.WidgetText().Text(title).Keep()).KeepIter() {
-		for range c.HorizontalWrapped().KeepIter() {
-			for i, k := range app.AllKinds {
-				c.Checkbox(ids.PrepareStr("kind-"+scope+"-"+k.String()), inst.kindShown[i], kindLabel(k)).
-					SendRespVal(&inst.kindShown[i])
-			}
+	for range c.HorizontalWrapped().KeepIter() {
+		c.Label("Kinds:").Send()
+		for i, k := range app.AllKinds {
+			c.Checkbox(ids.PrepareStr("kind-"+scope+"-"+k.String()), inst.kindShown[i], kindLabel(k)).
+				SendRespVal(&inst.kindShown[i])
 		}
 	}
 }
@@ -488,15 +538,20 @@ func (inst *Inst) presentMaturities() (grades []app.MaturityE) {
 	return
 }
 
-// renderMaturityChips draws the maturity filter (ADR-0375): one selectable
-// chip per grade some launchable app carries, with none selected meaning no
-// restriction.
+// renderMaturityChecks draws the maturity filter (ADR-0375): one checkbox per
+// grade some launchable app carries. A ticked grade restricts the list to the
+// ticked grades, and none ticked means no restriction — the polarity ADR-0375
+// SD4 chose, so looking at one grade alone is one click.
+//
+// The checkbox's own bound value is not the state: the click computes the
+// next mask and sets it as a gesture, so the command sets and never toggles
+// (ADR-0345 §SD2), and the next frame draws the box from the mask.
 //
 // The row is drawn only where it can tell apps apart: on a host whose apps
 // all carry one grade, an ungraded host among them, there is nothing to
-// choose and the row would be one more line above the list. A selection made
+// choose and the row would be one more line in the fold. A selection made
 // while the row was drawn keeps it drawn, so it can always be cleared.
-func (inst *Inst) renderMaturityChips(ids *c.WidgetIdStack) {
+func (inst *Inst) renderMaturityChecks(ids *c.WidgetIdStack) {
 	grades := inst.presentMaturities()
 	if len(grades) < 2 && inst.maturityFilter.isInert() {
 		return
@@ -504,18 +559,16 @@ func (inst *Inst) renderMaturityChips(ids *c.WidgetIdStack) {
 	for range c.HorizontalWrapped().KeepIter() {
 		c.Label("Maturity:").Send()
 		for _, g := range grades {
-			if c.SelectableLabel(ids.PrepareStr("maturity-chip-"+g.String()),
+			if c.Checkbox(ids.PrepareStr("maturity-check-"+g.String()),
 				inst.maturityFilter.selected(g), maturityLabel(g)).
-				SendResp().HasPrimaryClicked() {
-				// The click computes the next state, so the command sets and
-				// never toggles (ADR-0345 §SD2).
+				SendRespVal(&inst.maturityClick).HasChanged() {
 				f := inst.filterState()
 				f.maturities = f.maturities.toggled(g)
 				inst.setFilterGesture(f)
 			}
 		}
 		if !inst.maturityFilter.isInert() {
-			if c.Button(ids.PrepareStr("maturity-chip-clear"), c.Atoms().Text(icons.PhX+" Clear").Keep()).
+			if c.Button(ids.PrepareStr("maturity-clear"), c.Atoms().Text(icons.PhX+" Clear").Keep()).
 				SendResp().HasPrimaryClicked() {
 				f := inst.filterState()
 				f.maturities = 0

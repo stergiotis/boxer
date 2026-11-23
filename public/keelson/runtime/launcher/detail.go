@@ -18,9 +18,9 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 )
 
 // renderDetailPane draws the selected app, or says what to do when nothing is
@@ -45,7 +45,8 @@ func (inst *Inst) renderDetailPane(ids *c.WidgetIdStack) {
 		c.Separator().Horizontal().Send()
 		inst.renderDetailMeta(m)
 		inst.renderDetailCaps(m)
-		inst.renderDetailHelp(m)
+		inst.renderDetailHelp(ids, m)
+		inst.renderDetailMore(ids, m)
 	}
 }
 
@@ -59,16 +60,8 @@ func (inst *Inst) renderDetailHead(ids *c.WidgetIdStack, m app.Manifest) {
 		for rt := range c.RichTextLabel(rowLabel(m)) {
 			rt.Strong()
 		}
-		if m.Kind != app.KindApp {
-			badge.New(ids.PrepareStr("detail-kind"), m.Kind.String()).
-				Size(badge.SizeSm).
-				Send()
-		}
-		if m.Maturity != app.MaturityUnstated {
-			badge.New(ids.PrepareStr("detail-maturity"), m.Maturity.String()).
-				Size(badge.SizeSm).
-				Send()
-		}
+		sendKindBadge(ids, "detail-kind", m.Kind)
+		sendMaturityBadge(ids, "detail-maturity", m.Maturity)
 	}
 	if m.Summary != "" {
 		c.Label(m.Summary).Send()
@@ -127,11 +120,7 @@ func (inst *Inst) renderDetailActions(ids *c.WidgetIdStack, m app.Manifest) {
 		if inst.helpAppId != "" && inst.hasHelp(m) && inst.registry.Launchable(inst.helpAppId) {
 			if c.Button(ids.PrepareStr("detail-help"), c.Atoms().Text(icons.PhBookOpen+" Help").Keep()).
 				SendResp().HasPrimaryClicked() {
-				// The Help center reads its own selection from the library, so
-				// raising it is the whole action here. Selecting this app's
-				// book inside it wants a cross-app selection verb the help
-				// host does not expose yet.
-				inst.open(inst.helpAppId)
+				inst.openHelp(overviewDoc(inst.lib, m.Id), m.Id)
 			}
 		}
 		if inst.inspect != nil {
@@ -149,15 +138,15 @@ func (inst *Inst) renderDetailActions(ids *c.WidgetIdStack, m app.Manifest) {
 	c.AddSpace(styletokens.GapItems(inst.density))
 }
 
-// renderDetailMeta draws the key-value block: the classification and
-// declaration columns keelson('apps') carries.
+// renderDetailMeta draws the key-value block a person choosing an app reads:
+// the topics it is listed under and whether it remembers its state.
 //
-// Rows appear only when they hold something. A pane that renders eighteen
-// labels for an app that declares three of them is the failure on the other
-// side of the one-line row (§SD10) — the point of a detail pane is that the
-// expensive information renders once, not that all of it renders always.
+// Rows appear only when they hold something. The builder's columns — the
+// search keywords, the version, the module, the launch kind, the stored keys
+// — are in renderDetailMore's fold, one click away, rather than between the
+// summary and what the app touches.
 func (inst *Inst) renderDetailMeta(m app.Manifest) {
-	rows := make([][2]string, 0, 8)
+	rows := make([][2]string, 0, 2)
 	if len(m.Topics) > 0 {
 		labels := make([]string, 0, len(m.Topics))
 		for _, t := range m.Topics {
@@ -165,6 +154,24 @@ func (inst *Inst) renderDetailMeta(m app.Manifest) {
 		}
 		rows = append(rows, [2]string{"Topics", strings.Join(labels, " · ")})
 	}
+	if m.Workingset {
+		rows = append(rows, [2]string{"Remembers", "reopens with the state you left"})
+	}
+	renderKeyValueRows(rows)
+	if len(rows) > 0 {
+		c.AddSpace(styletokens.GapItems(inst.density))
+	}
+}
+
+// renderDetailMore draws the builder's view of the app in a fold, closed by
+// default: the search keywords, the version, where the app comes from, its
+// launch kind, its stored keys and the bus subjects behind each line of
+// "What it touches". All of it is what keelson('apps') serialises; a person
+// picking an app needs none of it, and a person checking one is a click away.
+// The fold's open state is shared across apps, so someone reading these
+// columns keeps reading them as the selection moves.
+func (inst *Inst) renderDetailMore(ids *c.WidgetIdStack, m app.Manifest) {
+	rows := make([][2]string, 0, 6)
 	if len(m.Keywords) > 0 {
 		rows = append(rows, [2]string{"Also found by", strings.Join(m.Keywords, ", ")})
 	}
@@ -179,15 +186,28 @@ func (inst *Inst) renderDetailMeta(m app.Manifest) {
 	if m.LaunchKind != "" {
 		rows = append(rows, [2]string{"Opens with", m.LaunchKind})
 	}
-	if m.Workingset {
-		rows = append(rows, [2]string{"Remembers", "reopens with the state you left"})
-	}
 	if len(m.PersistedKeys) > 0 {
 		rows = append(rows, [2]string{"Stores", strconv.Itoa(len(m.PersistedKeys)) + " state keys"})
 	}
-	if len(rows) == 0 {
+	if len(rows) == 0 && len(m.Caps) == 0 {
 		return
 	}
+	for range c.CollapsingHeader(ids.PrepareStr("detail-more"), c.WidgetText().Text("Details").Keep()).KeepIter() {
+		renderKeyValueRows(rows)
+		if len(m.Caps) > 0 {
+			for rt := range c.RichTextLabel("Bus subjects") {
+				rt.Small().Weak()
+			}
+			for _, cap := range m.Caps {
+				c.Label(cap.Pattern + " [" + cap.Direction.String() + "]").Send()
+			}
+		}
+	}
+}
+
+// renderKeyValueRows draws caption and value pairs, the caption weak and
+// first.
+func renderKeyValueRows(rows [][2]string) {
 	for _, r := range rows {
 		for range c.Horizontal().KeepIter() {
 			for rt := range c.RichTextLabel(r[0]) {
@@ -196,7 +216,6 @@ func (inst *Inst) renderDetailMeta(m app.Manifest) {
 			c.Label(r[1]).Send()
 		}
 	}
-	c.AddSpace(styletokens.GapItems(inst.density))
 }
 
 // originLabel renders where an app came from (ADR-0339) as one line: the
@@ -227,9 +246,9 @@ func originLabel(o app.Origin) (label string) {
 // answer "why does this app need the filesystem" answers "what would opening
 // it do" almost verbatim. Nothing had ever rendered them.
 //
-// The pattern is shown beside the reason rather than instead of it: the reason
-// is the sentence, and the subject is what a reader who wants to check it
-// against the cap broker needs.
+// The reason is the sentence a person reads; the subject each one stands for
+// is what a reader checking it against the cap broker needs, and is listed in
+// the Details fold (renderDetailMore) rather than under every reason.
 func (inst *Inst) renderDetailCaps(m app.Manifest) {
 	if len(m.Caps) == 0 {
 		return
@@ -246,9 +265,6 @@ func (inst *Inst) renderDetailCaps(m app.Manifest) {
 			reason = "(no reason declared)"
 		}
 		c.Label("• " + reason).Send()
-		for rt := range c.RichTextLabel("    " + cap.Pattern + " [" + cap.Direction.String() + "]") {
-			rt.Small().Weak()
-		}
 	}
 	c.AddSpace(styletokens.GapItems(inst.density))
 }
@@ -263,9 +279,12 @@ func (inst *Inst) hasHelp(m app.Manifest) (ok bool) {
 }
 
 // renderDetailHelp lists the app's help documents by title — the contents
-// page, not the prose. It answers "is there more to read, and about what"
-// without the launcher taking on the markdown renderer's id contract.
-func (inst *Inst) renderDetailHelp(m app.Manifest) {
+// page, not the prose. Each title opens the Help center on that document when
+// the host wired a way to say which (SetHelpRef); without one the titles are
+// text, since a title that looks like a link and does nothing is worse than a
+// list. It answers "is there more to read, and about what" without the
+// launcher taking on the markdown renderer's id contract.
+func (inst *Inst) renderDetailHelp(ids *c.WidgetIdStack, m app.Manifest) {
 	if !inst.hasHelp(m) {
 		return
 	}
@@ -280,13 +299,60 @@ func (inst *Inst) renderDetailHelp(m app.Manifest) {
 	for rt := range c.RichTextLabel("Help pages") {
 		rt.Strong()
 	}
+	navigable := inst.helpRef != nil && inst.helpAppId != "" && inst.registry.Launchable(inst.helpAppId)
 	for _, d := range docs {
 		title := d.Title
 		if title == "" {
 			title = d.Path
 		}
-		for rt := range c.RichTextLabel("• " + title) {
-			rt.Small().Weak()
+		if !navigable {
+			for rt := range c.RichTextLabel("• " + title) {
+				rt.Small().Weak()
+			}
+			continue
+		}
+		if c.Button(ids.PrepareStr("detail-help-doc-"+d.Path), c.Atoms().Text(icons.PhBookOpen+" "+title).Keep()).
+			Kind(c.ButtonKindGhost).
+			SendResp().HasPrimaryClicked() {
+			inst.openHelp(d.Path, m.Id)
 		}
 	}
+	c.AddSpace(styletokens.GapItems(inst.density))
+}
+
+// overviewDoc is the document the Help action opens an app's book on: its
+// overview when it has one, else its first document in path order — the
+// choice F1 makes (helphost.RefForApp), restated because the launcher does
+// not import the help app.
+func overviewDoc(lib help.LibraryI, id app.AppIdT) (doc string) {
+	if lib == nil {
+		return
+	}
+	b, ok := lib.Book(id)
+	if !ok {
+		return
+	}
+	docs := b.Docs()
+	if len(docs) == 0 {
+		return
+	}
+	doc = docs[0].Path
+	for _, d := range docs {
+		if d.Path == "overview" {
+			doc = d.Path
+			break
+		}
+	}
+	return
+}
+
+// openHelp raises the Help center on one document of id's book. The ref is
+// queued before the raise, so a fresh window opens on it and an open one
+// shows it at its next frame (helphost.PushRef). Without a wired ref the
+// Help center opens where it was.
+func (inst *Inst) openHelp(doc string, id app.AppIdT) {
+	if inst.helpRef != nil && doc != "" {
+		inst.helpRef(help.RefT{AppId: id, Doc: doc})
+	}
+	inst.open(inst.helpAppId)
 }

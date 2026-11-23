@@ -463,6 +463,25 @@ func TestHiddenKindCount_FollowsToggles(t *testing.T) {
 	assert.Equal(t, 2, inst.hiddenKindCount())
 }
 
+func TestFiltersTitle_NamesWhatIsNarrowed(t *testing.T) {
+	// The closed fold's title is the only sign the list is narrowed by kind,
+	// grade or topic.
+	inst := &Inst{}
+	inst.ensureKindShown()
+	assert.Equal(t, "Filters", inst.filtersTitle())
+	inst.kindShown[indexOfKind(t, app.KindDemo)] = false
+	assert.Equal(t, "Filters · 1 kind hidden", inst.filtersTitle())
+	inst.kindShown[indexOfKind(t, app.KindApplet)] = false
+	inst.maturityFilter = maturityFilterT(0).toggled(app.MaturityCore).toggled(app.MaturityIncubating)
+	assert.Equal(t, "Filters · 2 kinds hidden · only Incubating, Core", inst.filtersTitle())
+	for i, tp := range app.Topics() {
+		if tp == app.TopicRuntime {
+			inst.topicFilter = inst.topicFilter.toggledAt(i)
+		}
+	}
+	assert.Equal(t, "Filters · 2 kinds hidden · only Incubating, Core · topics Runtime", inst.filtersTitle())
+}
+
 func TestEnsureKindShown_Idempotent(t *testing.T) {
 	inst := &Inst{}
 	inst.ensureKindShown()

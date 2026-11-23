@@ -289,7 +289,7 @@ func TestFilterArgsRoundTripWithMaturities(t *testing.T) {
 	assert.Empty(t, filterArgs(filterT{}).Maturities, "no selected grade spells as no maturities")
 }
 
-// The maturity chips are drawn only where they can tell apps apart.
+// The maturity checkboxes are drawn only where they can tell apps apart.
 func TestPresentMaturities_ListsTheGradesInUse(t *testing.T) {
 	w := opsFixture(t)
 	assert.Equal(t, []app.MaturityE{app.MaturityUnstated}, w.inst.presentMaturities(), "an ungraded host has one grade, so no row")

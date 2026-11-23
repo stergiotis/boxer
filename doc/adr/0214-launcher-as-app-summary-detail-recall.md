@@ -452,6 +452,29 @@ its second window shares the instance. The launcher's own window, from
 "Browse all apps…", and the help center stay open-or-raise: they are
 helpers the launcher reaches for, not apps the person picked.
 
+### 2026-11-23 — the pane is for the person choosing; the builder's columns fold away, and help opens on the book
+
+SD6 rendered every declared column in one block, and in use the block read
+as written for the builder: the module path and its pseudo-version, the
+launch kind's identifier, search keywords with ADR numbers among them, and
+a bus subject under every reason in "what it touches". A person picking an
+app reads the summary, the topics, the reasons and the help, so those stay
+in the pane. The keywords, version, origin, launch kind, stored keys and
+the subjects behind the reasons move to a *Details* fold, closed by default
+and one click away. No column is dropped.
+
+The Help action now opens the Help center on the app's book, at its
+overview, and each help page title opens that page. The launcher still
+does not import the help app: the host hands it the queue F1 already uses
+to say which document a help window opening next should show. Without that
+hook the action opens the Help center where it was, and the titles stay
+text rather than links that do nothing.
+
+The list pane's kind, maturity and topic controls move to a *Filters*
+fold, closed by default, whose title names what they narrow (SD5, SD6's
+topic chips, ADR-0375 SD4). The list is already sectioned by topic, so the
+chips narrow it rather than being the way to its sections.
+
 ## References
 
 - [ADR-0158](./0158-app-classification-topics-keywords-kind.md) — topics,

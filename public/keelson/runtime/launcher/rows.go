@@ -389,54 +389,58 @@ func (inst *Inst) renderRowBadges(ids *c.WidgetIdStack, m app.Manifest, isOpen b
 			Tooltip("a window for this app is already open — clicking raises it").
 			Send()
 	}
-	switch m.Kind {
-	case app.KindApplet:
-		badge.New(ids.PrepareStr(key("kind")), "applet").
-			Tone(badge.ToneInfo).
-			Size(badge.SizeSm).
-			Tooltip("minted from a committed SQL-applet document").
-			Send()
-	case app.KindChatlet:
-		badge.New(ids.PrepareStr(key("kind")), "chatlet").
-			Tone(badge.ToneInfo).
-			Size(badge.SizeSm).
-			Tooltip("the chat, specialised by a committed document").
-			Send()
-	case app.KindWorkstatelet:
-		badge.New(ids.PrepareStr(key("kind")), "workstatelet").
-			Tone(badge.ToneInfo).
-			Size(badge.SizeSm).
-			Tooltip("opens the windows a document lists, in the layout it names").
-			Send()
-	case app.KindDashboardlet:
-		badge.New(ids.PrepareStr(key("kind")), "dashboardlet").
-			Tone(badge.ToneInfo).
-			Size(badge.SizeSm).
-			Tooltip("one dashboard from a committed document, in the dashboard viewer").
-			Send()
-	case app.KindNotebooklet:
-		badge.New(ids.PrepareStr(key("kind")), "notebooklet").
-			Tone(badge.ToneInfo).
-			Size(badge.SizeSm).
-			Tooltip("a committed notebook, its records computed on the server when it opens; nothing is stored").
-			Send()
-	case app.KindDemo:
-		badge.New(ids.PrepareStr(key("kind")), "demo").
-			Tone(badge.ToneNeutral).
-			Size(badge.SizeSm).
-			Tooltip("demonstrates a widget or a runtime facility rather than doing a user's work").
-			Send()
-	}
+	sendKindBadge(ids, key("kind"), m.Kind)
 	// Only the grade that warns: an incubating app is one a person should
 	// not build on, and that is worth a mark on the row. The other grades
-	// are in the detail pane and behind the maturity chips (ADR-0375).
+	// are in the detail pane and behind the maturity checkboxes (ADR-0375).
 	if m.Maturity == app.MaturityIncubating {
-		badge.New(ids.PrepareStr(key("maturity")), "incubating").
-			Tone(badge.ToneWarning).
-			Size(badge.SizeSm).
-			Tooltip("exists to learn what can be built: its operations, its stored state and the app itself may change or go").
-			Send()
+		sendMaturityBadge(ids, key("maturity"), m.Maturity)
 	}
+}
+
+// sendKindBadge draws an app's provenance as a badge, the same on a row and
+// in the detail pane. A plain app gets none: a badge reading "app" on most
+// rows is chrome, and the provenance that matters is the exception.
+func sendKindBadge(ids *c.WidgetIdStack, key string, k app.KindE) {
+	var tone badge.ToneE
+	var label, tip string
+	switch k {
+	case app.KindApplet:
+		label, tone, tip = "applet", badge.ToneInfo, "minted from a committed SQL-applet document"
+	case app.KindChatlet:
+		label, tone, tip = "chatlet", badge.ToneInfo, "the chat, specialised by a committed document"
+	case app.KindWorkstatelet:
+		label, tone, tip = "workstatelet", badge.ToneInfo, "opens the windows a document lists, in the layout it names"
+	case app.KindDashboardlet:
+		label, tone, tip = "dashboardlet", badge.ToneInfo, "one dashboard from a committed document, in the dashboard viewer"
+	case app.KindNotebooklet:
+		label, tone, tip = "notebooklet", badge.ToneInfo, "a committed notebook, its records computed on the server when it opens; nothing is stored"
+	case app.KindDemo:
+		label, tone, tip = "demo", badge.ToneNeutral, "demonstrates a widget or a runtime facility rather than doing a user's work"
+	default:
+		return
+	}
+	badge.New(ids.PrepareStr(key), label).Tone(tone).Size(badge.SizeSm).Tooltip(tip).Send()
+}
+
+// sendMaturityBadge draws a stated grade as a badge, the same on a row and in
+// the detail pane. Both helpers prepare the id only once they know they draw:
+// an id prepared and not consumed leaves the id stack in the wrong state. Only incubating takes the warning tone; the row draws no
+// other grade. An unstated grade draws nothing.
+func sendMaturityBadge(ids *c.WidgetIdStack, key string, g app.MaturityE) {
+	var tone badge.ToneE
+	var tip string
+	switch g {
+	case app.MaturityIncubating:
+		tone, tip = badge.ToneWarning, "exists to learn what can be built: its operations, its stored state and the app itself may change or go"
+	case app.MaturitySupported:
+		tone, tip = badge.ToneNeutral, "other work may depend on it: a change that breaks a caller or your stored state is announced"
+	case app.MaturityCore:
+		tone, tip = badge.ToneNeutral, "other apps or deployments are built on its stored data or bus contract: changing either needs a migration"
+	default:
+		return
+	}
+	badge.New(ids.PrepareStr(key), g.String()).Tone(tone).Size(badge.SizeSm).Tooltip(tip).Send()
 }
 
 // rowLabel is the name on the row: Display, falling back to the Id when a

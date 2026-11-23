@@ -241,7 +241,7 @@ type ShowAppArgs struct {
 var ops = func() (s *appops.Set[*launcherApp, opsSnap]) {
 	s = appops.NewSet((*launcherApp).opsSnapshot)
 
-	s.Resource(resFilter, "the query, the kind toggles, the maturity chips and the topic chips; shared by every launcher window, written through the controlling one",
+	s.Resource(resFilter, "the query, the kind toggles, the maturity checkboxes and the topic chips; shared by every launcher window, written through the controlling one",
 		func(inst *launcherApp) any {
 			if !inst.isController() {
 				return filterT{}
@@ -303,7 +303,7 @@ var ops = func() (s *appops.Set[*launcherApp, opsSnap]) {
 		Summary: "set the launcher's filter whole: the query, the kinds shown, the maturity grades and the topics selected",
 		Effect:  app.OperationEffectView, Writes: []string{resFilter}, Agents: true,
 		Follows: []string{"a changed filter moves the selection to the list's first row"},
-		Gesture: "the search box and its clear button, the kind checkboxes, the maturity chips, the topic chips", Rebuild: app.OperationRebuildVolatile},
+		Gesture: "the search box and its clear button, the kind and maturity checkboxes and the topic chips in the filters fold", Rebuild: app.OperationRebuildVolatile},
 		func(inst *launcherApp, _ app.OperationCall, in SetFilterArgs) (out appops.None, err error) {
 			if err = refuseUnlessController(inst); err != nil {
 				return

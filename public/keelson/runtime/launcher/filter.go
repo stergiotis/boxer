@@ -149,7 +149,7 @@ func (inst maturityFilterT) shows(g app.MaturityE) (ok bool) {
 }
 
 // filterT is the launcher's whole filter state in one value: the query
-// string, the provenance toggles, the maturity chips and the topic chips.
+// string, the provenance toggles, the maturity checkboxes and the topic chips.
 // Every surface resolves through it.
 type filterT struct {
 	query      string

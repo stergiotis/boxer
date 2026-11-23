@@ -1027,6 +1027,9 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	// not over the bus (ADR-0348 §SD4).
 	appcenter.SetHost(host)
 	lchr.SetHelpApp(helphost.ManifestId)
+	// The detail pane's Help opens the Help center on the app's book, through
+	// the queue F1 uses (helphost.PushRef).
+	lchr.SetHelpRef(helphost.PushRef)
 	// The detail pane's Inspect (ADR-0260 §SD1): the app center, opened on
 	// the app the pane shows. Wired only where the registry holds it, so a
 	// host built over a narrower registry shows no dead action.
