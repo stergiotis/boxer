@@ -31,6 +31,7 @@ import (
 // aggregateFilterAccepted are statements the server parses.
 var aggregateFilterAccepted = []string{
 	"SELECT quantile(0.05)(L) FILTER (WHERE L BETWEEN 177 AND 1502) AS p05 FROM t",
+	"SELECT quantiles(0.05, 0.95)(L) FILTER (WHERE L BETWEEN 177 AND 1502), quantileExactWeighted(0.5)(L, w) FILTER (WHERE w > 0), topK(3, 2, 'counts')(L) FILTER (WHERE L > 1) FROM t",
 	"SELECT sum(x) FILTER (WHERE y > 5), avg(x) filter (where y) FROM t",
 	"SELECT sum(x)FILTER(WHERE y>5) FROM t",
 	"SELECT sum(x) FILTER ( WHERE y ) s FROM t",

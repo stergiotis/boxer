@@ -235,6 +235,7 @@ func TestServerTruthAggregateFilter(t *testing.T) {
 
 	queries := []string{
 		"SELECT quantile(0.05)(number) FILTER (WHERE number BETWEEN 3 AND 15) AS p05 FROM numbers(20)",
+		"SELECT quantiles(0.05, 0.95)(number) FILTER (WHERE number BETWEEN 3 AND 15), quantileExactWeighted(0.5)(number, number + 1) FILTER (WHERE number > 2), topK(3, 2, 'counts')(number % 4) FILTER (WHERE number > 1) FROM numbers(20)",
 		"SELECT sum(number) FILTER (WHERE number > 5), avg(number) filter (where number % 2 = 0) FROM numbers(20)",
 		"SELECT count() FILTER (WHERE number > 4), count(*) FILTER (WHERE number > 4), count(number, *) FILTER (WHERE number > 4) FROM numbers(20)",
 		"SELECT count(DISTINCT number % 3) FILTER (WHERE number % 4), uniq(DISTINCT number % 3, number % 5) FILTER (WHERE number > 2) FROM numbers(20)",
