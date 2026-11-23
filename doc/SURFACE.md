@@ -23,7 +23,7 @@ itself; ADR-0389 states its tier.
 | Section | Packages |
 | --- | ---: |
 | [Stable](#stable) | 77 |
-| [Experimental](#experimental) | 286 |
+| [Experimental](#experimental) | 287 |
 | [Internal](#internal) | 16 |
 | [Test support](#test-support) | 18 |
 | [Tools](#tools) | 91 |
@@ -464,6 +464,7 @@ Public and usable, but may change in any MINOR version without a deprecation win
 - `public/thestack/imzero2/egui2/widgets/canonicaltypeedit` — Package canonicaltypeedit is an immediate-mode widget (ADR-0267): an editor for a single primitive leeway canonical type ([canonicaltypes]), and for a signature of them.
 - `public/thestack/imzero2/egui2/widgets/canonicaltypesummary` — Package canonicaltypesummary is an immediate-mode widget (ADR-0267): a tethered value-inspector for a single leeway canonical type ([canonicaltypes]).
 - `public/thestack/imzero2/egui2/widgets/componentview` — Package componentview is an immediate-mode widget (ADR-0267), the typed per-component complement to the generic leewaywidgets.RecordCard (ADR-0075).
+- `public/thestack/imzero2/egui2/widgets/decision` — Package decision is an immediate-mode widget (ADR-0267) that draws one question the person settles with a button: what is asked, the thing it is asked about, what follows from answering, notes that the question has gone stale or cannot be granted, and the options.
 - `public/thestack/imzero2/egui2/widgets/distsummary` — Package distsummary is an immediate-mode widget (ADR-0267) summarising a single statistical distribution on two levels.
 - `public/thestack/imzero2/egui2/widgets/ecdf` — Package ecdf is a painter helper (ADR-0267) for plotting an empirical CDF together with a finite-sample exact simultaneous confidence band (Berk-Jones by default; DKW / equal-precision / higher-criticism available per the underlying ecdfbands library).
 - `public/thestack/imzero2/egui2/widgets/filepicker` — Package filepicker is a semi-retained imzero2 widget (ADR-0267): an in-app file open / save / pick-folder dialog rendered as an egui::Window.
@@ -608,7 +609,7 @@ Command and governance packages of this repository's tooling. Their Go API is ou
 - `public/app/commands/queryrunsd` — Package queryrunsd is the standalone query-run capture service (ADR-0115 S1): it serves the loopback /pull endpoint that the ClickHouse-owned refreshable materialized view reads every cadence, turning terminal system.query_log events into boxer.facts rows of kind QueryRun.
 - `public/app/commands/runtimecodegen` — Package runtimecodegen is the CLI wiring for the runtime/factsschema code generator.
 - `public/app/commands/sample`
-- `public/app/commands/schema` — Package schema is `boxer schema`: the stored boxer tables judged against the columns this build was generated for, and the mechanical part of bringing them in line (ADR-0387).
+- `public/app/commands/schema` — Package schema is `boxer schema`: the stored tables of this build judged against the columns it was generated for, and the mechanical part of bringing them in line (ADR-0387).
 - `public/app/commands/swisstopo`
 - `public/app/commands/sysmetricsd` — Package sysmetricsd is the standalone system-metrics scraper service (ADR-0090 SD2/P3): the sole /proc reader, sampling the host through the sysmetrics collectors and publishing each per-tick BundleSnapshot one-way over NATS for any consumer.
 - `public/app/commands/viewerfixture` — Package viewerfixture prepares and checks the media fixtures scripts/ci/viewer_wine_smoke.sh drives the packaged Windows viewer with (ADR-0243).
