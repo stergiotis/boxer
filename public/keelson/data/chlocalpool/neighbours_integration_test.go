@@ -27,10 +27,12 @@ import (
 
 const (
 	neighbourCap = "max_server_memory_usage=2000000000"
-	// About 1 GiB peak resident, including the array's own freed growth
-	// buffers that jemalloc's decay has not returned yet: well under
-	// neighbourCap alone, well over it four at a time.
-	capShareQuery = "SELECT groupArray(number) FROM numbers(30000000) SETTINGS max_threads = 1 FORMAT Null"
+	// About half a GiB peak resident, including the array's own freed growth
+	// buffers that jemalloc's decay has not returned yet — and on a loaded
+	// machine, where the decay runs late, up to twice that: under
+	// neighbourCap alone either way, well over it capShareTogether at a time.
+	capShareQuery    = "SELECT groupArray(number) FROM numbers(15000000) SETTINGS max_threads = 1 FORMAT Null"
+	capShareTogether = 8
 	// Leaves well over 1 GiB resident after it finishes.
 	residentQuery = "SELECT groupArray(number) FROM numbers(45000000) SETTINGS max_threads = 1 FORMAT Null"
 	sleeperQuery  = "SELECT sleepEachRow(1) FROM numbers(3) SETTINGS max_block_size = 1 FORMAT Null"
@@ -66,7 +68,7 @@ func TestListen_ProcessMemoryCapIsShared(t *testing.T) {
 
 	l := startListener(t, listenerOpts{ServerSettings: []string{neighbourCap}})
 	var wg sync.WaitGroup
-	bodies := make([]string, 4)
+	bodies := make([]string, capShareTogether)
 	for i := range bodies {
 		wg.Go(func() { _, bodies[i], _ = l.postCtx(context.Background(), nil, capShareQuery) })
 	}

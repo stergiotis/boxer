@@ -5,9 +5,10 @@ package chlocalpool
 // The Arrow types the engine emits and infers on the worker path. Go code on
 // both sides of that path switches on Arrow type IDs, so a release that
 // changes a mapping — 26.2 moved `Date` from uint16 to date32, 26.9 made a
-// nullable struct infer as `Nullable(Tuple)` — should fail here first. The
-// schema is read with arrow-go, not with ClickHouse, so the check is not
-// circular.
+// nullable struct infer as `Nullable(Tuple)` — should fail here first. Where
+// the supported releases differ, a case states both sides and asks the
+// binary which it is. The schema is read with arrow-go, not with ClickHouse,
+// so the check is not circular.
 
 import (
 	"bytes"
@@ -65,17 +66,23 @@ func atLeast(major, minor, wantMajor, wantMinor int) bool {
 }
 
 func TestArrow_EmittedTypes(t *testing.T) {
+	major, minor := engineVersion(t)
 	cases := []struct {
 		expr     string
 		want     string
 		nullable bool
+		// since is the first release that accepts the expression; an older
+		// one refuses it with refusal.
+		since   [2]int
+		refusal string
 	}{
 		{expr: "toDate('2026-01-02')", want: "date32"}, // uint16 before 26.2
 		{expr: "toDate32('2026-01-02')", want: "date32"},
 		{expr: "toDateTime('2026-01-02 03:04:05', 'UTC')", want: "uint32"}, // not a timestamp
 		{expr: "toDateTime64('2026-01-02 03:04:05.123', 3, 'UTC')", want: "timestamp[ms, tz=UTC]"},
 		{expr: "(1, 'a')::Tuple(a UInt8, b String)", want: "struct<a: uint8, b: utf8>"},
-		{expr: "(1, 'a')::Nullable(Tuple(a UInt8, b String))", want: "struct<a: uint8, b: utf8>", nullable: true},
+		// Before 26.9 a nullable tuple needs enable_nullable_tuple_type.
+		{expr: "(1, 'a')::Nullable(Tuple(a UInt8, b String))", want: "struct<a: uint8, b: utf8>", nullable: true, since: [2]int{26, 9}, refusal: "ILLEGAL_COLUMN"},
 		{expr: "map('k', 1)", want: "map<utf8, uint8, items_non_nullable>"},
 		{expr: "toLowCardinality('x')", want: "utf8"}, // no dictionary unless asked
 		{expr: "[1, 2]", want: "list<item: uint8>"},
@@ -86,6 +93,11 @@ func TestArrow_EmittedTypes(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.expr, func(t *testing.T) {
 			out, stderr, err := runOutput(t, "SELECT "+c.expr+" AS c", "ArrowStream")
+			if !atLeast(major, minor, c.since[0], c.since[1]) {
+				require.Error(t, err)
+				assert.Contains(t, stderr, c.refusal)
+				return
+			}
 			require.NoError(t, err, stderr)
 			r, err := ipc.NewReader(bytes.NewReader(out), ipc.WithAllocator(memory.DefaultAllocator))
 			require.NoError(t, err)
@@ -164,14 +176,20 @@ func TestArrow_InferredInputTableTypes(t *testing.T) {
 		require.True(t, ok, line)
 		got[name] = typ
 	}
+	// Before 26.9 a nullable struct loses its own nullability on the way in:
+	// a null struct reads as a tuple of defaults.
+	stn := "Tuple(a Int32, b String)"
+	if major, minor := engineVersion(t); atLeast(major, minor, 26, 9) {
+		stn = "Nullable(Tuple(a Int32, b String))"
+	}
 	assert.Equal(t, map[string]string{
 		"d32":  "Date32",
 		"d32n": "Nullable(Date32)",
 		"ts":   "DateTime64(3, 'UTC')",
 		"st":   "Tuple(a Int32, b String)",
-		"stn":  "Nullable(Tuple(a Int32, b String))", // Tuple(Nullable(...)) before 26.9
-		"lst":  "Array(Nullable(String))",            // arrow-go list items are nullable by default
-		"u16":  "UInt16",                             // no date: a uint16 day count stays a number
+		"stn":  stn,
+		"lst":  "Array(Nullable(String))", // arrow-go list items are nullable by default
+		"u16":  "UInt16",                  // no date: a uint16 day count stays a number
 	}, got)
 }
 
