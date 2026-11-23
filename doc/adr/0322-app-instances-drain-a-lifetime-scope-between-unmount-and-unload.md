@@ -338,6 +338,17 @@ addressed its columns by position. [ADR-0396](./0396-the-app-contract-a-host-pro
 scope a method, `MountContextI.Lifetime()`, in place of the optional
 `LifetimeI` and `app.LifetimeOf`.
 
+### 2026-11-23 — work is done through a nil scope as through any other
+
+`MountContextI.Lifetime()` is nil on a host that does not drain, and an app
+that kept the result and called `Go` on it dereferenced nil under a test's
+mount context. The methods work is done through now accept a nil
+`*Scope`: `Ctx` and `Tail` never end, `Enter` and `Go` admit the work and
+nothing waits for it, `OnDrained` registers nothing and says so, `IsRetired`
+is false and `Done` never closes. `Retire`, `Abandon` and `Drain` are the
+owner's and still need a scope. An app that wants its work waited for under
+such a host makes a scope of its own, as before.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the app contract and `Manifest`

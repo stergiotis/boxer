@@ -136,7 +136,9 @@ type MountContextI interface {
 	// A goroutine the app starts without counting it in is not waited for.
 	//
 	// Absent: nil, on a host that does not drain (a test's context, a CLI
-	// bootstrap); a child of nil is a root scope the app owns.
+	// bootstrap); a child of nil is a root scope the app owns. Work is
+	// done through a nil scope as through any other — Ctx, Enter, Go and
+	// OnDrained accept it — and nothing waits for that work.
 	Lifetime() (s *lifetime.Scope)
 	// MountValue is the value the host hands every app it mounts under key,
 	// keyed as context.Context's values are, so a package this one cannot

@@ -31,6 +31,14 @@
 // process goes on (ADR-0386). Work entered with [Scope.Enter] runs on its
 // caller's goroutine, under the caller's boundary. Only work that entered is waited for; a goroutine started without Enter
 // or Go is invisible to the drain.
+//
+// A nil *Scope is what a host that does not drain hands out — a test's
+// mount context, a CLI bootstrap — and the methods work is done through
+// accept it: [Scope.Ctx] and [Scope.Tail] never end, [Scope.Enter] and
+// [Scope.Go] always admit the work and nothing waits for it,
+// [Scope.OnDrained] registers nothing, [Scope.IsRetired] is false and
+// [Scope.Done] never closes. The owner's verbs — Retire, Abandon, Drain —
+// are for a scope that exists.
 package lifetime
 
 import (
@@ -108,8 +116,12 @@ func (inst *Scope) adopt(child *Scope) (leave func(), ok bool) {
 	return
 }
 
-// Ctx is the work context: it ends at Retire.
+// Ctx is the work context: it ends at Retire. On a nil scope it never
+// ends.
 func (inst *Scope) Ctx() (ctx context.Context) {
+	if inst == nil {
+		return context.Background() //boxer:lint disable=CS020 reason="documented root: a nil scope is a host that does not drain, and its work context has no end"
+	}
 	return inst.work
 }
 
@@ -137,8 +149,11 @@ func (inst *Scope) TailContext() (tail context.Context) {
 
 // Enter counts one piece of work in. ok is false once the scope retired:
 // nothing new starts after Retire. leave counts it out, and may be called
-// more than once.
+// more than once. A nil scope admits the work and counts nothing.
 func (inst *Scope) Enter() (leave func(), ok bool) {
+	if inst == nil {
+		return func() {}, true
+	}
 	inst.mu.Lock()
 	if inst.retired {
 		inst.mu.Unlock()
@@ -164,15 +179,17 @@ func (inst *Scope) leave() {
 
 // Go runs f under the work context as one piece of work, unless the scope
 // retired. started says whether f runs. A panic in f is recovered and logged
-// at Error level, and f counts as returned.
+// at Error level, and f counts as returned. On a nil scope f always runs,
+// under a context that never ends, and nothing waits for it.
 func (inst *Scope) Go(f func(ctx context.Context)) (started bool) {
 	leave, ok := inst.Enter()
 	if !ok {
 		return false
 	}
+	work := inst.Ctx()
 	go func() {
 		defer leave()
-		runGuarded("lifetime: a goroutine of the scope panicked", func() { f(inst.work) })
+		runGuarded("lifetime: a goroutine of the scope panicked", func() { f(work) })
 	}()
 	return true
 }
@@ -191,8 +208,12 @@ func runGuarded(msg string, f func()) {
 
 // OnDrained registers f to run once the scope is retired and its work has
 // left, under the tail context. registered is false once the drain began:
-// a hook added that late does not run.
+// a hook added that late does not run. Nor does one added to a nil scope,
+// which never drains.
 func (inst *Scope) OnDrained(f func(tail context.Context)) (registered bool) {
+	if inst == nil {
+		return false
+	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if inst.draining {
@@ -234,8 +255,11 @@ func (inst *Scope) Abandon() {
 	inst.cancelTail()
 }
 
-// IsRetired says whether Retire ran.
+// IsRetired says whether Retire ran; never on a nil scope.
 func (inst *Scope) IsRetired() (retired bool) {
+	if inst == nil {
+		return false
+	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	return inst.retired
@@ -243,8 +267,11 @@ func (inst *Scope) IsRetired() (retired bool) {
 
 // Done closes once the scope is retired, its work has left and its hooks
 // have returned. A scope with no work and no hooks is done when Retire
-// returns.
+// returns. On a nil scope the channel is nil: it never closes.
 func (inst *Scope) Done() (done <-chan struct{}) {
+	if inst == nil {
+		return nil
+	}
 	return inst.done
 }
 

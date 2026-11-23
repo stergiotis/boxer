@@ -152,3 +152,33 @@ func contextWithTimeout(t *testing.T) context.Context {
 	t.Cleanup(cancel)
 	return ctx
 }
+
+// A nil scope is a host that does not drain: work is admitted, runs under
+// contexts that never end, and nothing is registered or waited for.
+func TestANilScopeAdmitsWorkAndNeverEnds(t *testing.T) {
+	var s *Scope
+	require.NoError(t, s.Ctx().Err())
+	require.Nil(t, s.Ctx().Done(), "the work context has no end")
+	require.NoError(t, s.TailContext().Err())
+
+	leave, ok := s.Enter()
+	require.True(t, ok)
+	leave()
+	leave()
+
+	ran := make(chan context.Context, 1)
+	require.True(t, s.Go(func(ctx context.Context) { ran <- ctx }))
+	select {
+	case ctx := <-ran:
+		require.NoError(t, ctx.Err())
+	case <-time.After(5 * time.Second):
+		t.Fatal("the function did not run")
+	}
+	panicked := make(chan struct{})
+	require.True(t, s.Go(func(context.Context) { defer close(panicked); panic("boom") }))
+	<-panicked
+
+	require.False(t, s.OnDrained(func(context.Context) { t.Error("a nil scope ran a drain hook") }))
+	require.False(t, s.IsRetired())
+	require.Nil(t, s.Done())
+}
