@@ -76,7 +76,7 @@ func setupE2E(t *testing.T) (svc *adhocdata.Service, query func(sql string) stri
 		return io.ReadAll(rep)
 	})
 	srv := introspecthttp.New(introspecthttp.Config{Registry: reg, Runner: runner}, logger)
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 	t.Cleanup(func() { _ = srv.Stop(context.Background()) })
 
 	query = func(sql string) (out string) {

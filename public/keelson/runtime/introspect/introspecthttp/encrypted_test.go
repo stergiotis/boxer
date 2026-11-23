@@ -53,7 +53,7 @@ func TestServer_SealedDatasetUnavailable(t *testing.T) {
 	r := introspect.NewRegistry()
 	require.NoError(t, r.Register(&sealedStub{name: "adhoc_secret", revision: 1, openErr: assert.AnError}))
 	s := New(Config{Registry: r}, zerolog.Nop())
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	t.Cleanup(func() { _ = s.Stop(context.Background()) })
 
 	resp, err := http.Get(s.BaseURL() + "/table/adhoc_secret")
@@ -72,7 +72,7 @@ func TestServer_SealedDatasetOpens(t *testing.T) {
 	plaintext := []byte("PLAINTEXT-ARROW-STREAM-BYTES")
 	require.NoError(t, r.Register(&sealedStub{name: "adhoc_x", plaintext: plaintext, revision: 7}))
 	s := New(Config{Registry: r}, zerolog.Nop())
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	t.Cleanup(func() { _ = s.Stop(context.Background()) })
 
 	resp, err := http.Get(s.BaseURL() + "/table/adhoc_x")
@@ -100,7 +100,7 @@ func TestServer_TablesListingOmitsSealed(t *testing.T) {
 	r := introspect.NewRegistry()
 	require.NoError(t, r.Register(&sealedStub{name: "adhoc_secret", revision: 1}))
 	s := New(Config{Registry: r}, zerolog.Nop())
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	t.Cleanup(func() { _ = s.Stop(context.Background()) })
 
 	resp, err := http.Get(s.BaseURL() + "/tables")
@@ -118,7 +118,7 @@ func TestServer_RefusesAForeignHostHeader(t *testing.T) {
 	r := introspect.NewRegistry()
 	require.NoError(t, r.Register(&sealedStub{name: "adhoc_secret", revision: 1, plaintext: []byte("x")}))
 	s := New(Config{Registry: r}, zerolog.Nop())
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	t.Cleanup(func() { _ = s.Stop(context.Background()) })
 	_, port, err := net.SplitHostPort(s.Addr())
 	require.NoError(t, err)

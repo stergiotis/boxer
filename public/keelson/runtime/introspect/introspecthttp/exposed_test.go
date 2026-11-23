@@ -90,7 +90,7 @@ func exposedServer(t *testing.T, src introspect.ExposureSourceI, logs io.Writer)
 		r.SetExposureSource(src)
 	}
 	s = New(Config{Registry: r}, zerolog.New(logs))
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	t.Cleanup(func() { _ = s.Stop(context.Background()) })
 	return
 }
@@ -241,7 +241,7 @@ func TestTheRegistryKnowsWhereItIsServed(t *testing.T) {
 	r := introspect.NewRegistry()
 	assert.Empty(t, r.ServedAt())
 	s := New(Config{Registry: r}, zerolog.Nop())
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	assert.Equal(t, s.BaseURL(), r.ServedAt())
 	require.NoError(t, s.Stop(context.Background()))
 	assert.Empty(t, r.ServedAt())

@@ -69,7 +69,7 @@ func newExposeRig(t *testing.T) (r *exposeRig) {
 		r.mu.Unlock()
 	})
 	r.srv = introspecthttp.New(introspecthttp.Config{Registry: reg}, logger)
-	require.NoError(t, r.srv.Start())
+	require.NoError(t, r.srv.Start(t.Context()))
 	t.Cleanup(func() {
 		_ = svc.Close(context.Background())
 		_ = r.srv.Stop(context.Background())

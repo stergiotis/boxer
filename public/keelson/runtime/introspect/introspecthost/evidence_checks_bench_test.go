@@ -34,7 +34,7 @@ func BenchmarkEvidenceChecksJournal(b *testing.B) {
 	_, err = headstore.Ship(ctx, headstore.Over(anchors), w, headstore.DefaultCadence())
 	require.NoError(b, err)
 	reg := introspect.NewRegistry()
-	stop, err := Start(Deps{Registry: reg, Log: zerolog.Nop(), AgentRuns: journal, Anchors: anchors})
+	stop, err := Start(context.Background(), Deps{Registry: reg, Log: zerolog.Nop(), AgentRuns: journal, Anchors: anchors})
 	require.NoError(b, err)
 	b.Cleanup(func() { _ = stop(context.Background()) })
 	p, ok := reg.Lookup(TableEvidenceChecks)

@@ -83,7 +83,7 @@ func TestBundleListSqlRunsAgainstTheCatalog(t *testing.T) {
 		return io.ReadAll(rep)
 	})
 	s := introspecthttp.New(introspecthttp.Config{Registry: reg, Runner: runner}, logger)
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	t.Cleanup(func() { _ = s.Stop(context.Background()) })
 
 	resp, err := http.Post(s.BaseURL()+"/query", "text/plain", strings.NewReader(bundleListSql+" FORMAT JSONEachRow"))

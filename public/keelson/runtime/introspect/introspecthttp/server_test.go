@@ -65,7 +65,7 @@ func newTestServer(t *testing.T) *Server {
 	require.NoError(t, providers.RegisterStatic(r))
 	require.NoError(t, introspect.RegisterCatalog(r))
 	s := New(Config{Registry: r}, zerolog.Nop())
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	t.Cleanup(func() { _ = s.Stop(context.Background()) })
 	return s
 }
@@ -140,7 +140,7 @@ func TestServer_UnknownTable404(t *testing.T) {
 
 func TestServer_RefusesNonLoopback(t *testing.T) {
 	s := New(Config{Registry: introspect.NewRegistry(), Addr: "0.0.0.0:0"}, zerolog.Nop())
-	err := s.Start()
+	err := s.Start(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "non-loopback")
 }
@@ -193,7 +193,7 @@ func newQueryServer(t *testing.T) *Server {
 	require.NoError(t, providers.RegisterStatic(r))
 	require.NoError(t, introspect.RegisterCatalog(r))
 	s := New(Config{Registry: r, Runner: runner}, logger)
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	t.Cleanup(func() { _ = s.Stop(context.Background()) })
 	return s
 }
@@ -235,7 +235,7 @@ func TestServer_MacroRunnerGetsMacrosIntact(t *testing.T) {
 		return []byte("1\n"), nil
 	})
 	s := New(Config{Registry: r, Runner: runner}, zerolog.Nop())
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	defer func() { _ = s.Stop(context.Background()) }()
 
 	resp, err := http.Post(s.BaseURL()+"/query", "text/plain", strings.NewReader("SELECT count() FROM keelson('env') FORMAT TabSeparated"))
@@ -255,7 +255,7 @@ func TestServer_QueryNoRunner503(t *testing.T) {
 	r := introspect.NewRegistry()
 	require.NoError(t, providers.RegisterStatic(r))
 	s := New(Config{Registry: r}, zerolog.Nop()) // no Runner
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	defer func() { _ = s.Stop(context.Background()) }()
 	resp, err := http.Post(s.BaseURL()+"/query", "text/plain", strings.NewReader("SELECT 1"))
 	require.NoError(t, err)
@@ -271,7 +271,7 @@ func TestServer_QueryUnknownKeelson400(t *testing.T) {
 		return nil, errors.New("runner must not be called")
 	})
 	s := New(Config{Registry: r, Runner: dummy}, zerolog.Nop())
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	defer func() { _ = s.Stop(context.Background()) }()
 	resp, err := http.Post(s.BaseURL()+"/query", "text/plain",
 		strings.NewReader("SELECT * FROM keelson('bogus') FORMAT ArrowStream"))
@@ -294,7 +294,7 @@ func TestServer_QueryBindsParams(t *testing.T) {
 		return []byte("ok"), nil
 	})
 	s := New(Config{Registry: r, Runner: capture}, zerolog.Nop())
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	defer func() { _ = s.Stop(context.Background()) }()
 	resp, err := http.Post(s.BaseURL()+"/query?param_x=1&param_name=a%20b&log_comment=stamp", "text/plain",
 		strings.NewReader("SELECT {x:UInt64} FORMAT ArrowStream"))
@@ -347,7 +347,7 @@ func TestServer_QueryExceptionEnvelope(t *testing.T) {
 		return nil, errors.New("worker: Code: 62. DB::Exception: Syntax error")
 	})
 	s := New(Config{Registry: r, Runner: failing}, zerolog.Nop())
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	defer func() { _ = s.Stop(context.Background()) }()
 	resp, err := http.Post(s.BaseURL()+"/query", "text/plain", strings.NewReader("SELECT 1"))
 	require.NoError(t, err)
@@ -430,7 +430,7 @@ func TestServer_QueryAppliesPreExecutePasses(t *testing.T) {
 		Stage: passreg.StagePreExecute,
 	}))
 	s := New(Config{Registry: r, Runner: runner, Passes: pr}, zerolog.Nop())
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	defer func() { _ = s.Stop(context.Background()) }()
 
 	resp, err := http.Post(s.BaseURL()+"/query", "text/plain", strings.NewReader("SELECT 1"))
@@ -458,7 +458,7 @@ func TestServer_QueryFailingPreExecutePassFallsBack(t *testing.T) {
 		Stage: passreg.StagePreExecute,
 	}))
 	s := New(Config{Registry: r, Runner: runner, Passes: pr}, zerolog.Nop())
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	defer func() { _ = s.Stop(context.Background()) }()
 
 	resp, err := http.Post(s.BaseURL()+"/query", "text/plain", strings.NewReader("SELECT 1"))

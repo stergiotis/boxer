@@ -145,9 +145,9 @@ func New(cfg Config, log zerolog.Logger) (s *Server) {
 
 // Start binds the listener and serves in a background goroutine. It
 // refuses a non-loopback bind (ADR-0082 §SD1 bind-gate).
-func (s *Server) Start() (err error) {
+func (s *Server) Start(ctx context.Context) (err error) {
 	// Loopback only: remote exposure (token+TLS) is deferred to ADR-0082 §SD1.
-	ln, lnErr := loopback.Gate{Name: "introspecthttp", LoopbackOnly: true}.Listen(context.Background(), s.addr)
+	ln, lnErr := loopback.Gate{Name: "introspecthttp", LoopbackOnly: true}.Listen(ctx, s.addr)
 	if lnErr != nil {
 		return lnErr
 	}

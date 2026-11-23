@@ -226,8 +226,9 @@ func noopStop(context.Context) error { return nil }
 // its `/query` URL via [introspect.SetLocalQueryEndpoint] for co-resident
 // apps. It is best-effort and never blocks boot: a disabled gate or a bind
 // failure returns a no-op stop (and, on failure, the error) rather than
-// aborting the host. The returned stop is always non-nil.
-func Start(deps Deps) (stop func(context.Context) error, err error) {
+// aborting the host. The returned stop is always non-nil. ctx bounds the
+// bind; the listener serves until stop.
+func Start(ctx context.Context, deps Deps) (stop func(context.Context) error, err error) {
 	stop = noopStop
 	if !Enabled.Get() {
 		deps.Log.Debug().Msg("introspecthost: disabled via KEELSON_INTROSPECT_ENABLE")
@@ -443,7 +444,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	}
 
 	srv := introspecthttp.New(cfg, deps.Log)
-	if startErr := srv.Start(); startErr != nil {
+	if startErr := srv.Start(ctx); startErr != nil {
 		deps.Log.Warn().Err(startErr).Msg("introspecthost: HTTP table source start failed; keelson.* url()/query endpoint unavailable")
 		if topoHolder != nil {
 			_ = topoHolder.Close()

@@ -35,7 +35,7 @@ func exposeLauncher(t *testing.T) (l *PlayLauncher, h app.OperationsHandlerI, pu
 	require.NoError(t, err)
 	svc.SetDispatcher(attestAll{})
 	srv := introspecthttp.New(introspecthttp.Config{Registry: reg}, logger)
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 	t.Cleanup(func() {
 		_ = svc.Close(context.Background())
 		_ = srv.Stop(context.Background())

@@ -69,7 +69,7 @@ func newOwnClearRig(t *testing.T) (r *ownClearRig) {
 	adhoc, err := adhocdata.NewService(adhocdata.Config{Bus: bus, Registry: reg, Dir: t.TempDir(), Log: logger})
 	require.NoError(t, err)
 	listener := introspecthttp.New(introspecthttp.Config{Registry: reg}, logger)
-	require.NoError(t, listener.Start())
+	require.NoError(t, listener.Start(t.Context()))
 	sd, err := sessiondata.NewService(sessiondata.Config{Bus: bus, Log: logger, SweepInterval: -1, Adhoc: adhoc})
 	require.NoError(t, err)
 	t.Cleanup(func() {

@@ -96,7 +96,7 @@ that depend on it; or first make the callers compile against the old API
 | `scctree.RunScc(root)`, `scctree.RunSccContext(ctx, root)` | `RunScc(ctx, root)` |
 | `auditrectest.FullContext()` | `FullContext(ctx)` |
 | `llm.NewService(bus, …)`, `moderator.NewService(bus, …)`, `(*queryprogress.Poller).Start()`, `(*chserver.ObservingEngine).Start()`, `(*kafka.ConsumerLag).Start()` | ctx first — the object's lifetime, beside its `Close` or `Stop` |
-| `(*serve.FileDumpService).Listen()`, `(*chlocalpool.Worker).WriteSQL(sql, format)` | ctx first |
+| `(*serve.FileDumpService).Listen()`, `(*chlocalpool.Worker).WriteSQL(sql, format)`, `(*introspecthttp.Server).Start()`, `introspecthost.Start(deps)` | ctx first |
 
 New: `app.Msg.Context()`, `app.Msg.WithContext(ctx)`, `app.ContextOf(mc)`,
 `app.RequestWithin`, `(*hostboot.Runtime).Context()`, `introspect.BoundRead`.

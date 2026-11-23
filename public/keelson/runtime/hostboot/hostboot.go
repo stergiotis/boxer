@@ -1600,7 +1600,7 @@ func (rt *Runtime) bootIntrospect() {
 	if rt.Clipboard != nil {
 		deps.Clipboard = rt.Clipboard
 	}
-	stop, ierr := introspecthost.Start(deps)
+	stop, ierr := introspecthost.Start(rt.ctx, deps)
 	if ierr != nil {
 		logger.Warn().Err(ierr).Msg("introspect: table source unavailable")
 		return

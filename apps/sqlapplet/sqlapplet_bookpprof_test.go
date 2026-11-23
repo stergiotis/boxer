@@ -188,7 +188,7 @@ func TestPprofBookQueriesExecute(t *testing.T) {
 		return io.ReadAll(rep)
 	})
 	srv := introspecthttp.New(introspecthttp.Config{Registry: reg, Runner: runner}, logger)
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 	t.Cleanup(func() { _ = srv.Stop(context.Background()) })
 
 	// Capture and publish under the aliases the books declare — the imzrt

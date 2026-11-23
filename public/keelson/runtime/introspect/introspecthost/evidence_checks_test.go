@@ -36,7 +36,7 @@ func (inst sealVerdict) NotDurable() string { return inst.notDurable }
 func readEvidenceChecks(t *testing.T, deps Deps) (rows map[string]checkRow) {
 	reg := introspect.NewRegistry()
 	deps.Registry, deps.Log = reg, zerolog.Nop()
-	stop, err := Start(deps)
+	stop, err := Start(context.Background(), deps)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stop(context.Background()) })
 	p, ok := reg.Lookup(TableEvidenceChecks)
@@ -111,7 +111,7 @@ func TestEvidenceChecksPresentWithoutStores(t *testing.T) {
 	envtest.Set(t, Enabled, "true")
 	introspect.SetLocalQueryEndpoint("")
 	reg := introspect.NewRegistry()
-	stop, err := Start(Deps{Registry: reg, Log: zerolog.Nop()})
+	stop, err := Start(context.Background(), Deps{Registry: reg, Log: zerolog.Nop()})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stop(context.Background()) })
 	p, ok := reg.Lookup(TableEvidenceChecks)
@@ -159,7 +159,7 @@ func TestEvidenceChecksFilterSparesTheJournal(t *testing.T) {
 	envtest.Set(t, Enabled, "true")
 	introspect.SetLocalQueryEndpoint("")
 	reg := introspect.NewRegistry()
-	stop, err := Start(Deps{Registry: reg, Log: zerolog.Nop(), AgentRuns: journalNotRead{StoreI: agentrun.NewMemStore(), t: t},
+	stop, err := Start(context.Background(), Deps{Registry: reg, Log: zerolog.Nop(), AgentRuns: journalNotRead{StoreI: agentrun.NewMemStore(), t: t},
 		Anchors: anchor.NewMemStore(), Trail: sealVerdict{}, Run: "run-x"})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stop(context.Background()) })

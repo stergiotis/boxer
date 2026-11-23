@@ -77,7 +77,7 @@ func TestServer_AdhocQueryEndpoint(t *testing.T) {
 		return io.ReadAll(rep)
 	})
 	s := New(Config{Registry: reg, Runner: runner}, logger)
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	t.Cleanup(func() { _ = s.Stop(context.Background()) })
 
 	post := func(sql string) string {
@@ -207,7 +207,7 @@ func TestProbeIsFetchedByARealEngine(t *testing.T) {
 		{Pattern: chlocalbroker.SubjectExecAll, Direction: app.CapDirectionBoth, Reason: "test"},
 	})
 	s := New(Config{Registry: introspect.NewRegistry()}, logger)
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(t.Context()))
 	t.Cleanup(func() { _ = s.Stop(context.Background()) })
 
 	run := func(sql string) {

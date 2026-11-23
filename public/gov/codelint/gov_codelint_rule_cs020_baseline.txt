@@ -2,4 +2,3 @@
 # context or hide an I/O verb behind a ctx-less signature, held until they
 # are converted. One "<import path>.<Func>" or "<import path>.<Recv>.<Method>"
 # per line. The list only shrinks: a converted function is deleted from it.
-github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp.Server.Start

@@ -17,7 +17,7 @@ func TestStart_DisabledGate(t *testing.T) {
 	envtest.Set(t, Enabled, "false")
 	introspect.SetLocalQueryEndpoint("") // reset process global
 
-	stop, err := Start(Deps{Log: zerolog.Nop()})
+	stop, err := Start(context.Background(), Deps{Log: zerolog.Nop()})
 	if err != nil {
 		t.Fatalf("Start (disabled) returned error: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestStart_NoRunnerDoesNotPublishEndpoint(t *testing.T) {
 	envtest.Set(t, Enabled, "true")
 	introspect.SetLocalQueryEndpoint("") // reset process global
 
-	stop, err := Start(Deps{
+	stop, err := Start(context.Background(), Deps{
 		WindowHost:       nil,
 		Bus:              nil,
 		ChlocalAvailable: false,
@@ -79,7 +79,7 @@ func TestStart_RegistersWorkingsetsFromState(t *testing.T) {
 		t.Fatalf("WriteWorkingset: %v", err)
 	}
 	reg := introspect.NewRegistry()
-	stop, err := Start(Deps{Registry: reg, State: state, Log: zerolog.Nop()})
+	stop, err := Start(context.Background(), Deps{Registry: reg, State: state, Log: zerolog.Nop()})
 	if err != nil {
 		t.Fatalf("Start returned error: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestStart_CoverageTablesPresentWithoutSampler(t *testing.T) {
 	introspect.SetLocalQueryEndpoint("")
 
 	reg := introspect.NewRegistry()
-	stop, err := Start(Deps{Registry: reg, Log: zerolog.Nop()})
+	stop, err := Start(context.Background(), Deps{Registry: reg, Log: zerolog.Nop()})
 	if err != nil {
 		t.Fatalf("Start returned error: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestStart_WorkingsetsPresentWithoutState(t *testing.T) {
 	introspect.SetLocalQueryEndpoint("")
 
 	reg := introspect.NewRegistry()
-	stop, err := Start(Deps{Registry: reg, Log: zerolog.Nop()})
+	stop, err := Start(context.Background(), Deps{Registry: reg, Log: zerolog.Nop()})
 	if err != nil {
 		t.Fatalf("Start returned error: %v", err)
 	}

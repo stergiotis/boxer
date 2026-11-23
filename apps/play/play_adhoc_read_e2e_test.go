@@ -94,7 +94,7 @@ func adhocReadPlane(t *testing.T) (svc *adhocdata.Service, queryURL string) {
 		return io.ReadAll(rep)
 	})
 	srv := introspecthttp.New(introspecthttp.Config{Registry: reg, Runner: runner}, logger)
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 	t.Cleanup(func() { _ = srv.Stop(context.Background()) })
 
 	queryURL = srv.BaseURL() + "/query"

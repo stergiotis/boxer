@@ -53,7 +53,7 @@ func TestLawChecksOverLiveRows(t *testing.T) {
 	copies := copiesOf{{Digest: "d", Tier: uint8(agentrun.TierAmber), Plaintext: true}}
 
 	reg := introspect.NewRegistry()
-	stop, err := Start(Deps{Registry: reg, Log: zerolog.Nop(), AgentRuns: journal, LLMCalls: calls, Clipboard: copies,
+	stop, err := Start(context.Background(), Deps{Registry: reg, Log: zerolog.Nop(), AgentRuns: journal, LLMCalls: calls, Clipboard: copies,
 		Cell: func() cell.Declaration { return decl }})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stop(context.Background()) })
