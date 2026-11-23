@@ -306,39 +306,6 @@ func (inst *App) contextFill() (used int64, limit int64, trigger int64, over boo
 	return
 }
 
-// renderContext is how full the model's context is: the last answered
-// call's prompt and answer against the size runtime.llm.describe reports, a bar
-// once the size is known, and a count without it.
-func (inst *App) renderContext() {
-	used, limit, trigger, over, off, why := inst.contextFill()
-	if used <= 0 {
-		return
-	}
-	if limit <= 0 {
-		for range c.HoverText(tipContext + " The host does not know the model's context size; BOXER_LLM_CONTEXT_TOKENS states it.").KeepIter() {
-			c.Label("context " + tokens(used) + " tokens").Selectable(false).Send()
-		}
-		return
-	}
-	frac := tokenmeter.Fraction(used, limit)
-	tip := tipContext + " The size is " + strconv.FormatInt(limit, 10) + " tokens, from " + inst.model.ContextSource + "."
-	switch {
-	case trigger > 0 && !off:
-		tip += " At " + tokens(trigger) + " (" + strconv.FormatInt(trigger*100/limit, 10) + " %) the next turn compacts first: large tool results are elided and older turns summarised; your messages are never summarised."
-	case off:
-		tip += " Compaction is off for this conversation: " + why + ". A full context fails the turn."
-	default:
-		tip += " Compaction is off for this conversation, so a full context fails the turn."
-	}
-	for range c.HoverText(tip).KeepIter() {
-		bar := c.ProgressBar(min(frac, 1)).DesiredWidth(contextBarW).Text("context " + tokens(used) + " / " + tokens(limit) + " tokens")
-		if over {
-			bar = bar.Fill(color.Hex(styletokens.WarningDefault.AsHex()))
-		}
-		bar.Send()
-	}
-}
-
 // contextWarning is the line above the composer once the meter turns:
 // the next turn compacts, or, with compaction off, may not fit.
 func (inst *App) contextWarning() (line string, ok bool) {
