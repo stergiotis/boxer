@@ -36,7 +36,7 @@ func TestRunScc_FallsBackToPathScc(t *testing.T) {
 
 	// t.TempDir sits under the OS temp root, outside the repo's module, so the
 	// primary `go tool scc` misses and the fallback runs our shim.
-	groups, err := RunScc(t.TempDir())
+	groups, err := RunScc(t.Context(), t.TempDir())
 	if err != nil {
 		t.Fatalf("RunScc with PATH fallback: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestRunScc_NoSccResolvable_ErrorNamesPathFallback(t *testing.T) {
 	}
 	t.Setenv("PATH", filepath.Dir(goBin))
 
-	_, err = RunScc(t.TempDir())
+	_, err = RunScc(t.Context(), t.TempDir())
 	if err == nil {
 		t.Fatal("expected an error when neither go tool scc nor PATH scc is available")
 	}

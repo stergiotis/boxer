@@ -153,12 +153,12 @@ func CheckCompiles(pkg string) (failing []string, output string, err error) {
 }
 
 // ReportOf runs the tab binary package pkg natively and returns its report.
-func ReportOf(pkg string) (rep TabReport, err error) {
+func ReportOf(ctx context.Context, pkg string) (rep TabReport, err error) {
 	mainDir, err := packageModuleDir(pkg)
 	if err != nil {
 		return
 	}
-	o, err := extbin.Go.Output(context.Background(), extbin.Opts{Dir: mainDir}, "run", "-tags", readTags(mainDir), pkg, "tabreport", "--json")
+	o, err := extbin.Go.Output(ctx, extbin.Opts{Dir: mainDir}, "run", "-tags", readTags(mainDir), pkg, "tabreport", "--json")
 	if err != nil {
 		return rep, eb.Build().Str("pkg", pkg).Errorf("tabcheck: run tabreport: %w", err)
 	}

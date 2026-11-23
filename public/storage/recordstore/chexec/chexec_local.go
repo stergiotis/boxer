@@ -44,7 +44,7 @@ type LocalExecutor struct {
 func NewLocalExecutor(path string, alloc memory.Allocator) (inst *LocalExecutor, err error) {
 	// Resolve once at construction (Command does the PATH lookup without
 	// running), caching the concrete path and failing fast when it is absent.
-	probe, err := extbin.ClickHouseLocal.Command(context.Background(), extbin.Opts{})
+	probe, err := extbin.ClickHouseLocal.Command(context.Background(), extbin.Opts{}) //boxer:lint disable=CS020 reason="Command resolves the binary on PATH here and runs nothing"
 	if err != nil {
 		err = eh.Errorf("clickhouse local not available: %w", err)
 		return

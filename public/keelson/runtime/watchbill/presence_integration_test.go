@@ -24,7 +24,7 @@ import (
 func TestPresenceRoundTripOnTheServer(t *testing.T) {
 	ctx := context.Background()
 	exec := serverExec(t)
-	facts, isCh := chstore.NewWithFallback(chstore.ConfigFromEnv(), zerolog.Nop(), 2*time.Second)
+	facts, isCh := chstore.NewWithFallback(t.Context(), chstore.ConfigFromEnv(), zerolog.Nop(), 2*time.Second)
 	require.True(t, isCh, "the facts store must reach the server the executor reaches")
 
 	pres := NewPresence(exec, chstore.KeyedIdsOf(facts, PresenceIdScope))

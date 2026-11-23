@@ -41,7 +41,7 @@ func TestTheMemoryStoreKeysByScopeOrdinalAndScheme(t *testing.T) {
 	rows, err = st.Read(ctx, "c", 12)
 	require.NoError(t, err)
 	assert.Empty(t, rows)
-	assert.Len(t, st.All(), 2)
+	assert.Len(t, st.All(t.Context()), 2)
 
 	assert.Equal(t, "turn,close", anchor.DefaultCadence().String())
 	assert.Equal(t, "never", anchor.Cadence{}.String())

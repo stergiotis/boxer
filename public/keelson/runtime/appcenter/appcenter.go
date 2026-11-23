@@ -195,7 +195,8 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.mu.Lock()
 	inst.wantGlobal = true
 	inst.mu.Unlock()
-	inst.appCtx, inst.cancelApp = context.WithCancel(context.Background())
+	// The poll ends when the window leaves, or at Unmount's cancel.
+	inst.appCtx, inst.cancelApp = context.WithCancel(ctx.Lifetime().Ctx())
 	inst.wg.Add(1)
 	go inst.poll()
 	inst.markDirty()

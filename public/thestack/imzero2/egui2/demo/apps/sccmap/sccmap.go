@@ -191,7 +191,7 @@ func scanScc(ctx context.Context, path string, report bgjob.Reporter) (data *scc
 		report = func(uint64, uint64, string) {}
 	}
 	report(0, 0, "resolving worktree")
-	root, rootErr := scctree.RepoRootAt(path)
+	root, rootErr := scctree.RepoRootAt(ctx, path)
 	if rootErr != nil || root == "" {
 		// Not a git worktree (or git unavailable): visualize the entered
 		// directory directly. An empty path resolves to the working dir so the
@@ -205,7 +205,7 @@ func scanScc(ctx context.Context, path string, report bgjob.Reporter) (data *scc
 	}
 	report(0, 0, "running scc")
 	var groups []scctree.SccGroup
-	groups, err = scctree.RunSccContext(ctx, root)
+	groups, err = scctree.RunScc(ctx, root)
 	if err != nil {
 		err = eh.Errorf("scctree.RunScc: %w", err)
 		return

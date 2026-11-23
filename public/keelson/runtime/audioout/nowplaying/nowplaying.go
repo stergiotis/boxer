@@ -53,7 +53,7 @@ type Player struct {
 func New(bus app.BusI, spawn func(f func(ctx context.Context)) (started bool)) (inst *Player) {
 	if spawn == nil {
 		spawn = func(f func(ctx context.Context)) bool {
-			go f(context.Background())
+			go f(context.Background()) //boxer:lint disable=CS020 reason="documented root: a nil spawn runs the work bare, under no lifetime"
 			return true
 		}
 	}

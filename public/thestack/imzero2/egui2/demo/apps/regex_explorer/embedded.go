@@ -64,7 +64,7 @@ func NewEmbedded(seed uint64) (inst *EmbeddedApp) {
 	}
 	// An embedded explorer has no mount of its own, so no lifetime: its
 	// bus calls run under a root ctx and are bounded by the transport.
-	inst.state.setBus(context.Background(), &runtimeapp.NoopBus{})
+	inst.state.setBus(context.Background(), &runtimeapp.NoopBus{}) //boxer:lint disable=CS020 reason="documented root: an embedded explorer has no mount, so no lifetime to take a ctx from"
 	return
 }
 
@@ -117,7 +117,7 @@ func (inst *EmbeddedApp) SetPattern(p string) {
 // status bar's engine-check indicator reflects the
 // embedded explorer just like the standalone window does.
 func (inst *EmbeddedApp) Render() {
-	inst.state.RunTripwire(context.Background())
+	inst.state.RunTripwire(inst.state.ioCtx)
 	inst.state.ids.Reset()
 	for range c.IdScope(inst.state.ids.PrepareSeq(inst.seed)) {
 		inst.state.RenderWindow()

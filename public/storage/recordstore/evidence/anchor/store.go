@@ -75,8 +75,9 @@ var _ SenderI = (*MemStore)(nil)
 func NewMemStore() (inst *MemStore) { return &MemStore{} }
 
 // All is every head the store holds, in receipt order: what an
-// introspection table shows.
-func (inst *MemStore) All() (rows []Anchored) {
+// introspection table shows. The memory store reads nothing: ctx is the
+// reading store's, taken so the two list alike.
+func (inst *MemStore) All(_ context.Context) (rows []Anchored) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	return append(rows, inst.rows...)

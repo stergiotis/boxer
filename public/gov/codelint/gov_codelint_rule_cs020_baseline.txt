@@ -2,38 +2,16 @@
 # context or hide an I/O verb behind a ctx-less signature, held until they
 # are converted. One "<import path>.<Func>" or "<import path>.<Recv>.<Method>"
 # per line. The list only shrinks: a converted function is deleted from it.
-github.com/stergiotis/boxer/public/app/commands/adr.RunQuery
 github.com/stergiotis/boxer/public/app/commands/http/serve.FileDumpService.Listen
 github.com/stergiotis/boxer/public/fs/lading/ladingadapter.Open
-github.com/stergiotis/boxer/public/keelson/data/chlocalpool.New
 github.com/stergiotis/boxer/public/keelson/data/chlocalpool.Worker.WriteSQL
 github.com/stergiotis/boxer/public/keelson/runtime/agent.Service.Close
-github.com/stergiotis/boxer/public/keelson/runtime/appcenter.App.Mount
-github.com/stergiotis/boxer/public/keelson/runtime/audioout/nowplaying.New
-github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore.NewWithFallback
 github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp.Server.Start
 github.com/stergiotis/boxer/public/keelson/runtime/llm.NewService
 github.com/stergiotis/boxer/public/keelson/runtime/moderator.NewService
 github.com/stergiotis/boxer/public/keelson/runtime/queryprogress.Poller.Start
-github.com/stergiotis/boxer/public/keelson/runtime/task.RunToCompletion
-github.com/stergiotis/boxer/public/keelson/runtime/trail.AsAuditSink
-github.com/stergiotis/boxer/public/keelson/runtime/watchbill.Worker.RunJob
 github.com/stergiotis/boxer/public/keelson/runtime/watchbill.Worker.Stop
 github.com/stergiotis/boxer/public/keelson/runtime/watchbill/lane.Coordinator.Stop
-github.com/stergiotis/boxer/public/keelson/runtime/watchbill/lane.ExecLauncher.Start
-github.com/stergiotis/boxer/public/keelson/security/capslock.Run
-github.com/stergiotis/boxer/public/science/audio/sink/playout.Engine.ProduceLocked
 github.com/stergiotis/boxer/public/science/geo/h3.Runtime.Close
-github.com/stergiotis/boxer/public/storage/recordstore/chexec.NewLocalExecutor
-github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor/anchorsql.Store.All
 github.com/stergiotis/boxer/public/streaming/persisted/kafka.ConsumerLag.Start
-github.com/stergiotis/boxer/public/thestack/imzero2/application.Application.Launch
-github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/tabhost.ReportOf
-github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/regex_explorer.AppInstance.Frame
-github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/regex_explorer.EmbeddedApp.Render
-github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/regex_explorer.NewEmbedded
 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets.RenderLoopHandlerTestDriver
-github.com/stergiotis/boxer/public/thestack/imzero2/egui2/driver.GenerateRustFiles
-github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/scctree.RepoRootAt
-github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/scctree.RunScc
-github.com/stergiotis/boxer/public/thestack/imzero2/scene.Launch

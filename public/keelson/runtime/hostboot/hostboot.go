@@ -521,7 +521,7 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 		if pingTimeout <= 0 {
 			pingTimeout = DefaultFactsPingTimeout
 		}
-		rt.Facts, rt.IsChStore = chstore.NewWithFallback(factsCfg, logger, pingTimeout)
+		rt.Facts, rt.IsChStore = chstore.NewWithFallback(ctx, factsCfg, logger, pingTimeout)
 	}
 	if runInst != nil {
 		row := factsstore.RuntimeStartRow{

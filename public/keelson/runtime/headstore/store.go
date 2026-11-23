@@ -181,4 +181,6 @@ func NewMemStore() (inst *MemStore) {
 }
 
 // All is every head the store holds, in receipt order.
-func (inst *MemStore) All() (rows []anchor.Anchored) { return inst.Mem.All() }
+func (inst *MemStore) All(ctx context.Context) (rows []anchor.Anchored) {
+	return inst.Mem.All(ctx)
+}

@@ -33,7 +33,7 @@ import (
 // is bounded.
 const setupTimeout = 2 * time.Minute
 
-func NewWithFallback(cfg Config, logger zerolog.Logger, pingTimeout time.Duration) (store factsstore.FactsStoreI, isChStore bool) {
+func NewWithFallback(ctx context.Context, cfg Config, logger zerolog.Logger, pingTimeout time.Duration) (store factsstore.FactsStoreI, isChStore bool) {
 	cfg = ConfigWithEnvDefaults(cfg)
 	if pingTimeout <= 0 {
 		pingTimeout = 2 * time.Second
@@ -46,9 +46,9 @@ func NewWithFallback(cfg Config, logger zerolog.Logger, pingTimeout time.Duratio
 		store = factsstore.NewInMemoryFactsStore()
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), pingTimeout)
+	pingCtx, cancel := context.WithTimeout(ctx, pingTimeout)
 	defer cancel()
-	pingErr := ch.Ping(ctx)
+	pingErr := ch.Ping(pingCtx)
 	if pingErr != nil {
 		logger.Warn().Err(pingErr).
 			Str("url", env.RedactURL(cfg.URL)).
@@ -60,7 +60,7 @@ func NewWithFallback(cfg Config, logger zerolog.Logger, pingTimeout time.Duratio
 	// Reachable — set up the table and the read surface. Setup gets its own
 	// budget: on a server that has never carried the surface it is a full
 	// install, which a ping's timeout does not cover.
-	setupCtx, cancelSetup := context.WithTimeout(context.Background(), setupTimeout)
+	setupCtx, cancelSetup := context.WithTimeout(ctx, setupTimeout)
 	defer cancelSetup()
 	setupErr := ch.SetupTable(setupCtx, "")
 	if setupErr != nil {

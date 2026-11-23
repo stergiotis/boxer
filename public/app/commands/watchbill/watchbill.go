@@ -118,7 +118,7 @@ func newRunCommand() *cli.Command {
 			logger := runinfo.TagLogger(log.Logger, runInst)
 			factsCfg := chstore.ConfigFromEnv()
 			factsCfg.RunId = runInst.RunId
-			facts, isCh := chstore.NewWithFallback(factsCfg, logger, factsPingTimeout)
+			facts, isCh := chstore.NewWithFallback(ctx, factsCfg, logger, factsPingTimeout)
 			cfg := watchbill.Config{
 				Store: store, RunId: runInst.RunId, Log: logger,
 				MaxWorkers: cmd.Int("max-workers"), Poll: cmd.Duration("poll"), Queues: cmd.StringSlice("queue"),

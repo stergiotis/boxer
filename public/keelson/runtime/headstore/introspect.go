@@ -18,7 +18,7 @@ const TableAnchors = "anchors"
 // AllI is a store that can list every head; the memory store is one. A
 // store that cannot serves an empty table.
 type AllI interface {
-	All() (rows []anchor.Anchored)
+	All(ctx context.Context) (rows []anchor.Anchored)
 }
 
 // RegisterIntrospect registers keelson('anchors') over the store.
@@ -36,7 +36,7 @@ func (anchorsProvider) Schema() *arrow.Schema                { return anchorsTab
 func (inst anchorsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	var rows []anchor.Anchored
 	if inst.all != nil {
-		rows = inst.all.All()
+		rows = inst.all.All(ctx)
 	}
 	rec = anchorsTable(rows).Build(proj, len(rows))
 	return

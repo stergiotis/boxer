@@ -92,6 +92,9 @@ that depend on it; or first make the callers compile against the old API
 | `introspect.Provider.Snapshot(proj)`, `ArgProvider.SnapshotArgs(proj, args)`, `FilteredProvider.SnapshotWhere(proj, where)`; the functions `introspect.SnapshotWhere`, `SnapshotCall`, `SnapshotCallFile`, `SnapshotStream`, `SnapshotFile` | ctx first — the query's. A provider that answers from memory takes it and ignores it; one that reads a store reads under it, bounding a read of its own with `introspect.BoundRead(ctx, d)` |
 | `trivialsql.Read(reg, …)`, `trivialsql.ReadTables(reg, …)` | ctx first |
 | `factsstore.RunEventReaderI.ListRunEvents(filter)` | `ListRunEvents(ctx, filter)` |
+| `chstore.NewWithFallback(cfg, …)`; `headstore.AllI.All()`, `(*anchor.MemStore).All()`, `(*anchorsql.Store).All()`; `adr.RunQuery`, `adr.RunOverview`; `capslock.Run(args)`; `driver.GenerateRustFiles(path)`; `tabhost.ReportOf(pkg)`; `scctree.RepoRoot()`, `RepoRootAt(dir)` | ctx first |
+| `scctree.RunScc(root)`, `scctree.RunSccContext(ctx, root)` | `RunScc(ctx, root)` |
+| `auditrectest.FullContext()` | `FullContext(ctx)` |
 
 New: `app.Msg.Context()`, `app.Msg.WithContext(ctx)`, `app.ContextOf(mc)`,
 `app.RequestWithin`, `(*hostboot.Runtime).Context()`, `introspect.BoundRead`.

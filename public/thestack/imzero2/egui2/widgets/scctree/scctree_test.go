@@ -306,7 +306,7 @@ func TestBuildColoredTree_BucketIndexAlwaysWithinRange(t *testing.T) {
 func TestRepoRoot_ResolvesGitToplevel(t *testing.T) {
 	// Skip cleanly when this isn't a git checkout (CI sometimes runs in a
 	// shallow tarball). When git IS available we expect a non-empty path.
-	root, err := RepoRoot()
+	root, err := RepoRoot(t.Context())
 	if err != nil {
 		t.Skipf("git not available or not in a repo: %v", err)
 	}

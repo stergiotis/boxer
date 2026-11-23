@@ -25,12 +25,12 @@ func TestEveryDurableFlushIsSealedOnce(t *testing.T) {
 	require.NoError(t, rec.LlmCall(ctx, time.Now(), Context{}, LlmCall{CallId: "c1"}))
 	require.NoError(t, rec.Flush(ctx))
 	assert.EqualValues(t, 3, exec.landed(), "two rows and their seal")
-	require.Len(t, anchors.All(), 1)
-	first := anchors.All()[0].Head
+	require.Len(t, anchors.All(t.Context()), 1)
+	first := anchors.All(t.Context())[0].Head
 	assert.NotEmpty(t, first.Digest)
 	require.NoError(t, rec.Flush(ctx))
 	assert.EqualValues(t, 3, exec.landed(), "an empty flush seals nothing")
-	assert.Len(t, anchors.All(), 1)
+	assert.Len(t, anchors.All(t.Context()), 1)
 
 	exec.mu.Lock()
 	exec.open = false
@@ -41,7 +41,7 @@ func TestEveryDurableFlushIsSealedOnce(t *testing.T) {
 	require.Len(t, obs.committed, 5, "the held batch's row and its seal are in the batch before the flush")
 	held := obs.committed[4].Key
 	obs.mu.Unlock()
-	assert.Len(t, anchors.All(), 1, "a seal the server did not take is not anchored")
+	assert.Len(t, anchors.All(t.Context()), 1, "a seal the server did not take is not anchored")
 
 	exec.mu.Lock()
 	exec.open = true
@@ -61,7 +61,7 @@ func TestEveryDurableFlushIsSealedOnce(t *testing.T) {
 	assert.EqualValues(t, 2, c.Seals)
 	assert.EqualValues(t, 3, c.Written, "seals are not among the written rows")
 	// Each durable seal is the stream's head at its ordinal (ADR-0327 §SD7).
-	rows := anchors.All()
+	rows := anchors.All(t.Context())
 	require.Len(t, rows, 2)
 	assert.Equal(t, anchor.Head{Scope: SealScope("run-1"), Ordinal: 1, Scheme: TrailSealScheme.Name(), Digest: first.Digest}, rows[0].Head)
 	assert.Equal(t, SealScope("run-1"), rows[1].Head.Scope)

@@ -156,7 +156,7 @@ func actionOverview(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	ok, err := RunOverview(tables, os.Stdout)
+	ok, err := RunOverview(ctx, tables, os.Stdout)
 	if err != nil {
 		return err
 	}
@@ -185,7 +185,7 @@ func actionQuery(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	ok, err := RunQuery(tables, sql, cmd.String("format"), os.Stdout)
+	ok, err := RunQuery(ctx, tables, sql, cmd.String("format"), os.Stdout)
 	if err != nil {
 		return err
 	}

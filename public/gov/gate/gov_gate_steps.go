@@ -429,7 +429,7 @@ func (inst *StepTab) Run(ctx context.Context, cfg Config, w io.Writer) (status S
 			status = StatusFail
 			continue
 		}
-		rep, rErr := tabhost.ReportOf(pkg)
+		rep, rErr := tabhost.ReportOf(ctx, pkg)
 		if rErr != nil {
 			_, _ = fmt.Fprintf(w, "%s: no report: %v\n", p, rErr)
 			status = StatusFail

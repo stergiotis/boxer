@@ -19,7 +19,7 @@ import (
 // busaudit.NewAsyncSink in front of it. A failure to buffer is logged; the
 // bus cannot surface it to the requester.
 func AsAuditSink(rec *Recorder) (sink busaudit.AuditSinkI) {
-	ctx := evidence.WithAttestation(context.Background(), evidence.Attestation{OriginBy: evidence.OriginByHost})
+	ctx := evidence.WithAttestation(context.Background(), evidence.Attestation{OriginBy: evidence.OriginByHost}) //boxer:lint disable=CS020 reason="a context of values only, the host's attestation: the rows are buffered under it and land with the recorder's flush"
 	return busaudit.AuditFunc(func(r busaudit.AuditRecord) {
 		at := r.Ts
 		if at.IsZero() {

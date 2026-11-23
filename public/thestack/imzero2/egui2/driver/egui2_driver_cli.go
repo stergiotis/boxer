@@ -51,7 +51,7 @@ func NewCliCommand() *cli.Command {
 				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					rustOutputBasePath := cmd.String("rustOutputBasePath")
-					return GenerateRustFiles(rustOutputBasePath)
+					return GenerateRustFiles(ctx, rustOutputBasePath)
 				},
 			},
 			{

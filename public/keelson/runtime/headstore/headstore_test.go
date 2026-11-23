@@ -46,7 +46,7 @@ func TestTheServiceAppendsAndReadsHeads(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, heads)
 	// The store holds the head by scope under the journal's scheme.
-	rows := store.All()
+	rows := store.All(t.Context())
 	require.Len(t, rows, 1)
 	assert.Equal(t, anchor.Head{Cell: "c", Scope: 11, Ordinal: 3, Scheme: agentrun.ChainScheme.Name(), Digest: "abc"}, rows[0].Head)
 	_, err = store.Append(ctx, anchor.Head{Cell: "c", Scope: 11, Ordinal: 3, Scheme: "other/v1", Digest: "zzz"})

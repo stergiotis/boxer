@@ -50,7 +50,7 @@ func NewCliCommand() (cmd *cli.Command) {
 			if t := cmd.String("tags"); t != "" {
 				args = append(args, "-tags", t)
 			}
-			exit := capslocklib.Run(args)
+			exit := capslocklib.Run(ctx, args)
 			if exit != 0 {
 				err = cli.Exit("", exit)
 			}

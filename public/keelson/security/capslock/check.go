@@ -584,7 +584,7 @@ func sortedKeys(m map[string]struct{}) (out []string) {
 // index 0). Returns the exit code the binary should propagate: 0 when every
 // finding is already in the baseline, 1 on drift or analysis failure, 2 on
 // flag-parse failure.
-func Run(args []string) (exitCode int) {
+func Run(ctx context.Context, args []string) (exitCode int) {
 	fs := flag.NewFlagSet("capslock-check", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	root := fs.String("root", ".", "module root to analyse")
@@ -598,7 +598,7 @@ func Run(args []string) (exitCode int) {
 	if *tags != "" {
 		opts.Tags = godepcollect.SplitTags(*tags)
 	}
-	findings, err := Analyse(context.Background(), opts)
+	findings, err := Analyse(ctx, opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "capslock-check: %v\n", err)
 		exitCode = 1

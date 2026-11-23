@@ -208,7 +208,8 @@ func (inst *Worker) RunJob(ctx context.Context, id string, onClaim ...func(job w
 			inst.log.Warn().Err(perr).Msg("watchbill: presence not declared")
 		}
 		defer func() {
-			if perr := inst.cfg.Presence.Stopped(context.Background(), inst.Status()); perr != nil {
+			// The run's ctx may have ended; the stop is declared all the same.
+			if perr := inst.cfg.Presence.Stopped(context.WithoutCancel(ctx), inst.Status()); perr != nil {
 				inst.log.Warn().Err(perr).Msg("watchbill: presence stop not declared")
 			}
 		}()

@@ -117,7 +117,7 @@ func chTablePrelude(t ArrowTables) string {
 // RunQuery executes one SQL statement against the bound tables via
 // `clickhouse local`. ok=false means the binary is unreachable; callers decide
 // whether to error or fall back.
-func RunQuery(tables ArrowTables, query, format string, stdout io.Writer) (ok bool, err error) {
+func RunQuery(ctx context.Context, tables ArrowTables, query, format string, stdout io.Writer) (ok bool, err error) {
 	if tables.Adr == "" {
 		return false, eh.Errorf("adr: ArrowTables.Adr is required (it anchors the working directory)")
 	}
@@ -128,11 +128,11 @@ func RunQuery(tables ArrowTables, query, format string, stdout io.Writer) (ok bo
 	if format == "" {
 		format = "PrettyCompact"
 	}
-	script, err := fairlead.Lead(context.Background(), fairlead.ExitLocal, "adr.query", chTablePrelude(tables)+query)
+	script, err := fairlead.Lead(ctx, fairlead.ExitLocal, "adr.query", chTablePrelude(tables)+query)
 	if err != nil {
 		return true, err
 	}
-	cmd, err := extbin.ClickHouseLocal.Command(context.Background(),
+	cmd, err := extbin.ClickHouseLocal.Command(ctx,
 		extbin.Opts{Path: bin, Dir: filepath.Dir(tables.Adr)},
 		"--multiquery", "--output-format", format)
 	if err != nil {
@@ -151,7 +151,7 @@ func RunQuery(tables ArrowTables, query, format string, stdout io.Writer) (ok bo
 
 // RunOverview runs the canned overview queries, each under a heading. ok=false
 // means `clickhouse local` is unreachable (callers fall back to RenderBoardASCII).
-func RunOverview(tables ArrowTables, stdout io.Writer) (ok bool, err error) {
+func RunOverview(ctx context.Context, tables ArrowTables, stdout io.Writer) (ok bool, err error) {
 	if _, found := resolveChBinary(); !found {
 		return false, nil
 	}
@@ -159,7 +159,7 @@ func RunOverview(tables ArrowTables, stdout io.Writer) (ok bool, err error) {
 		if _, err = fmt.Fprintf(stdout, "\n── %s ──\n", q.title); err != nil {
 			return true, err
 		}
-		if _, err = RunQuery(tables, q.sql, "PrettyCompact", stdout); err != nil {
+		if _, err = RunQuery(ctx, tables, q.sql, "PrettyCompact", stdout); err != nil {
 			return true, err
 		}
 	}

@@ -60,7 +60,7 @@ func Run(parent context.Context, api TaskApiI, opts SpawnOpts, work func(ctx con
 func RunToCompletion(api TaskApiI, opts SpawnOpts, work func() error) (err error) {
 	LabelGoroutine(api)
 	opts.Cancellable = false
-	h := spawnFor(context.Background(), api, opts)
+	h := spawnFor(context.Background(), api, opts) //boxer:lint disable=CS020 reason="documented root: the task is not cancellable by its contract, and work takes no ctx"
 	if h == nil {
 		return ph.Guard(work)
 	}

@@ -51,7 +51,7 @@ func TestRetriedBatchVerifies(t *testing.T) {
 	assert.Equal(t, evidence.SealBreakNone, broken.Why, "a seal stored twice is not a fork: %+v", broken)
 	assert.Empty(t, unnamed)
 	assert.Empty(t, unanchored)
-	assert.Len(t, anchors.All(), 1, "one durable seal, anchored once")
+	assert.Len(t, anchors.All(t.Context()), 1, "one durable seal, anchored once")
 }
 
 // With a node, the reads and the backstop see only that node's rows of a

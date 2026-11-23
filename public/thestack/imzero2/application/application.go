@@ -118,7 +118,7 @@ func (inst *Application[U]) Launch() (err error) {
 		// not by any spawn context. extbin only resolves the binary here.
 		switch debugMode {
 		case "":
-			cmd, err = imzero2Client.Command(context.Background(), extbin.Opts{Path: cfg.ClientBinary}, args...)
+			cmd, err = imzero2Client.Command(context.Background(), extbin.Opts{Path: cfg.ClientBinary}, args...) //boxer:lint disable=CS020 reason="documented root: the client lives as long as the application and ends on the pipe's EOF handshake, not with a spawn ctx"
 			break
 		case "flamegraph":
 			args = slices.Concat([]string{
@@ -126,7 +126,7 @@ func (inst *Application[U]) Launch() (err error) {
 				"--",
 				cfg.ClientBinary}, args)
 			log.Info().Strs("args", args).Msg("starting imzero2 client executable with flamegraph (cargo install flamegraph)")
-			cmd, err = extbin.Flamegraph.Command(context.Background(), extbin.Opts{}, args...)
+			cmd, err = extbin.Flamegraph.Command(context.Background(), extbin.Opts{}, args...) //boxer:lint disable=CS020 reason="documented root: the client lives as long as the application and ends on the pipe's EOF handshake, not with a spawn ctx"
 			break
 		case "memcheck":
 			args = slices.Concat([]string{
@@ -134,7 +134,7 @@ func (inst *Application[U]) Launch() (err error) {
 				"--",
 				cfg.ClientBinary}, args)
 			log.Info().Strs("args", args).Msg("starting imzero2 client executable with valgrind memcheck")
-			cmd, err = extbin.Valgrind.Command(context.Background(), extbin.Opts{}, args...)
+			cmd, err = extbin.Valgrind.Command(context.Background(), extbin.Opts{}, args...) //boxer:lint disable=CS020 reason="documented root: the client lives as long as the application and ends on the pipe's EOF handshake, not with a spawn ctx"
 			break
 		case "massif":
 			args = slices.Concat([]string{
@@ -143,12 +143,12 @@ func (inst *Application[U]) Launch() (err error) {
 				"--",
 				cfg.ClientBinary}, args)
 			log.Info().Strs("args", args).Msg("starting imzero2 client executable with valgrind massif")
-			cmd, err = extbin.Valgrind.Command(context.Background(), extbin.Opts{}, args...)
+			cmd, err = extbin.Valgrind.Command(context.Background(), extbin.Opts{}, args...) //boxer:lint disable=CS020 reason="documented root: the client lives as long as the application and ends on the pipe's EOF handshake, not with a spawn ctx"
 			break
 		case "heaptrack":
 			args = slices.Concat([]string{cfg.ClientBinary}, args)
 			log.Info().Strs("args", args).Msg("starting imzero2 client executable with heaptrack")
-			cmd, err = extbin.Heaptrack.Command(context.Background(), extbin.Opts{}, args...)
+			cmd, err = extbin.Heaptrack.Command(context.Background(), extbin.Opts{}, args...) //boxer:lint disable=CS020 reason="documented root: the client lives as long as the application and ends on the pipe's EOF handshake, not with a spawn ctx"
 			break
 		default:
 			err = eb.Build().Str("debugMode", debugMode).Strs("possible", []string{"memcheck", "massif", "heaptrack"}).Errorf("unhandled debug mode BOXER_IMZERO_DEBUG_MODE")

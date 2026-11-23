@@ -59,7 +59,7 @@ func TestTheTableStoreKeepsTheContract(t *testing.T) {
 	rows, err = st.Read(ctx, "c", 12)
 	require.NoError(t, err)
 	assert.Empty(t, rows)
-	all := st.All()
+	all := st.All(t.Context())
 	assert.Len(t, all, 3)
 	for _, a := range all {
 		assert.True(t, a.Receipt.Durable)

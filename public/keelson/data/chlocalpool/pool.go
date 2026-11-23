@@ -53,7 +53,7 @@ func New(cfg Config, logger zerolog.Logger) (p *Pool, err error) {
 	}
 	// The release floor, asked of the binary once per path before the first
 	// worker (chversion; the answer is kept for the process).
-	probeCtx, cancel := context.WithTimeout(context.Background(), cfg.SpawnTimeout)
+	probeCtx, cancel := context.WithTimeout(context.Background(), cfg.SpawnTimeout) //boxer:lint disable=CS020 reason="documented root: the pool's construction asks the binary its release once, bounded by SpawnTimeout"
 	_, err = extbin.ClickHouseLocal.CheckVersion(probeCtx, extbin.Opts{Path: cfg.BinaryPath})
 	cancel()
 	if err != nil {

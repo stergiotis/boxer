@@ -256,7 +256,7 @@ func Launch(spec Spec, opts Options) (s *Session, err error) {
 	if s.hostLog, err = os.OpenFile(filepath.Join(opts.OutDir, "logs", opts.Name+".host.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC|os.O_APPEND, 0o666); err != nil {
 		return s, eh.Errorf("unable to create the host log: %w", err)
 	}
-	s.cmd, err = hostProgram.Command(context.Background(), extbin.Opts{
+	s.cmd, err = hostProgram.Command(context.Background(), extbin.Opts{ //boxer:lint disable=CS020 reason="documented root: the host lives until Session.Close, which stops it in order"
 		Path: opts.HostBinary,
 		Dir:  opts.HostDir,
 		Env:  hostEnv(spec, opts, port, w, h, exported),

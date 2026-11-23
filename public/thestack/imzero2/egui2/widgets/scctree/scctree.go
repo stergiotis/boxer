@@ -172,9 +172,9 @@ func isJsTsTestName(name string) (yes bool) {
 // resolves against the current working directory. It errors when dir is not
 // inside a git worktree (or git is unavailable); callers that can visualize a
 // plain directory should fall back to dir itself.
-func RepoRootAt(dir string) (root string, err error) {
+func RepoRootAt(ctx context.Context, dir string) (root string, err error) {
 	var out []byte
-	out, err = extbin.Git.Output(context.Background(), extbin.Opts{Dir: dir}, "rev-parse", "--show-toplevel")
+	out, err = extbin.Git.Output(ctx, extbin.Opts{Dir: dir}, "rev-parse", "--show-toplevel")
 	if err != nil {
 		err = eh.Errorf("git rev-parse --show-toplevel: %w", err)
 		return
@@ -185,8 +185,8 @@ func RepoRootAt(dir string) (root string, err error) {
 
 // RepoRoot returns the git top-level directory for the current working
 // directory. It is [RepoRootAt] with an empty dir.
-func RepoRoot() (root string, err error) {
-	return RepoRootAt("")
+func RepoRoot(ctx context.Context) (root string, err error) {
+	return RepoRootAt(ctx, "")
 }
 
 // RunScc shells out to scc in root with the project's agreed flags and returns
@@ -206,16 +206,10 @@ func RepoRoot() (root string, err error) {
 // `--not-match` regex baked into this function made the toggle uniformly
 // impossible at the consumer.
 //
-// It is [RunSccContext] with a background context.
-func RunScc(root string) (groups []SccGroup, err error) {
-	return RunSccContext(context.Background(), root)
-}
-
-// RunSccContext is [RunScc] with cancellation: killing ctx terminates the scc
-// child process, so a caller running the scan on a worker goroutine (e.g.
-// behind a bgjob.Runner) can abort an in-flight scan. It applies the same scc
-// resolution order and flags as RunScc.
-func RunSccContext(ctx context.Context, root string) (groups []SccGroup, err error) {
+// Ending ctx terminates the scc child process, so a caller running the scan
+// on a worker goroutine (e.g. behind a bgjob.Runner) can abort a scan in
+// flight.
+func RunScc(ctx context.Context, root string) (groups []SccGroup, err error) {
 	// Flags are identical whichever scc extbin resolves to; extbin owns the
 	// `go tool scc` → PATH `scc` fallback.
 	sccArgs := []string{

@@ -189,7 +189,7 @@ func rustfmtFile(available bool, path string) {
 	}
 }
 
-func GenerateRustFiles(basePath string) (err error) {
+func GenerateRustFiles(ctx context.Context, basePath string) (err error) {
 	tracker := compiletime.NewStateAndErrTracker[rustclient.GeneratorStateE](rustclient.GenerateStateInitial, "")
 	factoryBuf := bytes.NewBuffer(nil)
 	methodBuf := bytes.NewBuffer(nil)
@@ -233,7 +233,7 @@ func GenerateRustFiles(basePath string) (err error) {
 	// Resolve rustfmt once up front so the "not found" note is emitted a single
 	// time rather than per formatted file; extbin owns the resolution.
 	rustfmtAvailable := true
-	if _, lookErr := extbin.Rustfmt.Command(context.Background(), extbin.Opts{}); lookErr != nil {
+	if _, lookErr := extbin.Rustfmt.Command(ctx, extbin.Opts{}); lookErr != nil {
 		log.Warn().Msg("rustfmt not found in path, generated files will not be reformatted")
 		rustfmtAvailable = false
 	}

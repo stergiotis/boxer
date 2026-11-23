@@ -334,7 +334,7 @@ func (inst *AppInstance) Unmount(ctx runtimeapp.MountContextI) (err error) {
 // Kicks off the SD1 engine-fidelity tripwire on the first call
 // (once per process — see [App.RunTripwire]).
 func (inst *AppInstance) Frame(ctx runtimeapp.FrameContextI) (err error) {
-	inst.state.RunTripwire(context.Background())
+	inst.state.RunTripwire(inst.state.ioCtx)
 	inst.state.frameCtx = ctx
 	inst.state.RenderWindow()
 	inst.state.frameCtx = nil

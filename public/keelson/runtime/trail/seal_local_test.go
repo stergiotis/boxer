@@ -171,7 +171,7 @@ func TestRetriedBatchIsNotAFork(t *testing.T) {
 	assert.Equal(t, evidence.SealBreak{}, broken, "a seal stored twice is not a fork")
 	assert.Empty(t, unnamed)
 	assert.Empty(t, unanchored)
-	assert.Len(t, anchors.All(), 1)
+	assert.Len(t, anchors.All(t.Context()), 1)
 }
 
 // With the facts table's id generator the trail's rows carry minted ids —

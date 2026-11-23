@@ -158,10 +158,14 @@ func (inst *Store) Read(ctx context.Context, cell string, scope uint64) (heads [
 }
 
 // All is the newest MaxAll receipts that count, oldest first: what
-// keelson('anchors') lists. A read that fails lists nothing.
-func (inst *Store) All() (rows []anchor.Anchored) {
-	ctx, cancel := context.WithTimeout(context.Background(), allTimeout)
-	defer cancel()
+// keelson('anchors') lists. A read that fails lists nothing. A ctx without
+// a deadline is bounded by allTimeout.
+func (inst *Store) All(ctx context.Context) (rows []anchor.Anchored) {
+	if _, has := ctx.Deadline(); !has {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, allTimeout)
+		defer cancel()
+	}
 	rows, err := inst.query(ctx, "SELECT * FROM (SELECT "+columns+" FROM "+inst.table+
 		" ORDER BY cell, scope, ordinal, scheme, received_at, receipt_id LIMIT 1 BY cell, scope, ordinal, scheme)"+
 		" ORDER BY at_ns DESC LIMIT "+strconv.Itoa(MaxAll))

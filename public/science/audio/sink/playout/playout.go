@@ -423,7 +423,7 @@ func (inst *Engine) ProduceLocked(out []float32, outFrames int) (produced int) {
 	if outFrames <= 0 {
 		return 0
 	}
-	ctx := context.Background()
+	ctx := context.Background() //boxer:lint disable=CS020 reason="documented root: the audio device's callback carries no ctx"
 	step := inst.stepLocked()
 	if step == 1 && inst.frac == 0 {
 		// Direct path: held lookahead frames go out first, the rest is read

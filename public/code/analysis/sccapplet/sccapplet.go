@@ -56,12 +56,12 @@ type Stats struct {
 // Scan runs scc over the git worktree that contains dir, with the flags the
 // repo code exploration app uses.
 func Scan(ctx context.Context, dir string) (groups []scctree.SccGroup, err error) {
-	root, err := scctree.RepoRootAt(dir)
+	root, err := scctree.RepoRootAt(ctx, dir)
 	if err != nil {
 		err = eh.Errorf("sccapplet: %w", err)
 		return
 	}
-	groups, err = scctree.RunSccContext(ctx, root)
+	groups, err = scctree.RunScc(ctx, root)
 	if err != nil {
 		err = eh.Errorf("sccapplet: scc: %w", err)
 	}

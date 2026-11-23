@@ -88,7 +88,7 @@ func (inst ExecLauncher) Start(ctx context.Context, job watchbillstore.Job) (chi
 	// Background, not ctx: the child outlives the call that started it
 	// and is ended by the coordinator through the group, not by a cancel
 	// of the spawn.
-	cmd, err := childProgram.Command(context.Background(), extbin.Opts{Path: inst.Path, Dir: inst.Dir}, argsOf(job)...)
+	cmd, err := childProgram.Command(context.Background(), extbin.Opts{Path: inst.Path, Dir: inst.Dir}, argsOf(job)...) //boxer:lint disable=CS020 reason="documented root: the child outlives the call that started it; the coordinator ends it through its process group"
 	if err != nil {
 		return nil, eh.Errorf("lane: resolve the child: %w", err)
 	}
