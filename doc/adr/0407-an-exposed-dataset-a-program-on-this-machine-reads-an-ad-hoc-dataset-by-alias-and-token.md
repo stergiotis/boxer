@@ -545,8 +545,11 @@ unlabelled; over a dataset a person published it is labelled at the read
 and refused at the exposure; a result published in the round it arrived
 in is not exposed. `publish_result` is consequential and a test grant has
 nobody to confirm it, so those tests hand it to the window's engine under
-an attested call instead of through the dispatcher. The change has run
-against stubs only; no live run of a model is behind it.
+an attested call instead of through the dispatcher. Beside the stubs, the
+integration lane joins a task's own clear publication with a server table
+on one ClickHouse server and finds the result unlabelled, and the
+person's run of it, a mixed statement and a data set kept from a person's
+dataset labelled. No live run of a model is behind the change.
 
 ## Choices for review
 

@@ -144,7 +144,9 @@ type BundleResult struct {
 	Inputs    []BundleInput
 	// DerivedFromSealed says the live revision derives from sealed data:
 	// its publisher declared so, or the service found an input that is
-	// not the publishing task's own publication at TLP:CLEAR.
+	// not the publishing task's own publication at TLP:CLEAR. The service
+	// sets it in process; a reply over the bus does not carry it, and a
+	// reader learns what it needs from a read's OwnClear.
 	DerivedFromSealed bool
 	// PublisherTask is Context's task, and what survives the bus: the
 	// task that reads and runs on the bundle without a grant entry for it
