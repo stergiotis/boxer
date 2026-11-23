@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/extbin"
+	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowalloc"
+	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowintern"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
@@ -88,6 +90,25 @@ func TestUnderATransformNoFactsDDL(t *testing.T) {
 	require.Contains(t, have, "FROM carrier.facts_view\n")
 }
 
+// --with-id-tables appends what first-run setup provisions beside the facts:
+// the facts DDL stays a byte-identical prefix, and every statement of the
+// lease table and of the id directory follows it, in the named database.
+func TestWithIdTablesAppendsTheLeaseTableAndTheDirectory(t *testing.T) {
+	cfg := chstore.Config{Database: "audit", Table: "trail_facts"}
+	facts, err := compose(options{cfg: cfg})
+	require.NoError(t, err)
+	have, err := compose(options{cfg: cfg, withIdTables: true})
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(have, facts))
+	at := len(facts)
+	for _, stmt := range append(rowalloc.ProvisionSQL(rowalloc.Layout{Database: cfg.Database}), rowintern.ProvisionSQL(rowintern.Layout{Database: cfg.Database})...) {
+		i := strings.Index(have[at:], stmt+";\n")
+		require.GreaterOrEqual(t, i, 0, stmt)
+		at += i + len(stmt)
+	}
+	require.Contains(t, have, "audit."+rowintern.TableName+" ")
+}
+
 func TestWithSurfaceNeedsTrailViews(t *testing.T) {
 	_, err := compose(options{cfg: defaults(), withSurface: true})
 	require.Error(t, err)
@@ -100,7 +121,7 @@ func TestWithSurfaceNeedsTrailViews(t *testing.T) {
 func TestScriptAppliesToAFreshServer(t *testing.T) {
 	for _, cfg := range []chstore.Config{defaults(), {Database: "audit", Table: "trail_facts"}} {
 		t.Run(cfg.Database+"."+cfg.Table, func(t *testing.T) {
-			script, err := compose(options{cfg: cfg, trailViews: true, withSurface: true})
+			script, err := compose(options{cfg: cfg, trailViews: true, withSurface: true, withIdTables: true})
 			require.NoError(t, err)
 			dir := t.TempDir()
 			file := filepath.Join(t.TempDir(), "ddl.sql")
@@ -123,6 +144,7 @@ func TestScriptAppliesToAFreshServer(t *testing.T) {
 			want := append([]string{}, trailviews.AllViewNames()...)
 			require.ElementsMatch(t, want, strings.Fields(names))
 			require.Equal(t, "0\n", run("--query", "SELECT count() FROM "+cfg.Database+"."+trailviews.ViewTimeline))
+			require.Equal(t, "0\n", run("--query", "SELECT count() FROM "+cfg.Database+"."+rowintern.TableName), "the id directory is there")
 			require.Equal(t, strconv.Itoa(trailviews.ViewsVersion)+"\n", run("--query", "SELECT "+trailviews.FuncViewsVersion+"()"),
 				"the script installs the trail functions with the views")
 		})

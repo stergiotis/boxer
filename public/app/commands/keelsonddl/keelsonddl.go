@@ -8,6 +8,15 @@
 // The SQL is composed by chstore.ComposeSetupSQL, the same function
 // SetupTable uses, so this command and first-run initialisation cannot drift.
 //
+// # The id tables, opt-in
+//
+// First-run setup also provisions two small tables beside the facts: the id
+// lease table the store mints row ids through (ADR-0397 §SD2) and the id
+// directory the keyed generators resolve natural keys in (ADR-0405 §SD3).
+// --with-id-tables prints both after the facts DDL, for a server a host does
+// not set up itself — one prepared by an operator, or a test server. Without
+// the flag the output stays the facts DDL alone.
+//
 // # The trail views, opt-in
 //
 // --trail-views appends the read-only views over the audit trail
@@ -46,6 +55,8 @@ import (
 
 	"github.com/urfave/cli/v3"
 
+	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowalloc"
+	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowintern"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -64,6 +75,9 @@ type options struct {
 	readTable   string
 	trailViews  bool
 	withSurface bool
+	// withIdTables also prints the id lease table and the id directory
+	// first-run setup provisions beside the facts.
+	withIdTables bool
 }
 
 // compose renders the script: the facts DDL, then — when asked — the read
@@ -85,6 +99,23 @@ func compose(opts options) (sql string, err error) {
 		if err != nil {
 			return "", eh.Errorf("keelsonddl: %w", err)
 		}
+	}
+	if opts.withIdTables {
+		ids := strings.Builder{}
+		ids.WriteString(sql)
+		if !strings.HasSuffix(sql, "\n") {
+			ids.WriteString("\n")
+		}
+		ids.WriteString("\n-- the id lease table and the id directory first-run setup provisions beside the facts (ADR-0397, ADR-0405)\n")
+		for _, stmt := range rowalloc.ProvisionSQL(rowalloc.Layout{Database: opts.cfg.Database}) {
+			ids.WriteString(stmt)
+			ids.WriteString(";\n")
+		}
+		for _, stmt := range rowintern.ProvisionSQL(rowintern.Layout{Database: opts.cfg.Database}) {
+			ids.WriteString(stmt)
+			ids.WriteString(";\n")
+		}
+		sql = ids.String()
 	}
 	if !opts.trailViews {
 		return sql, nil
@@ -127,6 +158,7 @@ func NewCliCommand() *cli.Command {
 		Description: "Emits the exact CREATE DATABASE + CREATE TABLE script chstore.SetupTable executes on first run. " +
 			"With no flags the output matches the default first-run initialisation (" + def.Database + "." + def.Table + "). " +
 			"Pipe it into a client to apply it, e.g. `app keelsonddl | clickhouse client -mn`. " +
+			"--with-id-tables appends the id lease table and the id directory first-run setup provisions beside it. " +
 			"--trail-views appends the audit-trail views (not part of first-run setup); they need leeway's SQL read surface " +
 			"on the server first, which --with-surface prints ahead of them.",
 		Flags: []cli.Flag{
@@ -148,6 +180,10 @@ func NewCliCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:  "read-table",
 				Usage: "with --trail-views: the database-qualified relation the views read (ADR-0402); empty takes BOXER_FACTS_READ_TABLE for the facts table, else database.table",
+			},
+			&cli.BoolFlag{
+				Name:  "with-id-tables",
+				Usage: "append the id lease table and the id directory that first-run setup provisions in the database, for a server no host sets up",
 			},
 			&cli.BoolFlag{
 				Name:  "trail-views",
@@ -176,6 +212,7 @@ func NewCliCommand() *cli.Command {
 				engineClause: cmd.String("engine"),
 				trailViews:   cmd.Bool("trail-views"),
 				withSurface:  cmd.Bool("with-surface"),
+				withIdTables: cmd.Bool("with-id-tables"),
 			})
 			if err != nil {
 				return err
