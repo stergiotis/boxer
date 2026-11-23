@@ -1203,15 +1203,15 @@ func TestGenerated_T090_materialized_cte(t *testing.T) {
 }
 
 // Source: 091_array_joins
-// SQL: SELECT k, x, y, z FROM t LEFT ARRAY JOIN a AS x, b AS y ARRAY JOIN arrayFilter(i -> i IN (SELECT k FROM u), c) AS z I...
+// SQL: SELECT a, e1, e2, e3 FROM t LEFT ARRAY JOIN arr AS e1, arr AS e2 ARRAY JOIN arrayFilter(i -> i IN (SELECT id FROM t3)...
 func TestGenerated_T091_array_joins(t *testing.T) {
-	q, err := Select(Col("k"), Col("x"), Col("y"), Col("z")).
+	q, err := Select(Col("a"), Col("e1"), Col("e2"), Col("e3")).
 		From("t").
-		LeftArrayJoin(Col("a").As("x"), Col("b").As("y")).
-		ArrayJoin(Func("arrayFilter", Raw("i -> i IN (SELECT k FROM u)"), Col("c")).As("z")).
+		LeftArrayJoin(Col("arr").As("e1"), Col("arr").As("e2")).
+		ArrayJoin(Func("arrayFilter", Raw("i -> i IN (SELECT \"id\" FROM t3)"), Col("arr")).As("e3")).
 		ArrayJoin(Func("array", Raw("1"), Raw("2")).As("w")).
-		Where(Col("x").Gt(Raw("0"))).
-		OrderBy(Col("k").Order()).
+		Where(Col("e1").Gt(Raw("0"))).
+		OrderBy(Col("a").Order()).
 		Build()
 	require.NoError(t, err, "builder error")
 	sql := q.ToSQL()
