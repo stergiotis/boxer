@@ -234,6 +234,14 @@ columnExpr
     // Ambiguity resolves to the lowest alternative, so the dynamic selection
     // must stay ahead of them.
     | dynamicColumnSelection                                                              # ColumnExprDynamic
+    // `EXISTS (query)`, also written `exists(query)`: the one call whose
+    // parentheses hold a query instead of arguments. EXISTS is a keyword that
+    // is also a name, so `exists(SELECT x)` matches the call alternatives
+    // below as well, with `SELECT` read as a column and `x` as its alias;
+    // this alternative is ahead of them so that a query is read as a query,
+    // and the tables it names are tables. ClickHouse holds it as the call
+    // `exists((query))`, which CanonicalizeSugar writes.
+    | EXISTS LPAREN selectUnionStmt RPAREN                                                # ColumnExprExists
     | identifier (LPAREN columnExprList? RPAREN) filterClause? OVER LPAREN windowExpr RPAREN  # ColumnExprWinFunction
     | identifier (LPAREN columnExprList? RPAREN) filterClause? OVER identifier                # ColumnExprWinFunctionTarget
     | identifier (LPAREN columnExprList? RPAREN)? LPAREN DISTINCT? columnArgList? RPAREN filterClause?  # ColumnExprFunction

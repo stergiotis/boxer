@@ -271,6 +271,9 @@ type ClickHouseParserGrammar1Visitor interface {
 	// Visit a parse tree produced by ClickHouseParserGrammar1#ColumnExprPrecedence3.
 	VisitColumnExprPrecedence3(ctx *ColumnExprPrecedence3Context) interface{}
 
+	// Visit a parse tree produced by ClickHouseParserGrammar1#ColumnExprExists.
+	VisitColumnExprExists(ctx *ColumnExprExistsContext) interface{}
+
 	// Visit a parse tree produced by ClickHouseParserGrammar1#ColumnExprInterval.
 	VisitColumnExprInterval(ctx *ColumnExprIntervalContext) interface{}
 

@@ -359,6 +359,10 @@ func (v *BaseClickHouseParserGrammar1Visitor) VisitColumnExprPrecedence3(ctx *Co
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseClickHouseParserGrammar1Visitor) VisitColumnExprExists(ctx *ColumnExprExistsContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseClickHouseParserGrammar1Visitor) VisitColumnExprInterval(ctx *ColumnExprIntervalContext) interface{} {
 	return v.VisitChildren(ctx)
 }

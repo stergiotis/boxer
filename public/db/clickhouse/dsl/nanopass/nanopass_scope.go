@@ -381,7 +381,8 @@ func buildScopeFromSelectStmt(stmt *grammar1.SelectStmtContext, parent *SelectSc
 // findSubqueryScopes walks one SELECT's subtree and builds scopes for
 // expression-level subqueries: scalar/IN subqueries (ColumnExprSubquery)
 // subqueries in projection or function-argument position
-// (ColumnsExprSubquery), and a query as a table function's argument —
+// (ColumnsExprSubquery), the query of an EXISTS (ColumnExprExists), and a
+// query as a table function's argument —
 // `view(SELECT …)`, `f((SELECT …))` (TableArgExpr). FROM-clause subqueries
 // are excluded — they are
 // owned by Tables[i].Scopes. CTE bodies (namedQuery) are excluded — they
@@ -416,6 +417,10 @@ func findSubqueryScopes(stmt *grammar1.SelectStmtContext, parent *SelectScope, d
 			return false
 
 		case *grammar1.ColumnsExprSubqueryContext:
+			subqueries = append(subqueries, buildNestedUnionScopes(c, parent, defaultDB)...)
+			return false
+
+		case *grammar1.ColumnExprExistsContext:
 			subqueries = append(subqueries, buildNestedUnionScopes(c, parent, defaultDB)...)
 			return false
 

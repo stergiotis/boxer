@@ -114,6 +114,12 @@ func predictionCorpus() []struct {
 		{"aggregate_filter", "SELECT quantile(0.05)(x) FILTER (WHERE x > 1) AS p FROM t"},
 		{"aggregate_filter_window", "SELECT sum(x) FILTER (WHERE y) OVER (ORDER BY z) FROM t"},
 		{"filter_as_alias", "SELECT count() filter FROM t filter"},
+		// EXISTS followed by a parenthesis that holds a query is the
+		// predicate, ahead of the call it also reads as; otherwise the
+		// word is a name.
+		{"exists_predicate", "SELECT a FROM t WHERE EXISTS (SELECT 1 FROM u WHERE u.k = t.k)"},
+		{"exists_call_spelling", "SELECT exists(SELECT * FROM u), exists((SELECT 1))"},
+		{"exists_as_name", "SELECT exists, exists(a) FROM t"},
 	}
 }
 

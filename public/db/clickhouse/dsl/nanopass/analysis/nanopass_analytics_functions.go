@@ -13,7 +13,9 @@ type FunctionRef struct {
 	IsWindow     bool // true if this is a window function call (has OVER clause)
 }
 
-// ExtractFunctions walks the CST and returns all function calls.
+// ExtractFunctions walks the CST and returns all function calls. An
+// `EXISTS (query)` is the call `exists`, which is what the server holds it
+// as and what canonicalisation writes.
 func ExtractFunctions(pr *nanopass.ParseResult) (refs []FunctionRef) {
 	nodes := nanopass.FindAll(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		switch ctx.(type) {
@@ -22,6 +24,8 @@ func ExtractFunctions(pr *nanopass.ParseResult) (refs []FunctionRef) {
 		case *grammar1.ColumnExprWinFunctionContext:
 			return true
 		case *grammar1.ColumnExprWinFunctionTargetContext:
+			return true
+		case *grammar1.ColumnExprExistsContext:
 			return true
 		}
 		return false
@@ -53,6 +57,8 @@ func ExtractFunctions(pr *nanopass.ParseResult) (refs []FunctionRef) {
 				}
 				refs = append(refs, ref)
 			}
+		case *grammar1.ColumnExprExistsContext:
+			refs = append(refs, FunctionRef{Name: "exists"})
 		}
 	}
 	return
