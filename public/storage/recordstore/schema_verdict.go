@@ -151,6 +151,11 @@ type TableContract struct {
 	// layout and deduplication window are not looked at, since a view has
 	// none of them, and a plan proposes no statement for it.
 	ColumnsOnly bool
+	// NoDedupWindow marks a table no record store inserts into: one whose
+	// DDL is written by hand and whose writer sends no deduplication token.
+	// A plan adds its missing columns like any other's and proposes no
+	// insert deduplication window for it.
+	NoDedupWindow bool
 }
 
 // ColumnRename is a column present under a name that differs from the

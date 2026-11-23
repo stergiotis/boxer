@@ -235,3 +235,21 @@ func TestOutcome(t *testing.T) {
 		assert.Equal(t, tc.want, tc.plan.Outcome(), name)
 	}
 }
+
+// A table written by hand, into which no record store inserts, gets its
+// missing columns and no deduplication window.
+func TestAHandWrittenTableIsOfferedNoDedupWindow(t *testing.T) {
+	cols := []recordstore.ColumnSpec{{Name: "event_time", Type: "DateTime", Codec: "DoubleDelta, ZSTD(3)"}, {Name: "cell", Type: "String", Codec: "ZSTD(3)"}}
+	c := recordstore.TableContract{Kind: "log", Table: "ops.log", Columns: cols, NoDedupWindow: true}
+	facts := recordstore.TableFacts{Exists: true, Engine: "MergeTree", Columns: []recordstore.LiveColumn{{Name: "event_time", Type: "DateTime"}}}
+
+	p := Derive(c, facts)
+	require.False(t, p.IsRefused())
+	require.Len(t, p.Statements, 1)
+	assert.Contains(t, p.Statements[0], "ADD COLUMN IF NOT EXISTS `cell` String CODEC(ZSTD(3)) AFTER `event_time`")
+
+	c.NoDedupWindow = false
+	p = Derive(c, facts)
+	require.Len(t, p.Statements, 2, "a record store's table also gets its window")
+	assert.Contains(t, p.Statements[1], recordstore.DedupWindowSetting)
+}

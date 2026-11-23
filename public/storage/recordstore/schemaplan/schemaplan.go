@@ -150,7 +150,7 @@ func Derive(c recordstore.TableContract, facts recordstore.TableFacts) (p Plan) 
 		}
 		prev = col.Name
 	}
-	if recordstore.IsPlainMergeTree(facts.Engine) && !v.DedupWindow {
+	if recordstore.IsPlainMergeTree(facts.Engine) && !v.DedupWindow && !c.NoDedupWindow {
 		p.Statements = append(p.Statements, "ALTER TABLE "+ref+" MODIFY SETTING "+recordstore.DedupWindowSetting+" = "+strconv.Itoa(recordstore.DedupWindowBlocks))
 	}
 	if c.Stamp != "" && facts.Comment != c.Stamp && len(v.Extra) > 0 {
