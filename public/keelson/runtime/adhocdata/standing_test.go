@@ -105,3 +105,26 @@ func TestATaskDoesNotExposeWhatDerivesFromSealedData(t *testing.T) {
 	}
 	assert.True(t, found, "and the trail says why")
 }
+
+// A refusal for a label says what still leaves the label off and who
+// exposes instead: the task has no call that lowers it.
+func TestALabelRefusalSaysWhoExposesInstead(t *testing.T) {
+	r := newExposeRig(t)
+	d := &fakeDispatcher{call: agentCall(), grants: []string{"expose:sales"}}
+	r.svc.SetDispatcher(d)
+	publishSales(t, r.svc, windowA, oboOf(d.call), BundleProvenance{}, 1)
+
+	amber := d.as(func(cc *app.CallContext) { cc.Tier = uint8(agentrun.TierAmber) })
+	_, err := r.svc.Expose(t.Context(), ExposeInput{Alias: "sales__orders", By: windowA, OnBehalfOf: amber})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "the call is labelled AMBER")
+	assert.ErrorContains(t, err, "Reading back what the task itself published at TLP:CLEAR leaves a run there")
+	assert.ErrorContains(t, err, "the person exposes the rest, from play's Data sets tab")
+
+	publishSales(t, r.svc, windowA, amber, BundleProvenance{}, 2)
+	clear := d.as(func(cc *app.CallContext) { cc.Tier = uint8(agentrun.TierClear) })
+	_, err = r.svc.Expose(t.Context(), ExposeInput{Alias: "sales__orders", By: windowA, OnBehalfOf: clear})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "was published by a call labelled AMBER")
+	assert.ErrorContains(t, err, "the person exposes the rest, from play's Data sets tab")
+}

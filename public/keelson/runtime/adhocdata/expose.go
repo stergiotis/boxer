@@ -285,14 +285,14 @@ func checkTaskMayExpose(rec *record, cc app.CallContext) (err error) {
 	switch standingOf(pub, derived, cc.Task) {
 	case standingOwnClear:
 	case standingLabelled:
-		return eb.Build().Str("alias", alias).Errorf("%s was published by a call labelled %s; a task exposes only what it published at TLP:CLEAR, and the person exposes the rest", alias, agentrun.TierE(pub.Val.Tier)) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text"
+		return eb.Build().Str("alias", alias).Errorf("%s was published by a call labelled %s; a task exposes only what it published at TLP:CLEAR, and the person exposes the rest, from play's Data sets tab", alias, agentrun.TierE(pub.Val.Tier)) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text and names who may expose it"
 	case standingDerived:
 		return eb.Build().Str("alias", alias).Errorf("%s derives from sealed data: the result it was published from read data that is not this task's own publication at TLP:CLEAR; a task exposes only its own work, and the person exposes the rest, from play's Data sets tab", alias) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text and names who may expose it"
 	default:
 		return eb.Build().Str("alias", alias).Str("task", cc.Task).Errorf("%w; %s was not published by this task's call, so only the person exposes it, from play's Data sets tab", ErrNotTheTasks, alias) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text and names who may expose it"
 	}
 	if cc.Tier > uint8(agentrun.TierClear) {
-		return eb.Build().Str("alias", alias).Errorf("the call is labelled %s; a task exposes data only from a run at TLP:CLEAR, and the person exposes the rest", agentrun.TierE(cc.Tier)) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text"
+		return eb.Build().Str("alias", alias).Errorf("the call is labelled %s; a task exposes data only from a run at TLP:CLEAR. Reading back what the task itself published at TLP:CLEAR leaves a run there, reading other sealed data does not, and the person exposes the rest, from play's Data sets tab", agentrun.TierE(cc.Tier)) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text and names who may expose it"
 	}
 	return nil
 }
