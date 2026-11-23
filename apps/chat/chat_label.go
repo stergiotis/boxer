@@ -222,9 +222,7 @@ func containsStr(set []string, s string) bool {
 // renderLabelFacts is the label's section of the inspector.
 func (inst *App) renderLabelFacts() {
 	f := inst.coord.labelFacts()
-	for range c.HoverText(tipLabel).KeepIter() {
-		factHead("Label")
-	}
+	factHead("Label", tipLabel)
 	c.Label(labelTierLine(f.tier)).Wrap().Send()
 	if f.tierBy != "" {
 		c.Label("Raised by " + f.tierBy + ".").Wrap().Send()

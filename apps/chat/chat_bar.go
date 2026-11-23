@@ -244,9 +244,11 @@ const tipNoDocument = "This conversation has no document. Whether it has one is 
 // its endpoint, the context used, its label, and the task.
 func (inst *App) renderConversationFacts() {
 	conv := inst.conv
-	d := styletokens.ActiveDensity()
-	factHead("Conversation")
-	inst.renderConvId("conv-id-facts")
+	factHead("Conversation", "")
+	// The id with its copy and trail buttons on one line, not stacked.
+	for range c.HorizontalWrapped().KeepIter() {
+		inst.renderConvId("conv-id-facts")
+	}
 	if conv.started {
 		label, _ := keepBadge(conv)
 		parts := []string{label}
@@ -262,8 +264,7 @@ func (inst *App) renderConversationFacts() {
 	} else {
 		c.Label("Not started: its first message fixes Keep, Apps, Questions and Document.").Wrap().Send()
 	}
-	c.AddSpace(styletokens.PaddingInner(d))
-	factHead("Model")
+	factHead("Model", "")
 	switch {
 	case !inst.answered:
 		c.Label("asking the host for a model…").Send()
@@ -278,14 +279,12 @@ func (inst *App) renderConversationFacts() {
 	if inst.coord == nil {
 		return
 	}
-	c.AddSpace(styletokens.PaddingInner(d))
 	inst.renderLabelFacts()
 	task, _, _ := inst.coord.stateOrNone()
 	if task == "" {
 		return
 	}
-	c.AddSpace(styletokens.PaddingInner(d))
-	factHead("Task")
+	factHead("Task", "")
 	_, now := inst.scores()
 	inst.factCopy("task", task, "the task's id")
 	c.Label("Granted: " + mayLevelWords[now.Level] + ". The model works in your windows under it until it is stopped or ends.").Wrap().Send()
@@ -314,11 +313,23 @@ func (inst *App) renderContextFact() {
 	}
 }
 
-// factHead is a heading inside the inspector.
-func factHead(text string) {
-	for rt := range c.RichTextLabel(text) {
-		rt.Strong()
+// factHead opens a section of the inspector: space above, the heading
+// (with tip, when there is one, on its hover), and a rule under it.
+func factHead(text string, tip string) {
+	c.AddSpace(styletokens.PaddingOuter(styletokens.ActiveDensity()))
+	heading := func() {
+		for rt := range c.RichTextLabel(text) {
+			rt.Strong()
+		}
 	}
+	if tip == "" {
+		heading()
+	} else {
+		for range c.HoverText(tip).KeepIter() {
+			heading()
+		}
+	}
+	c.Separator().Horizontal().Send()
 }
 
 // factCopy is a fact as selectable text with a copy button beside it.
