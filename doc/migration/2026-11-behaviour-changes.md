@@ -218,7 +218,14 @@ relied on the old behaviour.
   first leaf. A dock that counted on a late tab landing beside the root
   declares it in the root's group
   ([ADR-0404](../adr/0404-what-a-person-reads-in-a-window-a-stated-reader-one-way-to-draw-a-decision-and-the-chat-window-as-the-first-case.md)
-  §SD8).
+  §SD8). The IDL moved with it: the dock gained `Closable`,
+  `CloseRequested` and `HideTabBarWhenAlone`, the button `Extend`,
+  `HoverText`, `ReserveFrame` and `Fill`. A native host or a browser host
+  built before the change refuses a Go side built after it, and the other
+  way round; build both from one boxer version, as the fingerprint line
+  under *Processes, listeners and hosts* says.
+
+  contract: idl/fingerprint
 - **Segmented bars.** `selector.StyleSegmented` draws its options under one
   outline, and the options' widget ids sit under that outline's scope: a
   test or a scene that reached an option by id reaches it by name. Captures
