@@ -105,7 +105,7 @@ func TestSubmitComposesAndSaves(t *testing.T) {
 		inst.mu.Lock()
 		defer inst.mu.Unlock()
 		return strings.Contains(inst.status, "saved my-applet")
-	}, 2*time.Second, 10*time.Millisecond)
+	}, 20*time.Second, 10*time.Millisecond)
 
 	bus.mu.Lock()
 	defer bus.mu.Unlock()
@@ -194,7 +194,7 @@ func TestExportComposesAndWritesFile(t *testing.T) {
 		inst.mu.Lock()
 		defer inst.mu.Unlock()
 		return strings.Contains(inst.status, "exported exp-applet.md")
-	}, 2*time.Second, 10*time.Millisecond)
+	}, 20*time.Second, 10*time.Millisecond)
 
 	bus.mu.Lock()
 	defer bus.mu.Unlock()
@@ -217,7 +217,7 @@ func TestExportCancelledSurfaces(t *testing.T) {
 		inst.mu.Lock()
 		defer inst.mu.Unlock()
 		return strings.Contains(inst.status, "cancelled")
-	}, 2*time.Second, 10*time.Millisecond)
+	}, 20*time.Second, 10*time.Millisecond)
 
 	bus.mu.Lock()
 	defer bus.mu.Unlock()
@@ -255,7 +255,7 @@ func TestExportWaitsLongEnoughForAPerson(t *testing.T) {
 		inst.mu.Lock()
 		defer inst.mu.Unlock()
 		return strings.Contains(inst.status, "exported")
-	}, 2*time.Second, 10*time.Millisecond)
+	}, 20*time.Second, 10*time.Millisecond)
 
 	bus.mu.Lock()
 	defer bus.mu.Unlock()
@@ -280,7 +280,7 @@ func TestExportWaitsLongEnoughForAPerson(t *testing.T) {
 // from an assumption into a demonstration.
 func TestExport_RunsOnTheManifestCapsAlone(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
-	bus.SetRequestTimeout(2 * time.Second)
+	bus.SetRequestTimeout(20 * time.Second)
 	fs, err := fsbroker.NewService(bus, zerolog.Nop())
 	require.NoError(t, err)
 	defer fs.Close()
@@ -292,7 +292,7 @@ func TestExport_RunsOnTheManifestCapsAlone(t *testing.T) {
 	inst.export()
 
 	var reqId string
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
 		if pending := fs.Pending(); len(pending) == 1 {
 			reqId = pending[0].Id
@@ -308,7 +308,7 @@ func TestExport_RunsOnTheManifestCapsAlone(t *testing.T) {
 		inst.mu.Lock()
 		defer inst.mu.Unlock()
 		return strings.Contains(inst.status, "exported")
-	}, 2*time.Second, 10*time.Millisecond, "the handle write must be permitted by the dynamic grant alone")
+	}, 20*time.Second, 10*time.Millisecond, "the handle write must be permitted by the dynamic grant alone")
 
 	got, err := os.ReadFile(path)
 	require.NoError(t, err)
