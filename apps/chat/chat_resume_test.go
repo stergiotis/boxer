@@ -527,3 +527,22 @@ func TestAResumeRestoresTheArtefact(t *testing.T) {
 	}
 	assert.Equal(t, []string{artefactFormTurn, artefactFormTurn, artefactFormRevert}, forms, "one entry per move of the head, none for a turn that left it")
 }
+
+// A resumed conversation of the person's words and the model's replies has
+// read nothing untrusted, though the run's joined level is the model's; one
+// that read a window list has.
+func TestAResumedPlainConversationHasReadNothingUntrusted(t *testing.T) {
+	plain := []agentrun.Entry{
+		{Kind: agentrun.KindUser, Role: projection.RoleUser, Body: "hello", Label: harnessLabel()},
+		{Kind: agentrun.KindRequest, Key: "q1", Label: harnessLabel()},
+		{Kind: agentrun.KindReply, Key: "q1", Label: (&coordinator{}).replyLabel(harnessLabel())},
+		{Kind: agentrun.KindRequest, Key: "q2", Label: (&coordinator{}).replyLabel(harnessLabel())},
+	}
+	require.GreaterOrEqual(t, agentrun.Fold(plain).Label.Level, agentrun.LevelExternal, "the joined level is the model's own")
+	assert.False(t, readUntrusted(plain))
+
+	read := append(plain, agentrun.Entry{Kind: agentrun.KindOutcome, Key: "k1", Name: "c1", Role: projection.RoleTool, Label: outcomeLabel(true, false, agentrun.TierAmber)})
+	assert.True(t, readUntrusted(read))
+	sent := append(plain, agentrun.Entry{Kind: agentrun.KindUser, Role: projection.RoleUser, Form: formSent, Label: agentrun.Label{Level: agentrun.LevelExternal}})
+	assert.True(t, readUntrusted(sent))
+}

@@ -443,7 +443,9 @@ func (inst *App) adopt(r *resumed) {
 	// The coordinator's fingerprint is the profile's, which the call rows
 	// name; the run row's folds in the confined tier (runFingerprint).
 	coord.journal, coord.profile, coord.fingerprint = r.writer, profileNow(), profileNow().Fingerprint()
-	coord.tainted = r.fold.Label.Level >= agentrun.LevelExternal
+	// The fold's level is the model's own after the first reply; what the
+	// mark means is that a read brought outside content.
+	coord.tainted = readUntrusted(r.entries)
 	coord.confined = r.fold.Label.Tier >= coord.confinedTier
 	coord.compacted = slices.ContainsFunc(r.entries, func(e agentrun.Entry) bool {
 		return e.Kind == agentrun.KindCompact || (e.Kind == agentrun.KindEdit && e.Form == formSupersede)
@@ -607,4 +609,20 @@ func (inst *App) renderRunsTab() {
 		c.Label("Listing…").Selectable(false).Send()
 	}
 	inst.renderRoster()
+}
+
+// readUntrusted says a journal holds a read that brought content from
+// outside the person's own words: a tool result or a message of the
+// person's at the external level or above. The model's replies, and the
+// requests that carry them back, sit above that level too and are not
+// reads, so the run's joined label cannot answer this. A result that
+// re-enters another model's words counts, which errs toward saying so.
+func readUntrusted(entries []agentrun.Entry) bool {
+	for i := range entries {
+		e := &entries[i]
+		if (e.Kind == agentrun.KindOutcome || e.Kind == agentrun.KindUser) && e.Label.Level >= agentrun.LevelExternal {
+			return true
+		}
+	}
+	return false
 }
