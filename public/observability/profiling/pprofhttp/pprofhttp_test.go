@@ -3,6 +3,7 @@ package pprofhttp
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -58,16 +59,23 @@ func TestServeMuxServesPprofPathsAndNothingElse(t *testing.T) {
 	}
 }
 
-// A failed bind ends the command rather than being logged and ignored while
-// the process runs on without its listener.
-func TestListenAddressFailedBindEndsTheCommand(t *testing.T) {
+// A failed bind is logged and the command runs on: an address another
+// process already holds must not stop the host that asked for it second.
+func TestListenAddressFailedBindDoesNotEndTheCommand(t *testing.T) {
 	run := func(args ...string) error {
 		cmd := &cli.Command{Name: "x", Flags: Flags, Action: func(context.Context, *cli.Command) error { return nil }}
 		return cmd.Run(t.Context(), append([]string{"x"}, args...))
 	}
-	err := run("--pprofHttpListenAddress", "no-port")
-	if err == nil || !strings.Contains(err.Error(), "bad listen address") {
-		t.Fatalf("want a bind error, got %v", err)
+	held, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("hold a port: %v", err)
+	}
+	defer held.Close()
+	if err = run("--pprofHttpListenAddress", held.Addr().String()); err != nil {
+		t.Fatalf("address in use: want the command to run on, got %v", err)
+	}
+	if err = run("--pprofHttpListenAddress", "no-port"); err != nil {
+		t.Fatalf("malformed address: want the command to run on, got %v", err)
 	}
 	if err = run("--pprofHttpListenAddress", "127.0.0.1:0"); err != nil {
 		t.Fatalf("loopback bind: %v", err)

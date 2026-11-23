@@ -55,11 +55,14 @@ func NewServeMux() (mux *http.ServeMux) {
 	return
 }
 
-// httpServerAddressAction binds the listener before returning, so a failed
-// bind ends the command instead of being logged and ignored.
+// httpServerAddressAction binds the listener before returning. A failed bind
+// is logged and the command runs on without pprof: the listener is an
+// optional diagnostic, and a port another process already holds — two hosts
+// started with the same address — should not stop the one that asked second.
 func httpServerAddressAction(ctx context.Context, cmd *cli.Command, s string) (err error) {
-	ln, err := loopback.Gate{Name: "pprofhttp"}.Listen(ctx, s)
-	if err != nil {
+	ln, bindErr := loopback.Gate{Name: "pprofhttp"}.Listen(ctx, s)
+	if bindErr != nil {
+		log.Warn().Str("address", s).Err(bindErr).Msg("pprof http listener not started; continuing without it")
 		return
 	}
 	// No WriteTimeout: /debug/pprof/profile?seconds=N and the delta profiles
