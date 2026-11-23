@@ -136,7 +136,9 @@ func ownClearReason(pub published) (reason string) {
 }
 
 // LabelResult is the service's answer about a dataset a call reads by its
-// handle.
+// handle. Alias, Bundle and Revision are set only with OwnClear: the
+// question is not held to the task's grant, so an answer about a dataset
+// that is not the asking task's own names nothing of it.
 type LabelResult struct {
 	Handle   string
 	Alias    string
@@ -172,11 +174,12 @@ func (inst *Service) ReadLabel(ctx context.Context, handle string, by Identity, 
 	}
 	rec.mu.RLock()
 	pub := published{revision: rec.revision, context: rec.context, derived: rec.derived}
-	res.Alias, res.Bundle, res.Revision = rec.alias, rec.bundle, rec.revision
+	alias, bundle := rec.alias, rec.bundle
 	digest, rows, plain := rec.streamDigest, rec.rows, rec.plainBytes
 	rec.mu.RUnlock()
-	res.OwnClear = res.Bundle != "" && standingOf(pub.context, pub.derived, cc.Val.Task) == standingOwnClear
+	res.OwnClear = bundle != "" && standingOf(pub.context, pub.derived, cc.Val.Task) == standingOwnClear
 	if res.OwnClear {
+		res.Alias, res.Bundle, res.Revision = alias, bundle, pub.revision
 		inst.audit(ctx, AuditRecord{Operation: AuditReadLabel, Outcome: AuditApplied, Reason: ownClearReason(pub), Bundle: res.Bundle,
 			Revision: res.Revision, By: by, Context: cc, Aliases: []string{res.Alias}, Handles: []string{handle},
 			Rows: []uint64{rows}, Bytes: []uint64{plain}, StreamDigests: []string{digest}})

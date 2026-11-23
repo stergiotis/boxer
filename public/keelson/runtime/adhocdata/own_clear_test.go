@@ -220,6 +220,7 @@ func TestAHandlesLabelIsItsPublications(t *testing.T) {
 	got, err = svc.ReadLabel(t.Context(), handle, windowA, d.as(taskTwo))
 	require.NoError(t, err)
 	assert.False(t, got.OwnClear, "another task's read")
+	assert.Equal(t, LabelResult{Handle: handle}, got, "which learns nothing of a dataset its grant was not asked about: no alias, bundle or revision")
 	own = d.as(taskOne)
 
 	solo, err := svc.Publish(PublishInput{Alias: "persons", ArrowIPCStream: int64Stream(t, false, 9), By: windowA})
