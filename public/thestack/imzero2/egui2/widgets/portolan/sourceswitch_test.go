@@ -27,14 +27,31 @@ type snapPixels struct {
 	honour bool
 	mu     sync.Mutex
 	gate   chan struct{}
+	held   map[uint32]int // calls under way, by the colour they began with
+}
+
+// heldOf is how many calls that began with the colour are under way.
+func (s *snapPixels) heldOf(colour uint32) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.held[colour]
 }
 
 func (s *snapPixels) TilePixels(ctx context.Context, _ TileCoords) ([]uint32, int, int, error) {
 	colour := s.colour.Load()
-	s.calls.Add(1)
 	s.mu.Lock()
 	gate := s.gate
+	if s.held == nil {
+		s.held = make(map[uint32]int, 2)
+	}
+	s.held[colour]++
 	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.held[colour]--
+		s.mu.Unlock()
+	}()
+	s.calls.Add(1)
 	if gate != nil {
 		if s.honour {
 			select {
@@ -118,7 +135,12 @@ func TestMap_ASwitchCancelsTheCallsUnderWay(t *testing.T) {
 
 	src.colour.Store(0xbbbbbbff)
 	m.SetSource(m.Source())
-	waitFor(t, "the old calls ended on their context", func() bool { return src.ended.Load() == 2 })
+	// Nothing is released yet, so a call that is no longer under way ended
+	// on its context. More than the two may have: a worker the switch freed
+	// can start a request of the old source that was still queued, and the
+	// switch withdraws that one as well.
+	waitFor(t, "the old calls ended on their context", func() bool { return src.heldOf(0xaaaaaaff) == 0 })
+	assert.GreaterOrEqual(t, src.ended.Load(), int64(2))
 	src.release()
 
 	settle(t, m, "every tile shows the new source", func() bool {
