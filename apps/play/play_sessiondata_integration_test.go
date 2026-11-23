@@ -170,3 +170,67 @@ func liveItems(t *testing.T) []byte {
 	require.NoError(t, w.Close())
 	return buf.Bytes()
 }
+
+// A task joins a table its own call published at TLP:CLEAR with a server
+// table: the server receives it as external data, as it receives any
+// ad-hoc dataset, and the result is not labelled. A dataset a person
+// published beside it, the person's own run and a data set kept from the
+// person's dataset keep the label.
+func TestLiveATaskJoinsItsOwnClearPublicationUnlabelled(t *testing.T) {
+	r := newLiveRig(t, sessiondata.Limits{})
+	r.adhoc.SetDispatcher(r.disp)
+	window := adhocdata.Identity{App: "github.com/x/play", Instance: 1}
+	server, session := DestinationClickHouse(r.host), sessiondata.DestinationSession(r.host)
+	r.grant("t1", server, session, DestinationKeelson("items"))
+	obo := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: []string{server, session, DestinationKeelson("items")}}
+	_, err := r.adhoc.PublishBundle(t.Context(), adhocdata.BundlePublishInput{Alias: "mine", Document: []byte("SELECT 1"), By: window, OnBehalfOf: obo,
+		Datasets: []adhocdata.BundleDatasetInput{{LocalName: "result", ArrowIPCStream: liveItems(t)}}})
+	require.NoError(t, err)
+	_, err = r.adhoc.Publish(adhocdata.PublishInput{Alias: "items", ArrowIPCStream: liveItems(t)})
+	require.NoError(t, err)
+	c := r.liveClient(window.App, window.Instance)
+	c.SetResolver(autoResolver)
+	c.reach.record(r.url)
+	task := &ExecOptions{Agent: obo}
+	counted := "CROSS JOIN (SELECT count() AS n FROM " + r.table + ") AS m"
+
+	own := "SELECT i.id, m.n FROM keelson('mine__result') AS i " + counted
+	rows, confined, err := runAll(t, t.Context(), c, own, task)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), rows)
+	assert.False(t, confined, "the task's own clear publication, attached to the server and read back")
+
+	rows, confined, err = runAll(t, t.Context(), c, own, nil)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), rows)
+	assert.True(t, confined, "the person's run of the same statement")
+
+	rows, confined, err = runAll(t, t.Context(), c, "SELECT i.id FROM keelson('mine__result') AS i JOIN keelson('items') AS p USING id "+counted, task)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), rows)
+	assert.True(t, confined, "a dataset the task did not publish beside its own")
+
+	kept, err := c.defineSession(t.Context(), obo, "", "mine_kept", "SELECT * FROM keelson('mine__result')", []string{"id"})
+	require.NoError(t, err)
+	assert.True(t, kept.Dataset.Confined, "held as derived from sealed data")
+	assert.True(t, kept.Dataset.OwnClear)
+	rows, confined, err = runAll(t, t.Context(), c, "SELECT k.id FROM session('mine_kept') AS k "+counted, task)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), rows)
+	assert.False(t, confined)
+
+	theirs, err := c.defineSession(t.Context(), obo, "", "items_kept", "SELECT * FROM keelson('items')", []string{"id"})
+	require.NoError(t, err)
+	assert.False(t, theirs.Dataset.OwnClear)
+	rows, confined, err = runAll(t, t.Context(), c, "SELECT k.id FROM session('mine_kept') AS k JOIN session('items_kept') AS p USING id "+counted, task)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), rows)
+	assert.True(t, confined, "a confined data set beside the task's own")
+
+	// An endpoint that has not shown it may see sealed data gets neither.
+	unproven := r.liveClient(window.App, window.Instance)
+	unproven.SetResolver(autoResolver)
+	_, _, err = runAll(t, t.Context(), unproven, own, task)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "sealed data")
+}

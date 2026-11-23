@@ -3,6 +3,7 @@ package play
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp"
+	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sessiondata"
 )
 
@@ -649,4 +651,65 @@ func TestALaneOverTheTasksOwnPublicationIsNotLabelled(t *testing.T) {
 	confined, err = run("SELECT x FROM keelson('people__result')")
 	require.Error(t, err)
 	assert.True(t, confined)
+}
+
+// The label is lifted only where the services answered for everything
+// sealed the run read: every case play cannot tell keeps it.
+func TestTheLabelStaysWhereverPlayCannotTell(t *testing.T) {
+	r := newOwnClearRig(t)
+	handle := r.appPublishes("kernel_top")
+	theirs := r.personPublishes("people")
+	obo := r.attestedCall()
+	ctx := t.Context()
+	confined, ordinary := queryengine.SensitivityConfined, queryengine.SensitivityOrdinary
+	read := func(names ...string) (sql string) {
+		sql = "SELECT 1 FROM keelson('" + names[0] + "') AS t0"
+		for i, n := range names[1:] {
+			sql += " JOIN keelson('" + n + "') AS t" + strconv.Itoa(i+1) + " USING x"
+		}
+		return
+	}
+
+	assert.True(t, r.cl.ownClearRun(ctx, confined, read(handle), obo, nil), "the task's own clear publication, by its handle")
+	assert.False(t, r.cl.ownClearRun(ctx, ordinary, read(handle), obo, nil), "a run that read nothing sealed has no label to lift")
+	assert.False(t, r.cl.ownClearRun(ctx, confined, read(handle), nil, nil), "the person's run")
+	assert.False(t, r.cl.ownClearRun(ctx, confined, read(handle), &app.OnBehalfOf{Destinations: obo.Destinations}, nil), "a gate without a task")
+	assert.False(t, r.cl.ownClearRun(ctx, confined, read(handle, theirs), obo, nil), "one dataset that is not the task's")
+	assert.False(t, r.cl.ownClearRun(ctx, confined, "SELECT 1", obo, nil), "confined for a reason the statement does not show")
+	forged := *obo
+	forged.Call = "no-such-call"
+	assert.False(t, r.cl.ownClearRun(ctx, confined, read(handle), &forged, nil), "a call the dispatcher does not attest")
+	other := *obo
+	other.Task = "another-task"
+	assert.False(t, r.cl.ownClearRun(ctx, confined, read(handle), &other, nil), "another task's name on the call")
+
+	// Sealed data that is no ad-hoc dataset: an app's sealed table on the
+	// plane is nobody's publication.
+	introspect.SetLocalSealedPredicate(func(name string) bool { return name == "vault" || name == handle })
+	assert.False(t, r.cl.ownClearRun(ctx, confined, read(handle, "vault"), obo, nil))
+	assert.True(t, r.cl.ownClearRun(ctx, confined, read(handle), obo, nil))
+
+	// A client that cannot ask the dataset service.
+	deaf := NewClient(ClientConfig{URL: r.server.url()}, nil)
+	assert.False(t, deaf.ownClearRun(ctx, confined, read(handle), obo, nil))
+
+	// In a data session the binding answers; a sealed name it did not
+	// replace is one the service did not judge.
+	own := &sessionHold{b: sessiondata.Binding{Sensitivity: confined, OwnClear: true}}
+	assert.True(t, r.cl.ownClearRun(ctx, confined, "SELECT 1 FROM `__adhoc_0`", obo, own))
+	assert.False(t, r.cl.ownClearRun(ctx, confined, "SELECT 1 FROM `__adhoc_0` JOIN vault USING x", obo, own))
+	assert.False(t, r.cl.ownClearRun(ctx, confined, "SELECT 1 FROM `__adhoc_0`", nil, own), "the person's statement")
+	assert.False(t, r.cl.ownClearRun(ctx, confined, "SELECT 1 FROM `__adhoc_0`", obo, &sessionHold{b: sessiondata.Binding{Sensitivity: confined}}))
+
+	// A failure is marked only when the run would have been unlabelled.
+	cause := errors.New("boom")
+	dec := dispatchDecision{sensitivity: confined}
+	marked := r.cl.markOwnClearFailure(ctx, cause, dec, read(handle), obo, nil)
+	assert.True(t, failedOwnClear(marked))
+	assert.ErrorIs(t, marked, cause)
+	assert.Equal(t, "boom", marked.Error(), "it reads as the error it wraps")
+	assert.False(t, failedOwnClear(r.cl.markOwnClearFailure(ctx, cause, dec, read(theirs), obo, nil)))
+	assert.False(t, failedOwnClear(r.cl.markOwnClearFailure(ctx, cause, dec, read(handle), nil, nil)))
+	assert.False(t, failedOwnClear(cause))
+	assert.False(t, failedOwnClear(nil))
 }
