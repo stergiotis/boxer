@@ -117,14 +117,15 @@ clickhouse_point_private() {
 }
 
 # _gate_clickhouse_provision DIR: give the fresh server what a host's first
-# run leaves on one — the facts table (chstore's setup DDL, as `keelsonddl`
-# prints it) and leeway's SQL read surface — built from the tree in the
+# run leaves on one — the facts table with its id lease table and id directory
+# (chstore's setup DDL, as `keelsonddl --with-id-tables` prints it) and
+# leeway's SQL read surface — built from the tree in the
 # current directory. The live-server tests read and write boxer.facts and
 # call the surface's functions; on a server that never ran a host they fail
 # on a missing table rather than on what they test.
 _gate_clickhouse_provision() {
     local dir="$1"
-    ./boxer.sh keelsonddl |
+    ./boxer.sh keelsonddl --with-id-tables |
         "$dir/clickhouse" client --host 127.0.0.1 --port "$gate_clickhouse_native_port" --user default --multiquery
     ./boxer.sh leeway sqlsurface install --url "$gate_clickhouse_url" --user default
 }
@@ -134,15 +135,18 @@ _gate_clickhouse_provision() {
 # data and logs are not), start it on those ports, listening on 127.0.0.1
 # only, and provision it as a host's first run would. The variables stay where they point if the server does not start, so
 # a client finds either this server or nothing — never another one. The
-# binary's directory goes first on PATH and BOXER_CLICKHOUSE_BINARY_PATH
-# names it, so `clickhouse local` is the pinned build too. Succeeds when the server answers; gate_clickhouse_dir is then
-# set, for gate_stop_clickhouse.
+# binary's directory goes first on PATH, and BOXER_CLICKHOUSE_LOCAL and
+# BOXER_CLICKHOUSE_BINARY_PATH name it, so `clickhouse local` is the pinned
+# build too — the worker pool's as well, which takes the override ahead of a
+# packaged /usr/bin/clickhouse. Succeeds when the server answers;
+# gate_clickhouse_dir is then set, for gate_stop_clickhouse.
 clickhouse_private() {
     local dir="$1" srv="$_gate_lib_dir/clickhouse_server.sh"
     local log="$gate_logdir/clickhouse.log"
     clickhouse_point_private
     export PATH="$dir:$PATH"
     export BOXER_CLICKHOUSE_BINARY_PATH="$dir/clickhouse"
+    export BOXER_CLICKHOUSE_LOCAL="$dir/clickhouse"
     mkdir -p "$dir"
     rm -rf -- "$dir/data" "$dir/log"
     gate_clickhouse_dir="$dir"
