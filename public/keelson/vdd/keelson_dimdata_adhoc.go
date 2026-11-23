@@ -156,3 +156,16 @@ var (
 	MembAdhocColumnSummaries = KeelsonHrNkRegistry.MustBegin("adhocColumnSummaries", 246).
 					MustAddRestriction("blobArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
 )
+
+// Labels of a re-read. A bundle publish says whether its rows derive from
+// sealed data; a read's reply says whether the revision read is the reading
+// task's own publication at TLP:CLEAR, so the read need not label that
+// task's work; and a read may ask for that answer alone, by handle.
+var (
+	MembAdhocDerivedFromSealed = KeelsonHrNkRegistry.MustBegin("adhocDerivedFromSealed", 281).
+					MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	MembAdhocOwnClear = KeelsonHrNkRegistry.MustBegin("adhocOwnClear", 282).
+				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	MembAdhocLabelOnly = KeelsonHrNkRegistry.MustBegin("adhocLabelOnly", 283).
+				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+)

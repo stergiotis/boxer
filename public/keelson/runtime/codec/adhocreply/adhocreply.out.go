@@ -52,6 +52,7 @@ var (
 	kindAdhocDestination     uint64
 	kindAdhocPublisherTask   uint64
 	kindAdhocColumnSummaries uint64
+	kindAdhocOwnClear        uint64
 )
 
 func init() {
@@ -74,6 +75,7 @@ func init() {
 	kindAdhocDestination = vdd.MembAdhocDestination.GetId().Value()
 	kindAdhocPublisherTask = vdd.MembAdhocPublisherTask.GetId().Value()
 	kindAdhocColumnSummaries = vdd.MembAdhocColumnSummaries.GetId().Value()
+	kindAdhocOwnClear = vdd.MembAdhocOwnClear.GetId().Value()
 	buscodec.Register[AdhocReply](adhocReplyBusCodec)
 }
 
@@ -156,6 +158,7 @@ type AdhocReplyColumns struct {
 	Destination     []string
 	PublisherTask   []string
 	ColumnSummaries [][]byte
+	OwnClear        []bool
 }
 
 // Len returns the number of rows currently in the batch.
@@ -190,6 +193,7 @@ func (c *AdhocReplyColumns) Append(row AdhocReply) {
 	c.Destination = append(c.Destination, row.Destination)
 	c.PublisherTask = append(c.PublisherTask, row.PublisherTask)
 	c.ColumnSummaries = append(c.ColumnSummaries, row.ColumnSummaries)
+	c.OwnClear = append(c.OwnClear, row.OwnClear)
 }
 
 // Row reconstructs entity i as an AoS AdhocReply record. Inverse of
@@ -218,6 +222,7 @@ func (c *AdhocReplyColumns) Row(i int) (row AdhocReply) {
 	row.Destination = c.Destination[i]
 	row.PublisherTask = c.PublisherTask[i]
 	row.ColumnSummaries = c.ColumnSummaries[i]
+	row.OwnClear = c.OwnClear[i]
 	return
 }
 
@@ -425,6 +430,9 @@ func AdhocReplyBuildEntities[
 		boolSecAttr_NoLive := boolSec.BeginAttribute(c.NoLive[i])
 		boolSecAttr_NoLive.AddMembershipLowCardRefP(kindAdhocNoLive)
 		boolSecAttr_NoLive.EndAttributeP()
+		boolSecAttr_OwnClear := boolSec.BeginAttribute(c.OwnClear[i])
+		boolSecAttr_OwnClear.AddMembershipLowCardRefP(kindAdhocOwnClear)
+		boolSecAttr_OwnClear.EndAttributeP()
 		boolSec.EndSection()
 		// --- textArray. ---
 		textArraySec := dml.GetSectionTextArray()
@@ -529,6 +537,9 @@ func AdhocReplyEmitSectionBool[
 	boolSecAttr_NoLive := boolSec.BeginAttribute(row.NoLive)
 	boolSecAttr_NoLive.AddMembershipLowCardRefP(kindAdhocNoLive)
 	boolSecAttr_NoLive.EndAttributeP()
+	boolSecAttr_OwnClear := boolSec.BeginAttribute(row.OwnClear)
+	boolSecAttr_OwnClear.AddMembershipLowCardRefP(kindAdhocOwnClear)
+	boolSecAttr_OwnClear.EndAttributeP()
 	return
 }
 
@@ -888,6 +899,9 @@ func AdhocReplyFillFromArrow[
 		var boolNoLiveVal bool
 		var boolNoLiveCount int
 		var boolNoLiveLastAttr int64
+		var boolOwnClearVal bool
+		var boolOwnClearCount int
+		var boolOwnClearLastAttr int64
 		nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -913,6 +927,13 @@ func AdhocReplyFillFromArrow[
 					}
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolNoLiveVal = val
+				case kindAdhocOwnClear:
+					if boolOwnClearLastAttr != attrJ+1 {
+						boolOwnClearLastAttr = attrJ + 1
+						boolOwnClearCount++
+					}
+					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					boolOwnClearVal = val
 				}
 			}
 		}
@@ -931,6 +952,11 @@ func AdhocReplyFillFromArrow[
 			return
 		}
 		c.NoLive = append(c.NoLive, boolNoLiveVal)
+		if boolOwnClearCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "adhocOwnClear").Int("got", boolOwnClearCount).Errorf("slot bool@adhocOwnClear (field OwnClear) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolOwnClearCount)
+			return
+		}
+		c.OwnClear = append(c.OwnClear, boolOwnClearVal)
 		// --- textArray. ---
 		var textArrayReasonVal string
 		var textArrayReasonCount int
@@ -1329,6 +1355,9 @@ func AdhocReplyReadRow[
 	var boolNoLiveVal bool
 	var boolNoLiveCount int
 	var boolNoLiveLastAttr int64
+	var boolOwnClearVal bool
+	var boolOwnClearCount int
+	var boolOwnClearLastAttr int64
 	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1354,6 +1383,13 @@ func AdhocReplyReadRow[
 				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolNoLiveVal = val
+			case kindAdhocOwnClear:
+				if boolOwnClearLastAttr != attrJ+1 {
+					boolOwnClearLastAttr = attrJ + 1
+					boolOwnClearCount++
+				}
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolOwnClearVal = val
 			}
 		}
 	}
@@ -1379,6 +1415,14 @@ func AdhocReplyReadRow[
 	}
 	if boolNoLiveCount == 1 {
 		row.NoLive = boolNoLiveVal
+		present = true
+	}
+	if boolOwnClearCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "adhocOwnClear").Int("got", boolOwnClearCount).Errorf("slot bool@adhocOwnClear (field OwnClear) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolOwnClearCount)
+		return
+	}
+	if boolOwnClearCount == 1 {
+		row.OwnClear = boolOwnClearVal
 		present = true
 	}
 	// --- textArray. ---

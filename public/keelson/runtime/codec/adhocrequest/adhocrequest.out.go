@@ -33,22 +33,24 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindAdhocReqOp          uint64
-	kindAdhocAlias          uint64
-	kindAdhocHandle         uint64
-	kindAdhocKeepAfterClose uint64
-	kindAdhocArrowStream    uint64
-	kindAdhocBundle         uint64
-	kindAdhocDocument       uint64
-	kindAdhocLocalNames     uint64
-	kindAdhocArrowStreams   uint64
-	kindAdhocOboTask        uint64
-	kindAdhocOboEpoch       uint64
-	kindAdhocOboCall        uint64
-	kindAdhocWindowScoped   uint64
-	kindAdhocSourceSql      uint64
-	kindAdhocInputHandles   uint64
-	kindAdhocColumnsOnly    uint64
+	kindAdhocReqOp             uint64
+	kindAdhocAlias             uint64
+	kindAdhocHandle            uint64
+	kindAdhocKeepAfterClose    uint64
+	kindAdhocArrowStream       uint64
+	kindAdhocBundle            uint64
+	kindAdhocDocument          uint64
+	kindAdhocLocalNames        uint64
+	kindAdhocArrowStreams      uint64
+	kindAdhocOboTask           uint64
+	kindAdhocOboEpoch          uint64
+	kindAdhocOboCall           uint64
+	kindAdhocWindowScoped      uint64
+	kindAdhocSourceSql         uint64
+	kindAdhocInputHandles      uint64
+	kindAdhocColumnsOnly       uint64
+	kindAdhocDerivedFromSealed uint64
+	kindAdhocLabelOnly         uint64
 )
 
 func init() {
@@ -68,6 +70,8 @@ func init() {
 	kindAdhocSourceSql = vdd.MembAdhocSourceSql.GetId().Value()
 	kindAdhocInputHandles = vdd.MembAdhocInputHandles.GetId().Value()
 	kindAdhocColumnsOnly = vdd.MembAdhocColumnsOnly.GetId().Value()
+	kindAdhocDerivedFromSealed = vdd.MembAdhocDerivedFromSealed.GetId().Value()
+	kindAdhocLabelOnly = vdd.MembAdhocLabelOnly.GetId().Value()
 	buscodec.Register[AdhocRequest](adhocRequestBusCodec)
 }
 
@@ -131,22 +135,24 @@ type AdhocRequestColumns struct {
 	NaturalKey [][]byte
 	At         []time.Time
 
-	Op             []string
-	Alias          []string
-	Handle         []string
-	KeepAfterClose []bool
-	ArrowStream    [][]byte
-	Bundle         []string
-	Document       [][]byte
-	LocalNames     [][]string
-	ArrowStreams   [][][]byte
-	OboTask        []string
-	OboEpoch       []uint64
-	OboCall        []string
-	WindowScoped   []bool
-	SourceSql      []string
-	InputHandles   [][]string
-	ColumnsOnly    []bool
+	Op                []string
+	Alias             []string
+	Handle            []string
+	KeepAfterClose    []bool
+	ArrowStream       [][]byte
+	Bundle            []string
+	Document          [][]byte
+	LocalNames        [][]string
+	ArrowStreams      [][][]byte
+	OboTask           []string
+	OboEpoch          []uint64
+	OboCall           []string
+	WindowScoped      []bool
+	SourceSql         []string
+	InputHandles      [][]string
+	ColumnsOnly       []bool
+	DerivedFromSealed []bool
+	LabelOnly         []bool
 }
 
 // Len returns the number of rows currently in the batch.
@@ -178,6 +184,8 @@ func (c *AdhocRequestColumns) Append(row AdhocRequest) {
 	c.SourceSql = append(c.SourceSql, row.SourceSql)
 	c.InputHandles = append(c.InputHandles, row.InputHandles)
 	c.ColumnsOnly = append(c.ColumnsOnly, row.ColumnsOnly)
+	c.DerivedFromSealed = append(c.DerivedFromSealed, row.DerivedFromSealed)
+	c.LabelOnly = append(c.LabelOnly, row.LabelOnly)
 }
 
 // Row reconstructs entity i as an AoS AdhocRequest record. Inverse of
@@ -203,6 +211,8 @@ func (c *AdhocRequestColumns) Row(i int) (row AdhocRequest) {
 	row.SourceSql = c.SourceSql[i]
 	row.InputHandles = c.InputHandles[i]
 	row.ColumnsOnly = c.ColumnsOnly[i]
+	row.DerivedFromSealed = c.DerivedFromSealed[i]
+	row.LabelOnly = c.LabelOnly[i]
 	return
 }
 
@@ -413,6 +423,12 @@ func AdhocRequestBuildEntities[
 		boolSecAttr_ColumnsOnly := boolSec.BeginAttribute(c.ColumnsOnly[i])
 		boolSecAttr_ColumnsOnly.AddMembershipLowCardRefP(kindAdhocColumnsOnly)
 		boolSecAttr_ColumnsOnly.EndAttributeP()
+		boolSecAttr_DerivedFromSealed := boolSec.BeginAttribute(c.DerivedFromSealed[i])
+		boolSecAttr_DerivedFromSealed.AddMembershipLowCardRefP(kindAdhocDerivedFromSealed)
+		boolSecAttr_DerivedFromSealed.EndAttributeP()
+		boolSecAttr_LabelOnly := boolSec.BeginAttribute(c.LabelOnly[i])
+		boolSecAttr_LabelOnly.AddMembershipLowCardRefP(kindAdhocLabelOnly)
+		boolSecAttr_LabelOnly.EndAttributeP()
 		boolSec.EndSection()
 		// --- blobArray. ---
 		blobArraySec := dml.GetSectionBlobArray()
@@ -525,6 +541,12 @@ func AdhocRequestEmitSectionBool[
 	boolSecAttr_ColumnsOnly := boolSec.BeginAttribute(row.ColumnsOnly)
 	boolSecAttr_ColumnsOnly.AddMembershipLowCardRefP(kindAdhocColumnsOnly)
 	boolSecAttr_ColumnsOnly.EndAttributeP()
+	boolSecAttr_DerivedFromSealed := boolSec.BeginAttribute(row.DerivedFromSealed)
+	boolSecAttr_DerivedFromSealed.AddMembershipLowCardRefP(kindAdhocDerivedFromSealed)
+	boolSecAttr_DerivedFromSealed.EndAttributeP()
+	boolSecAttr_LabelOnly := boolSec.BeginAttribute(row.LabelOnly)
+	boolSecAttr_LabelOnly.AddMembershipLowCardRefP(kindAdhocLabelOnly)
+	boolSecAttr_LabelOnly.EndAttributeP()
 	return
 }
 
@@ -915,6 +937,12 @@ func AdhocRequestFillFromArrow[
 		var boolColumnsOnlyVal bool
 		var boolColumnsOnlyCount int
 		var boolColumnsOnlyLastAttr int64
+		var boolDerivedFromSealedVal bool
+		var boolDerivedFromSealedCount int
+		var boolDerivedFromSealedLastAttr int64
+		var boolLabelOnlyVal bool
+		var boolLabelOnlyCount int
+		var boolLabelOnlyLastAttr int64
 		nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -940,6 +968,20 @@ func AdhocRequestFillFromArrow[
 					}
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolColumnsOnlyVal = val
+				case kindAdhocDerivedFromSealed:
+					if boolDerivedFromSealedLastAttr != attrJ+1 {
+						boolDerivedFromSealedLastAttr = attrJ + 1
+						boolDerivedFromSealedCount++
+					}
+					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					boolDerivedFromSealedVal = val
+				case kindAdhocLabelOnly:
+					if boolLabelOnlyLastAttr != attrJ+1 {
+						boolLabelOnlyLastAttr = attrJ + 1
+						boolLabelOnlyCount++
+					}
+					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					boolLabelOnlyVal = val
 				}
 			}
 		}
@@ -958,6 +1000,16 @@ func AdhocRequestFillFromArrow[
 			return
 		}
 		c.ColumnsOnly = append(c.ColumnsOnly, boolColumnsOnlyVal)
+		if boolDerivedFromSealedCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "adhocDerivedFromSealed").Int("got", boolDerivedFromSealedCount).Errorf("slot bool@adhocDerivedFromSealed (field DerivedFromSealed) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolDerivedFromSealedCount)
+			return
+		}
+		c.DerivedFromSealed = append(c.DerivedFromSealed, boolDerivedFromSealedVal)
+		if boolLabelOnlyCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "adhocLabelOnly").Int("got", boolLabelOnlyCount).Errorf("slot bool@adhocLabelOnly (field LabelOnly) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolLabelOnlyCount)
+			return
+		}
+		c.LabelOnly = append(c.LabelOnly, boolLabelOnlyVal)
 		// --- blobArray. ---
 		var blobArrayArrowStreamVal []byte
 		var blobArrayArrowStreamCount int
@@ -1295,6 +1347,12 @@ func AdhocRequestReadRow[
 	var boolColumnsOnlyVal bool
 	var boolColumnsOnlyCount int
 	var boolColumnsOnlyLastAttr int64
+	var boolDerivedFromSealedVal bool
+	var boolDerivedFromSealedCount int
+	var boolDerivedFromSealedLastAttr int64
+	var boolLabelOnlyVal bool
+	var boolLabelOnlyCount int
+	var boolLabelOnlyLastAttr int64
 	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1320,6 +1378,20 @@ func AdhocRequestReadRow[
 				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolColumnsOnlyVal = val
+			case kindAdhocDerivedFromSealed:
+				if boolDerivedFromSealedLastAttr != attrJ+1 {
+					boolDerivedFromSealedLastAttr = attrJ + 1
+					boolDerivedFromSealedCount++
+				}
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolDerivedFromSealedVal = val
+			case kindAdhocLabelOnly:
+				if boolLabelOnlyLastAttr != attrJ+1 {
+					boolLabelOnlyLastAttr = attrJ + 1
+					boolLabelOnlyCount++
+				}
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolLabelOnlyVal = val
 			}
 		}
 	}
@@ -1345,6 +1417,22 @@ func AdhocRequestReadRow[
 	}
 	if boolColumnsOnlyCount == 1 {
 		row.ColumnsOnly = boolColumnsOnlyVal
+		present = true
+	}
+	if boolDerivedFromSealedCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "adhocDerivedFromSealed").Int("got", boolDerivedFromSealedCount).Errorf("slot bool@adhocDerivedFromSealed (field DerivedFromSealed) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolDerivedFromSealedCount)
+		return
+	}
+	if boolDerivedFromSealedCount == 1 {
+		row.DerivedFromSealed = boolDerivedFromSealedVal
+		present = true
+	}
+	if boolLabelOnlyCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "adhocLabelOnly").Int("got", boolLabelOnlyCount).Errorf("slot bool@adhocLabelOnly (field LabelOnly) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolLabelOnlyCount)
+		return
+	}
+	if boolLabelOnlyCount == 1 {
+		row.LabelOnly = boolLabelOnlyVal
 		present = true
 	}
 	// --- blobArray. ---

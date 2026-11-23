@@ -84,4 +84,15 @@ type AdhocRequest struct {
 	// ColumnsOnly asks a read for the dataset's column summaries instead
 	// of its stream, under the same grant (ADR-0288 §SD5).
 	ColumnsOnly bool `lw:"adhocColumnsOnly,bool"`
+
+	// DerivedFromSealed says a bundle publish's rows derive from sealed
+	// data: the publisher sets it from the label of the result it
+	// publishes, whatever tier the call that asked for the publish
+	// declared.
+	DerivedFromSealed bool `lw:"adhocDerivedFromSealed,bool"`
+
+	// LabelOnly asks a read, by Handle, only whether the dataset under
+	// the handle is the reading task's own publication at TLP:CLEAR; the
+	// reply carries no stream.
+	LabelOnly bool `lw:"adhocLabelOnly,bool"`
 }

@@ -80,4 +80,10 @@ type AdhocReply struct {
 	// ColumnSummaries answers a columns-only read: the dataset's column
 	// summaries, values included, as JSON (ADR-0288 §SD5).
 	ColumnSummaries []byte `lw:"adhocColumnSummaries,blobArray"`
+
+	// OwnClear answers a read an agent's call caused: the revision read
+	// was published by an attested call of the reading task at TLP:CLEAR
+	// and derives from no sealed data, so the read need not label that
+	// task's work. False, the default, leaves the read sealed.
+	OwnClear bool `lw:"adhocOwnClear,bool"`
 }
