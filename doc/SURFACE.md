@@ -23,7 +23,7 @@ itself; ADR-0389 states its tier.
 | Section | Packages |
 | --- | ---: |
 | [Stable](#stable) | 77 |
-| [Experimental](#experimental) | 287 |
+| [Experimental](#experimental) | 289 |
 | [Internal](#internal) | 16 |
 | [Test support](#test-support) | 18 |
 | [Tools](#tools) | 91 |
@@ -306,6 +306,7 @@ Public and usable, but may change in any MINOR version without a deprecation win
 - `public/keelson/runtime/schemacheck` — Package schemacheck is the one schema check a process runs over the stored tables it uses (ADR-0387): each table's live columns and stamp are judged against the columns the binary was generated for, the verdicts are kept on a board an operator reads as keelson('schema_tables'), and every table whose verdict is not ok gets one log line.
 - `public/keelson/runtime/sealed` — Package sealed holds bytes that must not outlive the process that wrote them (ADR-0240 §SD1).
 - `public/keelson/runtime/servicehost` — Package servicehost mounts headless apps — services — at boot and stops them at shutdown (ADR-0352).
+- `public/keelson/runtime/sessiondata` — Package sessiondata is the session data capability (ADR-0406, proposed): named, task-scoped data sets that SQL statements read.
 - `public/keelson/runtime/sysmetricsbus` — Package sysmetricsbus carries system-metrics snapshots over a bus as a unidirectional publish/subscribe data plane (ADR-0090).
 - `public/keelson/runtime/sysmfacts` — Package sysmfacts holds the component DTOs that model a system-metrics sample as `boxer.facts` rows, and (from ADR-0184 M3) the record store generated over them.
 - `public/keelson/runtime/sysmreplay` — Package sysmreplay reads stored system-metrics history back out of `boxer.facts` as [sysmsnap.BundleSnapshot] values — the inverse of github.com/stergiotis/boxer/public/keelson/runtime/sysmtee.
@@ -486,6 +487,7 @@ Public and usable, but may change in any MINOR version without a deprecation win
 - `public/thestack/imzero2/egui2/widgets/regexsummary` — Package regexsummary is an immediate-mode widget (ADR-0267): a two-level summary of a single regular-expression value.
 - `public/thestack/imzero2/egui2/widgets/riskmatrix` — Package riskmatrix is an immediate-mode widget (ADR-0267) that draws a risk register as a likelihood × impact matrix.
 - `public/thestack/imzero2/egui2/widgets/schemaview` — Package schemaview is an imzero2 widget that renders a leeway schema — a [common.TableDesc] — as a master-detail inspector across two dock panes: a collapsible section navigator ("structure") and a decoded property pane ("detail").
+- `public/thestack/imzero2/egui2/widgets/sectionhead` — Package sectionhead draws the heading that opens a section of a pane, an inspector or a settings page: space above, the heading, and a rule under it.
 - `public/thestack/imzero2/egui2/widgets/sqleditor` — Package sqleditor is the imzero2 SQL editing surface: a no-wrap monospace [c.TextEdit] with a line-number gutter and marks lane beside it, lexical and semantic syntax colour, a sparse overlay channel for the embedder's own decorations, and multi-statement awareness (which statement the caret is in, and what a run-under-cursor would ship).
 - `public/thestack/imzero2/egui2/widgets/taskmonitor` — Package taskmonitor is a semi-retained imzero2 widget (ADR-0267), the M4 of ADR-0038: it observes runtime.task.> over the bus and renders an in-flight list (with progress bar + per-row cancel button) and a rolling history of finished tasks.
 - `public/thestack/imzero2/egui2/widgets/trendsmooth` — Package trendsmooth is the shared modified-sinc smoothing overlay for the monitoring apps' trend plots — the app-consumer surface of github.com/stergiotis/boxer/public/analytics/timeseries/mssmooth (ADR-0152).

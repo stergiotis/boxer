@@ -235,7 +235,10 @@ every button is `Secondary` has no hierarchy.
 buttons visible, or more than about five of one weight in a row, is a
 prompt to apply C1 again: some are choices, some are per-item, some are
 rare. Group what remains by step, with a separator and a caption per
-group, inputs before the command that uses them.
+group, inputs before the command that uses them. A group opens with
+`sectionhead.New(caption).Send()` — space above, the caption, a rule
+under it — the same in a pane, an inspector or a settings page; a pane's
+title is not a group's caption and stays a heading of its own.
 
 **C4 — A disabled control says why, next to itself.** In a sentence
 beside or above it, not only in a tooltip.
