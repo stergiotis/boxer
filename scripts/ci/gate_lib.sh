@@ -123,11 +123,18 @@ clickhouse_point_private() {
 # current directory. The live-server tests read and write boxer.facts and
 # call the surface's functions; on a server that never ran a host they fail
 # on a missing table rather than on what they test.
+#
+# It also gets a table of rows, gate.rows. Some live tests read "a table of
+# the server" without owning one — they create nothing but session temporary
+# tables, so that they can run against a person's server — and on a server
+# that holds no data they would skip.
 _gate_clickhouse_provision() {
     local dir="$1"
     ./boxer.sh keelsonddl --with-id-tables |
         "$dir/clickhouse" client --host 127.0.0.1 --port "$gate_clickhouse_native_port" --user default --multiquery
     ./boxer.sh leeway sqlsurface install --url "$gate_clickhouse_url" --user default
+    "$dir/clickhouse" client --host 127.0.0.1 --port "$gate_clickhouse_native_port" --user default --multiquery \
+        -q "CREATE DATABASE IF NOT EXISTS gate; CREATE TABLE IF NOT EXISTS gate.rows ENGINE = MergeTree ORDER BY n AS SELECT number AS n, toString(number) AS label FROM numbers(5000)"
 }
 
 # clickhouse_private DIR: clickhouse_point_private, then install the pinned

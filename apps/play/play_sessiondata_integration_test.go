@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -61,19 +62,27 @@ func newLiveRig(t *testing.T, limits sessiondata.Limits) (r *liveRig) {
 	return
 }
 
-// liveTable is a table of the server with rows: the largest outside the
-// system databases.
+// liveTable is a table of the server a statement reads a thousand rows
+// of: the largest outside the system databases that holds them. The rows
+// are counted, not taken from system.tables, whose total_rows still counts
+// a row a lightweight delete has masked.
 func liveTable(t *testing.T, cfg chclient.Config) (table string) {
 	t.Helper()
 	c := NewClient(ClientConfig{URL: cfg.URL, User: cfg.User, Password: cfg.Password}, nil)
-	raw, err := c.queryTabSeparated(t.Context(), "SELECT concat(database, '.', name) FROM system.tables WHERE database NOT IN ('system', 'INFORMATION_SCHEMA', 'information_schema') AND NOT is_temporary AND total_rows > 0 ORDER BY total_rows DESC LIMIT 1 FORMAT TabSeparated", nil)
+	raw, err := c.queryTabSeparated(t.Context(), "SELECT concat(database, '.', name) FROM system.tables WHERE database NOT IN ('system', 'INFORMATION_SCHEMA', 'information_schema') AND NOT is_temporary AND total_rows >= "+strconv.Itoa(liveTableRows)+" ORDER BY total_rows DESC LIMIT 8 FORMAT TabSeparated", nil)
 	require.NoError(t, err)
-	table = strings.TrimSpace(string(raw))
-	if table == "" {
-		t.Skip("the server holds no table with rows")
+	for _, candidate := range strings.Fields(string(raw)) {
+		n, cErr := c.queryTabSeparated(t.Context(), "SELECT count() FROM (SELECT 1 FROM "+candidate+" LIMIT "+strconv.Itoa(liveTableRows)+") FORMAT TabSeparated", nil)
+		if cErr == nil && strings.TrimSpace(string(n)) == strconv.Itoa(liveTableRows) {
+			return candidate
+		}
 	}
+	t.Skipf("the server holds no table with %d rows to read", liveTableRows)
 	return
 }
+
+// liveTableRows is how many rows the tests read of the server's table.
+const liveTableRows = 1000
 
 func (inst *liveRig) liveClient(appId app.AppIdT, instance uint64) (c *Client) {
 	cfg := chclient.ConfigFromEnv()
@@ -91,12 +100,12 @@ func TestLiveKeepThroughTheOperationAndReadItAgain(t *testing.T) {
 	l.inner.client = r.liveClient("github.com/x/play", 1)
 
 	call := app.OperationCall{Writer: "task:t1", OnBehalfOf: obo, Key: "k1"}
-	args := mustEncode(t, QueryArgs{Sql: "SELECT * FROM " + r.table + " LIMIT 1000", KeepAs: "sample_rows_kept", Limit: 5})
+	args := mustEncode(t, QueryArgs{Sql: "SELECT * FROM " + r.table + " LIMIT " + strconv.Itoa(liveTableRows), KeepAs: "sample_rows_kept", Limit: 5})
 	_, err := h.ApplyCommand(call, opQuery, args)
 	require.NoError(t, err)
 	settleUntil(t, h, call, opQuery, args, func(bool) bool { return l.inner.queryRuns[call.Key].kept != nil })
 	kept := l.inner.queryRuns[call.Key].kept
-	assert.Equal(t, uint64(1000), kept.Rows)
+	assert.Equal(t, uint64(liveTableRows), kept.Rows)
 	assert.NotEmpty(t, kept.Columns)
 	assert.Equal(t, "SELECT * FROM session('sample_rows_kept') LIMIT 5", l.inner.sql)
 

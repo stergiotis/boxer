@@ -100,9 +100,11 @@ func TestLiveAServerOnThisMachineJoinsAnExposedDataset(t *testing.T) {
 	var sid [8]byte
 	_, _ = rand.Read(sid[:])
 	session := "adhoc-expose-it-" + hex.EncodeToString(sid[:])
-	out, ok := chQuery(t, cfg, session, "CREATE TEMPORARY TABLE weights AS SELECT number AS id, number % 7 AS w FROM numbers(1000)")
+	out, ok := chQuery(t, cfg, session, "CREATE TEMPORARY TABLE weights AS SELECT toInt64(number) AS id, number % 7 AS w FROM numbers(1000)")
 	require.True(t, ok, "the server refused a session temporary table: %s", out)
 
+	// The key is Int64 on both sides: a server before 26.9 finds no common
+	// type for an Int64 key and a UInt64 one.
 	out, ok = chQuery(t, cfg, session, "SELECT count(), sum(e.v * t.w), uniqExact(e.label) FROM "+res.ClickHouse+
 		" AS e INNER JOIN weights AS t ON e.v = t.id FORMAT TSV")
 	require.True(t, ok, "the server could not read the exposure; its user needs READ ON URL and remote_url_allow_hosts must admit 127.0.0.1: %s", out)
