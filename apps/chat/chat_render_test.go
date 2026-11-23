@@ -90,13 +90,13 @@ func TestTheBarSaysWhatTheModelMayDoInWords(t *testing.T) {
 	assert.Equal(t, "Model: may edit and run in your windows", inst.mayWords(), "the default ceiling, run")
 	inst.apps, inst.artefact = false, true
 	inst.syncAuthority()
-	assert.Equal(t, "Model: talks and writes the document", inst.mayWords())
+	assert.Equal(t, "Model: talks and writes the artefact", inst.mayWords())
 }
 
 func TestReaderLineSaysWhatWasDone(t *testing.T) {
 	assert.Equal(t, "set sql in window 2 · done", readerLine("set_sql in window 2 · rendered"))
 	assert.Equal(t, "Reading the clusters · get projection in window 2 · done", readerLine("Reading the clusters · get_projection in window 2 · completed"))
-	assert.Equal(t, "wrote the document · revision 1 · lines 1–27 · 1 finding", readerLine("artefact_write · revision 1 · lines 1–27 · 1 finding"))
+	assert.Equal(t, "wrote the artefact · revision 1 · lines 1–27 · 1 finding", readerLine("artefact_write · revision 1 · lines 1–27 · 1 finding"))
 	assert.Equal(t, "read 3 rows of the host's windows table", readerLine("read 3 row(s) of keelson('windows')"))
 	assert.Equal(t, "read the windows: no client", readerLine("query_windows: no client"))
 	assert.Equal(t, "clear marks: no task", readerLine("clear marks: no task"))

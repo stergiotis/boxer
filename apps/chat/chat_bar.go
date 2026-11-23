@@ -86,7 +86,7 @@ var mayBarWords = map[agent.LevelE]string{
 func (inst *App) mayWords() (s string) {
 	if inst.coord == nil || !inst.appsOn() {
 		if inst.artefactOn() && inst.perms.artPolicy().write {
-			return "Model: talks and writes the document"
+			return "Model: talks and writes the artefact"
 		}
 		return "Model: " + mayBarWords[agent.LevelTalk]
 	}
@@ -195,7 +195,7 @@ func (inst *App) menuViews() (views []chatTabE) {
 var viewTips = map[chatTabE]string{
 	tabConversations: "The conversations other chat windows hold and the ones this host kept; a click resumes one.",
 	tabSettings:      "What the model may do, what a new conversation starts with, and the model.",
-	tabArtefact:      "The document the model writes beside the chat, its revisions and its images.",
+	tabArtefact:      "The artefact: one markdown document the model writes beside the chat, its revisions and its images.",
 	tabDefinition:    "The document this window was made from: what the model is told, and the settings it runs under.",
 	tabAnalytics:     "For whoever builds the harness: the conversation's agent surface and its token and answer statistics.",
 	tabStops:         "For whoever builds the harness: conditions that hold or end a turn.",
@@ -215,9 +215,9 @@ func (inst *App) renderMenuViews() {
 			// place; one started without it has the item disabled, with
 			// the reason in its hover.
 			off := false
-			for range c.HoverText(tipNoDocument).KeepIter() {
+			for range c.HoverText(tipNoArtefact).KeepIter() {
 				for range c.EnabledUi(false).KeepIter() {
-					c.Checkbox(inst.ids.PrepareStr("no-document"), false, tabArtefact.title()).SendRespVal(&off)
+					c.Checkbox(inst.ids.PrepareStr("no-artefact"), false, tabArtefact.title()).SendRespVal(&off)
 				}
 			}
 			continue
@@ -237,7 +237,7 @@ func (inst *App) renderMenuView(t chatTabE) {
 	}
 }
 
-const tipNoDocument = "This conversation has no document. Whether it has one is fixed at its first message: tick Document before sending it."
+const tipNoArtefact = "This conversation has no artefact. Whether it has one is fixed at its first message: tick Artefact before sending it."
 
 // renderConversationFacts is the state chip's inspector body (ADR-0404
 // §SD7): the conversation's id, what its first message fixed, the model and
@@ -256,13 +256,13 @@ func (inst *App) renderConversationFacts() {
 			parts[0] += " (" + conv.notKept + ")"
 		}
 		if inst.coord != nil {
-			parts = append(parts, onOff("apps", conv.apps), onOff("questions", conv.questions), onOff("document", conv.artefact))
+			parts = append(parts, onOff("apps", conv.apps), onOff("questions", conv.questions), onOff("artefact", conv.artefact))
 		}
 		for range c.HoverText(tipKeep).KeepIter() {
 			c.Label("Fixed at its first message: " + strings.Join(parts, " · ")).Wrap().Send()
 		}
 	} else {
-		c.Label("Not started: its first message fixes Keep, Apps, Questions and Document.").Wrap().Send()
+		c.Label("Not started: its first message fixes Keep, Apps, Questions and Artefact.").Wrap().Send()
 	}
 	factHead("Model", "")
 	switch {

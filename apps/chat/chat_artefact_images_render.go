@@ -116,9 +116,9 @@ func (inst *App) removeImage(art *artefact, name string, purge bool) {
 // a decision the model asks for (ADR-0404 §SD3, §SD4); the image follows
 // the options.
 func (inst *App) renderImageProposal(p *artProposal, head int) {
-	verb, title := "adds", "The model proposes to add an image to the document"
+	verb, title := "adds", "The model proposes to add an image to the artefact"
 	if p.removes {
-		verb, title = "removes", "The model proposes to remove an image from the document"
+		verb, title = "removes", "The model proposes to remove an image from the artefact"
 	}
 	subject := ""
 	if p.image != nil {
@@ -132,7 +132,7 @@ func (inst *App) renderImageProposal(p *artProposal, head int) {
 		Title: title, Subject: subject,
 		Follows: []string{
 			"Accept " + verb + " it as revision " + strconv.Itoa(head+1) + "; the model goes on with its turn.",
-			"Reject leaves the document's images as they are, and the model is told you turned it down.",
+			"Reject leaves the artefact's images as they are, and the model is told you turned it down.",
 		},
 		Options: proposalOptions(p.tool),
 	}

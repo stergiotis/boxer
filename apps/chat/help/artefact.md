@@ -11,19 +11,19 @@ title: The artefact and its export
 
 A conversation may hold an **artefact**: one markdown document the model
 reads and edits through tools, under the ceiling, which you review beside
-the transcript as **Document** (ADR-0282). It is on when the Document option
+the transcript as **Artefact** (ADR-0282). It is on when the Artefact option
 was on at the conversation's first message (`BOXER_CHAT_ARTEFACT` seeds it);
-**View** › **Document** opens the view; in a conversation started without a
-document the item is greyed and its hover says how to have one. The view
-comes forward by itself when the model first writes the document and when a
-decision waits in it. The document lives in memory with the
+**View** › **Artefact** opens the view; in a conversation started without an
+artefact the item is greyed and its hover says how to have one. The view
+comes forward by itself when the model first writes the artefact and when a
+decision waits in it. The artefact lives in memory with the
 conversation. A resume reads its revisions back from the journal, one per
 turn that moved it, the last as the head; the writes inside a turn do not
 come back (ADR-0379 §SD4). Screenshots come back only with an export.
 
 ## Revisions
 
-Once the document has a revision, the view's first line is
+Once the artefact has a revision, the view's first line is
 `revision N · M lines`, with **Copy**, **Export** and **Open in mdedit**.
 Revision 0 is the empty document every artefact starts as; before the first
 change there is no such line, and a first proposal heads the view on its
@@ -32,16 +32,16 @@ nor **Open in mdedit** when that is what asked to export first: the answer
 is in the question. Every change is a new revision: the model's, named by the turn,
 the tool and the call's title; a **Revert to this** from the list, which
 makes an earlier revision current as a new one; your removal of a
-screenshot. Under the first lines, the document's own views are tabs:
-**Read**, the document as it reads, and **Source**, the **Revisions** tab, which lists them with
+screenshot. Under the first lines, the artefact's own views are tabs:
+**Read**, the artefact as it reads, and **Source**, the **Revisions** tab, which lists them with
 the lines each changed; **Lint**, which shows what renders differently from what was meant
 (links to missing headings, skipped levels, unclosed fences, invalid
 frontmatter, footnotes without definitions); and **Images**, the screenshot
 set. A tab can be dragged beside another, Source beside Read say.
 
 The policy line under the first says what the model may do, unless a
-question waits in the document, which says it for itself: "The model may
-read the document, not change it" when **At most** is below Edit; "Each
+question waits in the artefact, which says it for itself: "The model may
+read the artefact, not change it" when **At most** is below Edit; "Each
 change the model makes waits for you here" under **Ask first**, where a
 write is a proposal; "The model's changes apply at once; the Revisions tab
 can undo any of them" under **Apply directly**. A proposal says what **Accept**
@@ -50,7 +50,7 @@ and what **Reject** does (discards it, and the model is told), with its diff
 after the answers. A screenshot the model asks to see is drawn the same way,
 with **Allow** and **Decline** and the preview after them.
 
-The document carries the conversation's properties in its frontmatter,
+The artefact carries the conversation's properties in its frontmatter,
 stamped by the chat: `chat_conversation`, `chat_title`, `chat_started`,
 `chat_model`, `chat_endpoint`, `chat_run`, `chat_app`, `chat_window`,
 `chat_task` and `chat_keep`. The **Read** view, a proposal's diff and

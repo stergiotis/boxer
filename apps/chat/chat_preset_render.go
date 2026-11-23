@@ -79,7 +79,7 @@ func (inst permissions) plainAbilities(apps bool, questions bool, artefact bool)
 		can = append(can, "ask you questions")
 	}
 	if artefact && inst.artPolicy().write {
-		can = append(can, "write a document for you")
+		can = append(can, "write an artefact for you")
 	}
 	lines = append(lines, "It can "+wordList(can, "and")+".")
 	if len(cannot) > 0 {

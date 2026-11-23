@@ -12,7 +12,7 @@ title: The chat window
 For someone who asks a model to work on their data and in their windows, and
 stays in charge of what it may do: they come here to ask a question and read
 the answer, to let the model work in a window and decide what it asks, to get
-a document out, or to pick up an earlier conversation. They know their data.
+an artefact out, or to pick up an earlier conversation. They know their data.
 They have not read the harness, and the window does not expect them to. This
 reading of who the window is for is ADR-0404 §SD7 (proposed); the window has
 not been tried with such a person.
@@ -36,9 +36,9 @@ are the conditions that hold or end a conversation.
 ## The bar
 
 Above the bar is the window's menu bar, with two menus. **View** opens and
-closes the views beside the transcript — Conversations, Settings, Document,
+closes the views beside the transcript — Conversations, Settings, Artefact,
 Analytics (Definition in a chatlet) and Stops — each checked while it is
-open; Document is greyed in a conversation started without one.
+open; Artefact is greyed in a conversation started without one.
 **Conversation** holds **New conversation**, **Rename**, **Watch**,
 **Urgent** and **Open in mdedit**. Its items are the same in every state:
 before the first message all but New conversation are greyed, and a line
@@ -55,7 +55,7 @@ copy: its **id** — the key every record of this chat carries, in
 `keelson('llm_calls')` and `keelson('agent_actions')` under `conversation`
 and on the audit trail — with a button that opens its trail rows in play;
 what its first message fixed (**Keep** and whether the host kept it,
-**Apps**, **Questions**, **Document**); the model and the endpoint it is
+**Apps**, **Questions**, **Artefact**); the model and the endpoint it is
 reached at, and whether that is on this machine; how much of the model's
 context the last call used; the conversation's **label**; and, while the
 model holds one, the **task**'s id and what it was granted. Under the facts
@@ -68,7 +68,7 @@ lets read the conversation ("CLEAR: lets it be shared with anyone."), the
 read that raised it, whether the conversation read untrusted content and a
 read that brought some, and the remote providers its content was sent to.
 The host checks the label before a model call goes out and before an export
-is written; the document carries it when it is exported.
+is written; the artefact carries it when it is exported.
 
 A row under the bar holds the marks the conversation carries, **read
 untrusted content** and **holds confined content**, and, while the model
@@ -88,12 +88,12 @@ request under, in which case it went out as it was.
 ## The views beside the transcript
 
 Until something earns room, the transcript and the composer have the
-window. A column opens beside them when the model first writes the document
+window. A column opens beside them when the model first writes the artefact
 or a decision waits in it, and when you open a view from **View** or from
 the bar's words; a view opened while another is open joins it as a tab.
 A view closes from the **×** on its tab or by unchecking it in **View**, and
 the column goes when its last view does. A decision that arrives later
-brings the document forward again. The transcript, the composer and the
+brings the artefact forward again. The transcript, the composer and the
 views are tabs of one dock: the dividers drag, a tab can be dragged beside
 another or below it, and the window keeps that layout while it is open. The
 transcript and the composer have no tab of their own while each fills its
@@ -114,7 +114,7 @@ Everything the window asks you to settle with a button is drawn the same
 way (ADR-0404 §SD3): what is asked, what it is about, one sentence per answer
 saying what it does, any note that the question is out of date, then the
 answers, and after them what supports the answer — a diff, a preview. When
-the model or the harness asks — a proposed change to the document, a
+the model or the harness asks — a proposed change to the artefact, a
 screenshot it wants to see, a stop that fired, a question with a form — no
 answer is filled: each has the same weight. When you started the act and
 are asked to go through with it — an export — the answer that goes ahead is
@@ -140,7 +140,7 @@ message ends the edit.
 
 Before the first message the transcript says what the window talks to,
 `Chat with <model>` and whether it runs on this machine, and offers the four
-choices the first message fixes: **Apps**, **Questions**, **Document** and
+choices the first message fixes: **Apps**, **Questions**, **Artefact** and
 **Keep**, the same options as in Settings. After **Edit** takes back a
 conversation's only turn, it says what that conversation was started with
 instead. A host without a model says "No model to talk to" and why.
@@ -148,7 +148,7 @@ instead. A host without a model says "No model to talk to" and why.
 ## The transcript
 
 Your messages and the model's are bubbles; a line beginning `⚙` is what the
-model did with a tool — "set sql in window 2 · done", "wrote the document ·
+model did with a tool — "set sql in window 2 · done", "wrote the artefact ·
 revision 1" — with **Details** listing the turn's steps as they were
 recorded, tool names and token counts included; the line's hover gives it as
 recorded too. A refused or failed call's line is in the error tone, since it
@@ -183,7 +183,7 @@ Another app can draw a chatlet inside its own window (ADR-0368). The pane
 works as a chatlet's window does, and the access dialog names the app it sits
 in. Its conversations are listed in its own Conversations view, not in the
 chat's or the chatlet's. A narrow pane shows the bar, wrapped, then a row
-naming the other views — Conversations, Settings, Definition, Document — and
+naming the other views — Conversations, Settings, Definition, Artefact — and
 the transcript and composer: a click on a name shows that view in their
 place, and **Chat** brings the transcript back. The row ends with the
 window's two menus, **View** and **Conversation**; View holds the views the

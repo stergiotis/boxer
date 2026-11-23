@@ -43,8 +43,8 @@ chat's mount tag; they expire with their 30-day class.
 {"do":"wait","contains":"Send","role":"button"}
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","valueContains":"Wrote up the demo with its screenshot","role":"label","settleMs":500}
-{"do":"click","contains":"Export","role":"button","comment":"the document's Export"}
-{"do":"wait","valueContains":"Export this document?","role":"label"}
+{"do":"click","contains":"Export","role":"button","comment":"the artefact's Export"}
+{"do":"wait","valueContains":"Export this artefact?","role":"label"}
 {"do":"wait","valueContains":"revision 2 · 2 files","role":"label"}
 {"do":"wait","valueContains":"It is kept for 30 days","role":"label"}
 {"do":"wait","valueContains":"exporting also records that you reviewed it","role":"label"}

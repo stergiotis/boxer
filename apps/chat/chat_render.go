@@ -443,7 +443,7 @@ func (inst *App) renderFirstSendChoices(where string) {
 				c.Checkbox(inst.ids.PrepareStr("questions"), inst.questions, "Questions — the model may ask you with a form").SendRespVal(&inst.questions)
 			}
 			for range c.HoverText(tipArtefact).KeepIter() {
-				c.Checkbox(inst.ids.PrepareStr("artefact"), inst.artefact, "Document — a document the model writes beside the chat").SendRespVal(&inst.artefact)
+				c.Checkbox(inst.ids.PrepareStr("artefact"), inst.artefact, "Artefact — a document the model writes beside the chat").SendRespVal(&inst.artefact)
 			}
 		}
 		for range c.HoverText(tipKeep).KeepIter() {

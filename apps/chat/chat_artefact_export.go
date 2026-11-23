@@ -336,12 +336,12 @@ func (inst *App) renderExportAsk(p *exportPlan, head int) {
 		notes = append(notes, decision.Note{Text: why, Tone: styletokens.ToneError})
 		do.Disabled, do.Why = true, "Export is off: this conversation holds sealed data."
 	case p.rev != head:
-		notes = append(notes, decision.Note{Text: "The document changed since you asked; Cancel and export again.", Tone: styletokens.ToneWarning})
+		notes = append(notes, decision.Note{Text: "The artefact changed since you asked; Cancel and export again.", Tone: styletokens.ToneWarning})
 		do.Disabled, do.Why = true, "Export is off: it would write revision "+strconv.Itoa(p.rev)+", which is no longer the current one."
 	}
 	in := decision.Input{
 		Ids: inst.ids, ScopeKey: "export", Origin: decision.OriginConfirm,
-		Title:   "Export this document?",
+		Title:   "Export this artefact?",
 		Subject: "revision " + strconv.Itoa(p.rev) + " · " + files + " · " + humanBytes(p.bytes),
 		Follows: follows,
 		Notes:   notes,

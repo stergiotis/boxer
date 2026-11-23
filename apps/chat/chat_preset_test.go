@@ -202,14 +202,14 @@ func TestPlainAbilities_followTheSettings(t *testing.T) {
 	require.NoError(t, err)
 	lines := limit.plainAbilities(true, true, true)
 	require.Len(t, lines, 3)
-	assert.Equal(t, "It can open app windows, read, edit and run things in the windows you share, reach this host and its data servers, ask you questions and write a document for you.", lines[0])
+	assert.Equal(t, "It can open app windows, read, edit and run things in the windows you share, reach this host and its data servers, ask you questions and write an artefact for you.", lines[0])
 	assert.Equal(t, "It cannot publish or export, reach the network or arrange your desktop.", lines[1])
 
 	lowered := limit
 	lowered.allow, lowered.changes = allowRead, changesAsk
 	lines = lowered.plainAbilities(true, false, true)
 	assert.Contains(t, lines[0], "read the windows you share")
-	assert.NotContains(t, lines[0], "document", "a read-only window cannot write the artefact")
+	assert.NotContains(t, lines[0], "artefact", "a read-only window cannot write the artefact")
 	assert.NotContains(t, lines[2], "waits for your OK", "reading changes nothing")
 
 	lowered.allow = allowEdit

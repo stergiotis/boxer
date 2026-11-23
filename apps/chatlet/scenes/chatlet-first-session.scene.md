@@ -24,7 +24,7 @@ The empty window says what the model can and cannot do, and the bar is one
 row. The model's name and endpoint are in the state chip's inspector. The
 dialog shows the document's sentence apart from the model's plan. The running
 turn counts steps without a limit beside them. The first write brings the
-document forward beside the transcript. Under the answer are the document's
+artefact forward beside the transcript. Under the answer are the document's
 follow-ups; one fills the composer and sends nothing. The conversation is
 watched without anyone asking: the Conversation menu says so.
 
@@ -46,7 +46,7 @@ watched without anyone asking: the Conversation menu says so.
 {"do":"capture","text":"first-session-dialog","sidecars":["svg","tree"]}
 {"do":"click","name":"Approve","role":"button"}
 {"do":"wait","valueContains":"· step 3","role":"label","comment":"no limit beside the count"}
-{"do":"wait","valueContains":"The scripted model wrote this report","role":"label","comment":"the document came forward beside the transcript"}
+{"do":"wait","valueContains":"The scripted model wrote this report","role":"label","comment":"the artefact came forward beside the transcript"}
 {"do":"capture","text":"first-session-artefact","sidecars":["svg","tree"]}
 {"do":"wait","name":"Explain it simply","role":"button","settleMs":500}
 {"do":"click","name":"Explain it simply","role":"button"}

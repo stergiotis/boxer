@@ -13,9 +13,9 @@ import (
 
 // toolWords are the chat's own tools as a line says what they did.
 var toolWords = map[string]string{
-	"artefact_write":        "wrote the document",
-	"artefact_edit":         "edited the document",
-	"artefact_read":         "read the document",
+	"artefact_write":        "wrote the artefact",
+	"artefact_edit":         "edited the artefact",
+	"artefact_read":         "read the artefact",
 	"artefact_view_image":   "looked at an image",
 	"artefact_crop_image":   "cut an image",
 	"artefact_copy_image":   "copied an image",

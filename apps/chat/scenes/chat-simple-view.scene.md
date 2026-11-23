@@ -14,7 +14,7 @@ scene:
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
 
-# chat — one rendering: the bar is one row, and the document comes forward
+# chat — one rendering: the bar is one row, and the artefact comes forward
 
 The headless host, against the scripted model in
 [chat-simple-view.script.jsonl](./chat-simple-view.script.jsonl). This scene
@@ -22,7 +22,7 @@ held the Simple view until ADR-0404 §SD7 (proposed) retired it; the window it
 showed is now the only one. The bar is one row: New conversation, the state
 chip, and what the model may do in words; the rest is in the menu bar above.
 The transcript has the window until the model's first write brings the
-document forward beside it.
+artefact forward beside it.
 The running turn reads "working…" and counts steps. Settings, opened from the
 bar's words, has no Simple view.
 
@@ -38,7 +38,7 @@ bar's words, has no Simple view.
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","valueContains":"working…","role":"label","comment":"plain words for a running turn"}
 {"do":"wait","valueContains":"step 2","role":"label"}
-{"do":"wait","valueContains":"The scripted model wrote this note","role":"label","comment":"the document came forward: a view not shown is not laid out"}
+{"do":"wait","valueContains":"The scripted model wrote this note","role":"label","comment":"the artefact came forward: a view not shown is not laid out"}
 {"do":"capture","text":"chat-simple-view-artefact","sidecars":["svg","tree"]}
 {"do":"wait","valueContains":"The note is in the Artefact tab.","role":"label","settleMs":500,"comment":"the turn landed; the model's words are its own"}
 ```

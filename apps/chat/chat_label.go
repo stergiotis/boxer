@@ -163,8 +163,8 @@ func tierReach(t agentrun.TierE) (reach string, known bool) {
 }
 
 const (
-	tipLabel         = "The conversation's traffic-light label (TLP): the highest of what it has read. It only rises. The host checks it before a model call goes out and before an export is written, and the document carries it when it is exported."
-	labelConfined    = "Confined: later model calls go only to a local or trusted endpoint, and the document cannot be exported to the shared file store."
+	tipLabel         = "The conversation's traffic-light label (TLP): the highest of what it has read. It only rises. The host checks it before a model call goes out and before an export is written, and the artefact carries it when it is exported."
+	labelConfined    = "Confined: later model calls go only to a local or trusted endpoint, and the artefact cannot be exported to the shared file store."
 	labelNoUntrusted = "No untrusted content read."
 	labelUntrusted   = "what the model writes since may have been steered by it."
 	labelNotSent     = "Not sent to a remote provider."

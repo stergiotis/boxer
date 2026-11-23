@@ -51,7 +51,7 @@ func (inst chatTabE) title() string {
 	case tabAnalytics:
 		return "Analytics"
 	case tabArtefact:
-		return "Document"
+		return "Artefact"
 	case tabDefinition:
 		return "Definition"
 	case tabStops:

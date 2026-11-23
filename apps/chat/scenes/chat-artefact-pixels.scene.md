@@ -23,7 +23,7 @@ ADR-0287 on the headless host, against the scripted model in
 [chat-artefact-pixels.script.jsonl](./chat-artefact-pixels.script.jsonl),
 with Pixels at Ask each time. The model captures the operations demo's
 window into the artefact's screenshots, then asks to see it. The view waits
-in the document beside the transcript, showing the image, its size and source, and the model
+in the artefact beside the transcript, showing the image, its size and source, and the model
 it would go to; Allow lets it through, and the transcript's tool line says
 it was shown.
 

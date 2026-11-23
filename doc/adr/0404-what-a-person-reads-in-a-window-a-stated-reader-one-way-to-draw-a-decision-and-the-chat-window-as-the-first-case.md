@@ -151,7 +151,7 @@ data. They have not read the harness.
   The chip names the state in the reader's word; the operations keep the
   machine's.
 - **The side pane appears when it has something to show**: the
-  document's first content, a decision that lives there, or a view the
+  artefact's first content, a decision that lives there, or a view the
   person opened from the menu or from the words. It opens once for each
   such occasion and stays closed when the person closes it. Before that
   the transcript has the window. Analytics and Stops are the builder's
@@ -166,13 +166,18 @@ data. They have not read the harness.
   plain chat's only view, in a window and embedded in a pane. The Simple
   view setting and the bar's Details fold are retired; the inspector
   takes the fold's place.
-- **One way to switch views.** The document's own views (document,
+- **One way to switch views.** The artefact's own views (read,
   source, revisions, lint, images) are tabs of a dock as the window's
   are, not a second control inside the pane.
 - **Decisions** are drawn by SD3 and weighted by SD4. A proposed change
   says what accepting and rejecting each do. A question about the
-  document heads the document's own tab and brings that tab forward
+  artefact heads the artefact's own tab and brings that tab forward
   once, so the tab strip is not pushed out of the pane by it.
+- **The artefact keeps its name.** The view, the setting and every
+  sentence about it say *Artefact*, the word the tools, the journal and
+  the help already use. Relabelling it *Document* for the person was
+  tried and taken back: it gave one thing two names, and a document is
+  also what mdedit opens and what a chatlet is made from.
 - **Steps in the reader's words.** A step in the transcript reads as what
   was done; the tool's name and the call's telemetry are in a hover or
   under the step's details.
@@ -264,7 +269,7 @@ without it.
 - In the light theme a hovered segment keeps a faint ring from the ghost
   kind, and its fill reaches the bar's outline; the button has no stroke
   to override.
-- A leaf dragged shorter than the document's header and tab strip shows
+- A leaf dragged shorter than the artefact's header and tab strip shows
   none of a question waiting in it.
 - The builder loses the conversation's id, endpoint and token count at a
   glance; they are one click away.
@@ -349,16 +354,16 @@ person of the role.
 
 **Second pass, 2026-11-22.** The person testing the first rebuild found
 the lone menu button, the panels in the dock's place, the unpolished
-segmented bar and the nested switch in the document (SD8). The window
+segmented bar and the nested switch in the artefact (SD8). The window
 went back onto the dock and the menu bar; the dock gained the placement
-rule; the document's views became tabs of a dock nested in its tab. The
+rule; the artefact's views became tabs of a dock nested in its tab. The
 chat and chatlet scenes pass but for one whose cause is a race in
 another app's operation. The cold read was not repeated on this pass.
 
 **Third pass, 2026-11-22.** The dock's tabs close from the tab; a pane
 that holds one view draws no strip; the segmented bar keeps its
 segments' positions on hover (measured from the tree sidecars at rest
-and on hover, in both themes); the document's reading view is named
+and on hover, in both themes); the artefact's reading view is named
 *Read*; a command is not offered beside the question it raised. A cold
 read of this state gave 7, 7 and 6 of 10 on the same three kinds of
 capture: against the first rebuild's 7, 8 and 7 that is no gain a single

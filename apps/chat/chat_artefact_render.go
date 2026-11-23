@@ -135,7 +135,7 @@ func (inst *artefactView) diffOf(key string, old string, new string) []diffLine 
 // conversation has none.
 func (inst *App) renderArtefactTab() {
 	if !inst.artefactOn() {
-		c.Label("This conversation has no document. Turn Document on in Settings before the first message.").Wrap().Send()
+		c.Label("This conversation has no artefact. Turn Artefact on in Settings before the first message.").Wrap().Send()
 		return
 	}
 	for range c.IdScope(inst.ids.PrepareStr("artefact-body")) {
@@ -193,14 +193,14 @@ func (inst *App) renderArtefact() {
 		}
 	}
 	if text != "" && !inst.exportable() {
-		weak("A document of this window does not export; Open in mdedit takes its text without its screenshots.")
+		weak("An artefact of this window does not export; Open in mdedit takes its text without its screenshots.")
 	}
 	// A question open in the document says what its answers do; the line
 	// on how changes arrive would say it again and push the answers down.
 	switch p := art.policyNow(); {
 	case inst.artefactQuestion() != "":
 	case !p.write:
-		weak("The model may read the document, not change it: At most in Settings is below Edit.")
+		weak("The model may read the artefact, not change it: At most in Settings is below Edit.")
 	case p.ask:
 		weak("Each change the model makes waits for you here.")
 	default:
@@ -310,10 +310,10 @@ func (inst *App) renderProposal(p *artProposal, head int, text string) {
 	}
 	in := decision.Input{
 		Ids: inst.ids, ScopeKey: "proposal", Origin: decision.OriginRequest,
-		Title:   "The model proposes a change to the document",
+		Title:   "The model proposes a change to the artefact",
 		Subject: subject,
 		Follows: []string{
-			"Accept writes this change into the document as revision " + strconv.Itoa(head+1) + "; the model goes on with its turn.",
+			"Accept writes this change into the artefact as revision " + strconv.Itoa(head+1) + "; the model goes on with its turn.",
 			"Reject discards it, and the model is told you turned it down and not to propose it again.",
 		},
 		Options: proposalOptions(p.tool),
@@ -331,7 +331,7 @@ func (inst *App) renderProposal(p *artProposal, head int, text string) {
 
 // noteStaleProposal is the note on a proposal made against an earlier
 // revision.
-const noteStaleProposal = "The document changed since the model proposed this; Accept will be refused as out of date."
+const noteStaleProposal = "The artefact changed since the model proposed this; Accept will be refused as out of date."
 
 // proposalOptions are Accept and Reject; the tool the model called is in
 // their hover, for whoever reads the call record.
