@@ -3,10 +3,13 @@ package play
 import (
 	"context"
 	"errors"
+	"slices"
+	"sort"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 )
 
@@ -39,7 +42,7 @@ func (inst *Client) ownClearRun(ctx context.Context, sensitivity queryengine.Sen
 	if sensitivity != queryengine.SensitivityConfined || !hasTask(agent) {
 		return false
 	}
-	names := sealedNames(residual)
+	names := labelledNames(residual)
 	if hold != nil {
 		// The binding replaced every keelson('…') it attached, so a sealed
 		// name left in the bound statement is one the service did not
@@ -47,6 +50,26 @@ func (inst *Client) ownClearRun(ctx context.Context, sensitivity queryengine.Sen
 		return hold.b.OwnClear && len(names) == 0
 	}
 	return inst.ownClearHandles(ctx, names, agent)
+}
+
+// labelledNames are the names of residual a run's label is judged by:
+// every table it names that is sealed on this process's plane now, and
+// every name with the shape of an ad-hoc dataset's handle whether or not it
+// is still registered. The label is asked for once the run has answered,
+// and a handle is unregistered a grace after its dataset left: a run that
+// read it meanwhile holds its rows, so the name still counts, and the
+// dataset service answers that it no longer holds it.
+func labelledNames(residual string) (names []string) {
+	names = sealedNames(residual)
+	for _, candidates := range [][]string{keelsonsql.References(residual), plainTables(residual)} {
+		for _, name := range candidates {
+			if adhocdata.IsHandle(name) && !slices.Contains(names, name) {
+				names = append(names, name)
+			}
+		}
+	}
+	sort.Strings(names)
+	return
 }
 
 // ownClearHandles asks the dataset service whether every name is an ad-hoc

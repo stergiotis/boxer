@@ -596,6 +596,11 @@ dataset labelled. No live run of a model is behind the change.
   keeps refusing.
 - Reading back (2026-11-23): a dataset read on this process's plane is
   judged by its handle rather than routed through a read of the service.
+  Review, 2026-11-23: the label is asked after the run answered, so it is
+  judged by every handle the statement names, registered or not; a
+  handle unregistered while the run read it used to drop out of the
+  question, and a statement joining it with the task's own publication
+  came back unlabelled.
 - The publisher states what its rows derive from, the service adds what
   the named inputs show, and a publisher that does neither is judged by
   its call's tier.
