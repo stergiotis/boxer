@@ -156,7 +156,10 @@ operation:
   (`get_state` and `describe_result` say so) or, as a task's own clear
   publication read back, is not; `publish_result` and `publish_projection`
   carry the label with the datasets, and a confined result that
-  `publish_result` publishes is recorded as derived from sealed data.
+  `publish_result` publishes is recorded as derived from sealed data. A
+  result is unlabelled only for the task whose own publications it
+  holds: published by the person or by another task it is recorded as
+  derived too.
 
 ## Panes
 
