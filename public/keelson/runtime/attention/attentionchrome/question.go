@@ -108,8 +108,8 @@ func (inst *questionCards) RenderCard(key string, ids *c.WidgetIdStack) (decided
 		inst.renderOpen(key, instance, ids)
 		return
 	}
-	// The model asks; answering is not the person's own act, so no option
-	// is primary (ADR-0404 SD4). Whether Answer is enabled is read before
+	// Answer leads, as the affirmative does in every decision (ADR-0404
+	// SD4). Whether Answer is enabled is read before
 	// the form draws, so it follows a pick one frame late; the click is
 	// checked against the picks after the form has drawn.
 	in := decision.Input{

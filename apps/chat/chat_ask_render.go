@@ -94,7 +94,8 @@ func askAnswered() {
 
 // renderAskButtons draws a harness question — a stop that fired, asking
 // whether the turn goes on — as a decision answered on the click (ADR-0404
-// §SD3, §SD4: the harness asks, so no option is primary). Each option's
+// §SD3, §SD4: its options are neither affirmative nor decline, so none
+// is filled). Each option's
 // description says what it does, as a sentence of its own.
 func (inst *App) renderAskButtons(o *openAsk) {
 	q := &o.questions[0]

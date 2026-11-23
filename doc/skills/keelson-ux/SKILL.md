@@ -276,10 +276,10 @@ body text, then the options
 ([decisions pattern](../../design-system/patterns/decisions.md), ADR-0404
 §SD3). The affirmative is primary, on `OriginConfirm` (the person
 started the act) and on `OriginRequest` (a model, an agent or the harness
-asks for something); a request that carries a note in a warning or an
-error tone has no primary, so the surface does not favour yes over its
-own caution (§SD4). The widget assigns the kinds; the caller states the
-origin, the roles and the notes. A long `Detail` scrolls
+asks for something), and it is the same button in every question: a
+caution is a note in a warning tone, which does not change the buttons
+(§SD4). The widget assigns the kinds; the caller states the roles and
+the notes. A long `Detail` scrolls
 inside a bound, so the pane's own controls under the decision stay where
 they were. A decision about what one tab shows is drawn inside that tab
 and brings it forward once (`ActivateTab`); above the tabs it pushes

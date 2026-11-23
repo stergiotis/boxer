@@ -12,57 +12,35 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/egui2test"
 )
 
-func TestKindFollowsOriginRoleDestroysAndCaution(t *testing.T) {
+// The kind is read from the option alone: neither who asks nor a note
+// beside the options reaches kindOf, so one answer is drawn the same in
+// every question (ADR-0404 SD4).
+func TestKindFollowsRoleAndDestroys(t *testing.T) {
 	type row struct {
-		origin    OriginE
-		opt       Option
-		cautioned bool
-		want      c.ButtonKindE
+		opt  Option
+		want c.ButtonKindE
 	}
 	for _, r := range []row{
-		// A request: the affirmative leads, the decline is a plain button.
-		{OriginRequest, Option{Role: RoleAffirm}, false, c.ButtonKindPrimary},
-		{OriginRequest, Option{Role: RoleDecline}, false, c.ButtonKindSecondary},
-		{OriginRequest, Option{Role: RoleOther}, false, c.ButtonKindGhost},
-		// A request under a note of caution: nothing is primary.
-		{OriginRequest, Option{Role: RoleAffirm}, true, c.ButtonKindSecondary},
-		{OriginRequest, Option{Role: RoleDecline}, true, c.ButtonKindSecondary},
-		// A confirmation: the affirmative leads, cautioned or not.
-		{OriginConfirm, Option{Role: RoleAffirm}, false, c.ButtonKindPrimary},
-		{OriginConfirm, Option{Role: RoleAffirm}, true, c.ButtonKindPrimary},
-		{OriginConfirm, Option{Role: RoleDecline}, false, c.ButtonKindSecondary},
-		{OriginConfirm, Option{Role: RoleOther}, false, c.ButtonKindGhost},
-		// What destroys is Danger in either origin.
-		{OriginRequest, Option{Role: RoleAffirm, Destroys: true}, false, c.ButtonKindDanger},
-		{OriginRequest, Option{Role: RoleAffirm, Destroys: true}, true, c.ButtonKindDanger},
-		{OriginConfirm, Option{Role: RoleAffirm, Destroys: true}, false, c.ButtonKindDanger},
-		{OriginConfirm, Option{Role: RoleDecline, Destroys: true}, false, c.ButtonKindDanger},
-		{OriginRequest, Option{Role: RoleOther, Destroys: true}, false, c.ButtonKindDangerGhost},
+		// The affirmative leads, the decline is a plain button.
+		{Option{Role: RoleAffirm}, c.ButtonKindPrimary},
+		{Option{Role: RoleDecline}, c.ButtonKindSecondary},
+		{Option{Role: RoleOther}, c.ButtonKindGhost},
+		// What destroys is Danger.
+		{Option{Role: RoleAffirm, Destroys: true}, c.ButtonKindDanger},
+		{Option{Role: RoleDecline, Destroys: true}, c.ButtonKindDanger},
+		{Option{Role: RoleOther, Destroys: true}, c.ButtonKindDangerGhost},
 		// Disabled changes nothing about the kind.
-		{OriginConfirm, Option{Role: RoleAffirm, Disabled: true, Why: "x"}, false, c.ButtonKindPrimary},
+		{Option{Role: RoleAffirm, Disabled: true, Why: "x"}, c.ButtonKindPrimary},
 	} {
-		assert.Equal(t, r.want, kindOf(r.origin, r.opt, r.cautioned), "origin %d role %d destroys %v cautioned %v", r.origin, r.opt.Role, r.opt.Destroys, r.cautioned)
+		assert.Equal(t, r.want, kindOf(r.opt), "role %d destroys %v", r.opt.Role, r.opt.Destroys)
 	}
-}
-
-func TestOnlyAWarningOrAnErrorNoteCautions(t *testing.T) {
-	for tone, want := range map[styletokens.Tone]bool{
-		styletokens.ToneNeutral: false, styletokens.ToneInfo: false, styletokens.ToneSuccess: false,
-		styletokens.ToneWarning: true, styletokens.ToneError: true,
-	} {
-		in := Input{Notes: []Note{{Text: "n", Tone: tone}}}
-		assert.Equal(t, want, in.cautioned(), "tone %d", tone)
-	}
-	assert.False(t, Input{}.cautioned())
 }
 
 func TestADeclineIsNeverWeakerThanAPlainButton(t *testing.T) {
-	for _, origin := range []OriginE{OriginRequest, OriginConfirm} {
-		for _, destroys := range []bool{false, true} {
-			k := kindOf(origin, Option{Role: RoleDecline, Destroys: destroys}, false)
-			assert.NotEqual(t, c.ButtonKindGhost, k)
-			assert.NotEqual(t, c.ButtonKindDangerGhost, k)
-		}
+	for _, destroys := range []bool{false, true} {
+		k := kindOf(Option{Role: RoleDecline, Destroys: destroys})
+		assert.NotEqual(t, c.ButtonKindGhost, k)
+		assert.NotEqual(t, c.ButtonKindDangerGhost, k)
 	}
 }
 

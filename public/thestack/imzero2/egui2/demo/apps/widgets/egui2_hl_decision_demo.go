@@ -21,7 +21,7 @@ func init() {
 		Description: "widgets/decision (ADR-0404 SD3, SD4): a request and a confirmation, where the affirmative is " +
 			"primary; a destructive one; a stale question with a disabled affirmative and its reason; " +
 			"one with a form; one with a long detail after its options; and a request in a column 300 points wide, " +
-			"where what follows wraps and a note of caution takes the fill off the affirmative.",
+			"where what follows wraps and the affirmative keeps its fill beside a note of warning.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			state = &decisionDemoState{}
 			return

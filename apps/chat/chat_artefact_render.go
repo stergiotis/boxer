@@ -295,8 +295,7 @@ func (inst *App) renderArtefactViews(art *artefact, n int, text string) {
 }
 
 // renderProposal is a change waiting for the person, drawn as a decision
-// (ADR-0404 §SD3): the model asks, so neither answer is primary (§SD4). The
-// diff against the head follows the options.
+// (ADR-0404 §SD3, §SD4). The diff against the head follows the options.
 func (inst *App) renderProposal(p *artProposal, head int, text string) {
 	if p.ownImages {
 		inst.renderImageProposal(p, head)

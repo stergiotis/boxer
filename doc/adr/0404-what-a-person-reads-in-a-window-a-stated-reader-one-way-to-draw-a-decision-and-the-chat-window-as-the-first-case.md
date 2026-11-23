@@ -87,29 +87,31 @@ The widget draws. Who may ask, what an answer authorises and where it is
 recorded stay with the host and the grant
 ([ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md)).
 
-### SD4 — The affirmative leads, unless the question cautions
+### SD4 — The affirmative leads, and looks the same in every question
 
 - The affirmative is the primary, where the person started the act and
   is asked whether to go through with it, and where a model, an agent or
   the harness asks the person for something it may not do on its own.
-- **A request that carries a note of caution has no primary.** Where the
-  question itself says, in a warning or an error tone, that there is a
-  reason to hesitate (the conversation has read untrusted content, the
-  question has gone stale), the options have equal weight. A
-  confirmation of the person's own act keeps its primary.
+- **One answer, one look.** The button is chosen from the option alone.
+  A note beside the options, whatever its tone, does not change it: a
+  caution is said in the note's words and tone, and an answer that
+  cannot be given is disabled with its reason.
 - An affirmative that destroys is `Danger` in every case.
 
 The option that declines is never drawn weaker than a plain button. The
-widget assigns the kinds from who started the act, each option's role
-and the notes' tones; a caller does not choose them.
+widget assigns the kinds from each option's role; a caller does not
+choose them.
 
-The first form of this decision, on 2026-11-22, gave no request a
-primary at all, so that the surface would not lean the person toward
-widening what an asker may do. The person testing it found a dialog
-whose buttons all look the same, which is the flat hierarchy this ADR's
-context names as a defect; the fill came back the same day, and the
-equal weight was kept for the one case where the surface has itself
-raised a caution.
+Two earlier forms were tried and taken back. The first gave no request
+a primary, so that the surface would not lean the person toward
+widening what an asker may do; the person testing it found a dialog
+whose buttons all look the same, the flat hierarchy this ADR's context
+names as a defect. The second kept the equal weight where the question
+carried a warning. A conversation reads untrusted content as soon as it
+lists windows, so most approvals after the first carried the warning
+and *Approve* was filled in one dialog and plain in the next; the
+person read that as the same button styled inconsistently, not as a
+caution.
 
 ### SD5 — A segmented choice reads as one control
 
@@ -234,9 +236,9 @@ without it.
 - **No primary on any request.** Tried first and not kept: a dialog of
   equal buttons has no focal point, and most requests are the expected
   next step of something the person asked for.
-- **The affirmative as primary on every request**, cautioned or not. Not
-  taken: beside a warning that the request may have been steered, a fill
-  on *Approve* favours the answer the warning is about.
+- **No primary on a request that carries a warning.** Tried second and
+  not kept (SD4): the warning is on most approvals, so the difference
+  read as inconsistent styling.
 - **The decline as primary on a request.** Not taken: it makes each
   routine approval a search without making it more considered.
 - **Keeping the Simple view as an option.** Not taken: SD2.

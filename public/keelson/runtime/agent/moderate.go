@@ -277,8 +277,7 @@ func (inst *Chrome) renderQuestion(ids *c.WidgetIdStack) (shown bool) {
 }
 
 // renderQuestionBody is a moderator's question and its buttons, in a modal
-// or a card. The moderator asks, so neither answer is primary (ADR-0404
-// SD4).
+// or a card, drawn as every decision is: Allow leads (ADR-0404 SD4).
 func (inst *Chrome) renderQuestionBody(q *question, waiting int, ids *c.WidgetIdStack) (allow bool, decline bool) {
 	svc := inst.svc
 	in := decision.Input{

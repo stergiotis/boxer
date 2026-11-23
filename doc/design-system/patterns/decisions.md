@@ -54,20 +54,21 @@ Top to bottom, and nothing else:
 | Options | the answers | one row, the affirmative first |
 | Detail | what supports the answer: a diff, a preview, the asker's stated reason | after the options, so the options do not move below it |
 
-### The affirmative leads, unless the question cautions
+### The affirmative leads, and looks the same in every question
 
 | The question is | Affirmative | Decline |
 | --- | --- | --- |
 | a **confirmation**: the person started the act | `Primary` | ordinary button |
 | a **request**: a model, an agent or the harness asks for something it may not do alone | `Primary` | ordinary button |
-| a request that carries a note in a warning or an error tone | ordinary button | ordinary button |
-| any of these, where saying yes destroys something | `Danger` | ordinary button |
+| either, where saying yes destroys something | `Danger` | ordinary button |
 
 Most requests are the expected next step of something the person asked
-for, and a question with no focal point is slower to read. Where the
-question itself raises a caution (the conversation has read untrusted
-content, the question has gone stale), the surface does not favour yes
-over its own warning. The widget draws the frame itself; a caller that
+for, and a question with no focal point is slower to read. A caution
+(the conversation has read untrusted content) is said by a note in a
+warning tone above the options; it does not change the buttons, so
+*Approve* is the same button in every dialog. An answer that cannot be
+given (the question has gone stale) is disabled, with its reason beside
+it. The widget draws the frame itself; a caller that
 already frames the question (a card, a modal) passes `Unframed`.
 
 ### Words
@@ -95,16 +96,16 @@ already frames the question (a card, a modal) passes `Unframed`.
 ## Trade-offs
 
 - A primary on a request makes a routine approval quick and leans the
-  person toward yes. The lean is taken away where the question carries a
-  caution, and nowhere else.
+  person toward yes, also beside a warning. Taking the fill away there
+  was tried: the warning is on most approvals, and the difference read
+  as inconsistent styling.
 - One widget fixes the order of parts. A question that needs another
   order is a sign it is two questions.
 
 ## Anti-patterns
 
 - The consequence in the smallest type, under the buttons.
-- *Approve* filled beside a warning that the request may have been
-  steered.
+- *Approve* filled in one dialog and plain in the next.
 - A column of filled `Danger` buttons, one per row; the armed state
   belongs to one item at a time (keelson-ux C2, C5).
 - A decision that scrolls: options below a long diff.

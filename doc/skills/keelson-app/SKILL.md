@@ -665,7 +665,7 @@ what destroys, `Ghost` for the toolbar; the client colours them per theme
 `badge` with a tone, never a coloured label, and it stays Soft or Ghost so
 that it does not read as a button. A question the person settles with a
 button is drawn by `decision.Render`, which assigns the kinds itself: the
-affirmative primary, except on a request that carries a note of caution ([keelson-ux](../keelson-ux/SKILL.md) C7,
+affirmative primary, the same in every question ([keelson-ux](../keelson-ux/SKILL.md) C7,
 [ADR-0404](../../adr/0404-what-a-person-reads-in-a-window-a-stated-reader-one-way-to-draw-a-decision-and-the-chat-window-as-the-first-case.md)
 §SD3, §SD4).
 

@@ -110,7 +110,7 @@ func (in Input) option(o Option) (clicked bool) {
 	draw := func() {
 		for range c.EnabledUi(!o.Disabled).KeepIter() {
 			clicked = c.Button(in.Ids.PrepareStr(o.Key), c.Atoms().Text(text).Keep()).
-				Kind(kindOf(in.Origin, o, in.cautioned())).
+				Kind(kindOf(o)).
 				SendResp().HasPrimaryClicked() && !o.Disabled
 		}
 	}

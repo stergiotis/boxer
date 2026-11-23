@@ -8,18 +8,17 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
-// OriginE is who started the act the question is about. It decides which
-// option, if any, is primary (ADR-0404 SD4).
+// OriginE is who started the act the question is about. The call site
+// states it; the drawing does not depend on it, since the affirmative
+// leads under either (ADR-0404 SD4).
 type OriginE uint8
 
 const (
 	// OriginRequest: another party (a model, an agent, the harness, an app)
-	// asks the person for something it may not do on its own. The
-	// affirmative is primary, unless the question carries a note of caution
-	// (a warning or an error tone): then no option is.
+	// asks the person for something it may not do on its own.
 	OriginRequest OriginE = iota
 	// OriginConfirm: the person started the act and is asked whether to go
-	// through with it. The affirmative is primary.
+	// through with it.
 	OriginConfirm
 )
 
@@ -147,30 +146,15 @@ func (in Input) Validate() (err error) {
 	return nil
 }
 
-// cautioned reports whether the question carries a note in a warning or an
-// error tone: the surface itself has given a reason to hesitate.
-func (in Input) cautioned() bool {
-	for _, n := range in.Notes {
-		if n.Tone == styletokens.ToneWarning || n.Tone == styletokens.ToneError {
-			return true
-		}
-	}
-	return false
-}
-
-// kindOf is the button kind of an option under an origin (ADR-0404 SD4).
-// cautioned is [Input.cautioned]: on a request it takes the fill off the
-// affirmative, so that the surface does not favour yes over its own warning.
-func kindOf(origin OriginE, o Option, cautioned bool) (kind c.ButtonKindE) {
+// kindOf is the button kind of an option (ADR-0404 SD4). It reads the
+// option alone, so the same answer is drawn the same in every question:
+// a note beside it, whatever its tone, does not change it.
+func kindOf(o Option) (kind c.ButtonKindE) {
 	switch o.Role {
 	case RoleAffirm:
-		switch {
-		case o.Destroys:
+		kind = c.ButtonKindPrimary
+		if o.Destroys {
 			kind = c.ButtonKindDanger
-		case origin == OriginRequest && cautioned:
-			kind = c.ButtonKindSecondary
-		default:
-			kind = c.ButtonKindPrimary
 		}
 	case RoleDecline:
 		// Never weaker than a plain button.

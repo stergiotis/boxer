@@ -16,13 +16,12 @@
 //
 // # Emphasis
 //
-// The caller states who started the act ([OriginE]) and each option's role
-// ([RoleE]); the widget picks the button kind. The affirmative is primary,
-// on a confirmation, where the person started the act, and on a request,
-// where another party asks the person for something. A request that carries
-// a note in a warning or an error tone has no primary: the surface does not
-// favour yes over its own caution. An option that destroys is Danger in
-// either case. A decline is
+// The caller states each option's role ([RoleE]); the widget picks the
+// button kind from the option alone, so one answer looks the same in every
+// question. The affirmative is primary, on a confirmation, where the person
+// started the act, and on a request, where another party asks the person
+// for something; a note beside it does not take the fill away. An option
+// that destroys is Danger in either case. A decline is
 // never weaker than a plain button; an option that is neither affirmative nor
 // decline is a ghost button.
 //
