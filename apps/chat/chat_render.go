@@ -30,7 +30,12 @@ const (
 	composerRows = 3
 	// composerChromePx is the input's own frame and margin, held back from
 	// the rows the pane's height holds.
-	composerChromePx float32 = 10
+	composerChromePx float32 = 10 + 2*hoverSlackPx
+	// hoverSlackPx is the room kept around the input inside its scroll
+	// area: a hovered control is drawn past its own rect by the theme's
+	// expansion (fresh's HOVER_LIFT, tokens::apply_stroke's note), and the
+	// scroll area clips at its edge, which cut the outline's sides off.
+	hoverSlackPx float32 = 1
 	// rowSeedFactor turns the body font's size into a row height on the
 	// first frame, before the measurement lands.
 	rowSeedFactor = 1.45
@@ -560,23 +565,26 @@ func (inst *App) renderComposer() {
 		// Hscroll keeps the input's width from feeding back into the
 		// window's minimum width (mdedit's editor found this). The input
 		// stays editable while a turn runs, so the next message can be
-		// written; it is sent once the answer is in.
+		// written; it is sent once the answer is in. The frame inside is
+		// the hover slack (hoverSlackPx).
 		for range c.ScrollArea().Hscroll(true).Vscroll(true).MaxHeight(max(inst.composerH, 1)).AutoShrink(false, true).KeepIter() {
-			b := c.TextEdit(inst.ids.PrepareStr("draft"), inst.draft, true).
-				DesiredWidth(max(w-btnW-buttonGap, 120)).
-				DesiredRows(rows).
-				HintText(hintDraft).
-				AccessibleName("Message")
-			if busy {
-				b = b.CaptureKeys(uint64(escMask))
-			}
-			if inst.hlOk {
-				b = b.HighlightJob(inst.hlJob)
-			}
-			inst.draftId = b.Id()
-			flags := b.SendRespVal(&inst.draft)
-			if inst.embed != nil {
-				inst.embed.draftFocused = flags.HasFocus()
+			for range c.Frame(inst.ids.PrepareStr("draft-slack")).Fill(color.Transparent).InnerMargin(hoverSlackPx).KeepIter() {
+				b := c.TextEdit(inst.ids.PrepareStr("draft"), inst.draft, true).
+					DesiredWidth(max(w-btnW-buttonGap-2*hoverSlackPx, 120)).
+					DesiredRows(rows).
+					HintText(hintDraft).
+					AccessibleName("Message")
+				if busy {
+					b = b.CaptureKeys(uint64(escMask))
+				}
+				if inst.hlOk {
+					b = b.HighlightJob(inst.hlJob)
+				}
+				inst.draftId = b.Id()
+				flags := b.SendRespVal(&inst.draft)
+				if inst.embed != nil {
+					inst.embed.draftFocused = flags.HasFocus()
+				}
 			}
 		}
 	}
