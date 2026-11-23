@@ -65,11 +65,11 @@ func NewCliCommand() *cli.Command {
 			},
 			&cli.StringSliceFlag{
 				Name:  "app-prefix",
-				Usage: "import-path prefix of the module's apps, which codelint's app rules (CS017) cover (repeatable); empty means <module>/apps",
+				Usage: "import-path prefix of the module's apps, which codelint's app rules (CS017) cover (repeatable); empty means <module>/apps; a prefix no linted package lies under is a warning",
 			},
 			&cli.StringSliceFlag{
 				Name:  "ctx-prefix",
-				Usage: "import-path prefix codelint's context rule (CS020) covers (repeatable); empty means the whole module",
+				Usage: "import-path prefix codelint's context rule (CS020) covers (repeatable); empty means the whole module; a prefix no linted package lies under is a warning",
 			},
 			&cli.StringFlag{
 				Name:  "ctx-baseline",

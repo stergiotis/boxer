@@ -141,6 +141,18 @@ func (inst *StepCodelint) Run(ctx context.Context, cfg Config, w io.Writer) (sta
 	absRoot, _ := filepath.Abs(cfg.root())
 
 	status = StatusPass
+	// A prefix the configuration names and no loaded package lies under
+	// leaves its rule with nothing to read — a mistyped prefix, or code
+	// patterns that do not reach it — and the step would pass all the same.
+	loaded := loadedPackagePaths(pkgs)
+	for _, p := range prefixesWithoutPackages(cfg.AppPrefixes, loaded) {
+		_, _ = fmt.Fprintf(w, "codelint: app prefix %q matches none of the %d loaded packages, so CS017 reads nothing under it; check the prefix and the code patterns\n", p, len(loaded))
+		status = StatusWarn
+	}
+	for _, p := range prefixesWithoutPackages(cfg.ContextPrefixes, loaded) {
+		_, _ = fmt.Fprintf(w, "codelint: context prefix %q matches none of the %d loaded packages, so CS020 reads nothing under it; check the prefix and the code patterns\n", p, len(loaded))
+		status = StatusWarn
+	}
 	for f, runErr := range linter.Run(pkgs) {
 		if runErr != nil {
 			err = eb.Build().Strs("patterns", cfg.codePatterns()).Errorf("codelint run: %w", runErr)
@@ -164,6 +176,36 @@ func (inst *StepCodelint) Run(ctx context.Context, cfg Config, w io.Writer) (sta
 			status = StatusFail
 		} else if status == StatusPass {
 			status = StatusWarn
+		}
+	}
+	return
+}
+
+// loadedPackagePaths is the import path of every package the code patterns
+// matched: the set the rules are run over. Their dependencies are loaded
+// too and not read, so they do not count.
+func loadedPackagePaths(pkgs []*packages.Package) (paths []string) {
+	paths = make([]string, 0, len(pkgs))
+	for _, p := range pkgs {
+		paths = append(paths, p.PkgPath)
+	}
+	return
+}
+
+// prefixesWithoutPackages are the prefixes no path lies at or below, in
+// the order given. The match is the rules' own: the prefix itself or a
+// path under it.
+func prefixesWithoutPackages(prefixes []string, paths []string) (unmatched []string) {
+	for _, p := range prefixes {
+		found := false
+		for _, path := range paths {
+			if path == p || strings.HasPrefix(path, p+"/") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			unmatched = append(unmatched, p)
 		}
 	}
 	return

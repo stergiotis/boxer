@@ -118,7 +118,10 @@ the gate is given one with `--tab-pkg`.
 `codelint` applies its app rule (CS017) to `<module>/apps` and its context
 rule (CS020) to the whole module. `--app-prefix` and `--ctx-prefix` name
 other trees, and `--ctx-baseline` a file of grandfathered CS020 findings
-([ADR-0396](../adr/0396-the-app-contract-a-host-promises.md) §8).
+([ADR-0396](../adr/0396-the-app-contract-a-host-promises.md) §8). A prefix
+given this way that none of the packages matched by `--code-pattern` lies under is
+reported and turns the step to a warning: the rule would otherwise read
+nothing and pass.
 
 ## 4. Accept the adoption ADR
 

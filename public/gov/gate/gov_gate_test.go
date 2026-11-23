@@ -199,3 +199,14 @@ func TestLintScopeFollowsTheModule(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, scope.ContextBaseline)
 }
+
+// A prefix the configuration names and no package lies under is reported:
+// its rule would read nothing and the step would pass.
+func TestPrefixesWithoutPackages(t *testing.T) {
+	paths := []string{"example.com/acme/apps/one", "example.com/acme/lib", "example.com/acme/appsupport"}
+	assert.Empty(t, prefixesWithoutPackages(nil, paths), "the defaults are not asked about")
+	assert.Empty(t, prefixesWithoutPackages([]string{"example.com/acme/apps", "example.com/acme/lib"}, paths))
+	assert.Equal(t, []string{"example.com/acme/cmd", "example.com/acme/app"},
+		prefixesWithoutPackages([]string{"example.com/acme/cmd", "example.com/acme/apps", "example.com/acme/app"}, paths),
+		"a prefix matches a path at or below it, not a longer name")
+}
