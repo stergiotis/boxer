@@ -131,6 +131,33 @@ relied on the old behaviour.
   `refuseNumberGluedToWord` records the lexer change that would accept
   them).
 
+## Sealed data and labels
+
+- **A play result stream's `Confined` is the label, `Sealed` the wall.**
+  `Confined` on the stream `play.Client.ExecuteArrowStream` returns no
+  longer says "the run read sealed data": it is false for a task's run
+  that read only its own publications at TLP:CLEAR. A module that decides
+  where a result may be written by it asks `Sealed` instead; one that
+  labels its outcome keeps `Confined`
+  ([ADR-0407](../adr/0407-an-exposed-dataset-a-program-on-this-machine-reads-an-ad-hoc-dataset-by-alias-and-token.md),
+  proposed, section of 2026-11-23 on reading back).
+- **A bundle published from sealed data says so.** An app that publishes a
+  table for a task sets `DerivedFromSealed` on the bundle
+  (`playground.BundleSpec`, `adhocdata.BundleProvenance`) when its rows
+  came from sealed data. Left unset, the bundle is judged by the tier of
+  its publishing call and the input handles it names, and a result of
+  sealed data published in the round it arrived in reads back, and is
+  exposed, as the task's clear work (ADR-0407, same section).
+- **A read answers whose the revision is.** `adhocdata.ReadAll` returns
+  `OwnClear`. A module that reads a dataset on a task's behalf may leave
+  its outcome unlabelled only for a true answer; one that does not look
+  keeps labelling, as before. `sessiondata.Binding` and `DatasetInfo`
+  carry the same answer (ADR-0407, same section).
+- **A task's exposure of a derived dataset is refused.** `expose_dataset`
+  and `adhocdata.ExposeRequest` refuse a task a dataset that derives from
+  sealed data, and a republish that derives ends an exposure the task
+  made (ADR-0407, item 3 of *The wall*).
+
 ## Stored data and formats
 
 - **Record-store schema verdict.** A store judges the live table by its
