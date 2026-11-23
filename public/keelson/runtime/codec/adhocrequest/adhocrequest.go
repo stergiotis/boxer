@@ -85,11 +85,12 @@ type AdhocRequest struct {
 	// of its stream, under the same grant (ADR-0288 §SD5).
 	ColumnsOnly bool `lw:"adhocColumnsOnly,bool"`
 
-	// DerivedFromSealed says a bundle publish's rows derive from sealed
-	// data: the publisher sets it from the label of the result it
-	// publishes, whatever tier the call that asked for the publish
-	// declared.
-	DerivedFromSealed bool `lw:"adhocDerivedFromSealed,bool"`
+	// FromNothingSealed is a bundle publisher's assertion that its rows
+	// derive from nothing sealed: it sets it from the label of the result
+	// it publishes, whatever tier the call that asked for the publish
+	// declared. False, the default, leaves the revision sealed to every
+	// reader: it is never a task's own clear publication.
+	FromNothingSealed bool `lw:"adhocFromNothingSealed,bool"`
 
 	// LabelOnly asks a read, by Handle, only whether the dataset under
 	// the handle is the reading task's own publication at TLP:CLEAR; the

@@ -21,7 +21,8 @@ const (
 	// TLP:CLEAR.
 	standingLabelled
 	// standingDerived — the task's call published it at TLP:CLEAR, and it
-	// derives from sealed data.
+	// is taken as derived from sealed data: the publisher did not assert
+	// otherwise, or an input it named says so.
 	standingDerived
 	// standingOwnClear — the task's call published it at TLP:CLEAR, from
 	// nothing sealed.

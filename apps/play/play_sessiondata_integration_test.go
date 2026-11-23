@@ -184,7 +184,8 @@ func TestLiveATaskJoinsItsOwnClearPublicationUnlabelled(t *testing.T) {
 	r.grant("t1", server, session, DestinationKeelson("items"))
 	obo := &app.OnBehalfOf{Task: "t1", Epoch: 1, Call: "c1", Destinations: []string{server, session, DestinationKeelson("items")}}
 	_, err := r.adhoc.PublishBundle(t.Context(), adhocdata.BundlePublishInput{Alias: "mine", Document: []byte("SELECT 1"), By: window, OnBehalfOf: obo,
-		Datasets: []adhocdata.BundleDatasetInput{{LocalName: "result", ArrowIPCStream: liveItems(t)}}})
+		Datasets:   []adhocdata.BundleDatasetInput{{LocalName: "result", ArrowIPCStream: liveItems(t)}},
+		Provenance: adhocdata.BundleProvenance{FromNothingSealed: true}})
 	require.NoError(t, err)
 	_, err = r.adhoc.Publish(adhocdata.PublishInput{Alias: "items", ArrowIPCStream: liveItems(t)})
 	require.NoError(t, err)

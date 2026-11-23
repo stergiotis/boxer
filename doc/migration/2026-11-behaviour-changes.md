@@ -141,22 +141,29 @@ relied on the old behaviour.
   labels its outcome keeps `Confined`
   ([ADR-0407](../adr/0407-an-exposed-dataset-a-program-on-this-machine-reads-an-ad-hoc-dataset-by-alias-and-token.md),
   proposed, section of 2026-11-23 on reading back).
-- **A bundle published from sealed data says so.** An app that publishes a
-  table for a task sets `DerivedFromSealed` on the bundle
-  (`playground.BundleSpec`, `adhocdata.BundleProvenance`) when its rows
-  came from sealed data. Left unset, the bundle is judged by the tier of
-  its publishing call and the input handles it names, and a result of
-  sealed data published in the round it arrived in reads back, and is
-  exposed, as the task's clear work (ADR-0407, same section).
+- **A bundle is a task's own clear work only when its publisher asserts
+  so.** An app that publishes a table for a task sets `FromNothingSealed`
+  on the bundle (`playground.BundleSpec`, `adhocdata.BundleProvenance`)
+  when it knows the rows derive from nothing sealed: its own label of
+  what it computed from, never the tier of the call. Left unset, the
+  default, the bundle is sealed data to every reader: the task reads it
+  back labelled and `expose_dataset` refuses it, at whatever tier the
+  publish was declared. A module that published on a task's behalf
+  before this and expects the task to expose the result has to add the
+  assertion; the service still overrides it for an input that is not
+  the task's own clear publication (ADR-0407, same section).
 - **A read answers whose the revision is.** `adhocdata.ReadAll` returns
   `OwnClear`. A module that reads a dataset on a task's behalf may leave
   its outcome unlabelled only for a true answer; one that does not look
   keeps labelling, as before. `sessiondata.Binding` and `DatasetInfo`
   carry the same answer (ADR-0407, same section).
-- **A task's exposure of a derived dataset is refused.** `expose_dataset`
-  and `adhocdata.ExposeRequest` refuse a task a dataset that derives from
-  sealed data, and a republish that derives ends an exposure the task
-  made (ADR-0407, item 3 of *The wall*).
+- **A task exposes only what was asserted clear, and only while it is
+  its own.** `expose_dataset` and `adhocdata.ExposeRequest` refuse a task
+  a dataset whose publisher did not assert that it derives from nothing
+  sealed, and a republish that is not the exposing task's own clear
+  publication — not asserted, above TLP:CLEAR, the person's or another
+  task's — ends an exposure the task made (ADR-0407, item 3 of *The
+  wall*).
 
 ## Stored data and formats
 

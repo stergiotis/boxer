@@ -49,7 +49,8 @@ func exposeLauncher(t *testing.T) (l *PlayLauncher, h app.OperationsHandlerI, pu
 	l.inner.client.SetSessionBus(l.bus)
 	publisher = bus.NewClient("test.publisher", caps)
 	in := adhocdata.BundlePublishInput{Alias: "kernel_top", Document: []byte("SELECT 1"), OnBehalfOf: &agentCall,
-		Datasets: []adhocdata.BundleDatasetInput{{LocalName: "result", ArrowIPCStream: intStream(t, 7, 8)}}}
+		Datasets:   []adhocdata.BundleDatasetInput{{LocalName: "result", ArrowIPCStream: intStream(t, 7, 8)}},
+		Provenance: adhocdata.BundleProvenance{FromNothingSealed: true}}
 	_, err = adhocdata.PublishBundleRequest(t.Context(), publisher, in)
 	require.NoError(t, err)
 	res, err := adhocdata.ResolveRequest(t.Context(), l.bus, "kernel_top__result")

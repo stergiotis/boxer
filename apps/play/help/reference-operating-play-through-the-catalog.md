@@ -155,11 +155,11 @@ operation:
   as allowed to see sealed data, whether it is labelled confined
   (`get_state` and `describe_result` say so) or, as a task's own clear
   publication read back, is not; `publish_result` and `publish_projection`
-  carry the label with the datasets, and a confined result that
-  `publish_result` publishes is recorded as derived from sealed data. A
-  result is unlabelled only for the task whose own publications it
-  holds: published by the person or by another task it is recorded as
-  derived too.
+  carry the label with the datasets. `publish_result` asserts that the
+  rows derive from nothing sealed only for a result that is unlabelled
+  for the task that publishes it; a confined result, and a result of one
+  task's own publications published by the person or by another task,
+  goes out without the assertion and is sealed data to every reader.
 
 ## Panes
 
@@ -280,8 +280,8 @@ from a statement that reads one. They are decided apart.
   published on its behalf can be read, checked, published again with
   `publish_result` and exposed without the conversation being labelled.
   After one read of other sealed data the task's calls are labelled, what
-  `publish_result` publishes from a confined result is recorded as
-  derived from sealed data, and neither is the task's to expose: the
+  `publish_result` publishes from a confined result is not asserted to
+  derive from nothing sealed, and neither is the task's to expose: the
   person exposes it from the Data sets tab.
 
 ### Session data sets

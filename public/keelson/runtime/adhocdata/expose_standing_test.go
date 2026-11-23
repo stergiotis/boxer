@@ -27,14 +27,14 @@ func TestATasksExposureEndsWhenTheRevisionIsNoLongerItsOwn(t *testing.T) {
 			d := &fakeDispatcher{call: agentCall(), grants: []string{"expose:sales"}}
 			r.svc.SetDispatcher(d)
 			own := oboOf(d.call)
-			publishSales(t, r.svc, windowA, own, BundleProvenance{}, 1)
+			publishSales(t, r.svc, windowA, own, BundleProvenance{FromNothingSealed: true}, 1)
 			exp, err := r.svc.Expose(t.Context(), ExposeInput{Alias: "sales__orders", By: windowA, OnBehalfOf: own})
 			require.NoError(t, err)
 			status, body, _ := fetch(t, http.MethodGet, exp.URL, exp.Token)
 			require.Equal(t, http.StatusOK, status)
 			require.Equal(t, []int64{1}, int64Values(t, body))
 
-			publishSales(t, r.svc, windowA, tc.republish(d), BundleProvenance{}, 2)
+			publishSales(t, r.svc, windowA, tc.republish(d), BundleProvenance{FromNothingSealed: true}, 2)
 			status, body, _ = fetch(t, http.MethodGet, exp.URL, exp.Token)
 			assert.Equal(t, http.StatusNotFound, status, "the task's token reads no revision the task did not publish")
 			assert.Equal(t, "not found\n", string(body), "and is told nothing of it")
@@ -56,10 +56,10 @@ func TestThePersonsExposureFollowsARepublishByATask(t *testing.T) {
 	r := newExposeRig(t)
 	d := &fakeDispatcher{call: agentCall()}
 	r.svc.SetDispatcher(d)
-	publishSales(t, r.svc, windowA, nil, BundleProvenance{}, 1)
+	publishSales(t, r.svc, windowA, nil, BundleProvenance{FromNothingSealed: true}, 1)
 	exp, err := r.svc.Expose(t.Context(), ExposeInput{Alias: "sales__orders", By: windowA})
 	require.NoError(t, err)
-	publishSales(t, r.svc, windowA, oboOf(d.call), BundleProvenance{}, 2)
+	publishSales(t, r.svc, windowA, oboOf(d.call), BundleProvenance{FromNothingSealed: true}, 2)
 	status, body, _ := fetch(t, http.MethodGet, exp.URL, exp.Token)
 	require.Equal(t, http.StatusOK, status)
 	assert.Equal(t, []int64{2}, int64Values(t, body))
@@ -75,7 +75,7 @@ func TestATasksTokenNeverReadsThePersonsRowsUnderARace(t *testing.T) {
 	own := oboOf(d.call)
 	var served, ended int
 	for i := range 60 {
-		publishSales(t, r.svc, windowA, own, BundleProvenance{}, 1)
+		publishSales(t, r.svc, windowA, own, BundleProvenance{FromNothingSealed: true}, 1)
 		exp, err := r.svc.Expose(t.Context(), ExposeInput{Alias: "sales__orders", By: windowA, OnBehalfOf: own})
 		require.NoError(t, err)
 		done := make(chan struct{})

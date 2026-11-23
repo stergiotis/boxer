@@ -49,7 +49,7 @@ var (
 	kindAdhocSourceSql         uint64
 	kindAdhocInputHandles      uint64
 	kindAdhocColumnsOnly       uint64
-	kindAdhocDerivedFromSealed uint64
+	kindAdhocFromNothingSealed uint64
 	kindAdhocLabelOnly         uint64
 )
 
@@ -70,7 +70,7 @@ func init() {
 	kindAdhocSourceSql = vdd.MembAdhocSourceSql.GetId().Value()
 	kindAdhocInputHandles = vdd.MembAdhocInputHandles.GetId().Value()
 	kindAdhocColumnsOnly = vdd.MembAdhocColumnsOnly.GetId().Value()
-	kindAdhocDerivedFromSealed = vdd.MembAdhocDerivedFromSealed.GetId().Value()
+	kindAdhocFromNothingSealed = vdd.MembAdhocFromNothingSealed.GetId().Value()
 	kindAdhocLabelOnly = vdd.MembAdhocLabelOnly.GetId().Value()
 	buscodec.Register[AdhocRequest](adhocRequestBusCodec)
 }
@@ -151,7 +151,7 @@ type AdhocRequestColumns struct {
 	SourceSql         []string
 	InputHandles      [][]string
 	ColumnsOnly       []bool
-	DerivedFromSealed []bool
+	FromNothingSealed []bool
 	LabelOnly         []bool
 }
 
@@ -184,7 +184,7 @@ func (c *AdhocRequestColumns) Append(row AdhocRequest) {
 	c.SourceSql = append(c.SourceSql, row.SourceSql)
 	c.InputHandles = append(c.InputHandles, row.InputHandles)
 	c.ColumnsOnly = append(c.ColumnsOnly, row.ColumnsOnly)
-	c.DerivedFromSealed = append(c.DerivedFromSealed, row.DerivedFromSealed)
+	c.FromNothingSealed = append(c.FromNothingSealed, row.FromNothingSealed)
 	c.LabelOnly = append(c.LabelOnly, row.LabelOnly)
 }
 
@@ -211,7 +211,7 @@ func (c *AdhocRequestColumns) Row(i int) (row AdhocRequest) {
 	row.SourceSql = c.SourceSql[i]
 	row.InputHandles = c.InputHandles[i]
 	row.ColumnsOnly = c.ColumnsOnly[i]
-	row.DerivedFromSealed = c.DerivedFromSealed[i]
+	row.FromNothingSealed = c.FromNothingSealed[i]
 	row.LabelOnly = c.LabelOnly[i]
 	return
 }
@@ -423,9 +423,9 @@ func AdhocRequestBuildEntities[
 		boolSecAttr_ColumnsOnly := boolSec.BeginAttribute(c.ColumnsOnly[i])
 		boolSecAttr_ColumnsOnly.AddMembershipLowCardRefP(kindAdhocColumnsOnly)
 		boolSecAttr_ColumnsOnly.EndAttributeP()
-		boolSecAttr_DerivedFromSealed := boolSec.BeginAttribute(c.DerivedFromSealed[i])
-		boolSecAttr_DerivedFromSealed.AddMembershipLowCardRefP(kindAdhocDerivedFromSealed)
-		boolSecAttr_DerivedFromSealed.EndAttributeP()
+		boolSecAttr_FromNothingSealed := boolSec.BeginAttribute(c.FromNothingSealed[i])
+		boolSecAttr_FromNothingSealed.AddMembershipLowCardRefP(kindAdhocFromNothingSealed)
+		boolSecAttr_FromNothingSealed.EndAttributeP()
 		boolSecAttr_LabelOnly := boolSec.BeginAttribute(c.LabelOnly[i])
 		boolSecAttr_LabelOnly.AddMembershipLowCardRefP(kindAdhocLabelOnly)
 		boolSecAttr_LabelOnly.EndAttributeP()
@@ -541,9 +541,9 @@ func AdhocRequestEmitSectionBool[
 	boolSecAttr_ColumnsOnly := boolSec.BeginAttribute(row.ColumnsOnly)
 	boolSecAttr_ColumnsOnly.AddMembershipLowCardRefP(kindAdhocColumnsOnly)
 	boolSecAttr_ColumnsOnly.EndAttributeP()
-	boolSecAttr_DerivedFromSealed := boolSec.BeginAttribute(row.DerivedFromSealed)
-	boolSecAttr_DerivedFromSealed.AddMembershipLowCardRefP(kindAdhocDerivedFromSealed)
-	boolSecAttr_DerivedFromSealed.EndAttributeP()
+	boolSecAttr_FromNothingSealed := boolSec.BeginAttribute(row.FromNothingSealed)
+	boolSecAttr_FromNothingSealed.AddMembershipLowCardRefP(kindAdhocFromNothingSealed)
+	boolSecAttr_FromNothingSealed.EndAttributeP()
 	boolSecAttr_LabelOnly := boolSec.BeginAttribute(row.LabelOnly)
 	boolSecAttr_LabelOnly.AddMembershipLowCardRefP(kindAdhocLabelOnly)
 	boolSecAttr_LabelOnly.EndAttributeP()
@@ -937,9 +937,9 @@ func AdhocRequestFillFromArrow[
 		var boolColumnsOnlyVal bool
 		var boolColumnsOnlyCount int
 		var boolColumnsOnlyLastAttr int64
-		var boolDerivedFromSealedVal bool
-		var boolDerivedFromSealedCount int
-		var boolDerivedFromSealedLastAttr int64
+		var boolFromNothingSealedVal bool
+		var boolFromNothingSealedCount int
+		var boolFromNothingSealedLastAttr int64
 		var boolLabelOnlyVal bool
 		var boolLabelOnlyCount int
 		var boolLabelOnlyLastAttr int64
@@ -968,13 +968,13 @@ func AdhocRequestFillFromArrow[
 					}
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolColumnsOnlyVal = val
-				case kindAdhocDerivedFromSealed:
-					if boolDerivedFromSealedLastAttr != attrJ+1 {
-						boolDerivedFromSealedLastAttr = attrJ + 1
-						boolDerivedFromSealedCount++
+				case kindAdhocFromNothingSealed:
+					if boolFromNothingSealedLastAttr != attrJ+1 {
+						boolFromNothingSealedLastAttr = attrJ + 1
+						boolFromNothingSealedCount++
 					}
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-					boolDerivedFromSealedVal = val
+					boolFromNothingSealedVal = val
 				case kindAdhocLabelOnly:
 					if boolLabelOnlyLastAttr != attrJ+1 {
 						boolLabelOnlyLastAttr = attrJ + 1
@@ -1000,11 +1000,11 @@ func AdhocRequestFillFromArrow[
 			return
 		}
 		c.ColumnsOnly = append(c.ColumnsOnly, boolColumnsOnlyVal)
-		if boolDerivedFromSealedCount != 1 {
-			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "adhocDerivedFromSealed").Int("got", boolDerivedFromSealedCount).Errorf("slot bool@adhocDerivedFromSealed (field DerivedFromSealed) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolDerivedFromSealedCount)
+		if boolFromNothingSealedCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "adhocFromNothingSealed").Int("got", boolFromNothingSealedCount).Errorf("slot bool@adhocFromNothingSealed (field FromNothingSealed) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolFromNothingSealedCount)
 			return
 		}
-		c.DerivedFromSealed = append(c.DerivedFromSealed, boolDerivedFromSealedVal)
+		c.FromNothingSealed = append(c.FromNothingSealed, boolFromNothingSealedVal)
 		if boolLabelOnlyCount != 1 {
 			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "adhocLabelOnly").Int("got", boolLabelOnlyCount).Errorf("slot bool@adhocLabelOnly (field LabelOnly) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolLabelOnlyCount)
 			return
@@ -1347,9 +1347,9 @@ func AdhocRequestReadRow[
 	var boolColumnsOnlyVal bool
 	var boolColumnsOnlyCount int
 	var boolColumnsOnlyLastAttr int64
-	var boolDerivedFromSealedVal bool
-	var boolDerivedFromSealedCount int
-	var boolDerivedFromSealedLastAttr int64
+	var boolFromNothingSealedVal bool
+	var boolFromNothingSealedCount int
+	var boolFromNothingSealedLastAttr int64
 	var boolLabelOnlyVal bool
 	var boolLabelOnlyCount int
 	var boolLabelOnlyLastAttr int64
@@ -1378,13 +1378,13 @@ func AdhocRequestReadRow[
 				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolColumnsOnlyVal = val
-			case kindAdhocDerivedFromSealed:
-				if boolDerivedFromSealedLastAttr != attrJ+1 {
-					boolDerivedFromSealedLastAttr = attrJ + 1
-					boolDerivedFromSealedCount++
+			case kindAdhocFromNothingSealed:
+				if boolFromNothingSealedLastAttr != attrJ+1 {
+					boolFromNothingSealedLastAttr = attrJ + 1
+					boolFromNothingSealedCount++
 				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				boolDerivedFromSealedVal = val
+				boolFromNothingSealedVal = val
 			case kindAdhocLabelOnly:
 				if boolLabelOnlyLastAttr != attrJ+1 {
 					boolLabelOnlyLastAttr = attrJ + 1
@@ -1419,12 +1419,12 @@ func AdhocRequestReadRow[
 		row.ColumnsOnly = boolColumnsOnlyVal
 		present = true
 	}
-	if boolDerivedFromSealedCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "adhocDerivedFromSealed").Int("got", boolDerivedFromSealedCount).Errorf("slot bool@adhocDerivedFromSealed (field DerivedFromSealed) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolDerivedFromSealedCount)
+	if boolFromNothingSealedCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "adhocFromNothingSealed").Int("got", boolFromNothingSealedCount).Errorf("slot bool@adhocFromNothingSealed (field FromNothingSealed) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolFromNothingSealedCount)
 		return
 	}
-	if boolDerivedFromSealedCount == 1 {
-		row.DerivedFromSealed = boolDerivedFromSealedVal
+	if boolFromNothingSealedCount == 1 {
+		row.FromNothingSealed = boolFromNothingSealedVal
 		present = true
 	}
 	if boolLabelOnlyCount > 1 {

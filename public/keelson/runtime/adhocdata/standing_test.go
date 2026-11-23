@@ -49,10 +49,11 @@ func TestStandingOf(t *testing.T) {
 	}
 }
 
-// A publication that derives from sealed data is not the task's own clear
-// work whatever tier its call declared: the publisher's declaration and the
-// inputs the service resolves both say so, the task may not expose it, and
-// a republish that derives ends an exposure the task made.
+// A publication is the task's own clear work only when its publisher
+// asserted that its rows derive from nothing sealed and no input the
+// service resolves says otherwise, whatever tier its call declared: the
+// task may not expose any other, and a republish that is not asserted ends
+// an exposure the task made.
 func TestATaskDoesNotExposeWhatDerivesFromSealedData(t *testing.T) {
 	r := newExposeRig(t)
 	svc := r.svc
@@ -60,19 +61,19 @@ func TestATaskDoesNotExposeWhatDerivesFromSealedData(t *testing.T) {
 	svc.SetDispatcher(d)
 	own := oboOf(d.call)
 
-	res := publishSales(t, svc, windowA, own, BundleProvenance{DerivedFromSealed: true}, 1)
-	assert.True(t, res.DerivedFromSealed)
+	res := publishSales(t, svc, windowA, own, BundleProvenance{}, 1)
+	assert.False(t, res.FromNothingSealed)
 	audits := svc.auditRecords()
-	assert.Equal(t, "derives from sealed data", audits[len(audits)-1].Reason, "the publish row says so")
+	assert.Equal(t, reasonNotStated, audits[len(audits)-1].Reason, "the publish row says so")
 	_, err := svc.Expose(t.Context(), ExposeInput{Alias: "sales__orders", By: windowA, OnBehalfOf: own})
 	require.Error(t, err, "the same-round publish of a confined result is not the task's to expose")
-	assert.ErrorContains(t, err, "derives from sealed data")
+	assert.ErrorContains(t, err, "not known to derive from nothing sealed")
 	assert.ErrorContains(t, err, "the person exposes the rest")
 	_, err = svc.Expose(t.Context(), ExposeInput{Alias: "sales__orders", By: windowA})
 	assert.NoError(t, err, "the person exposes it")
 
-	clean := publishSales(t, svc, windowA, own, BundleProvenance{}, 2)
-	assert.False(t, clean.DerivedFromSealed)
+	clean := publishSales(t, svc, windowA, own, BundleProvenance{FromNothingSealed: true}, 2)
+	assert.True(t, clean.FromNothingSealed)
 	audits = svc.auditRecords()
 	assert.Empty(t, audits[len(audits)-1].Reason)
 	exp, err := svc.Expose(t.Context(), ExposeInput{Alias: "sales__orders", By: windowA, OnBehalfOf: own})
@@ -83,25 +84,25 @@ func TestATaskDoesNotExposeWhatDerivesFromSealedData(t *testing.T) {
 	summary := func(inputs ...string) (out BundleResult) {
 		out, err = svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "summary", Document: []byte(testDoc), By: windowA, OnBehalfOf: own,
 			Datasets:   []BundleDatasetInput{{LocalName: "orders", ArrowIPCStream: int64Stream(t, false, 6)}},
-			Provenance: BundleProvenance{InputHandles: inputs}})
+			Provenance: BundleProvenance{InputHandles: inputs, FromNothingSealed: true}})
 		require.NoError(t, err)
 		return
 	}
-	assert.False(t, summary(clean.Datasets[0].Handle).DerivedFromSealed, "an input that is the task's own clear publication seals nothing")
+	assert.True(t, summary(clean.Datasets[0].Handle).FromNothingSealed, "an input that is the task's own clear publication seals nothing")
 	_, err = svc.Expose(t.Context(), ExposeInput{Alias: "summary__orders", By: windowA, OnBehalfOf: own})
 	assert.NoError(t, err)
-	assert.True(t, summary(clean.Datasets[0].Handle, persons.Handle).DerivedFromSealed, "an input a person published is sealed data, though the publisher declared nothing")
+	assert.False(t, summary(clean.Datasets[0].Handle, persons.Handle).FromNothingSealed, "an input a person published is sealed data, whatever the publisher asserted")
 	_, err = svc.Expose(t.Context(), ExposeInput{Alias: "summary__orders", By: windowA, OnBehalfOf: own})
-	assert.ErrorContains(t, err, "derives from sealed data")
-	assert.True(t, summary("adhoc_00000000000000ff").DerivedFromSealed, "an input the service does not hold is not known to be the task's")
-	assert.True(t, summary(res.Datasets[0].Handle).DerivedFromSealed, "an input that itself derived from sealed data carries it on")
+	assert.ErrorContains(t, err, "not known to derive from nothing sealed")
+	assert.False(t, summary("adhoc_00000000000000ff").FromNothingSealed, "an input the service does not hold is not known to be the task's")
+	assert.False(t, summary(res.Datasets[0].Handle).FromNothingSealed, "an input that itself derived from sealed data carries it on")
 
-	publishSales(t, svc, windowA, own, BundleProvenance{DerivedFromSealed: true}, 3)
+	publishSales(t, svc, windowA, own, BundleProvenance{}, 3)
 	status, _, _ := fetch(t, "GET", exp.URL, exp.Token)
-	assert.Equal(t, 404, status, "a republish that derives from sealed data ends the task's exposure")
+	assert.Equal(t, 404, status, "a republish not asserted to derive from nothing sealed ends the task's exposure")
 	found := false
 	for _, rec := range r.records() {
-		found = found || (rec.Exposure == exp.Id && rec.Reason == "a republish derives from sealed data")
+		found = found || (rec.Exposure == exp.Id && rec.Reason == "a republish is not known to derive from nothing sealed")
 	}
 	assert.True(t, found, "and the trail says why")
 }
@@ -112,7 +113,7 @@ func TestALabelRefusalSaysWhoExposesInstead(t *testing.T) {
 	r := newExposeRig(t)
 	d := &fakeDispatcher{call: agentCall(), grants: []string{"expose:sales"}}
 	r.svc.SetDispatcher(d)
-	publishSales(t, r.svc, windowA, oboOf(d.call), BundleProvenance{}, 1)
+	publishSales(t, r.svc, windowA, oboOf(d.call), BundleProvenance{FromNothingSealed: true}, 1)
 
 	amber := d.as(func(cc *app.CallContext) { cc.Tier = uint8(agentrun.TierAmber) })
 	_, err := r.svc.Expose(t.Context(), ExposeInput{Alias: "sales__orders", By: windowA, OnBehalfOf: amber})
@@ -121,7 +122,7 @@ func TestALabelRefusalSaysWhoExposesInstead(t *testing.T) {
 	assert.ErrorContains(t, err, "Reading back what the task itself published at TLP:CLEAR leaves a run there")
 	assert.ErrorContains(t, err, "the person exposes the rest, from play's Data sets tab")
 
-	publishSales(t, r.svc, windowA, amber, BundleProvenance{}, 2)
+	publishSales(t, r.svc, windowA, amber, BundleProvenance{FromNothingSealed: true}, 2)
 	clear := d.as(func(cc *app.CallContext) { cc.Tier = uint8(agentrun.TierClear) })
 	_, err = r.svc.Expose(t.Context(), ExposeInput{Alias: "sales__orders", By: windowA, OnBehalfOf: clear})
 	require.Error(t, err)

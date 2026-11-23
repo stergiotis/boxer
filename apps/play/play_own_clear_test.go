@@ -186,11 +186,19 @@ func (inst *ownClearRig) round(op string, args string) (out outcome) {
 
 // appPublishes publishes bundle with a three-row dataset result as an app
 // does on the task's behalf: under a call of the task routed to the
-// window, at the tier the conversation holds. It returns the dataset's
-// handle; the task's query binds the alias in the window.
+// window, at the tier the conversation holds, asserting that the rows it
+// computed derive from nothing sealed. It returns the dataset's handle; the
+// task's query binds the alias in the window.
 func (inst *ownClearRig) appPublishes(bundle string) (handle string) {
 	inst.t.Helper()
-	return inst.publish(inst.win, bundle, inst.attestedCall())
+	return inst.publish(inst.win, bundle, inst.attestedCall(), true)
+}
+
+// appPublishesCarelessly is appPublishes by an app that says nothing about
+// what its rows derive from.
+func (inst *ownClearRig) appPublishesCarelessly(bundle string) (handle string) {
+	inst.t.Helper()
+	return inst.publish(inst.win, bundle, inst.attestedCall(), false)
 }
 
 // attestedCall makes a call of the task to the window, at the tier the
@@ -263,13 +271,14 @@ func listed(t *testing.T, text string, name string) (d map[string]any) {
 // personPublishes publishes bundle as a person's window does.
 func (inst *ownClearRig) personPublishes(bundle string) (handle string) {
 	inst.t.Helper()
-	return inst.publish(inst.person, bundle, nil)
+	return inst.publish(inst.person, bundle, nil, false)
 }
 
-func (inst *ownClearRig) publish(by app.BusI, bundle string, obo *app.OnBehalfOf) (handle string) {
+func (inst *ownClearRig) publish(by app.BusI, bundle string, obo *app.OnBehalfOf, fromNothingSealed bool) (handle string) {
 	inst.t.Helper()
 	res, err := adhocdata.PublishBundleRequest(inst.t.Context(), by, adhocdata.BundlePublishInput{Alias: bundle, Document: []byte("SELECT 1"),
-		OnBehalfOf: obo, Datasets: []adhocdata.BundleDatasetInput{{LocalName: "result", ArrowIPCStream: arrowRows()}}})
+		OnBehalfOf: obo, Datasets: []adhocdata.BundleDatasetInput{{LocalName: "result", ArrowIPCStream: arrowRows()}},
+		Provenance: adhocdata.BundleProvenance{FromNothingSealed: fromNothingSealed}})
 	require.NoError(inst.t, err)
 	return res.Datasets[0].Handle
 }
@@ -410,7 +419,7 @@ func TestAResultPublishedInTheRoundItArrivedInCarriesItsLabel(t *testing.T) {
 	require.Equal(t, r.g.Task, pub.PublisherTask, "the publish is the task's own, declared at TLP:CLEAR")
 	exp := r.call(opExposeDataset, jsonArgs(t, map[string]any{"name": "leak__result"}))
 	require.Equal(t, "refused", exp.Phase, "a result of sealed data published at TLP:CLEAR is not exposed by the task")
-	assert.Contains(t, exp.Reason, "derives from sealed data")
+	assert.Contains(t, exp.Reason, "not known to derive from nothing sealed")
 	r.endRound(q, exp)
 
 	// Read back, it labels as any sealed data does, and stays unexposed.
@@ -497,7 +506,7 @@ func TestOnlyTheTasksOwnClearRevisionReadsBackUnlabelled(t *testing.T) {
 	// follower binds the new revision: the same statement is labelled from
 	// then on. The alias has one owner, so the republish comes from the
 	// publishing window without a call of the task.
-	r.publish(r.win, "kernel_top", nil)
+	r.publish(r.win, "kernel_top", nil, false)
 	r.reread()
 	out = r.call(opQuery, stmt)
 	require.Equal(t, "completed", out.Phase, out.Reason)
@@ -611,7 +620,7 @@ func TestAKeptDataSetOfTheTasksOwnPublicationIsNotLabelled(t *testing.T) {
 	require.Equal(t, "completed", phase, reason)
 	exp := r.call(opExposeDataset, jsonArgs(t, map[string]any{"name": "leak__result"}))
 	require.Equal(t, "refused", exp.Phase)
-	assert.Contains(t, exp.Reason, "derives from sealed data")
+	assert.Contains(t, exp.Reason, "not known to derive from nothing sealed")
 }
 
 // A lane's run and an explain go through the same labelled execution as

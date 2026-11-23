@@ -229,12 +229,13 @@ route. Where does an exposure stand?
    release from what it may not. What can: who published the live revision
    (the attested call, ADR-0288 §SD5), the TLP tier the coordinator
    declared on that call and on the exposing one (ADR-0312 §SD4), and
-   whether the revision derives from sealed data. A task's exposure is
-   refused unless its own call published the dataset, neither call declared
-   a tier above CLEAR and the revision derives from nothing sealed; a
-   republish that is not that task's own at TLP:CLEAR from nothing sealed
-   — declared above CLEAR, derived from sealed data, or made by the person
-   or another task — ends a task's exposure. A dataset the task may read under
+   whether its publisher asserted that the revision derives from nothing
+   sealed. A task's exposure is refused unless its own call published the
+   dataset, neither call declared a tier above CLEAR and the publisher
+   asserted, uncontradicted by an input, that the rows derive from nothing
+   sealed; a republish that is not that task's own at TLP:CLEAR from
+   nothing sealed — declared above CLEAR, not asserted, or made by the
+   person or another task — ends a task's exposure. A dataset the task may read under
    `keelson:<alias>` but did not publish — another task's, or data a person
    published — is not the task's to release; the person exposes it. The
    same facts about a revision decide what a task reads back without a
@@ -253,7 +254,7 @@ route. Where does an exposure stand?
 
 The default is refusal wherever the rules above do not clearly admit the
 act: a task's exposure of what it did not publish, a labelled call, a
-revision derived from sealed data, a managed host above clearance, no
+revision not asserted to derive from nothing sealed, a managed host above clearance, no
 listener, no grant.
 
 ### What it does not cover
@@ -487,18 +488,22 @@ every byte involved was the task's own work at TLP:CLEAR.
   has both declared at the tier before either outcome arrived, so the
   publish was recorded at TLP:CLEAR. This weakened item 3 as it stood: an
   exposure asked for in the same round was admitted, and released rows
-  derived from a dataset a person published. A revision now records
-  whether it derives from sealed data. The publisher says so from the
-  label of the result it publishes (`BundleProvenance.DerivedFromSealed`;
-  play's `publish_result` sets it from the main result's label, which
-  carries a kept data set's confinement too), and the service adds what
-  it sees itself: an input handle that is not the publishing task's own
-  clear publication, or that it no longer holds, makes the revision
-  derived whatever the publisher said. A derived revision is neither read
-  back unlabelled nor exposed by the task, and a republish that derives
-  ends a task's exposure. A publisher that states nothing and names no
-  inputs is still judged by its call's tier; an app that computes from
-  sealed data outside play has to set the field.
+  derived from a dataset a person published. A revision now stands as
+  derived from nothing sealed only when its publisher asserts so
+  (`BundleProvenance.FromNothingSealed`, whose zero value is the strict
+  one). A publisher asserts it from what it knows — play's
+  `publish_result` from the label of the result it snapshots, for the
+  task that publishes, which carries a kept data set's confinement too —
+  and never from its call's tier. The service overrides the assertion
+  where it sees otherwise: an input handle that is not the publishing
+  task's own clear publication, or that it no longer holds, makes the
+  revision sealed whatever the publisher asserted. A revision that is
+  not so asserted is neither read back unlabelled nor exposed by the
+  task, and a republish that is not ends a task's exposure. A publisher
+  that states nothing — an older one, a careless one — therefore
+  publishes sealed data at whatever tier its call declared; an app that
+  computes a table for a task outside play has to make the assertion,
+  from its own knowledge of what it computed from.
 - **Kept data sets.** A session data set a task keeps from a statement
   whose only sealed inputs are its own clear publications is held behind
   the wall like any data set derived from sealed data, and reads back
@@ -517,8 +522,9 @@ every byte involved was the task's own work at TLP:CLEAR.
 - **The trail.** The dataset service's row of a read taken as the task's
   own says so and names the call that published the revision; an answer by
   handle is a row of its own (`read-label`), written only when it is
-  own-clear. A publish's row says when the revision derives from sealed
-  data. The session data service's attach, define and replay rows name
+  own-clear. The row of a publish an agent's call caused says when the
+  revision does not stand as that task's own clear work, and whether
+  because nothing was asserted or because an input contradicted it. The session data service's attach, define and replay rows name
   the attachments read as the task's own (`own-clear`) and the label that
   followed (`label`).
 - **Chat needs no rule.** It labels from what an outcome carries: the
@@ -526,10 +532,10 @@ every byte involved was the task's own work at TLP:CLEAR.
 
 Surfaces, Tier 1, all additive: `adhocdata.ReadResult.OwnClear`,
 `LabelResult`, `Service.ReadLabel`, `ReadLabelRequest`, `AuditReadLabel`,
-`BundleProvenance.DerivedFromSealed`, `BundleResult.DerivedFromSealed`;
-the wire fields `adhocDerivedFromSealed`, `adhocOwnClear` and
+`BundleProvenance.FromNothingSealed`, `BundleResult.FromNothingSealed`;
+the wire fields `adhocFromNothingSealed`, `adhocOwnClear` and
 `adhocLabelOnly` (memberships 281 to 283) on the ad-hoc request and reply;
-`playground.BundleSpec.DerivedFromSealed`; `sessiondata.Binding.OwnClear`,
+`playground.BundleSpec.FromNothingSealed`; `sessiondata.Binding.OwnClear`,
 `DatasetInfo.OwnClear`, `AuditRecord.OwnClear` and `Label`; the result
 stream's `Sealed` beside `Confined`, which now reports the label; a
 reason on applied `adhocDataset` trail rows. Changed in meaning, not in
@@ -601,21 +607,20 @@ dataset labelled. No live run of a model is behind the change.
   handle unregistered while the run read it used to drop out of the
   question, and a statement joining it with the task's own publication
   came back unlabelled.
-- The publisher states what its rows derive from, the service adds what
-  the named inputs show, and a publisher that does neither is judged by
-  its call's tier. Open, review of 2026-11-23: the zero value of
-  `DerivedFromSealed` is the relaxed one. An app that reads a person's
-  dataset on a task's behalf and publishes what it made of it under a
-  call of the same round, stating nothing, gets a revision that reads
-  back as the task's own clear work and that the task exposes
+- The publisher asserts that its rows derive from nothing sealed, the
+  service overrides the assertion where a named input shows otherwise,
+  and a publisher that asserts nothing publishes sealed data whatever
+  tier its call declared. Decided with the owner after the review of
+  2026-11-23, replacing the first form, in which the field said "derives
+  from sealed data" and a publisher that stated nothing was judged by
+  its call's tier: an app that read a person's dataset for a task and
+  published what it made of it in the same round, stating nothing, got
+  a revision the task read back unlabelled and exposed
   (`TestAPublisherThatStatesNothingAfterASealedReadIsNotClear`,
-  skipped). Two ways to close it: the service remembers that a task read
-  sealed data that is not its own and takes that task's later
-  publications as derived; or a revision is clear only when its
-  publisher asserts so. The first reverses the line above, the second
-  changes the wire field's meaning.
-- A task's exposure ends on a republish that derives from sealed data.
-  Review, 2026-11-23: it ends on any republish that is not the exposing
+  `TestACarelessPublisherIsNeverExposedByItsTask`). The field was
+  renamed with its meaning, before anything carrying it was released.
+- A task's exposure ends on a republish that is not asserted to derive
+  from nothing sealed. Review, 2026-11-23: it ends on any republish that is not the exposing
   task's own clear publication, the person's and another task's under
   the same owner included, since the exposure was admitted for the
   standing of the revision it named and the token would otherwise read

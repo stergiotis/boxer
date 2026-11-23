@@ -152,7 +152,7 @@ func PublishBundleRequest(ctx context.Context, bus app.BusI, in BundlePublishInp
 		KeepAfterClose: in.KeepAfterClose,
 		OboTask:        oboTask(in.OnBehalfOf), OboEpoch: oboEpoch(in.OnBehalfOf), OboCall: oboCall(in.OnBehalfOf),
 		SourceSql: in.Provenance.SourceSql, InputHandles: in.Provenance.InputHandles,
-		DerivedFromSealed: in.Provenance.DerivedFromSealed,
+		FromNothingSealed: in.Provenance.FromNothingSealed,
 		LocalNames:        make([]string, 0, len(in.Datasets)), ArrowStreams: make([][]byte, 0, len(in.Datasets)),
 	}
 	for _, d := range in.Datasets {

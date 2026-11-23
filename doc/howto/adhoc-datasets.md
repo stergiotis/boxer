@@ -155,14 +155,18 @@ in for one each state a fact the dataset service cannot see for itself
 ([ADR-0407](../adr/0407-an-exposed-dataset-a-program-on-this-machine-reads-an-ad-hoc-dataset-by-alias-and-token.md),
 proposed).
 
-- **Publishing.** Set `DerivedFromSealed` on the bundle
-  (`playground.BundleSpec`, or `adhocdata.BundleProvenance`) when the rows
-  were computed from sealed data: a dataset read with
-  `adhocdata.ReadAll` whose answer was not `OwnClear`, a confined result.
-  The tier of the call that asked for the publish does not say it, since a
-  call declares the tier its conversation had when the model asked. Name
-  the datasets the rows were read from as `InputHandles` too; the service
-  checks those itself.
+- **Publishing.** Set `FromNothingSealed` on the bundle
+  (`playground.BundleSpec`, or `adhocdata.BundleProvenance`) when, and
+  only when, the app knows the rows were computed from nothing sealed: no
+  dataset read with `adhocdata.ReadAll` whose answer was not `OwnClear`,
+  no confined result, no input it cannot account for. Left unset, which
+  is the default, the bundle is sealed data to every reader: the task it
+  was published for reads it back labelled and cannot expose it, whatever
+  tier the publishing call declared. The tier does not stand in for the
+  assertion, since a call declares the tier its conversation had when the
+  model asked. Name the datasets the rows were read from as
+  `InputHandles` too; the service checks those itself and overrides an
+  assertion they contradict.
 - **Reading.** `adhocdata.ReadAll` answers `OwnClear` when the revision it
   returns is the reading task's own publication at TLP:CLEAR from nothing
   sealed. Only then may the app leave the outcome of the call that caused
@@ -252,8 +256,8 @@ a day); when the dataset is retracted, its columns change or the window
 that published it closes; when the window that exposed it closes; on
 Revoke or `revoke_exposure`; when the host stops. An exposure a task made
 ends as well on a republish that is not that task's own at TLP:CLEAR from
-nothing sealed: the person's, another task's, one above CLEAR, one that
-derives from sealed data. On a host the
+nothing sealed: the person's, another task's, one above CLEAR, one whose
+publisher did not assert that it derives from nothing sealed. On a host the
 organisation manages (`BOXER_CELL_MANAGED`), an exposure above the export
 clearance is refused. Every expose, read, revoke and lapse is on the trail
 in the domain `adhoc-expose`, without the token.

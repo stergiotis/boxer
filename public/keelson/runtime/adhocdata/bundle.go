@@ -94,12 +94,17 @@ const (
 type BundleProvenance struct {
 	SourceSql    string
 	InputHandles []string
-	// DerivedFromSealed says the rows derive from sealed data. The
-	// publisher sets it from the label of the result it publishes, not
-	// from the tier of the call that asked for the publish: a call
-	// declares the tier its conversation had when the model asked, which
-	// a result that arrived in the same round has not raised yet.
-	DerivedFromSealed bool
+	// FromNothingSealed is the publisher's assertion that the rows derive
+	// from nothing sealed. A publisher makes it only from what it knows:
+	// from the label of the result it publishes, not from the tier of the
+	// call that asked for the publish, since a call declares the tier its
+	// conversation had when the model asked, which a result that arrived
+	// in the same round has not raised yet. False, the zero value, is the
+	// strict one: a revision whose publisher does not assert it is sealed
+	// data to every reader, never a task's own clear publication, and
+	// not a task's to expose. The service overrides the assertion where it
+	// sees otherwise (BundleResult.FromNothingSealed).
+	FromNothingSealed bool
 }
 
 // BundleInput is one dataset a bundle's source statement read, as the
@@ -142,12 +147,13 @@ type BundleResult struct {
 	// SourceSql and Inputs are the live revision's provenance.
 	SourceSql string
 	Inputs    []BundleInput
-	// DerivedFromSealed says the live revision derives from sealed data:
-	// its publisher declared so, or the service found an input that is
-	// not the publishing task's own publication at TLP:CLEAR. The service
-	// sets it in process; a reply over the bus does not carry it, and a
-	// reader learns what it needs from a read's OwnClear.
-	DerivedFromSealed bool
+	// FromNothingSealed says the live revision stands as derived from
+	// nothing sealed: its publisher asserted so, and every input it named
+	// is the publishing task's own publication at TLP:CLEAR. The service
+	// sets it in process; a reply over the bus does not carry it and so
+	// reads as the strict value, and a reader learns what it needs from a
+	// read's OwnClear.
+	FromNothingSealed bool
 	// PublisherTask is Context's task, and what survives the bus: the
 	// task that reads and runs on the bundle without a grant entry for it
 	// (§SD4).
@@ -183,6 +189,13 @@ func (inst *bundleRec) checkOwner(by Identity) (err error) {
 	}
 	return nil
 }
+
+// Why an applied publish an agent's call caused does not stand as that
+// task's own clear publication, as its trail row says it.
+const (
+	reasonNotStated   = "sealed to every reader: the publisher did not state that the rows derive from nothing sealed"
+	reasonSealedInput = "sealed to every reader: an input is not the publishing task's own publication at TLP:CLEAR, so the rows derive from sealed data"
+)
 
 // sealedDataset is one stream sealed ahead of a bundle's commit.
 type sealedDataset struct {
@@ -263,10 +276,14 @@ func (inst *Service) PublishBundle(ctx context.Context, in BundlePublishInput) (
 	r.Outcome, r.Revision, r.Owner, r.DocumentDigest = AuditApplied, res.Revision, res.Owner, res.DocumentDigest
 	r.fillDatasets(res.Datasets)
 	r.Document, r.SourceSql = res.Document, res.SourceSql
-	if res.DerivedFromSealed {
-		// On an applied publish the reason is why a later read of the
-		// revision is labelled whatever tier this call declared.
-		r.Reason = "derives from sealed data"
+	if cc.Has && !res.FromNothingSealed {
+		// On an applied publish an agent's call caused, the reason is why
+		// a later read of the revision is labelled whatever tier the call
+		// declared. A publish no agent's call caused is nobody's own.
+		r.Reason = reasonNotStated
+		if in.Provenance.FromNothingSealed {
+			r.Reason = reasonSealedInput
+		}
 	}
 	for _, in := range res.Inputs {
 		r.InputHandles = append(r.InputHandles, in.Handle)
@@ -391,7 +408,9 @@ func (inst *Service) publishBundle(in BundlePublishInput, cc option.Option[app.C
 		owner, keep, revision, createdAt = old.owner, keep || old.keepAfterClose, old.revision+1, old.createdAt
 	}
 	inputs := inst.resolveInputsLocked(in.Provenance.InputHandles)
-	derived := in.Provenance.DerivedFromSealed || inst.sealedInputLocked(in.Provenance.InputHandles, cc) != ""
+	// Derived unless the publisher asserts otherwise and no input it
+	// names says otherwise.
+	derived := !in.Provenance.FromNothingSealed || inst.sealedInputLocked(in.Provenance.InputHandles, cc) != ""
 	registered := make([]*record, 0, len(sealedSet))
 	for _, s := range sealedSet {
 		handle, hErr := inst.mintHandleLocked()
@@ -634,7 +653,7 @@ func (inst *bundleRec) result(recs []*record) (res BundleResult) {
 		Alias: inst.alias, Revision: inst.revision, Document: inst.document, DocumentDigest: inst.documentDigest,
 		CreatedAtUs: inst.createdAt, Datasets: make([]BundleDataset, 0, len(inst.handles)),
 		Owner: inst.owner, Context: inst.context, SourceSql: inst.sourceSql, Inputs: inst.inputs,
-		DerivedFromSealed: inst.derived,
+		FromNothingSealed: !inst.derived,
 	}
 	if inst.context.Has {
 		res.PublisherTask = inst.context.Val.Task
@@ -655,7 +674,7 @@ func (inst *bundleRec) result(recs []*record) (res BundleResult) {
 // not cc's task's own publication at TLP:CLEAR, or one the service no
 // longer holds; empty when every input is. An ad-hoc dataset is sealed, so
 // rows read from one that is not the publishing task's own clear
-// publication derive from sealed data whatever the publisher declared. A
+// publication derive from sealed data whatever the publisher asserted. A
 // publish no agent's call caused has no task to own an input. The caller
 // holds inst.mu.
 func (inst *Service) sealedInputLocked(handles []string, cc option.Option[app.CallContext]) (handle string) {

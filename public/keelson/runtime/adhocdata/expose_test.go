@@ -306,7 +306,7 @@ func TestAnAgentsExposureIsHeldToItsGrantAndItsOwnWork(t *testing.T) {
 	r.svc.SetDispatcher(d)
 	obo := oboOf(d.call)
 	_, err := r.svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
-		By: windowA, OnBehalfOf: obo})
+		By: windowA, OnBehalfOf: obo, Provenance: BundleProvenance{FromNothingSealed: true}})
 	require.NoError(t, err)
 	_, err = r.svc.Publish(PublishInput{Alias: "persons", ArrowIPCStream: int64Stream(t, false, 1), By: windowB})
 	require.NoError(t, err)
@@ -347,7 +347,7 @@ func TestATaskDoesNotExposeAboveClear(t *testing.T) {
 	r.svc.SetDispatcher(d)
 	obo := oboOf(d.call)
 	_, err := r.svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
-		By: windowA, OnBehalfOf: obo})
+		By: windowA, OnBehalfOf: obo, Provenance: BundleProvenance{FromNothingSealed: true}})
 	require.NoError(t, err)
 	_, err = r.svc.Expose(t.Context(), ExposeInput{Alias: "sales__orders", By: windowA, OnBehalfOf: obo})
 	assert.ErrorContains(t, err, "labelled AMBER")
@@ -363,7 +363,7 @@ func TestWhoRevokesAnExposure(t *testing.T) {
 	r.svc.SetDispatcher(d)
 	obo := oboOf(d.call)
 	_, err := r.svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
-		By: windowA, OnBehalfOf: obo})
+		By: windowA, OnBehalfOf: obo, Provenance: BundleProvenance{FromNothingSealed: true}})
 	require.NoError(t, err)
 	res, err := r.svc.Expose(t.Context(), ExposeInput{Alias: "sales__orders", By: windowA, OnBehalfOf: obo})
 	require.NoError(t, err)

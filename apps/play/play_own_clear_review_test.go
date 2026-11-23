@@ -10,6 +10,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 )
@@ -82,7 +83,7 @@ func TestAResultIsUnlabelledOnlyForTheTaskWhoseWorkItHolds(t *testing.T) {
 		pub, err = r.adhoc.ResolveBundle(t.Context(), "bythem", adhocdata.Identity{}, nil)
 		return err == nil
 	}, 10*time.Second, 2*time.Millisecond)
-	assert.True(t, pub.DerivedFromSealed, "to the person the result is sealed data, whoever published what it read")
+	assert.False(t, pub.FromNothingSealed, "to the person the result is sealed data, whoever published what it read")
 	require.Eventually(t, func() bool { r.host.frame(); return !r.host.l.lastPublish().Pending }, 10*time.Second, 2*time.Millisecond)
 
 	// The task's own publish of the same result stays its own clear work.
@@ -90,7 +91,7 @@ func TestAResultIsUnlabelledOnlyForTheTaskWhoseWorkItHolds(t *testing.T) {
 	require.Equal(t, "completed", phase, reason)
 	pub, err := r.adhoc.ResolveBundle(t.Context(), "final", adhocdata.Identity{}, nil)
 	require.NoError(t, err)
-	assert.False(t, pub.DerivedFromSealed)
+	assert.True(t, pub.FromNothingSealed)
 
 	// A check rests on the result: for another caller the result is
 	// confined, for the task whose work it holds it is not.
@@ -136,4 +137,25 @@ func TestAnObservingTaskReadsAnotherTasksOwnClearResultLabelled(t *testing.T) {
 	}, 10*time.Second, 2*time.Millisecond)
 	require.Equal(t, "completed", got.Phase, got.Reason)
 	assert.True(t, got.Confined, "the rows are another task's publication: sealed data to the observer")
+}
+
+// An app that publishes on the task's behalf without saying what its rows
+// derive from publishes sealed data, whatever tier its call declared: the
+// task's read of it is labelled and the task does not expose it.
+func TestACarelessAppsPublicationIsSealedToItsTask(t *testing.T) {
+	r := newOwnClearRig(t)
+	r.appPublishesCarelessly("kernel_top")
+	out := r.round(opQuery, jsonArgs(t, map[string]any{"sql": "SELECT x FROM keelson('kernel_top__result')"}))
+	require.Equal(t, "completed", out.Phase, out.Reason)
+	assert.True(t, out.Confined, "nothing says the rows derive from nothing sealed")
+	assert.True(t, r.p.graph.MainConfined())
+
+	// Published on from play in the round the read arrived in, at
+	// TLP:CLEAR: play asserts nothing of a confined result.
+	r.tier = agentrun.TierClear
+	phase, reason := r.publishResult("leak")
+	require.Equal(t, "completed", phase, reason)
+	exp := r.call(opExposeDataset, jsonArgs(t, map[string]any{"name": "leak__result"}))
+	require.Equal(t, "refused", exp.Phase)
+	assert.Contains(t, exp.Reason, "not known to derive from nothing sealed")
 }

@@ -42,9 +42,10 @@ type AuditRecord struct {
 	Operation string
 	Outcome   string
 	// Reason is why a refused operation was refused. On an applied one it
-	// is what a reviewer needs to read the labels by: that a published
-	// revision derives from sealed data, or that a read was taken as the
-	// reading task's own publication at TLP:CLEAR and left no label.
+	// is what a reviewer needs to read the labels by: that a revision an
+	// agent's call published does not stand as that task's own clear work,
+	// or that a read was taken as the reading task's own publication at
+	// TLP:CLEAR and left no label.
 	Reason     string
 	Bundle     string
 	Revision   uint64

@@ -162,7 +162,7 @@ func (inst *PlayLauncher) publishResult(call app.OperationCall, in PublishResult
 		publisher = call.OnBehalfOf.Task
 	}
 	confined, held := p.graph.MainLabelFor(resultId, publisher)
-	derived := confined || !held
+	fromNothingSealed := held && !confined
 	trunc := p.graph.MainTruncation()
 	var refusal string
 	switch {
@@ -218,7 +218,7 @@ func (inst *PlayLauncher) publishResult(call app.OperationCall, in PublishResult
 			// The published rows carry the result's own label: the tier
 			// the call declared is the conversation's before this result
 			// arrived in it.
-			return inst.publishBundleOff(rec, in.Bundle, local, doc, adhocdata.BundleProvenance{SourceSql: source, InputHandles: inputs, DerivedFromSealed: derived}, call.OnBehalfOf)
+			return inst.publishBundleOff(rec, in.Bundle, local, doc, adhocdata.BundleProvenance{SourceSql: source, InputHandles: inputs, FromNothingSealed: fromNothingSealed}, call.OnBehalfOf)
 		})
 	}()
 	return

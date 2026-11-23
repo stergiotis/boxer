@@ -72,12 +72,12 @@ func TestPublishBundleCarriesWhatTheRowsDeriveFrom(t *testing.T) {
 	require.NoError(t, err)
 	got, err := adhocdata.ReadAll(t.Context(), producer, "computed__result", &obo)
 	require.NoError(t, err)
-	assert.True(t, got.OwnClear, "rows of nothing sealed are the task's own clear publication")
+	assert.False(t, got.OwnClear, "a producer that states nothing publishes sealed data, whatever tier its call declared")
 
-	spec.DerivedFromSealed = true
+	spec.FromNothingSealed = true
 	_, err = playground.PublishBundle(t.Context(), producer, spec)
 	require.NoError(t, err)
 	got, err = adhocdata.ReadAll(t.Context(), producer, "computed__result", &obo)
 	require.NoError(t, err)
-	assert.False(t, got.OwnClear, "the producer said the rows derive from sealed data")
+	assert.True(t, got.OwnClear, "the producer asserted its rows derive from nothing sealed: the task's own clear publication")
 }

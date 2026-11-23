@@ -21,7 +21,7 @@ func TestOnlyATasksOwnClearPublicationReadsBackAsItsOwn(t *testing.T) {
 	d := &fakeDispatcher{call: agentCall(), grants: []string{"keelson-bundle:sales", "keelson:persons", "keelson-bundle:people"}}
 	svc.SetDispatcher(d)
 	own := oboOf(d.call)
-	publishSales(t, svc, windowA, own, BundleProvenance{}, 1, 2, 3)
+	publishSales(t, svc, windowA, own, BundleProvenance{FromNothingSealed: true}, 1, 2, 3)
 
 	got, err := svc.Read(t.Context(), "sales__orders", windowA, own)
 	require.NoError(t, err)
@@ -60,13 +60,13 @@ func TestOnlyATasksOwnClearPublicationReadsBackAsItsOwn(t *testing.T) {
 	assert.False(t, got.OwnClear, "a bundle a person published")
 
 	amber := d.as(func(cc *app.CallContext) { cc.Tier = uint8(agentrun.TierAmber) })
-	publishSales(t, svc, windowA, amber, BundleProvenance{}, 4)
+	publishSales(t, svc, windowA, amber, BundleProvenance{FromNothingSealed: true}, 4)
 	clear := d.as(func(cc *app.CallContext) { cc.Tier = uint8(agentrun.TierClear) })
 	got, err = svc.Read(t.Context(), "sales__orders", windowA, clear)
 	require.NoError(t, err)
 	assert.False(t, got.OwnClear, "its live revision was published above TLP:CLEAR")
 
-	publishSales(t, svc, windowA, clear, BundleProvenance{}, 5)
+	publishSales(t, svc, windowA, clear, BundleProvenance{FromNothingSealed: true}, 5)
 	got, err = svc.Read(t.Context(), "sales__orders", windowA, clear)
 	require.NoError(t, err)
 	assert.True(t, got.OwnClear, "published again at TLP:CLEAR, the live revision is its own")
@@ -76,38 +76,39 @@ func TestOnlyATasksOwnClearPublicationReadsBackAsItsOwn(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, got.OwnClear, "the tier of the reading call does not decide: the read adds no label to whatever the conversation holds")
 
-	publishSales(t, svc, windowA, nil, BundleProvenance{}, 6)
+	publishSales(t, svc, windowA, nil, BundleProvenance{FromNothingSealed: true}, 6)
 	clear = d.as(func(cc *app.CallContext) { cc.Tier = uint8(agentrun.TierClear) })
 	got, err = svc.Read(t.Context(), "sales__orders", windowA, clear)
 	require.NoError(t, err)
 	assert.False(t, got.OwnClear, "the person republished it since")
 
-	publishSales(t, svc, windowA, d.as(taskTwo), BundleProvenance{}, 7)
+	publishSales(t, svc, windowA, d.as(taskTwo), BundleProvenance{FromNothingSealed: true}, 7)
 	got, err = svc.Read(t.Context(), "sales__orders", windowA, d.as(taskOne))
 	require.NoError(t, err)
 	assert.False(t, got.OwnClear, "another task republished it since")
 }
 
-// A publication that derives from sealed data does not read back as the
-// task's own, whatever tier its call declared: the publisher's declaration
-// and an input the service finds sealed both keep it sealed.
-func TestAPublicationDerivedFromSealedDataReadsBackSealed(t *testing.T) {
+// A publication does not read back as the task's own unless its publisher
+// asserted that its rows derive from nothing sealed, whatever tier its call
+// declared; and an input the service finds sealed keeps it sealed whatever
+// the publisher asserted.
+func TestAPublicationNotAssertedClearReadsBackSealed(t *testing.T) {
 	svc := newTestService(t)
 	d := &fakeDispatcher{call: agentCall()}
 	svc.SetDispatcher(d)
 	own := oboOf(d.call)
-	publishSales(t, svc, windowA, own, BundleProvenance{DerivedFromSealed: true}, 1)
+	publishSales(t, svc, windowA, own, BundleProvenance{}, 1)
 	got, err := svc.Read(t.Context(), "sales__orders", windowA, own)
 	require.NoError(t, err)
-	assert.False(t, got.OwnClear, "declared at TLP:CLEAR in the round the sealed result arrived in")
+	assert.False(t, got.OwnClear, "declared at TLP:CLEAR in the round the sealed result arrived in, and not asserted to derive from nothing sealed")
 
-	clean := publishSales(t, svc, windowA, own, BundleProvenance{}, 2)
+	clean := publishSales(t, svc, windowA, own, BundleProvenance{FromNothingSealed: true}, 2)
 	persons, err := svc.Publish(PublishInput{Alias: "persons", ArrowIPCStream: int64Stream(t, false, 9), By: windowB})
 	require.NoError(t, err)
 	summary := func(inputs ...string) {
 		_, err = svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "summary", Document: []byte(testDoc), By: windowA, OnBehalfOf: own,
 			Datasets:   []BundleDatasetInput{{LocalName: "orders", ArrowIPCStream: int64Stream(t, false, 6)}},
-			Provenance: BundleProvenance{InputHandles: inputs}})
+			Provenance: BundleProvenance{InputHandles: inputs, FromNothingSealed: true}})
 		require.NoError(t, err)
 	}
 	summary(clean.Datasets[0].Handle)
@@ -129,13 +130,13 @@ func TestTheAnswerBelongsToTheRevisionRead(t *testing.T) {
 	d := &fakeDispatcher{call: agentCall(), grants: []string{"keelson-bundle:sales"}}
 	svc.SetDispatcher(d)
 	clear := oboOf(d.call)
-	publishSales(t, svc, windowA, clear, BundleProvenance{}, 1)
+	publishSales(t, svc, windowA, clear, BundleProvenance{FromNothingSealed: true}, 1)
 
 	rec, err := svc.newest("sales__orders")
 	require.NoError(t, err)
 	rc, pub, err := rec.openPublished()
 	require.NoError(t, err)
-	publishSales(t, svc, windowA, nil, BundleProvenance{}, 2)
+	publishSales(t, svc, windowA, nil, BundleProvenance{FromNothingSealed: true}, 2)
 	assert.Equal(t, standingOwnClear, standingOf(pub.context, pub.derived, "task-1"), "the reader opened before the republish reads the task's revision")
 	require.NoError(t, rc.Close())
 	got, err := svc.Read(t.Context(), "sales__orders", windowA, clear)
@@ -154,6 +155,7 @@ func TestTheAnswerBelongsToTheRevisionRead(t *testing.T) {
 				Datasets: []BundleDatasetInput{{LocalName: "orders", ArrowIPCStream: sealedStream}}}
 			if i%2 == 0 {
 				in.OnBehalfOf, in.Datasets[0].ArrowIPCStream = clear, clearStream
+				in.Provenance.FromNothingSealed = true
 			}
 			if _, pErr := svc.PublishBundle(t.Context(), in); pErr != nil {
 				t.Errorf("publish: %v", pErr)
@@ -188,7 +190,7 @@ func TestAHandlesLabelIsItsPublications(t *testing.T) {
 	d := &fakeDispatcher{call: agentCall()}
 	svc.SetDispatcher(d)
 	own := oboOf(d.call)
-	first := publishSales(t, svc, windowA, own, BundleProvenance{}, 1)
+	first := publishSales(t, svc, windowA, own, BundleProvenance{FromNothingSealed: true}, 1)
 	handle := first.Datasets[0].Handle
 
 	got, err := svc.ReadLabel(t.Context(), handle, windowA, own)
@@ -233,7 +235,7 @@ func TestAHandlesLabelIsItsPublications(t *testing.T) {
 
 	// The person republishes: the old handle still reads the task's bytes
 	// until it is unloaded, the new one reads the person's.
-	second := publishSales(t, svc, windowA, nil, BundleProvenance{}, 2)
+	second := publishSales(t, svc, windowA, nil, BundleProvenance{FromNothingSealed: true}, 2)
 	got, err = svc.ReadLabel(t.Context(), handle, windowA, own)
 	require.NoError(t, err)
 	assert.True(t, got.OwnClear, "the handle that left still names the task's revision")
@@ -245,13 +247,13 @@ func TestAHandlesLabelIsItsPublications(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, got.OwnClear, "an unloaded handle reads nothing")
 
-	third := publishSales(t, svc, windowA, own, BundleProvenance{DerivedFromSealed: true}, 3)
+	third := publishSales(t, svc, windowA, own, BundleProvenance{}, 3)
 	got, err = svc.ReadLabel(t.Context(), third.Datasets[0].Handle, windowA, own)
 	require.NoError(t, err)
-	assert.False(t, got.OwnClear, "derived from sealed data")
+	assert.False(t, got.OwnClear, "not asserted to derive from nothing sealed")
 
 	// Over the bus, as an app asks.
-	fourth := publishSales(t, svc, windowA, own, BundleProvenance{}, 4)
+	fourth := publishSales(t, svc, windowA, own, BundleProvenance{FromNothingSealed: true}, 4)
 	window := bus.NewClient(windowA.App, []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	window.SetInstanceKey(windowA.Instance)
 	res, err := ReadLabelRequest(t.Context(), window, fourth.Datasets[0].Handle, own)
@@ -275,7 +277,7 @@ func TestTheReadReplyCarriesTheAnswer(t *testing.T) {
 	d := &fakeDispatcher{call: agentCall()}
 	svc.SetDispatcher(d)
 	own := oboOf(d.call)
-	publishSales(t, svc, windowA, own, BundleProvenance{}, 1, 2)
+	publishSales(t, svc, windowA, own, BundleProvenance{FromNothingSealed: true}, 1, 2)
 	window := bus.NewClient(windowA.App, []app.SubjectFilter{{Pattern: "runtime.adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	window.SetInstanceKey(windowA.Instance)
 
@@ -288,12 +290,19 @@ func TestTheReadReplyCarriesTheAnswer(t *testing.T) {
 	assert.False(t, got.OwnClear, "the app's own read")
 	assert.False(t, ReadResult{}.OwnClear, "the zero value is the sealed one")
 
-	// The declaration crosses the bus on a publish.
+	// The assertion crosses the bus on a publish, and so does its absence.
 	_, err = PublishBundleRequest(t.Context(), window, BundlePublishInput{Alias: "sales", Document: []byte(testDoc), OnBehalfOf: own,
 		Datasets:   []BundleDatasetInput{{LocalName: "orders", ArrowIPCStream: int64Stream(t, false, 3)}},
-		Provenance: BundleProvenance{DerivedFromSealed: true}})
+		Provenance: BundleProvenance{}})
 	require.NoError(t, err)
 	got, err = ReadAll(t.Context(), window, "sales__orders", own)
 	require.NoError(t, err)
-	assert.False(t, got.OwnClear, "the publisher declared the rows derived from sealed data")
+	assert.False(t, got.OwnClear, "the publisher asserted nothing")
+	_, err = PublishBundleRequest(t.Context(), window, BundlePublishInput{Alias: "sales", Document: []byte(testDoc), OnBehalfOf: own,
+		Datasets:   []BundleDatasetInput{{LocalName: "orders", ArrowIPCStream: int64Stream(t, false, 4)}},
+		Provenance: BundleProvenance{FromNothingSealed: true}})
+	require.NoError(t, err)
+	got, err = ReadAll(t.Context(), window, "sales__orders", own)
+	require.NoError(t, err)
+	assert.True(t, got.OwnClear, "the publisher asserted its rows derive from nothing sealed")
 }
