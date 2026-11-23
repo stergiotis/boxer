@@ -179,6 +179,9 @@ func sessionError(what string, err error) error {
 	if ge, ok := errors.AsType[*sessiondata.GrantError](err); ok {
 		return &AgentLimitError{Reason: ge.Reason, Destination: ge.Destination}
 	}
+	if advice := runErrorAdvice(err.Error()); advice != "" {
+		return eh.Errorf("%s: %w — %s", what, err, advice) //boxer:lint disable=CS013 reason="what names the step the service refused, and the advice what the server's text leaves unsaid"
+	}
 	return eh.Errorf("%s: %w", what, err) //boxer:lint disable=CS013 reason="what names the step the service refused"
 }
 

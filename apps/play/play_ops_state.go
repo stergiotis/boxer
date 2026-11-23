@@ -110,7 +110,7 @@ func snapshotState(p *PlayApp) (st PlayState) {
 	st.Result = ResultState{Id: uint64(id), Phase: phase.String(), Rows: numRows,
 		Notice: p.queryNotice(), Truncated: p.graph.MainTruncation()}
 	if runErr != nil {
-		st.Result.Error = runErr.Error()
+		st.Result.Error = withRunErrorAdvice(runErr.Error())
 	}
 	if phase == queryStateRunning && p.frameProgress.fresh {
 		st.Result.Progress = formatProgressLine(p.frameProgress)

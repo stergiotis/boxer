@@ -173,7 +173,7 @@ func describeResult(r *opsResults, glosses *glossColumnsOps, in ResultArgs) (out
 	defer lr.release()
 	out = ResultDescription{Id: uint64(lr.id), Node: string(lr.node), Rows: lr.numRows, Loading: lr.loading}
 	if lr.err != nil {
-		out.Error = lr.err.Error()
+		out.Error = withRunErrorAdvice(lr.err.Error())
 	}
 	if lr.truncation != "" {
 		out.Truncated, out.TruncationReason = true, lr.truncation
