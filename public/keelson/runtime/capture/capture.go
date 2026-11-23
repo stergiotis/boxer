@@ -15,6 +15,9 @@ const (
 	FormatSvg FormatE = "svg"
 	// FormatPng is the windows' pixels as PNG.
 	FormatPng FormatE = "png"
+	// FormatJpeg is the windows' pixels as JPEG: the same replay and
+	// obligations as FormatPng, encoded lossily at Request.Quality.
+	FormatJpeg FormatE = "jpeg"
 	// FormatTree is the windows' widgets under the messages that drew them
 	// (ADR-0301).
 	FormatTree FormatE = "tree"
@@ -28,7 +31,14 @@ type Request struct {
 	// Crop, in logical points, keeps only this part of the frame; nil keeps
 	// all of it.
 	Crop *image.Rectangle
+	// Quality is a JPEG's quality, 1 to 100; zero is DefaultJpegQuality.
+	// Other formats ignore it.
+	Quality int
 }
+
+// DefaultJpegQuality is a JPEG capture's quality when the request names
+// none: high enough that a chart's text and lines survive the encoding.
+const DefaultJpegQuality = 90
 
 // Facts are what the PDP reads and never writes (the PIP's answers for one
 // request).

@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"image"
+	"image/jpeg"
 	"image/png"
 	"io"
 	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -155,7 +157,7 @@ func (inst *Service) Capture(req Request, facts Facts, recheck func() bool) (id 
 	for _, o := range d.Obligations {
 		var check func(Obligation) error
 		switch req.Format {
-		case FormatPng:
+		case FormatPng, FormatJpeg:
 			if h, ok := inst.registry.pixel[o.Name]; ok {
 				check = h.Check
 			}
@@ -168,7 +170,7 @@ func (inst *Service) Capture(req Request, facts Facts, recheck func() bool) (id 
 				check = h.Check
 			}
 		default:
-			d = deny(d, "a capture is svg, png or tree, not "+string(req.Format))
+			d = deny(d, "a capture is svg, png, jpeg or tree, not "+string(req.Format))
 			return
 		}
 		if check == nil {
@@ -189,8 +191,12 @@ func (inst *Service) Capture(req Request, facts Facts, recheck func() bool) (id 
 		return
 	}
 	var sourceJob string
+	if q := req.Quality; req.Format == FormatJpeg && (q < 0 || q > 100) {
+		d = deny(d, "a JPEG's quality is 1 to 100, or 0 for the default, not "+strconv.Itoa(q))
+		return
+	}
 	switch req.Format {
-	case FormatPng:
+	case FormatPng, FormatJpeg:
 		sourceJob, err = inst.source.RenderPixels(slices.Clone(scope.Windows), recheck)
 	case FormatSvg:
 		sourceJob, err = inst.source.RenderSvg(scope.Windows[0], recheck)
@@ -255,7 +261,7 @@ func (inst *Service) finishLocked(id string, j *job, r SourceResult) {
 	var out []byte
 	var mediaType string
 	switch j.info.Request.Format {
-	case FormatPng:
+	case FormatPng, FormatJpeg:
 		if r.Width <= 0 || r.Height <= 0 || len(r.Rgba) != r.Width*r.Height*4 {
 			fail("the render's pixels do not match its size")
 			return
@@ -270,6 +276,18 @@ func (inst *Service) finishLocked(id string, j *job, r SourceResult) {
 			j.info.Obligations = append(j.info.Obligations, o.String())
 		}
 		var buf bytes.Buffer
+		if j.info.Request.Format == FormatJpeg {
+			q := j.info.Request.Quality
+			if q == 0 {
+				q = DefaultJpegQuality
+			}
+			if e := jpeg.Encode(&buf, f.Img, &jpeg.Options{Quality: q}); e != nil {
+				fail("jpeg: " + e.Error())
+				return
+			}
+			out, mediaType = buf.Bytes(), "image/jpeg"
+			break
+		}
 		if e := png.Encode(&buf, f.Img); e != nil {
 			fail("png: " + e.Error())
 			return
@@ -356,7 +374,7 @@ func sortedByPhase(obligations []Obligation, format FormatE, reg *Registry) (out
 	out = slices.Clone(obligations)
 	phase := func(o Obligation) PhaseE {
 		switch format {
-		case FormatPng:
+		case FormatPng, FormatJpeg:
 			return reg.pixel[o.Name].Phase()
 		case FormatTree:
 			return reg.tree[o.Name].Phase()

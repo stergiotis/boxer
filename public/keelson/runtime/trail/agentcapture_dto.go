@@ -11,7 +11,8 @@ type AgentCapture struct {
 	Id uint64 `lw:",id"`
 	// Kind's value is the label; its membership id is what a query filters on.
 	Kind string `lw:"runtimeKindAgentCapture,symbol"`
-	// Format is "svg" or "png"; Windows the instance keys captured.
+	// Format is "svg", "png", "jpeg" or "tree"; Windows the instance keys
+	// captured.
 	Format  string   `lw:"agentCaptureFormat,symbol"`
 	Windows []uint64 `lw:"agentCaptureWindows,u64Array"`
 	// Decision is "permit" or "deny", Policy the policy that decided, and

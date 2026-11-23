@@ -449,6 +449,9 @@ const (
 	CaptureFormatSvg = "svg"
 	// CaptureFormatPng is the windows' pixels as PNG.
 	CaptureFormatPng = "png"
+	// CaptureFormatJpeg is the windows' pixels as JPEG, at the request's
+	// Quality.
+	CaptureFormatJpeg = "jpeg"
 	// CaptureFormatTree is the windows' widgets under the messages that drew
 	// them, with their rects, roles and names (ADR-0301).
 	CaptureFormatTree = "tree"
@@ -464,7 +467,9 @@ type CaptureRequest struct {
 	// Crop keeps x, y, w, h of the frame, in logical points; nil keeps it
 	// all.
 	Crop *[4]float32
-	Key  string
+	// Quality is a JPEG's quality, 1 to 100; zero is the host's default.
+	Quality int
+	Key     string
 	// Asked names what asked for the capture; its Key is not used.
 	Asked Asked
 }
@@ -472,7 +477,7 @@ type CaptureRequest struct {
 // CaptureWith captures windows as a CaptureRequest says; the outcome's Job
 // names the capture.
 func (inst *Client) CaptureWith(ctx context.Context, r CaptureRequest) (out Outcome, err error) {
-	w := wireCapture{V: wireVersion, Handle: r.Handle, Instances: r.Instances, Key: r.Key, Format: r.Format, wireCause: r.Asked.wire()}
+	w := wireCapture{V: wireVersion, Handle: r.Handle, Instances: r.Instances, Key: r.Key, Format: r.Format, Quality: r.Quality, wireCause: r.Asked.wire()}
 	if len(r.Instances) > 0 {
 		w.Instance = r.Instances[0]
 	}

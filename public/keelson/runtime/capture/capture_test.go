@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"image"
+	"image/jpeg"
 	"image/png"
 	"os"
 	"testing"
@@ -152,6 +153,44 @@ func TestAPngCaptureIsScopedCroppedEncodedAndDigested(t *testing.T) {
 	s.Release(id, 0)
 	_, _, err = s.Bytes(id)
 	assert.Error(t, err, "a released capture is gone with its key")
+}
+
+// A JPEG is the PNG's replay and obligations, encoded lossily: a smaller
+// quality makes a smaller file of the same cropped size.
+func TestAJpegCaptureIsCroppedAndEncodedAtItsQuality(t *testing.T) {
+	sizeAt := func(q int) int {
+		src := &fakeSource{result: SourceResult{Phase: opwire.PhaseCompleted, Rgba: rgba(64, 48), Width: 64, Height: 48, PixelsPerPoint: 1}}
+		s := NewService(GrantPolicy{}, NewRegistry(), src)
+		s.SetSealedDir(t.TempDir())
+		crop := image.Rect(8, 8, 40, 32)
+		id, d, err := s.Capture(Request{Windows: []uint64{7}, Format: FormatJpeg, Crop: &crop, Quality: q}, covers(7), func() bool { return true })
+		require.NoError(t, err)
+		require.Equal(t, EffectPermit, d.Effect, d.Reason)
+		st, _ := s.Status(id)
+		require.Equal(t, opwire.PhaseCompleted, st.Phase, st.Reason)
+		b, media, err := s.Bytes(id)
+		require.NoError(t, err)
+		assert.Equal(t, "image/jpeg", media)
+		img, err := jpeg.Decode(bytes.NewReader(b))
+		require.NoError(t, err)
+		assert.Equal(t, image.Rect(0, 0, 32, 24), img.Bounds())
+		info, _ := s.Info(id)
+		assert.Equal(t, []string{"scope@1"}, info.Obligations)
+		return len(b)
+	}
+	assert.Less(t, sizeAt(10), sizeAt(0), "quality 0 is the default, which is higher than 10")
+}
+
+func TestAJpegQualityOutOfRangeIsDenied(t *testing.T) {
+	src := &fakeSource{}
+	s := NewService(GrantPolicy{}, NewRegistry(), src)
+	for _, q := range []int{-1, 101} {
+		_, d, err := s.Capture(Request{Windows: []uint64{1}, Format: FormatJpeg, Quality: q}, covers(1), nil)
+		require.NoError(t, err)
+		assert.Equal(t, EffectDeny, d.Effect)
+		assert.Contains(t, d.Reason, "quality")
+	}
+	assert.Empty(t, src.rendered)
 }
 
 func TestAnSvgCaptureIsSealedFromTheRendersBytes(t *testing.T) {

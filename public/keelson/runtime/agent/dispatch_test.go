@@ -551,7 +551,7 @@ func TestAPngCaptureIsEncodedByTheCaptureService(t *testing.T) {
 	out, err = r.cli.CaptureAs(ctx, g.Handle, 7, Asked{Key: "gif"}, "gif")
 	require.NoError(t, err)
 	assert.Equal(t, "refused", out.Phase)
-	assert.Contains(t, out.Reason, "svg, png or tree")
+	assert.Contains(t, out.Reason, "svg, png, jpeg or tree")
 }
 
 func TestCaptureAndRecords(t *testing.T) {

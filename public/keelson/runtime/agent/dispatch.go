@@ -1176,7 +1176,7 @@ func (inst *Service) capture(msg *app.Msg) (rep wireCallReply) {
 	if format == "" {
 		format = capture.FormatSvg
 	}
-	creq := capture.Request{Windows: windows, Format: format}
+	creq := capture.Request{Windows: windows, Format: format, Quality: req.Quality}
 	if c := req.Crop; c != nil {
 		r := image.Rect(int(math.Floor(float64(c.X))), int(math.Floor(float64(c.Y))),
 			int(math.Ceil(float64(c.X+c.W))), int(math.Ceil(float64(c.Y+c.H))))

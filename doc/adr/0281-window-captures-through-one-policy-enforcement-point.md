@@ -420,6 +420,17 @@ pixels, and the PEP parses it before sealing it. The registry gains tree
 handlers; the scope handler refuses a crop, as the SVG one does. The
 decision, obligations, label and record are those of SD2–SD6 unchanged.
 
+### 2026-11-23 — JPEG beside PNG
+
+`jpeg` joins the request's formats, for a capture meant for a document: a
+map, a heatmap or an image is smaller as JPEG. It is a pixel capture in
+every respect but the last step — the same spans, replay, pixel
+obligation handlers, label and record — encoded at the request's quality
+(1–100, 0 for a default of 90) instead of as PNG; a quality out of range
+is denied before anything renders. A chart's lines and text blur under
+JPEG, so callers keep PNG as their default. A host built before this
+refuses `jpeg` as a format it does not know.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — task grants, §SD7 labels, §SD11 capture.

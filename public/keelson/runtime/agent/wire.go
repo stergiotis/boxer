@@ -303,9 +303,11 @@ type wireCapture struct {
 	Handle   string `json:"handle"`
 	Instance uint64 `json:"instance"`
 	Key      string `json:"key"`
-	// Format is "svg", "png" or "tree"; empty is "svg" (ADR-0281,
+	// Format is "svg", "png", "jpeg" or "tree"; empty is "svg" (ADR-0281,
 	// ADR-0301).
 	Format string `json:"format,omitempty"`
+	// Quality is a JPEG's quality, 1 to 100; zero is the host's default.
+	Quality int `json:"quality,omitempty"`
 	// Instances, when set, are the windows captured together, and Instance
 	// is ignored; Crop keeps a part of the frame, in logical points.
 	Instances []uint64  `json:"instances,omitempty"`
