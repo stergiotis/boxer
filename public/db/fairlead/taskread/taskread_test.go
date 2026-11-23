@@ -30,6 +30,11 @@ func TestPassLetsATasksReadThroughAndRefusesTheRest(t *testing.T) {
 		{name: "a task's select with exists", sql: "SELECT a FROM t WHERE exists(SELECT 1 FROM u WHERE u.k = t.k) AND NOT EXISTS (SELECT 1 FROM v)", task: "t1"},
 		{name: "a task's exists hiding a nested comment", sql: "SELECT exists(SELECT /* /* */ 1 FROM u */ 1)", task: "t1", refused: true},
 		{name: "a task's exists around an insert", sql: "SELECT exists(INSERT INTO t SELECT 1)", task: "t1", refused: true},
+		// A common table expression marked MATERIALIZED parses, where the
+		// server reads the marker and nowhere else.
+		{name: "a task's materialized cte", sql: "WITH a AS MATERIALIZED (SELECT k FROM t), b AS MATERIALIZED (SELECT k FROM a) SELECT count() FROM b", task: "t1"},
+		{name: "a task's not materialized, which the server does not have", sql: "WITH a AS NOT MATERIALIZED (SELECT 1) SELECT * FROM a", task: "t1", refused: true},
+		{name: "a task's materialized cte around an insert", sql: "WITH a AS MATERIALIZED (INSERT INTO t SELECT 1) SELECT 1", task: "t1", refused: true},
 		{name: "a task's insert", sql: "INSERT INTO t VALUES (1)", task: "t1", refused: true},
 		{name: "a task's insert wrapper", sql: "INSERT INTO t SELECT 1", task: "t1", refused: true},
 		{name: "a task's create", sql: "CREATE TABLE t (a UInt8) ENGINE = Memory", task: "t1", refused: true},
