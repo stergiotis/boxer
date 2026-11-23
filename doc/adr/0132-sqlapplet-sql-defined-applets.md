@@ -863,6 +863,47 @@ a table read only in the condition is a table the statement reads. A filter
 on a call the vocabulary names is witnessed by that name, read fail-closed
 as written; the server reads `fileIf` and the like, which do not exist.
 
+### 2026-11-23 — EXISTS, a MATERIALIZED common table expression and several ARRAY JOIN clauses parse
+
+Three more forms a ClickHouse 26.9 server accepts did not parse, so the §SD5
+class could not be established and an agent's statement using one was refused
+for the grammar. Each is accepted where the server accepts it and nowhere
+else, checked form by form against `clickhouse format`.
+
+`EXISTS (query)`, also written `exists(query)`, is an alternative of its own
+in grammar1, ahead of the call alternatives. It has to be ahead: EXISTS,
+SELECT and FROM are keywords that are also names, so `exists(SELECT * FROM
+db.t)` read as a call on an expression, a product of two columns, and named
+no table to table extraction, the scopes or the placement of a run, while the
+server read a query from `db.t`. The query is now a subquery scope of the
+statement like any other, and what it holds is classified with the statement.
+The server holds the predicate as the call `exists((query))`;
+`CanonicalizeSugar` writes that call with its name quoted, since bare the word
+followed by a parenthesis is the predicate again, and grammar2 and the AST see
+a call with a subquery argument. `exists(1)` and `exists()` still parse as
+calls, which the server refuses.
+
+`WITH name AS MATERIALIZED (query)` marks a definition the server may evaluate
+once for the statement. The marker stands after AS only, and there is no
+`NOT MATERIALIZED`. It is part of the definition, so grammar2, the canonical
+form and `ast.CTE.Materialized` keep it; the body is read and classified as
+the body of any definition. The statement stays a read: with the server's
+setting on, the evaluation is the query's own, runs under `readonly=1` and
+leaves no table behind.
+
+A FROM takes several ARRAY JOIN clauses, each plain, LEFT or INNER. Each
+unfolds over the rows the one before it made, which one clause listing all
+the arrays does not, so the clauses stay apart in grammar2, the canonical
+form and the AST (`ast.Select.MoreArrayJoins`). Every clause is read and
+classified. The server also takes a JOIN after an ARRAY JOIN; that still does
+not parse here.
+
+`DESCRIBE` stays outside the grammar: a parsed statement is taken everywhere
+as a query whose rows are its result, and the server takes a DESCRIBE neither
+as a subquery nor under a run's wrappers. Play's refusal of an agent's
+DESCRIBE now names the `describe_table` operation, with the table when the
+statement names one.
+
 ## References
 
 Internal:

@@ -72,7 +72,8 @@ because all other passes emit bare identifiers.
 The passes eliminate syntactic sugar (CASE → multiIf/if/caseWithExpression,
 DATE/TIMESTAMP → toDate/toDateTime, ternary → if, EXTRACT/SUBSTRING/TRIM →
 function calls, the aggregate filter `f(x) FILTER (WHERE c)` → the -If
-combinator call `fIf(x, c)` the server's parser makes of it), canonicalize operators (== → =), normalize JOIN keyword order
+combinator call `fIf(x, c)` the server's parser makes of it, `EXISTS (q)` →
+the call `"exists"((q))` the server holds), canonicalize operators (== → =), normalize JOIN keyword order
 (strictness before direction), remove redundant keywords (OUTER), enforce
 structural conventions (USING with parentheses, comma joins → CROSS JOIN),
 and quote all identifiers consistently (double-quoted).
@@ -182,7 +183,8 @@ must not be "fixed" without re-checking the server:
 
 - `FROM t SELECT a` (FROM-first syntax)
 - `WITH (SELECT x) AS name` (scalar subquery CTE)
-- `EXISTS (SELECT ...)` (EXISTS predicate)
+- `FROM t ARRAY JOIN a AS x JOIN u ON ...` (a JOIN after an ARRAY JOIN)
+- `x = ANY (SELECT ...)`, `x = ALL (SELECT ...)` (quantified comparisons)
 - `* EXCEPT(col)`, `COLUMNS('...') APPLY(func)`, `REPLACE(...)` (column modifiers)
 - Map literals in SET (`SET param = {'key': [1,2]}`)
 

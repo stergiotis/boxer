@@ -159,7 +159,7 @@ state, structural reordering, or a node-conditional token rename
 | Pass | Description | Properties |
 |------|-------------|-----------|
 | `CanonicalizeJoin` | Strictness-before-direction, a bare strictness gets INNER, removes OUTER, comma→CROSS, parenthesises USING | Idempotent |
-| `CanonicalizeSugar` | DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM → function-call form, and `f(args) FILTER (WHERE c)` → `fIf(args, c)` as the server's parser rewrites it; sugar nests, outermost first | NeedsFixedPoint |
+| `CanonicalizeSugar` | DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM → function-call form, and `f(args) FILTER (WHERE c)` → `fIf(args, c)` as the server's parser rewrites it, and `EXISTS (q)` / `exists(q)` → `"exists"((q))`, the call the server holds; sugar nests, outermost first | NeedsFixedPoint |
 | `CanonicalizeCasts` | `expr::Type` and `CAST(expr AS Type)` → `CAST(expr, 'Type')` | NeedsFixedPoint |
 | `CanonicalizeCaseConditionals` | CASE → `if`/`multiIf`/`caseWithExpression`; leaf-level | NeedsFixedPoint |
 | `CanonicalizeMultiIf` | `multiIf(c, r, d)` (3-arg) → `if(c, r, d)` | Idempotent |
@@ -371,12 +371,28 @@ The upstream ClickHouse ANTLR4 grammar has these required modifications:
   (`CTEDef.Recursive`; the self-entry carries nil `Scopes`, so traversals
   never descend from a body into itself).
 
+- **`EXISTS (query)`**, also written `exists(query)`: a `ColumnExprExists`
+  alternative in Grammar1, ahead of the call alternatives, because EXISTS,
+  SELECT and FROM are also names and `exists(SELECT * FROM t)` would otherwise
+  read as a call on an expression that names no table. Its query is an
+  expression-level subquery scope. `CanonicalizeSugar` rewrites it to the
+  call `"exists"((query))`, so Grammar2 and the AST see a call.
+- **`WITH name AS MATERIALIZED (query)`**: an optional `MATERIALIZED` after
+  `AS` in both grammars' `namedQuery`. It is part of the definition, so
+  canonicalisation keeps it and `ast.CTE.Materialized` carries it. ClickHouse
+  has no `NOT MATERIALIZED`.
+- **Several ARRAY JOIN clauses**: `arrayJoinClause*` after the FROM in both
+  grammars. Each clause unfolds over the rows of the one before, unlike one
+  clause listing all the arrays, so they are kept apart: `AllArrayJoinClause()`
+  on the CST, `ast.Select.ArrayJoin` and `MoreArrayJoins` in the AST.
+
 ## Known Grammar Limitations
 
 - Param slots with keyword names (`{date: UInt64}`) parse in Grammar1 but not Grammar2 — slot names there are bare `IDENTIFIER` tokens
 - `FROM t SELECT a` (FROM-first syntax)
 - `WITH (SELECT x) AS name` (scalar subquery CTE)
-- `EXISTS (SELECT ...)` (EXISTS predicate)
+- `FROM t ARRAY JOIN a AS x JOIN u ON ...` (a JOIN after an ARRAY JOIN)
+- `x = ANY (SELECT ...)`, `x = ALL (SELECT ...)` (quantified comparisons)
 - `* EXCEPT(col)`, `COLUMNS('...') APPLY(func)`, `REPLACE(...)` (column modifiers)
 - Map literals in SET (`SET param = {'key': [1,2]}`)
 

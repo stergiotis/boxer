@@ -109,7 +109,7 @@ github.com/stergiotis/boxer/public/db/clickhouse/dsl/
     ├── passes/                   # the shipped passes (see "Included Passes")
     └── testdata/
         ├── nanopass_testdata_corpus.go   # LoadCorpus() []CorpusEntry via embed.FS
-        └── corpus/               # 82 .sql files (+ corpus/unsupported/ with 4)
+        └── corpus/               # 90 .sql files (+ corpus/unsupported/ with 3)
 ```
 
 ## Dependencies and Imports
@@ -450,7 +450,7 @@ normalises case and identifier quoting last:
 ```
 CanonicalizeWhitespaceSingleLine     // idempotent
 CanonicalizeEquals                   // ==  →  =
-CanonicalizeSugar                    // DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM, f(x) FILTER (WHERE c) → function calls   (fixpoint)
+CanonicalizeSugar                    // DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM, f(x) FILTER (WHERE c), EXISTS (q) → function calls   (fixpoint)
 FixedPoint(CanonicalizeConstructors(ConstructorFormFunction), maxIter)  // [..]/(..) → array()/tuple()
 FixedPoint(CanonicalizeCaseConditionals, maxIter)                       // CASE → if()/multiIf()/caseWithExpression()
 CanonicalizeMultiIf                  // 3-arg multiIf(c,r,d) → if(c,r,d)
@@ -660,7 +660,7 @@ the connection default; there is no ambient inheritance from sibling tables.
 | `CanonicalizeWhitespace` / `CanonicalizeWhitespaceSingleLine` | collapse whitespace (preserve / drop newlines) | Idempotent |
 | `CanonicalizeEquals` | `==` → `=` | Idempotent |
 | `CanonicalizeIdentifiers` | double-quote identifiers (param slots & type exprs stay bare; setting names, SET prelude included, only when a keyword) | Idempotent |
-| `CanonicalizeSugar` | DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM → function calls; the aggregate filter `f(args) FILTER (WHERE c)` → `fIf(args, c)` (`fDistinctIf` under DISTINCT), the call ClickHouse's parser makes of it | NeedsFixedPoint |
+| `CanonicalizeSugar` | DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM → function calls; the aggregate filter `f(args) FILTER (WHERE c)` → `fIf(args, c)` (`fDistinctIf` under DISTINCT), the call ClickHouse's parser makes of it; `EXISTS (q)` and `exists(q)` → `"exists"((q))` | NeedsFixedPoint |
 | `CanonicalizeConstructors(form)` | tuple/array between literal and function form | NeedsFixedPoint |
 | `CanonicalizeCaseConditionals` | CASE → `if`/`multiIf`/`caseWithExpression` | NeedsFixedPoint |
 | `CanonicalizeMultiIf` | 3-arg `multiIf` → `if` | Idempotent |
@@ -760,6 +760,7 @@ The token stream includes **EOF** as the last token (`antlr.TokenEOF`, type `-1`
 *grammar1.ColumnExprTupleContext         // (expr, expr, …) — 2+ expressions
 *grammar1.ColumnExprArrayContext         // [1, 2, 3]
 *grammar1.ColumnExprSubqueryContext      // (SELECT …)
+*grammar1.ColumnExprExistsContext        // EXISTS (SELECT …), exists(SELECT …)
 *grammar1.ColumnExprCaseContext          // CASE WHEN … END
 *grammar1.ColumnExprCastContext          // CAST(x AS T)
 *grammar1.ColumnExprAliasContext         // expr AS alias
@@ -802,7 +803,7 @@ The token stream includes **EOF** as the last token (`antlr.TokenEOF`, type `-1`
 stmt.WithClause()        stmt.FromClause()       stmt.WhereClause()
 stmt.ProjectionClause()  stmt.GroupByClause()    stmt.HavingClause()
 stmt.OrderByClause()     stmt.LimitClause()      stmt.LimitByClause()
-stmt.SettingsClause()    stmt.PrewhereClause()   stmt.ArrayJoinClause()
+stmt.SettingsClause()    stmt.PrewhereClause()   stmt.AllArrayJoinClause()
 stmt.WindowClause()      stmt.QualifyClause()
 ```
 
@@ -928,6 +929,20 @@ detail in the package README and
   argument list of a call and before `OVER`, in grammar1 only; `filter` stays
   a name, and a bare alias may be `filter`. Canonicalisation rewrites it to the
   -If combinator call, so grammar2 and the AST never see it.
+- **`EXISTS (query)` / `exists(query)`** — a `ColumnExprExists` alternative in
+  grammar1 only, ahead of the call alternatives so that `exists(SELECT * FROM
+  t)` is a query and not a call on the product of two columns. Its query is an
+  expression-level subquery scope. Canonicalisation rewrites it to the call
+  `"exists"((query))`, which is how the server holds it; the name is quoted
+  because bare it is the predicate again.
+- **`WITH name AS MATERIALIZED (query)`** — an optional `MATERIALIZED` after
+  `AS` in both grammars' `namedQuery`; kept by canonicalisation (part of the
+  definition, not sugar) and carried by `ast.CTE.Materialized`. There is no
+  `NOT MATERIALIZED`.
+- **Several ARRAY JOIN clauses** — `arrayJoinClause*` after the FROM in both
+  grammars, so `stmt.AllArrayJoinClause()` and not a single accessor; each
+  clause unfolds over the rows of the one before, so they are kept apart
+  (`ast.Select.ArrayJoin` is the first, `MoreArrayJoins` the rest).
 
 ## Known Grammar Limitations
 
@@ -936,7 +951,8 @@ if/when support lands):
 
 - `FROM t SELECT a` (FROM-first syntax)
 - `WITH (SELECT x) AS name` (scalar-subquery CTE)
-- `EXISTS (SELECT …)` (EXISTS predicate)
+- `FROM t ARRAY JOIN a AS x JOIN u ON …` (a JOIN after an ARRAY JOIN)
+- `x = ANY (SELECT …)`, `x = ALL (SELECT …)` (quantified comparisons)
 - `* EXCEPT(col)`, `COLUMNS('…') APPLY(func)`, `REPLACE(…)` (column modifiers)
 - `SET param = {'key': [1,2]}` (map literals in SET)
 - Param slots with keyword names (`{date: UInt64}`) parse in Grammar1 but not
