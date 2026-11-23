@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,6 +55,53 @@ func syntaxDetail(err error) (detail string) {
 		detail = ": " + strings.Join(d, "; ")
 	}
 	return
+}
+
+// bracketHint names the first bracket of sql that has no partner, or is ""
+// when they all pair. A parser reports a missing bracket where the text
+// stops making sense, which is often lines after the bracket that was left
+// open; the pairing itself says where the fault is. Brackets inside string
+// literals, quoted identifiers and comments are not brackets, which the
+// lexer knows.
+func bracketHint(sql string) (hint string) {
+	lexer := grammar1.NewClickHouseLexer(antlr.NewInputStream(sql))
+	lexer.RemoveErrorListeners()
+	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
+	stream.Fill()
+	closerOf := map[int]int{
+		grammar1.ClickHouseLexerLPAREN:   grammar1.ClickHouseLexerRPAREN,
+		grammar1.ClickHouseLexerLBRACKET: grammar1.ClickHouseLexerRBRACKET,
+		grammar1.ClickHouseLexerLBRACE:   grammar1.ClickHouseLexerRBRACE,
+	}
+	at := func(tok antlr.Token) string {
+		return "'" + tok.GetText() + "' at " + strconv.Itoa(tok.GetLine()) + ":" + strconv.Itoa(tok.GetColumn())
+	}
+	var open []antlr.Token
+	for _, tok := range stream.GetAllTokens() {
+		if tok.GetChannel() != antlr.TokenDefaultChannel {
+			continue
+		}
+		typ := tok.GetTokenType()
+		if _, opens := closerOf[typ]; opens {
+			open = append(open, tok)
+			continue
+		}
+		if typ != grammar1.ClickHouseLexerRPAREN && typ != grammar1.ClickHouseLexerRBRACKET && typ != grammar1.ClickHouseLexerRBRACE {
+			continue
+		}
+		if len(open) == 0 {
+			return "; the " + at(tok) + " closes nothing"
+		}
+		last := open[len(open)-1]
+		if closerOf[last.GetTokenType()] != typ {
+			return "; the " + at(tok) + " stands where the " + at(last) + " is still open"
+		}
+		open = open[:len(open)-1]
+	}
+	if len(open) > 0 {
+		return "; the " + at(open[len(open)-1]) + " is never closed"
+	}
+	return ""
 }
 
 // describeHint says what to call instead of a DESCRIBE statement, or "" for
@@ -149,7 +197,7 @@ func checkAgentLimits(residual string, dec dispatchDecision, obo *app.OnBehalfOf
 		if hint := describeHint(classified); hint != "" {
 			return &AgentLimitError{Reason: "boxer's grammar does not parse the statement, so it cannot be classified and an agent cannot run it: " + hint}
 		}
-		return &AgentLimitError{Reason: "boxer's grammar does not parse the statement, so it cannot be classified and an agent cannot run it" + syntaxDetail(perr)}
+		return &AgentLimitError{Reason: "boxer's grammar does not parse the statement, so it cannot be classified and an agent cannot run it" + syntaxDetail(perr) + bracketHint(classified)}
 	}
 	class, witnesses, cerr := analysis.ClassifyQuerySecurity(pr)
 	if cerr != nil || class != analysis.QuerySecurityRead {

@@ -167,3 +167,31 @@ func TestADescribeRefusalNamesDescribeTable(t *testing.T) {
 		assert.NotContains(t, err.Error(), "describe_table", sql)
 	}
 }
+
+// A statement the grammar does not parse for a bracket without a partner is
+// told which bracket, where the parser's own diagnostic points at the place
+// the text stopped making sense. Brackets in literals, quoted names and
+// comments do not count, and a statement that fails for another reason gets
+// no such sentence.
+func TestAgentLimitsNameTheUnpairedBracket(t *testing.T) {
+	remote := dispatchDecision{targetURL: "http://db.example:8123/", class: dispatchClassManual}
+	grant := &app.OnBehalfOf{Task: "t", Destinations: []string{DestinationClickHouse("db.example:8123")}}
+	for sql, want := range map[string]string{
+		"SELECT round(sum(length(extractAll(b, 'the'))), 2) AS r,\n  round(sum(length(extractAll(b, 'a')), 2) AS q\nFROM t": "the '(' at 2:7 is never closed",
+		"SELECT least(greatest(a, 0), 1)) AS x FROM t": "the ')' at 1:31 closes nothing",
+		"SELECT [1, 2) AS x":                           "the ')' at 1:12 stands where the '[' at 1:7 is still open",
+		"SELECT ')' AS s, \"(\" AS q /* ( */, (1 AS x": "the '(' at 1:35 is never closed",
+	} {
+		err := checkAgentLimits(sql, remote, grant, nil)
+		var limit *AgentLimitError
+		require.ErrorAs(t, err, &limit, sql)
+		assert.Contains(t, limit.Reason, "boxer's grammar does not parse the statement", sql)
+		assert.Contains(t, limit.Reason, want, sql)
+	}
+	err := checkAgentLimits("SELECT a FROM t WHERE", remote, grant, nil)
+	var limit *AgentLimitError
+	require.ErrorAs(t, err, &limit)
+	assert.NotContains(t, limit.Reason, "closed")
+	assert.NotContains(t, limit.Reason, "closes nothing")
+	assert.Empty(t, bracketHint("SELECT f(a[1], {p:UInt8}) FROM t"))
+}
