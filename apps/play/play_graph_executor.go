@@ -54,9 +54,10 @@ func (inst clientExecutor) executeWithProgress(ctx context.Context, c compiledNo
 	return
 }
 
-// executeLabelled is executeWithProgress plus the run's dispatch label:
-// whether the statement reads confined data, from the same resolution the
-// request is sent with.
+// executeLabelled is executeWithProgress plus the result's label: whether
+// the run read sealed data that is not all the reading task's own
+// publication at TLP:CLEAR. A run that fails keeps the label of the
+// statement, from the same resolution the request is sent with.
 func (inst clientExecutor) executeLabelled(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(p runstream.Progress)) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, confined bool, err error) {
 	if inst.client == nil {
 		// A playground without a client (the demo tour's seeded one) has no
@@ -77,6 +78,7 @@ func (inst clientExecutor) executeLabelled(ctx context.Context, c compiledNode, 
 	confined = dec.sensitivity == queryengine.SensitivityConfined
 	rdr, rs, summary, xErr := inst.client.ExecuteArrowStream(ctx, c.SQL, alloc, opts, c.Params, dec)
 	if xErr != nil {
+		confined = confined && !failedOwnClear(xErr)
 		err = eh.Errorf("clientExecutor.execute: %w", xErr)
 		return
 	}
@@ -84,7 +86,9 @@ func (inst clientExecutor) executeLabelled(ctx context.Context, c compiledNode, 
 		rdr.Release()
 		_ = rs.Close()
 	}()
-	confined = confined || rs.Confined()
+	// The stream was sent with the decision's sensitivity or more, so its
+	// label is the result's.
+	confined = rs.Confined()
 	// Same frame drain as the main lane (play_runstream.go): a stream that
 	// dies part-way is a failed terminal, never a short result.
 	batches, _, rErr := drainRun(rdr, rs)

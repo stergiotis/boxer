@@ -32,8 +32,9 @@ import (
 
 // appWriteLabel is what one of play's own writes carries to its gate.
 type appWriteLabel struct {
-	// confined says the data the write carries came from a confined
-	// result (ADR-0145): it goes only where sealed plaintext may.
+	// confined says the data the write carries came from a result read
+	// from sealed data (ADR-0145), whoever published it: it goes only
+	// where sealed plaintext may.
 	confined bool
 	// agent is the context of the task whose call caused the write; nil
 	// for the person's.

@@ -75,7 +75,7 @@ type ValidateResult struct {
 	Handles  []string `json:",omitzero" desc:"leeway handles that name no section or column of their table, each with candidates; they would ship unresolved"`
 	Run      string   `json:",omitzero" desc:"allowed when run would accept this statement under the grant, else the agent limit it would hit"`
 	Needs    []string `json:",omitzero" desc:"destinations request_access would have to add: for a run, and the endpoint for the whole rewrite"`
-	Confined bool     `desc:"true when the statement reads confined data, which a run would carry into the window's label"`
+	Confined bool     `desc:"true when the statement reads sealed data, which a run carries into the window's label unless all of it is this task's own publication at TLP:CLEAR"`
 	// Literals are the editor's red underlines: string literals at an
 	// argument whose domain this build knows whole.
 	Literals          []string `json:",omitzero" desc:"string literals that name no member of their argument's domain — a component kind or field, section, channel, aspect, gloss or gloss key, introspection table — each with candidates; complete_sql lists a domain at an offset"`

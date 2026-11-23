@@ -210,7 +210,7 @@ type KeptDataset struct {
 	Bytes    uint64       `desc:"what its table takes on the server"`
 	Columns  []ColumnInfo `desc:"its columns"`
 	Endpoint string       `desc:"the server it lives on, as a grant names it"`
-	Confined bool         `json:",omitzero" desc:"true when it was derived from sealed data, an ad-hoc dataset: every statement reading it is confined"`
+	Confined bool         `json:",omitzero" desc:"true when it was derived from sealed data, an ad-hoc dataset, that is not all this task's own publication at TLP:CLEAR: every statement reading it is confined"`
 	Replayed []string     `json:",omitzero" desc:"data sets made again from their definitions first, because the server had lost them, as name@revision"`
 	Stale    []string     `json:",omitzero" desc:"data sets that read the redefined one: rebuilt from their definitions by the next statement that reads them"`
 	Cite     string       `desc:"how an assertion citing this answer's result_id names the data"`
@@ -220,7 +220,7 @@ type KeptDataset struct {
 func keptOf(res sessiondata.DefineResult, stale []string) (k *KeptDataset) {
 	d := res.Dataset
 	k = &KeptDataset{Name: d.Name, ReadWith: "session('" + d.Name + "')", Revision: d.Revision, Rows: d.Rows, Bytes: d.Bytes,
-		Endpoint: DestinationClickHouse(d.Endpoint), Confined: d.Confined, Replayed: res.Replayed, Stale: stale,
+		Endpoint: DestinationClickHouse(d.Endpoint), Confined: d.Confined && !d.OwnClear, Replayed: res.Replayed, Stale: stale,
 		Cite: "an assertion resting on this result reads session('" + d.Name + "'), the table its statement read, not the tables the definition read"}
 	for i, c := range d.Columns {
 		if i == schemaMaxColumns {
@@ -408,8 +408,9 @@ func addSessionDatasetOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 }
 
 // sessionDatasetInfos is list_datasets' rows for the data session obo's
-// runs read: one per data set, with its columns unless it is confined and
-// not the one asked for.
+// runs read: one per data set, with its columns unless it is confined —
+// derived from sealed data that is not all the task's own publication at
+// TLP:CLEAR — and not the one asked for.
 func sessionDatasetInfos(ctx context.Context, client *Client, obo *app.OnBehalfOf, only string) (out []DatasetInfo, sealedShown bool, err error) {
 	infos, err := client.listSession(ctx, obo)
 	if err != nil {
@@ -420,21 +421,25 @@ func sessionDatasetInfos(ctx context.Context, client *Client, obo *app.OnBehalfO
 			continue
 		}
 		dest := DestinationClickHouse(i.Endpoint)
+		// The label, not the wall: a data set made of the task's own
+		// publications at TLP:CLEAR alone reads back unlabelled, as the
+		// session data service answers for the task that asks.
+		confined := i.Confined && !i.OwnClear
 		d := DatasetInfo{Name: i.Name, Home: datasetHomeSession, ReadWith: "session('" + i.Name + "')", Destination: dest,
-			Granted: obo == nil || slices.Contains(obo.Destinations, dest), Confined: i.Confined,
+			Granted: obo == nil || slices.Contains(obo.Destinations, dest), Confined: confined,
 			Rows: i.Rows, Bytes: i.Bytes, Revision: i.Revision, State: i.State.String(), Reason: i.Reason, Endpoint: dest}
 		d.Reads = append(append(d.Reads, i.Dependencies...), i.Attachments...)
 		if only != "" {
 			d.Definition = i.SQL
 		}
-		if !i.Confined || only != "" {
+		if !confined || only != "" {
 			for k, c := range i.Columns {
 				if k == schemaMaxColumns {
 					break
 				}
 				d.Columns = append(d.Columns, ColumnInfo{Name: c.Name, Type: c.Type})
 			}
-			sealedShown = sealedShown || (i.Confined && len(d.Columns) > 0)
+			sealedShown = sealedShown || (confined && len(d.Columns) > 0)
 		}
 		out = append(out, d)
 	}

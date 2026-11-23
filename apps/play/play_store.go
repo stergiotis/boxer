@@ -41,8 +41,10 @@ type HistoryEntry struct {
 	// Agent is the on-behalf-of context of a run an agent's work caused
 	// (ADR-0270 §SD2); nil for the person's.
 	Agent *app.OnBehalfOf
-	// Confined is the dispatch decision's label (ADR-0270 §SD4), and
-	// Dispatch where the run went and why (dispatchDecision.describe).
+	// Confined says the run read sealed data, by its dispatch decision or
+	// its binding (ADR-0270 §SD4), whoever published it: what the person's
+	// history shows of where a run could go. Dispatch is where the run
+	// went and why (dispatchDecision.describe).
 	Confined bool
 	Dispatch string
 	// Security is the ADR-0132 §SD5 class of the statement as it ran,
@@ -60,11 +62,15 @@ type QueryStore struct {
 	schema   *arrow.Schema
 	numRows  int64
 	resultID ResultID // minted by finish; see ResultID
-	// confined is the label of the result held (ADR-0270 §SD4): whether
-	// the dispatch decision that produced it classified the run as
-	// confined. runConfined is the in-flight run's, moved over by finish.
+	// confined is the label of the result held (ADR-0270 §SD4): the run
+	// that produced it read sealed data that is not all the reading task's
+	// own publication at TLP:CLEAR. sealed says it read sealed data at
+	// all, which is what the wall goes by. runConfined and runSealed are
+	// the in-flight run's, moved over by finish.
 	confined    bool
+	sealed      bool
 	runConfined bool
+	runSealed   bool
 	// nextAgent is the on-behalf-of context of the next run, taken by
 	// Execute (ADR-0270 §SD2).
 	nextAgent *app.OnBehalfOf
@@ -272,7 +278,10 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 			inst.client.noteRun(dec)
 			sec, _ := classifySecurity(sql, inst.client.ExprSubstituted)
 			inst.mu.Lock()
-			inst.runConfined = dec.sensitivity == queryengine.SensitivityConfined
+			// Until the run says what it read, a statement naming sealed
+			// data is taken as labelled: a run that fails keeps it.
+			inst.runSealed = dec.sensitivity == queryengine.SensitivityConfined
+			inst.runConfined = inst.runSealed
 			inst.runDispatch = dec.describe()
 			inst.runSecurity = sec
 			inst.mu.Unlock()
@@ -280,6 +289,11 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 			start := time.Now()
 			rdr, rs, summary, err := inst.client.ExecuteArrowStream(ctx, sql, inst.alloc, &opts, sigs, dec)
 			if err != nil {
+				if failedOwnClear(err) {
+					inst.mu.Lock()
+					inst.runConfined = false
+					inst.mu.Unlock()
+				}
 				runErr = err
 				inst.finish(sql, sigs, start, nil, nil, 0, summary, err, runstream.Failed(err))
 				return
@@ -288,13 +302,15 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 				rdr.Release()
 				_ = rs.Close()
 			}()
-			if rs.Confined() {
-				// A run in a data session learns its label from the
-				// binding, after the decision (play_sessiondata.go).
-				inst.mu.Lock()
-				inst.runConfined = true
-				inst.mu.Unlock()
-			}
+			// The run knows what it read: a run in a data session learns
+			// from its binding that it read sealed data, after the
+			// decision (play_sessiondata.go), and any run learns from the
+			// services that hold the data whether all of it is the reading
+			// task's own publication at TLP:CLEAR (play_own_clear.go).
+			inst.mu.Lock()
+			inst.runSealed = inst.runSealed || rs.Sealed()
+			inst.runConfined = rs.Confined()
+			inst.mu.Unlock()
 
 			// Consume all batches and concatenate into a single record batch so
 			// the renderer sees one continuous column per field. The drain runs
@@ -383,6 +399,7 @@ func (inst *QueryStore) finish(sql string, sigs map[string]string, start time.Ti
 	inst.loading = false
 	inst.resultID = nextResultID()
 	inst.confined = inst.runConfined
+	inst.sealed = inst.runSealed
 
 	entry := HistoryEntry{
 		SQL:       sql,
@@ -394,7 +411,7 @@ func (inst *QueryStore) finish(sql string, sigs map[string]string, start time.Ti
 		Summary:   summary,
 		Terminal:  term.State,
 		Agent:     inst.runAgent,
-		Confined:  inst.runConfined,
+		Confined:  inst.runSealed,
 		Dispatch:  inst.runDispatch,
 		Security:  inst.runSecurity,
 	}
@@ -426,6 +443,14 @@ func (inst *QueryStore) LabelOf(id ResultID) (confined bool, held bool) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	return inst.confined, id != 0 && inst.resultID == id
+}
+
+// Sealed reports whether the result the store holds was read from sealed
+// data, whoever published it: it goes only where sealed plaintext may.
+func (inst *QueryStore) Sealed() (sealed bool) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	return inst.sealed
 }
 
 // ResultID names the result the store holds; 0 before any run.

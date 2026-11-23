@@ -95,10 +95,15 @@ type resultStream struct {
 	pending []byte
 	term    runstream.Terminal
 	hasTerm bool
-	// sensitivity is the label the request was sent with: a run that read
-	// a confined session data set or attached an ad-hoc dataset carries it
-	// although its dispatch decision could not know.
+	// sensitivity is what the request was sent as: a run that read a
+	// confined session data set or attached an ad-hoc dataset is confined
+	// although its dispatch decision could not know. It is the wall's
+	// word, where the run may go.
 	sensitivity queryengine.SensitivityE
+	// ownClear says everything sealed the run read is the reading task's
+	// own publication at TLP:CLEAR, as the services that hold the data
+	// answered (ownClearRun): the result is not labelled for it.
+	ownClear bool
 	// onClose runs once when the stream closes: the release of the data
 	// session's lease the run held.
 	onClose   func()
@@ -198,10 +203,18 @@ func (inst *resultStream) Close() (err error) {
 	return
 }
 
-// Confined reports whether the run read sealed data (ADR-0145): the label a
-// result of it carries, whatever the dispatch decision said before the
-// run was prepared.
+// Confined reports the label a result of the run carries (ADR-0145): it
+// read sealed data that is not all the reading task's own publication at
+// TLP:CLEAR, whatever the dispatch decision said before the run was
+// prepared.
 func (inst *resultStream) Confined() (confined bool) {
+	return inst.Sealed() && !inst.ownClear
+}
+
+// Sealed reports whether the run read sealed data, whoever published it:
+// what the wall goes by. A result that is Sealed and not Confined holds
+// only the reading task's own publications at TLP:CLEAR.
+func (inst *resultStream) Sealed() (sealed bool) {
 	return inst != nil && inst.sensitivity == queryengine.SensitivityConfined
 }
 

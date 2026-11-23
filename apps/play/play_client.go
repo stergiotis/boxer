@@ -1301,8 +1301,10 @@ func (inst *Client) resetSchemaCaches() {
 // A decision of class session — a statement reading session('…'), or an
 // ad-hoc dataset joined with server tables — is prepared with the session
 // data service first and sent inside its data session (play_sessiondata.go);
-// the result stream then holds the session until it is closed, and its
-// Confined reports the label the binding gave the run.
+// the result stream then holds the session until it is closed. Its Sealed
+// reports whether the run read sealed data and its Confined the label of
+// the result, which a task's reading of its own publications at TLP:CLEAR
+// leaves off.
 func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc memory.Allocator, opts *ExecOptions, signals map[string]string, dec dispatchDecision) (rdr *ipc.Reader, rs *resultStream, summary Summary, err error) {
 	if dec.class != dispatchClassSession {
 		return inst.executeArrowStream(ctx, sql, sql, alloc, opts, signals, dec, nil)
@@ -1346,6 +1348,14 @@ func (inst *Client) executeArrowStream(ctx context.Context, authored string, sen
 	agent, ownStatement := inst.runAgent(opts)
 	var skipped failedRewrites
 	residual, params, _ := inst.rewriteFor(agent, sql, skipped.observe)
+	// A run that fails names what it would have read, and its error is
+	// read as its result would be: it is marked when everything sealed in
+	// it is the task's own publication at TLP:CLEAR (play_own_clear.go).
+	defer func() {
+		if err != nil {
+			err = inst.markOwnClearFailure(ctx, err, dec, residual, agent, hold)
+		}
+	}()
 	var q string
 	rowCap := readResultRowCap(sql)
 	if opts != nil && opts.WrapStatement != nil {
@@ -1486,6 +1496,7 @@ func (inst *Client) executeArrowStream(ctx context.Context, authored string, sen
 		return
 	}
 	rs.sensitivity = req.Sensitivity
+	rs.ownClear = inst.ownClearRun(ctx, req.Sensitivity, residual, agent, hold)
 	if hold != nil {
 		rs.onClose = hold.release
 	}

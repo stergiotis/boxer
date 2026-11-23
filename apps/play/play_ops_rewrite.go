@@ -90,7 +90,7 @@ type RewriteTrace struct {
 	Handles    []string     `json:",omitzero" desc:"leeway handles that name no section or column, each with candidates; they ship unresolved"`
 	Target     string       `desc:"where the run would go: the endpoint's host, or introspection for this process's keelson() plane"`
 	Refused    string       `json:",omitzero" desc:"why no endpoint may serve the statement, when dispatch refuses it"`
-	Confined   bool         `desc:"true when the statement reads confined data"`
+	Confined   bool         `desc:"true when the statement reads sealed data"`
 }
 
 func addRewriteOps(s *appops.Set[*PlayLauncher, opsSnap]) {

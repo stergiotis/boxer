@@ -121,12 +121,24 @@ type dispatchRig struct {
 	cli  *agent.Client
 	g    agent.Grant
 	obo  *app.OnBehalfOf
+	// svc is the dispatcher, which a host service asks to attest a call.
+	svc *agent.Service
 }
 
 // newDispatchRig serves l's catalog through h to a dispatcher, draws a frame
 // whenever a query waits on one, as the host's repaint does, and grants a
 // task act on the window with r's destinations.
 func newDispatchRig(t *testing.T, r *sdRig, l *PlayLauncher, h app.OperationsHandlerI) (rig *dispatchRig) {
+	t.Helper()
+	dests := []string{DestinationClickHouse(r.host), sessiondata.DestinationSession(r.host)}
+	rig = newDispatchRigFor(t, l, h, dests, nil)
+	r.grant(rig.g.Task, dests...)
+	return
+}
+
+// newDispatchRigFor is newDispatchRig with the destinations of the task's
+// grant given, and the dispatcher's configuration open to configure.
+func newDispatchRigFor(t *testing.T, l *PlayLauncher, h app.OperationsHandlerI, dests []string, configure func(cfg *agent.Config)) (rig *dispatchRig) {
 	t.Helper()
 	ctx := t.Context()
 	playId := app.AppIdT("github.com/stergiotis/boxer/apps/play")
@@ -169,18 +181,20 @@ func newDispatchRig(t *testing.T, r *sdRig, l *PlayLauncher, h app.OperationsHan
 			}
 		}
 	}()
-	svc, err := agent.NewService(ctx, bus, zerolog.Nop(), agent.Config{Registry: reg, Host: host, TestGrants: true, Journal: agent.AcceptAnyIntent{}})
+	cfg := agent.Config{Registry: reg, Host: host, TestGrants: true, Journal: agent.AcceptAnyIntent{}}
+	if configure != nil {
+		configure(&cfg)
+	}
+	svc, err := agent.NewService(ctx, bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	host.eng.SetListener(func(e opengine.LogEntry) { svc.Listener()(key, e) })
 	cli := agent.NewClient(bus.NewClient("test.coordinator", agent.ClientCaps("test: drive play")))
 
-	dests := []string{DestinationClickHouse(r.host), sessiondata.DestinationSession(r.host)}
 	g, err := cli.Request(ctx, agent.GrantRequest{Plan: "keep and drop a data set",
 		Entries: []agent.GrantEntry{{Instance: key, Mode: agent.ModeAct}}, Destinations: dests})
 	require.NoError(t, err)
-	r.grant(g.Task, dests...)
-	return &dispatchRig{host: host, cli: cli, g: g, obo: &app.OnBehalfOf{Task: g.Task, Epoch: 1, Call: "c0", Destinations: dests}}
+	return &dispatchRig{host: host, cli: cli, g: g, obo: &app.OnBehalfOf{Task: g.Task, Epoch: 1, Call: "c0", Destinations: dests}, svc: svc}
 }
 
 // call makes a call of the task under key k, as the chat does in a turn.

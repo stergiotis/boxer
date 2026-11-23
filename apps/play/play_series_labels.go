@@ -133,8 +133,10 @@ func tsInputHash(c compiledNode) (hash string) {
 // meaningfully mean two things at once.
 type tsLabelsWriter struct {
 	client *Client
-	// confined reports the window's label, which the verdicts carry: they
-	// name spans of a confined result as much as the result does.
+	// confined reports whether the main result was read from sealed data,
+	// which the verdicts carry: they name spans of such a result as much
+	// as the result does. It is the wall's question, so a result of the
+	// task's own clear publications answers true as any other does.
 	confined func() bool
 
 	mu      sync.Mutex

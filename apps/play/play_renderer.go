@@ -1323,7 +1323,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.seriesLabels = newTsLabelsWriter(client)
 	inst.projector.tasks = client.Tasks
 	if graph != nil {
-		inst.seriesLabels.confined = graph.MainConfined
+		inst.seriesLabels.confined = graph.MainSealed
 	}
 	inst.fixtures = newFixtureState()
 	inst.cardFixtures = newCardgridFixtureState()

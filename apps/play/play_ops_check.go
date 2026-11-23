@@ -374,6 +374,10 @@ func runCheckOnce(ctx context.Context, client *Client, eng *chserver.Engine, dec
 		}
 		return out, app.RefuseOperation("the check failed: " + derr.Error())
 	}
+	// The assertion's own label, as a run's: sealed data it read labels
+	// the cell unless all of it is the task's own publication at
+	// TLP:CLEAR. The label of the result it rests on is added below.
+	confined := req.Sensitivity == queryengine.SensitivityConfined && !client.ownClearRun(ctx, req.Sensitivity, residual, obo, hold)
 	var parsed struct {
 		Meta []struct {
 			Name string `json:"name"`
@@ -385,7 +389,7 @@ func runCheckOnce(ctx context.Context, client *Client, eng *chserver.Engine, dec
 		return out, app.RefuseOperation("the check's result does not parse: " + jerr.Error())
 	}
 	out.ResultId, out.StatementDigest, out.SourceDigest = src.resultId, statementDigest(in.Statement), statementDigest(src.source)
-	out.Endpoint, out.Confined = DestinationClickHouse(endpointHost(target)), src.confined || req.Sensitivity == queryengine.SensitivityConfined
+	out.Endpoint, out.Confined = DestinationClickHouse(endpointHost(target)), src.confined || confined
 	out.Superseded = superseded
 	out.Rows = max(parsed.Rows, int64(len(parsed.Data)))
 	for _, m := range parsed.Meta {

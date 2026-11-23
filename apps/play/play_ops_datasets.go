@@ -82,8 +82,8 @@ type DatasetInfo struct {
 	Granted     bool         `desc:"true when this task may read it: the grant lists the destination, or the task published it"`
 	Published   bool         `json:",omitzero" desc:"true for an ad-hoc dataset this task published: the task reads it without a grant entry"`
 	Bundle      string       `json:",omitzero" desc:"the bundle an ad-hoc dataset was published in"`
-	Confined    bool         `json:",omitzero" desc:"true for sealed data, or a data set derived from it: reading it makes the result confined; its columns are listed when it is asked for by name"`
-	Columns     []ColumnInfo `json:",omitzero" desc:"its columns, when the task may read it; a sealed dataset's only when it is asked for by name"`
+	Confined    bool         `json:",omitzero" desc:"true for sealed data, or a data set derived from it, unless all of it is this task's own publication at TLP:CLEAR: reading it makes the result confined; its columns are listed when it is asked for by name"`
+	Columns     []ColumnInfo `json:",omitzero" desc:"its columns, when the task may read it; a confined dataset's only when it is asked for by name"`
 	Error       string       `json:",omitzero" desc:"why its columns could not be read"`
 	Waiting     string       `json:",omitzero" desc:"set while the alias is followed but not bound: why it waits; a run naming it fails until it binds"`
 	// Its size and revision: a session data set's as the service last saw
@@ -108,12 +108,13 @@ type DatasetList struct {
 	// Exposures are the live exposures of ad-hoc datasets.
 	Exposures      []DatasetExposure `json:",omitzero" desc:"the live exposures of ad-hoc datasets to programs on this machine, by alias; never their tokens, which only expose_dataset's answer carries"`
 	ExposuresError string            `json:",omitzero" desc:"why the exposures could not be listed"`
-	// sealedShown is set when a sealed dataset's columns are in the result.
+	// sealedShown is set when a confined dataset's columns are in the
+	// result.
 	sealedShown bool
 }
 
-// ResultConfined labels the result confined when it carries a sealed
-// dataset's columns.
+// ResultConfined labels the result confined when it carries the columns of
+// a sealed dataset that is not the task's own publication at TLP:CLEAR.
 func (inst DatasetList) ResultConfined() (confined bool) { return inst.sealedShown }
 
 var _ app.ConfinedResultI = DatasetList{}
@@ -225,9 +226,19 @@ func listDatasets(ctx context.Context, client *Client, obo *app.OnBehalfOf, only
 		stmt := "SELECT * FROM keelson('" + alias + "') LIMIT 0"
 		residual, _ := client.buildResidualOffline(stmt, nil)
 		dec := client.dispatchResidual(residual, "")
-		d.Confined = dec.sensitivity == queryengine.SensitivityConfined
+		// The decision says the dataset is sealed, which is where a read
+		// of it may go. Whether reading it labels the result is the
+		// dataset service's answer for this task: a listing asks it, and
+		// a read of the columns carries the run's own label.
+		sealed := dec.sensitivity == queryengine.SensitivityConfined
+		d.Confined = sealed
+		if sealed && d.Granted && only == "" {
+			d.Confined = !client.ownClearHandles(ctx, sealedNames(residual), obo)
+		}
 		if d.Granted && (!d.Confined || only != "") {
-			d.Columns, d.Error = datasetColumns(client, stmt, dec, obo)
+			var confined bool
+			d.Columns, d.Error, confined = datasetColumns(client, stmt, dec, obo)
+			d.Confined = sealed && confined
 			out.sealedShown = out.sealedShown || (d.Confined && len(d.Columns) > 0)
 		}
 		out.Datasets = append(out.Datasets, d)
@@ -263,17 +274,21 @@ func waitingDataset(alias string, why string, obo *app.OnBehalfOf) (d DatasetInf
 }
 
 // datasetColumns reads a dataset's schema from an empty run of it.
-func datasetColumns(client *Client, stmt string, dec dispatchDecision, obo *app.OnBehalfOf) (cols []ColumnInfo, errText string) {
+// datasetColumns reads the columns stmt returns, and reports the label of
+// that read: confined unless the run read nothing sealed, or only the
+// task's own publications at TLP:CLEAR.
+func datasetColumns(client *Client, stmt string, dec dispatchDecision, obo *app.OnBehalfOf) (cols []ColumnInfo, errText string, confined bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), schemaOpTimeout)
 	defer cancel()
 	rdr, rs, _, err := client.ExecuteArrowStream(ctx, stmt, memory.NewGoAllocator(), &ExecOptions{Agent: obo}, nil, dec)
 	if err != nil {
-		return nil, err.Error()
+		return nil, err.Error(), dec.sensitivity == queryengine.SensitivityConfined && !failedOwnClear(err)
 	}
 	defer func() {
 		rdr.Release()
 		_ = rs.Close()
 	}()
+	confined = rs.Confined()
 	for i, f := range rdr.Schema().Fields() {
 		if i == schemaMaxColumns {
 			break

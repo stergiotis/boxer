@@ -910,6 +910,10 @@ func (inst *queryGraph) MainLabelOf(id ResultID) (confined bool, held bool) {
 	return inst.mainLane.LabelOf(id)
 }
 
+// MainSealed reports whether `main`'s result was read from sealed data,
+// labelled or not: what a write of it elsewhere is walled by.
+func (inst *queryGraph) MainSealed() bool { return inst.mainLane.Sealed() }
+
 // CancelMain aborts an in-flight `main` execution.
 func (inst *queryGraph) CancelMain() { inst.mainLane.Cancel() }
 

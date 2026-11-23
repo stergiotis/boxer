@@ -102,7 +102,8 @@ type dispatchDecision struct {
 	// sensitivity is what the run touches (ADR-0145 §SD3), carried so the
 	// engine can refuse independently of whatever placed the run, and so an
 	// audit of the run records it (R12). Derived above the resolver, not by
-	// it — see confine.
+	// it — see confine. It is the wall's word and never the label of a
+	// result: who published the sealed data does not change it.
 	sensitivity queryengine.SensitivityE
 	// pending is the placement a refusal withheld only because its endpoint
 	// has not demonstrated it may see sealed data while a demonstration is
@@ -146,8 +147,11 @@ func (inst dispatchDecision) Reason() (reason string) { return inst.reason }
 // why.
 func (inst dispatchDecision) Refused() (refused bool) { return inst.class == dispatchClassRefused }
 
-// Confined reports whether the statement names sealed data, so its result
-// is confined.
+// Confined reports whether the statement names sealed data, so the wall
+// applies to it: it goes only where sealed plaintext may, whoever published
+// the data. Whether a result of it is labelled is the run's to say, once
+// the services that hold the data answered whose it is (the result
+// stream's Confined).
 func (inst dispatchDecision) Confined() (confined bool) {
 	return inst.sensitivity == queryengine.SensitivityConfined
 }
