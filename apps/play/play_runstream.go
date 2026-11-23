@@ -119,7 +119,7 @@ func openResultStream(st queryengine.StreamI) (rs *resultStream, err error) {
 		return
 	}
 	if text, is := rs.exceptionInPlaceOfResult(); is {
-		err = eh.Errorf("clickhouse failed after it began to answer: %s", text)
+		err = eh.Errorf("clickhouse failed after it began to answer: %s", text) //boxer:lint disable=CS013 reason="the server's exception is the error's text, as it is when a status carries it"
 		_ = st.Close()
 		rs = nil
 		return
