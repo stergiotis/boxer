@@ -104,6 +104,10 @@ type resultStream struct {
 	// own publication at TLP:CLEAR, as the services that hold the data
 	// answered (ownClearRun): the result is not labelled for it.
 	ownClear bool
+	// ownClearTask is the task the services answered that for: the label
+	// is left off for that task's reading of the result and for no other
+	// reader's.
+	ownClearTask string
 	// onClose runs once when the stream closes: the release of the data
 	// session's lease the run held.
 	onClose   func()
@@ -216,6 +220,16 @@ func (inst *resultStream) Confined() (confined bool) {
 // only the reading task's own publications at TLP:CLEAR.
 func (inst *resultStream) Sealed() (sealed bool) {
 	return inst != nil && inst.sensitivity == queryengine.SensitivityConfined
+}
+
+// ClearFor is the task whose own publications at TLP:CLEAR are everything
+// sealed the run read; empty for a run that read nothing sealed and for a
+// labelled one. A result that is Sealed is unlabelled for that task alone.
+func (inst *resultStream) ClearFor() (task string) {
+	if inst.Sealed() && inst.ownClear {
+		task = inst.ownClearTask
+	}
+	return
 }
 
 // terminal reports how the engine said the run ended, or ErrIncomplete when

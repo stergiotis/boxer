@@ -71,6 +71,12 @@ type QueryStore struct {
 	sealed      bool
 	runConfined bool
 	runSealed   bool
+	// clearFor is the task a sealed result that is not confined is
+	// unlabelled for: the services answered for that task's reading, so
+	// any other reader of the result takes it as labelled. runClearFor is
+	// the in-flight run's.
+	clearFor    string
+	runClearFor string
 	// nextAgent is the on-behalf-of context of the next run, taken by
 	// Execute (ADR-0270 §SD2).
 	nextAgent *app.OnBehalfOf
@@ -282,6 +288,7 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 			// data is taken as labelled: a run that fails keeps it.
 			inst.runSealed = dec.sensitivity == queryengine.SensitivityConfined
 			inst.runConfined = inst.runSealed
+			inst.runClearFor = ""
 			inst.runDispatch = dec.describe()
 			inst.runSecurity = sec
 			inst.mu.Unlock()
@@ -292,6 +299,7 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 				if failedOwnClear(err) {
 					inst.mu.Lock()
 					inst.runConfined = false
+					inst.runClearFor = failedClearFor(err)
 					inst.mu.Unlock()
 				}
 				runErr = err
@@ -310,6 +318,7 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 			inst.mu.Lock()
 			inst.runSealed = inst.runSealed || rs.Sealed()
 			inst.runConfined = rs.Confined()
+			inst.runClearFor = rs.ClearFor()
 			inst.mu.Unlock()
 
 			// Consume all batches and concatenate into a single record batch so
@@ -400,6 +409,7 @@ func (inst *QueryStore) finish(sql string, sigs map[string]string, start time.Ti
 	inst.resultID = nextResultID()
 	inst.confined = inst.runConfined
 	inst.sealed = inst.runSealed
+	inst.clearFor = inst.runClearFor
 
 	entry := HistoryEntry{
 		SQL:       sql,
@@ -443,6 +453,36 @@ func (inst *QueryStore) LabelOf(id ResultID) (confined bool, held bool) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	return inst.confined, id != 0 && inst.resultID == id
+}
+
+// LabelFor is LabelOf for a reader that is task's call, or the person's
+// with an empty task: a result read from sealed data is unlabelled only for
+// the task whose own publications at TLP:CLEAR were everything sealed in
+// it, so any other reader is answered confined.
+func (inst *QueryStore) LabelFor(id ResultID, task string) (confined bool, held bool) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	return labelFor(inst.confined, inst.sealed, inst.clearFor, task), id != 0 && inst.resultID == id
+}
+
+// Label is the label of the result held and, when it was read from sealed
+// data and is not labelled, the task it is unlabelled for, taken together
+// so the two describe one result.
+func (inst *QueryStore) Label() (confined bool, clearFor string) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	confined = inst.confined
+	if inst.sealed && !inst.confined {
+		clearFor = inst.clearFor
+	}
+	return
+}
+
+// labelFor is the label of a result for a reader that is task's call:
+// confined says the result is labelled for every reader, sealed that it was
+// read from sealed data and clearFor the one task it is unlabelled for.
+func labelFor(confined bool, sealed bool, clearFor string, task string) (labelled bool) {
+	return confined || (sealed && (task == "" || clearFor != task))
 }
 
 // Sealed reports whether the result the store holds was read from sealed

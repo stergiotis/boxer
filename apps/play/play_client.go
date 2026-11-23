@@ -1497,6 +1497,9 @@ func (inst *Client) executeArrowStream(ctx context.Context, authored string, sen
 	}
 	rs.sensitivity = req.Sensitivity
 	rs.ownClear = inst.ownClearRun(ctx, req.Sensitivity, residual, agent, hold)
+	if rs.ownClear {
+		rs.ownClearTask = agent.Task
+	}
 	if hold != nil {
 		rs.onClose = hold.release
 	}

@@ -618,6 +618,17 @@ dataset labelled. No live run of a model is behind the change.
   publication.
 - A run of a window under the task's mark is the task's read, as play's
   agent limits take it.
+- Review, 2026-11-23: play keeps, with a result's label, the task it was
+  judged for. `publish_result` by the person or by another task takes a
+  result of some task's own clear publications as sealed data and
+  publishes it as derived, and a `check` resting on it is confined for
+  them. Open: the window's label (the catalog's `Confined`, which the
+  engine stamps on every outcome and the window host reports for
+  captures and titles) is one value for every reader and is judged for
+  the task whose run made the result, so another task that observes the
+  window reads that task's publication unlabelled. A label per reader
+  changes what the catalog handler, the engine and the dispatcher
+  exchange; it waits for a decision.
 - The operator's `keelson('session_datasets')` shows a data set made of a
   task's own clear publications as confined; `OwnClear` is shown only to
   the task that asks.

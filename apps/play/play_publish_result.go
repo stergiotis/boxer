@@ -154,8 +154,14 @@ func (inst *PlayLauncher) publishResult(call app.OperationCall, in PublishResult
 	rec, _, _, loading, _, _, _, runErr, resultId := p.graph.MainSnapshot()
 	// The label of the rows held, not of whatever result the window holds
 	// a moment later: a result that moved on meanwhile is taken as
-	// labelled.
-	confined, held := p.graph.MainLabelOf(resultId)
+	// labelled. And the label for the publisher: a result that is
+	// unlabelled because it holds the own clear publications of the task
+	// that ran it is sealed data to the person and to any other task.
+	var publisher string
+	if call.OnBehalfOf != nil {
+		publisher = call.OnBehalfOf.Task
+	}
+	confined, held := p.graph.MainLabelFor(resultId, publisher)
 	derived := confined || !held
 	trunc := p.graph.MainTruncation()
 	var refusal string

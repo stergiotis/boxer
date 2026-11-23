@@ -188,8 +188,12 @@ func sourceTablesText(allowed map[string]bool) (text string) {
 // statement that produced it and the signal parameters it shipped. It is
 // not changed once made, so snapshots share it.
 type checkSource struct {
-	resultId  uint64
-	confined  bool
+	resultId uint64
+	confined bool
+	// clearFor is the task the result is unlabelled for although it was
+	// read from sealed data; a check by any other caller takes it as
+	// confined.
+	clearFor  string
 	source    string
 	sigParams map[string]string
 }
@@ -225,7 +229,8 @@ func snapshotCheck(p *PlayApp) (s checkSnap) {
 	if rec != nil {
 		rec.Release()
 	}
-	s.resultId, s.confined, s.source = uint64(id), p.graph.MainConfined(), p.graph.MainSQL()
+	s.resultId, s.source = uint64(id), p.graph.MainSQL()
+	s.confined, s.clearFor = p.graph.MainLabel()
 	if len(p.lastSentSigParams) > 0 {
 		s.sigParams = make(map[string]string, len(p.lastSentSigParams))
 		for k, v := range p.lastSentSigParams {
@@ -389,7 +394,10 @@ func runCheckOnce(ctx context.Context, client *Client, eng *chserver.Engine, dec
 		return out, app.RefuseOperation("the check's result does not parse: " + jerr.Error())
 	}
 	out.ResultId, out.StatementDigest, out.SourceDigest = src.resultId, statementDigest(in.Statement), statementDigest(src.source)
-	out.Endpoint, out.Confined = DestinationClickHouse(endpointHost(target)), src.confined || confined
+	// The result it rests on is unlabelled only for the task whose own
+	// publications it holds.
+	rests := src.confined || (src.clearFor != "" && (obo == nil || obo.Task != src.clearFor))
+	out.Endpoint, out.Confined = DestinationClickHouse(endpointHost(target)), rests || confined
 	out.Superseded = superseded
 	out.Rows = max(parsed.Rows, int64(len(parsed.Data)))
 	for _, m := range parsed.Meta {

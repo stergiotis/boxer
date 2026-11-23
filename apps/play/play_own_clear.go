@@ -101,6 +101,8 @@ func (inst *Client) ownClearHandles(ctx context.Context, names []string, agent *
 // wraps; a caller that labels a failed run asks failedOwnClear.
 type ownClearError struct {
 	err error
+	// task is the task whose own publications the run named.
+	task string
 }
 
 func (inst *ownClearError) Error() string { return inst.err.Error() }
@@ -117,6 +119,16 @@ func failedOwnClear(err error) (ownClear bool) {
 	return errors.As(err, &oc)
 }
 
+// failedClearFor is the task a failure marked for failedOwnClear is
+// unlabelled for; empty for any other error.
+func failedClearFor(err error) (task string) {
+	var oc *ownClearError
+	if errors.As(err, &oc) {
+		task = oc.task
+	}
+	return
+}
+
 // markOwnClearFailure is err marked for failedOwnClear when the run that
 // failed with it would have been unlabelled had it succeeded; err itself
 // otherwise.
@@ -128,5 +140,5 @@ func (inst *Client) markOwnClearFailure(ctx context.Context, err error, dec disp
 	if failedOwnClear(err) || !inst.ownClearRun(ctx, sensitivity, residual, agent, hold) {
 		return err
 	}
-	return &ownClearError{err: err}
+	return &ownClearError{err: err, task: agent.Task}
 }

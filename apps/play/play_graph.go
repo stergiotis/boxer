@@ -910,6 +910,16 @@ func (inst *queryGraph) MainLabelOf(id ResultID) (confined bool, held bool) {
 	return inst.mainLane.LabelOf(id)
 }
 
+// MainLabelFor is MainLabelOf for a reader that is task's call
+// (QueryStore.LabelFor).
+func (inst *queryGraph) MainLabelFor(id ResultID, task string) (confined bool, held bool) {
+	return inst.mainLane.LabelFor(id, task)
+}
+
+// MainLabel is the label of `main`'s result and the task it is unlabelled
+// for although it was read from sealed data (QueryStore.Label).
+func (inst *queryGraph) MainLabel() (confined bool, clearFor string) { return inst.mainLane.Label() }
+
 // MainSealed reports whether `main`'s result was read from sealed data,
 // labelled or not: what a write of it elsewhere is walled by.
 func (inst *queryGraph) MainSealed() bool { return inst.mainLane.Sealed() }
