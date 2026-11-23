@@ -207,7 +207,7 @@ what the thing is:
 | a switch between panes or views | the dock's tabs (`c.DockArea`), at every level of the window; a view the person opens and closes is in the declared layout always, passed to `Tab` only while open, closable from its tab (`Closable`, `CloseRequested`) and a checked item in a *View* menu; a pane alone in its leaf draws no strip (`HideTabBarWhenAlone`) | buttons, or a segmented bar, that swap a body; a pane header of your own |
 | picking an item to look at | selection: `recordtable` (`Result.Clicked`), `tree` and `fsbrowser` (`Activated` for Enter and double-click), with the detail beside it | an *Open* button on every row |
 | a command on one item among many | select the item, then act from the detail pane or one bar that says what is selected; or `c.ContextMenu` on the row; at most one `ButtonKindGhost` or `ButtonKindDangerGhost` icon per row for the row's dominant command | the same framed button on every row |
-| a command used rarely | the window's menu bar: `c.MenuBar` with a `c.MenuButton` per menu, each named for what it holds | a place on the toolbar; a lone *More* button |
+| a command used rarely | the window's menu bar: `c.MenuBar` with a `c.MenuButton` per menu, each named for what it holds. A menu lists every command of its subject, the ones that also have a button included | a place on the toolbar; a lone *More* button; a menu of the leftovers |
 | a command used constantly | a button and a key, with the key shown (`ButtonFluid.ShortcutText`; capture per [ADR-0177](../../adr/0177-imzero2-focus-scoped-keyboard-capture.md)) | a button only |
 | a parameter | the input itself, applied as it changes (`c.Slider*`, `c.DragValue*`, `c.TimeRangePicker`) | an input plus *Apply*, unless the computation is costly; then one primary |
 | moving, zooming, ranging or drilling a picture | the gesture on the picture (implot's hover, legend and `DragSelects`; treemap and icicle drill; the shared `camera`), with one hint line and a *fit* or *reset* | zoom, pan and range buttons |
@@ -244,6 +244,10 @@ beside or above it, not only in a tooltip.
   Structure step."
 - Don't: remove a control the reader expects; an absent command reads as
   a missing feature.
+- A menu holds the same items in every state. One that does not apply is
+  greyed, with the reason in its hover and, where several are greyed for
+  one reason, in a short line under them. A menu that opens on a sentence
+  and no items reads as a tooltip.
 
 **C5 — Destructive commands are armed, then confirmed, and say what is
 kept.** Inline arm-and-confirm for the person's own click; the host
