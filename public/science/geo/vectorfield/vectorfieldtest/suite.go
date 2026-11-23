@@ -8,7 +8,6 @@
 package vectorfieldtest
 
 import (
-	"context"
 	"errors"
 	"math"
 	"testing"
@@ -72,7 +71,7 @@ func Run(t *testing.T, src vectorfield.SourceI, opts Options) {
 		)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	for _, nr := range requests {
 		t.Run(nr.name, func(t *testing.T) {
 			win, err := src.Sample(ctx, nr.req)

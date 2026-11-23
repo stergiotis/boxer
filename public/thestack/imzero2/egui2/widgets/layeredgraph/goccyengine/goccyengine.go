@@ -77,7 +77,7 @@ func Shared() (*Engine, error) {
 	if sharedEng != nil {
 		return sharedEng, nil
 	}
-	eng, err := New(context.Background())
+	eng, err := New(context.Background()) //boxer:lint disable=CS020 reason="documented root: the shared engine lives for the process and outlives whichever caller asked first"
 	if err != nil {
 		return nil, err // don't cache the failure — retry on the next call
 	}

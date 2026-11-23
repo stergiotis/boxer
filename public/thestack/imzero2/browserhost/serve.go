@@ -153,7 +153,9 @@ func Serve(ctx context.Context, cfg ServeConfig, logger zerolog.Logger) (err err
 	case <-ctx.Done():
 	case <-reported:
 	}
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// ctx may have ended, which is why the server stops: the shutdown keeps
+	// its values and gets a wait of its own.
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)
 	if errors.Is(err, http.ErrServerClosed) {

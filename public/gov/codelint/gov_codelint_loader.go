@@ -15,6 +15,7 @@ import (
 // composite gate run against another repository root — must set it, or the
 // relative patterns silently resolve somewhere else.
 type LoadConfig struct {
+	// Ctx bounds the load. Nil means context.Background.
 	Ctx       context.Context
 	Dir       string
 	BuildTags []string
@@ -28,7 +29,7 @@ type LoadConfig struct {
 // remain in the package graph for type resolution but are not visited.
 func LoadPackages(cfg LoadConfig, roots ...string) (pkgs []*packages.Package, err error) {
 	if cfg.Ctx == nil {
-		cfg.Ctx = context.Background()
+		cfg.Ctx = context.Background() //boxer:lint disable=CS020 reason="documented root: a nil LoadConfig.Ctx stands for Background"
 	}
 	pcfg := &packages.Config{
 		Mode: packages.NeedName |

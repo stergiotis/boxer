@@ -118,7 +118,7 @@ func New(cfg Config) (inst *Head, err error) {
 	}
 	ctx := cfg.Ctx
 	if ctx == nil {
-		ctx = context.Background()
+		ctx = context.Background() //boxer:lint disable=CS020 reason="documented root: a nil Config.Ctx stands for Background"
 	}
 	inst = &Head{
 		exec: cfg.Exec, layout: cfg.Layout, stores: cfg.Stores, vis: cfg.Visibility, ctx: ctx,

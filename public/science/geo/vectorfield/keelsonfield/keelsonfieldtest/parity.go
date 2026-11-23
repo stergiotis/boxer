@@ -42,7 +42,7 @@ func Storm(t *testing.T) keelsonfield.Field {
 	f := keelsonfield.Field{Name: "storm", Unit: "m/s", SpeedMax: 30}
 	t0 := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 	for s := range 3 {
-		g, err := loader.LoadStep(context.Background(), s)
+		g, err := loader.LoadStep(t.Context(), s)
 		require.NoError(t, err)
 		f.Steps = append(f.Steps, t0.Add(time.Duration(s)*time.Hour))
 		f.Grids = append(f.Grids, g)
@@ -170,7 +170,7 @@ func Parity(t *testing.T, base string, f keelsonfield.Field, opts Options) {
 	reg := introspect.NewRegistry()
 	require.NoError(t, keelsonfield.Register(reg, base, f))
 	e := newEngine(t, reg)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	ref, err := sqlfield.NewSource(ctx, engineQueryer{e}, sqlfield.Relation{From: "keelson('" + base + "')"}, sqlfield.Options{})
 	require.NoError(t, err, "the reference: the reduction statements in clickhouse-local")

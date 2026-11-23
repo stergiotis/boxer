@@ -172,7 +172,7 @@ func TestEventFrom(t *testing.T) {
 	rec := newRecorder(t, &gateExec{open: true}, auditrec.WithForwarder(fwd), auditrec.WithOrigin("apps/default", 1))
 	def := audit.Origin{Run: "another-run", App: "apps/caller", Instance: 7}
 	require.NoError(t, rec.EventFrom(context.Background(), time.Now(), def, auditrectest.FullEvent(1)))
-	require.NoError(t, rec.EventFrom(auditrectest.FullContext(), time.Now(), def, auditrectest.FullEvent(2)))
+	require.NoError(t, rec.EventFrom(auditrectest.FullContext(t.Context()), time.Now(), def, auditrectest.FullEvent(2)))
 	require.NoError(t, rec.Flush(context.Background()))
 	rec.Close()
 	events := fwd.Events()

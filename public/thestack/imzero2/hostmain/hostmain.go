@@ -123,7 +123,7 @@ func New(opts Options, cliApp *cli.Command) (inst *Program) {
 // Main runs the program on the process arguments and exits non-zero when it
 // failed.
 func (inst *Program) Main() {
-	if err := inst.Run(context.Background(), os.Args); err != nil {
+	if err := inst.Run(context.Background(), os.Args); err != nil { //boxer:lint disable=CS020 reason="documented root: the body of a main function; Run takes the ctx for a caller that has one"
 		os.Exit(1)
 	}
 }

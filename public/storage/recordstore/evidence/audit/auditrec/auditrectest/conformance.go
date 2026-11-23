@@ -57,10 +57,10 @@ func FullEvent(subject uint64) audit.AuditEvent {
 	}
 }
 
-// FullContext carries a call identity naming an app, an instance, a
-// principal and a purpose.
-func FullContext() context.Context {
-	return callident.WithCallIdentity(context.Background(), callident.CallIdentity{
+// FullContext is ctx carrying a call identity that names an app, an
+// instance, a principal and a purpose.
+func FullContext(ctx context.Context) context.Context {
+	return callident.WithCallIdentity(ctx, callident.CallIdentity{
 		Origin: callident.Origin{App: "apps/conformance", Instance: 4},
 		Claims: callident.Claims{Principal: "p-7", Purpose: "art-15"},
 	})
@@ -71,7 +71,7 @@ func FullContext() context.Context {
 // through the recorder.
 func Conformance[B auditrec.BatchI](t *testing.T, open func(t *testing.T) auditrec.StoreI[B]) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	fwd := &Collector{}
 	rec, err := auditrec.New(open(t), "conformance-run", Scheme, zerolog.Nop(),
 		auditrec.WithForwarder(fwd), auditrec.WithOrigin("apps/default", 1), auditrec.WithFlushInterval(0))
@@ -79,12 +79,12 @@ func Conformance[B auditrec.BatchI](t *testing.T, open func(t *testing.T) auditr
 	defer rec.Close()
 
 	at := time.Date(2026, 10, 13, 9, 30, 0, 123456789, time.UTC)
-	require.NoError(t, rec.Event(FullContext(), at, FullEvent(42)))
+	require.NoError(t, rec.Event(FullContext(ctx), at, FullEvent(42)))
 	bad := FullEvent(43)
 	bad.Action = "Not A Name"
-	require.NoError(t, rec.Event(FullContext(), at.Add(time.Second), bad))
+	require.NoError(t, rec.Event(FullContext(ctx), at.Add(time.Second), bad))
 	require.NoError(t, rec.Flush(ctx))
-	require.NoError(t, rec.Event(context.Background(), at.Add(2*time.Second), FullEvent(44)))
+	require.NoError(t, rec.Event(ctx, at.Add(2*time.Second), FullEvent(44)))
 	require.NoError(t, rec.Flush(ctx))
 	require.Eventually(t, func() bool { return len(fwd.Events()) == 3 }, 5*time.Second, 10*time.Millisecond, "the prompt path forwards the three events")
 

@@ -851,7 +851,7 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	inst.mu.Unlock()
 
 	if facts != nil {
-		_, wErr := facts.WriteAppLifecycle(inst.ctx, factsstore.AppLifecycleRow{
+		_, wErr := facts.WriteAppLifecycle(inst.ctx, factsstore.AppLifecycleRow{ //boxer:lint disable=CS020 reason="the host's lifetime ctx, given at construction (ADR-0395): a window opens from the render loop, which carries no ctx per call"
 			RunId:   runId,
 			AppId:   m.Id,
 			TileKey: uint64(key),
@@ -871,7 +871,7 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 			// arrived over the bus and then restored writes both rows — the
 			// caller's plain request and this restore — which is the honest
 			// record of what happened. Best-effort, like every audit write.
-			_, lErr := facts.WriteLaunch(inst.ctx, factsstore.LaunchRow{
+			_, lErr := facts.WriteLaunch(inst.ctx, factsstore.LaunchRow{ //boxer:lint disable=CS020 reason="the host's lifetime ctx, given at construction (ADR-0395): a window opens from the render loop, which carries no ctx per call"
 				RunId:       runId,
 				CallerAppId: WorkingsetCallerAppId,
 				TargetAppId: m.Id,
