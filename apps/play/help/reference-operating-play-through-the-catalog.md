@@ -242,7 +242,9 @@ its lifetime and when the host stops, and `revoke_exposure` ends it at
 once. A task's exposure needs `expose:<prefix>` in its grant, as
 `request_access` asks for it, and is of a dataset the task's own call
 published at TLP:CLEAR from nothing sealed, asked for by a call that is
-not labelled; the person exposes any dataset from the Data sets tab, which
+not labelled, and it ends on a republish under the alias that is not
+that task's own at TLP:CLEAR from nothing sealed, the person's included;
+the person exposes any dataset from the Data sets tab, which
 shows the `curl` and `url()` lines of an exposure the window made. The
 resource `exposures` names the live exposures as `id@alias`;
 `list_datasets` reads it, and the two commands write it without reading

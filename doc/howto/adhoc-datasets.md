@@ -250,7 +250,10 @@ the same columns is served at its new revision, named in the `ETag`.
 **When it ends.** At the end of its lifetime (an hour unless asked, at most
 a day); when the dataset is retracted, its columns change or the window
 that published it closes; when the window that exposed it closes; on
-Revoke or `revoke_exposure`; when the host stops. On a host the
+Revoke or `revoke_exposure`; when the host stops. An exposure a task made
+ends as well on a republish that is not that task's own at TLP:CLEAR from
+nothing sealed: the person's, another task's, one above CLEAR, one that
+derives from sealed data. On a host the
 organisation manages (`BOXER_CELL_MANAGED`), an exposure above the export
 clearance is refused. Every expose, read, revoke and lapse is on the trail
 in the domain `adhoc-expose`, without the token.

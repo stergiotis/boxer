@@ -368,7 +368,11 @@ func (inst *Service) infoLocked(e *exposure, rec *record, by Identity, cc option
 const introspectExposedPath = "/exposed/"
 
 // liveFor is the dataset e serves now, or why e has lapsed: the alias holds
-// no live dataset, another publisher holds it, or its columns changed.
+// no live dataset, another publisher holds it, its columns changed, or, for
+// an exposure a task made, the live revision is no longer that task's own
+// publication at TLP:CLEAR. A task's exposure was admitted for the standing
+// of the revision it named, so it serves no revision without it: one the
+// person or another task published under the alias since ends it.
 func (inst *Service) liveFor(e *exposure) (rec *record, lapsed string) {
 	rec, err := inst.newest(e.alias)
 	if err != nil {
@@ -381,10 +385,17 @@ func (inst *Service) liveFor(e *exposure) (rec *record, lapsed string) {
 		return nil, "another publisher holds the alias now"
 	case rec.structure != e.structure:
 		return nil, "a republish changed its columns"
-	case e.context.Has && rec.context.Has && rec.context.Val.Tier > uint8(agentrun.TierClear):
+	case !e.context.Has:
+		return
+	}
+	switch standingOf(rec.context, rec.derived, e.task()) {
+	case standingOwnClear:
+	case standingLabelled:
 		return nil, "a republish was labelled above TLP:CLEAR"
-	case e.context.Has && rec.derived:
+	case standingDerived:
 		return nil, "a republish derives from sealed data"
+	default:
+		return nil, "a republish is not the task's own publication"
 	}
 	return
 }

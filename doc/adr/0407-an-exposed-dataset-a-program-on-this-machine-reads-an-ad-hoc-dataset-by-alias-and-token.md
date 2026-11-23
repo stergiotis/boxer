@@ -232,8 +232,9 @@ route. Where does an exposure stand?
    whether the revision derives from sealed data. A task's exposure is
    refused unless its own call published the dataset, neither call declared
    a tier above CLEAR and the revision derives from nothing sealed; a
-   republish declared above CLEAR, or one that derives from sealed data,
-   ends a task's exposure. A dataset the task may read under
+   republish that is not that task's own at TLP:CLEAR from nothing sealed
+   — declared above CLEAR, derived from sealed data, or made by the person
+   or another task — ends a task's exposure. A dataset the task may read under
    `keelson:<alias>` but did not publish — another task's, or data a person
    published — is not the task's to release; the person exposes it. The
    same facts about a revision decide what a task reads back without a
@@ -598,9 +599,13 @@ dataset labelled. No live run of a model is behind the change.
 - The publisher states what its rows derive from, the service adds what
   the named inputs show, and a publisher that does neither is judged by
   its call's tier.
-- A task's exposure ends on a republish that derives from sealed data; a
-  republish by the person under the same owner still does not end it, as
-  before.
+- A task's exposure ends on a republish that derives from sealed data.
+  Review, 2026-11-23: it ends on any republish that is not the exposing
+  task's own clear publication, the person's and another task's under
+  the same owner included, since the exposure was admitted for the
+  standing of the revision it named and the token would otherwise read
+  rows the task never had that standing for. The person's own exposure
+  follows a republish as before.
 - A failed run is judged as a successful one; a statement refused before
   it is placed keeps the statement's label.
 - A replay the person causes leaves a kept data set confined; the label
