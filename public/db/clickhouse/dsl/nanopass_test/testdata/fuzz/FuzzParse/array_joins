@@ -1,0 +1,2 @@
+go test fuzz v1
+string("SELECT x FROM t ARRAY JOIN a AS x LEFT ARRAY JOIN b AS y, c AS z INNER ARRAY JOIN [1] AS w WHERE x")

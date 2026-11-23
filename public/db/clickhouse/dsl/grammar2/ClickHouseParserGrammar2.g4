@@ -108,7 +108,7 @@ selectStmtWithParens: selectStmt | (LPAREN selectUnionStmt RPAREN);
 selectStmt:
     projectionClause
     fromClause?
-    arrayJoinClause?
+    arrayJoinClause*
     windowClause?
     qualifyClause?
     prewhereClause?

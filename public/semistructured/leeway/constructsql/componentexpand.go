@@ -412,13 +412,15 @@ func (inst *componentState) injectInto(scope *nanopass.SelectScope, conjunction 
 }
 
 // whereAnchor is the clause a synthesised WHERE follows: the last one that
-// must precede it. PREWHERE sits closest, then ARRAY JOIN, then FROM.
+// must precede it. PREWHERE sits closest, then the last ARRAY JOIN, then FROM.
 func whereAnchor(sel *grammar1.SelectStmtContext) (anchor antlr.ParserRuleContext) {
 	if c, ok := sel.PrewhereClause().(antlr.ParserRuleContext); ok && c != nil {
 		return c
 	}
-	if c, ok := sel.ArrayJoinClause().(antlr.ParserRuleContext); ok && c != nil {
-		return c
+	if joins := sel.AllArrayJoinClause(); len(joins) > 0 {
+		if c, ok := joins[len(joins)-1].(antlr.ParserRuleContext); ok && c != nil {
+			return c
+		}
 	}
 	if c, ok := sel.FromClause().(antlr.ParserRuleContext); ok && c != nil {
 		return c

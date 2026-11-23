@@ -342,12 +342,18 @@ func (b *flowBuilder) buildSelect(stmt *grammar1.SelectStmtContext, path string,
 		stage(idSuffix, kind, label, detail, start, end)
 	}
 
-	if ac := stmt.ArrayJoinClause(); ac != nil {
+	// Each ARRAY JOIN clause is a stage of its own: the second unfolds over
+	// the rows the first made.
+	for i, ac := range stmt.AllArrayJoinClause() {
 		label := "ARRAY JOIN"
 		if ac.LEFT() != nil {
 			label = "LEFT ARRAY JOIN"
 		}
-		clause("arrayjoin", flowJoin, label, ac)
+		id := "arrayjoin"
+		if i > 0 {
+			id += strconv.Itoa(i + 1)
+		}
+		clause(id, flowJoin, label, ac)
 	}
 	if pw := stmt.PrewhereClause(); pw != nil {
 		clause("prewhere", flowFilter, "PREWHERE", pw)

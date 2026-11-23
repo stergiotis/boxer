@@ -154,7 +154,7 @@ func selectHasBlockingClause(scope *nanopass.SelectScope) (blocked bool) {
 	stmt := scope.Node
 	if stmt.GroupByClause() != nil ||
 		stmt.HavingClause() != nil ||
-		stmt.ArrayJoinClause() != nil ||
+		len(stmt.AllArrayJoinClause()) > 0 ||
 		stmt.WindowClause() != nil ||
 		stmt.QualifyClause() != nil {
 		blocked = true

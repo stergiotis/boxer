@@ -1,0 +1,2 @@
+go test fuzz v1
+string("select x from t left array join a as x array join [1, 2] as y, (3, 4) as z array join (select [1]) as w")

@@ -187,16 +187,16 @@ func writeSelect(b *strings.Builder, sel Select) {
 		b.WriteString(" FROM ")
 		writeJoinExpr(b, *sel.From)
 	}
-	if sel.ArrayJoin != nil {
+	for _, aj := range sel.ArrayJoins() {
 		b.WriteByte(' ')
-		switch sel.ArrayJoin.Kind {
+		switch aj.Kind {
 		case ArrayJoinLeft:
 			b.WriteString("LEFT ")
 		case ArrayJoinInner:
 			b.WriteString("INNER ")
 		}
 		b.WriteString("ARRAY JOIN ")
-		writeExprList(b, sel.ArrayJoin.Exprs)
+		writeExprList(b, aj.Exprs)
 	}
 	if sel.WindowDef != nil {
 		b.WriteString(" WINDOW ")

@@ -126,6 +126,10 @@ func predictionCorpus() []struct {
 		{"cte_materialized", "WITH c AS MATERIALIZED (SELECT a FROM t), d AS (SELECT a FROM c) SELECT a FROM d"},
 		{"cte_materialized_nested", "WITH o AS MATERIALIZED (WITH i AS MATERIALIZED (SELECT a FROM t) SELECT a FROM i) SELECT a FROM o"},
 		{"with_scalar_named_materialized", "WITH 1 AS materialized SELECT materialized"},
+		// A FROM takes several ARRAY JOIN clauses; LEFT and INNER ahead of
+		// ARRAY start one, ahead of JOIN they continue the FROM.
+		{"array_joins", "SELECT x FROM t ARRAY JOIN a AS x LEFT ARRAY JOIN b AS y INNER ARRAY JOIN c AS z WHERE x > 1"},
+		{"join_then_array_joins", "SELECT x FROM t LEFT JOIN u ON u.k = t.k INNER JOIN v ON v.k = t.k LEFT ARRAY JOIN a AS x ARRAY JOIN b AS y"},
 	}
 }
 

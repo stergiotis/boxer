@@ -57,7 +57,7 @@ func StarPassthrough(body *SelectScope, carrier string) (why string) {
 	if stmt == nil {
 		return "its body could not be read"
 	}
-	if stmt.ArrayJoinClause() != nil {
+	if len(stmt.AllArrayJoinClause()) > 0 {
 		return "its body has an ARRAY JOIN, which can replace a column with one element"
 	}
 	if stmt.GroupByClause() != nil {

@@ -395,15 +395,28 @@ func (inst SelectBuilder) Settings(key, val string) SelectBuilder {
 	return inst
 }
 
+// ArrayJoin adds an ARRAY JOIN clause. A second call adds a second clause,
+// which unfolds over the rows the first made; arrays to walk in step go
+// into one call.
 func (inst SelectBuilder) ArrayJoin(exprs ...E) SelectBuilder {
 	inst = inst.absorbE(exprs...)
-	inst.sel.ArrayJoin = &ast.ArrayJoinClause{Exprs: unwrap(exprs)}
-	return inst
+	return inst.addArrayJoin(ast.ArrayJoinClause{Exprs: unwrap(exprs)})
 }
 
+// LeftArrayJoin adds a LEFT ARRAY JOIN clause, as ArrayJoin adds a plain one.
 func (inst SelectBuilder) LeftArrayJoin(exprs ...E) SelectBuilder {
 	inst = inst.absorbE(exprs...)
-	inst.sel.ArrayJoin = &ast.ArrayJoinClause{Kind: ast.ArrayJoinLeft, Exprs: unwrap(exprs)}
+	return inst.addArrayJoin(ast.ArrayJoinClause{Kind: ast.ArrayJoinLeft, Exprs: unwrap(exprs)})
+}
+
+func (inst SelectBuilder) addArrayJoin(clause ast.ArrayJoinClause) SelectBuilder {
+	if inst.sel.ArrayJoin == nil {
+		inst.sel.ArrayJoin = &clause
+		return inst
+	}
+	more := make([]ast.ArrayJoinClause, 0, len(inst.sel.MoreArrayJoins)+1)
+	more = append(more, inst.sel.MoreArrayJoins...)
+	inst.sel.MoreArrayJoins = append(more, clause)
 	return inst
 }
 

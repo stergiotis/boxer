@@ -241,7 +241,7 @@ func checkTsBodyShape(stmt *grammar1.SelectStmtContext, name string) (err error)
 		{stmt.OrderByClause() != nil, "ORDER BY"},
 		{stmt.LimitClause() != nil, "LIMIT"},
 		{stmt.LimitByClause() != nil, "LIMIT BY"},
-		{stmt.ArrayJoinClause() != nil, "ARRAY JOIN"},
+		{len(stmt.AllArrayJoinClause()) > 0, "ARRAY JOIN"},
 		{stmt.WindowClause() != nil, "WINDOW"},
 		{stmt.QualifyClause() != nil, "QUALIFY"},
 	} {

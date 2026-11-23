@@ -48,21 +48,25 @@ type Select struct {
 	// scalar items (the relative interleaving of the two groups in the
 	// source is not preserved). Recursive marks the clause as
 	// `WITH RECURSIVE …` (see Query.Recursive).
-	With      []Expr           `cbor:"with,omitempty"`
-	CTEs      []CTE            `cbor:"sel_ctes,omitempty"`
-	Recursive bool             `cbor:"sel_rec,omitempty"`
-	From      *JoinExpr        `cbor:"from,omitempty"`
-	ArrayJoin *ArrayJoinClause `cbor:"array_join,omitempty"`
-	WindowDef *WindowDefClause `cbor:"window_def,omitempty"`
-	Qualify   *Expr            `cbor:"qualify,omitempty"`
-	Prewhere  *Expr            `cbor:"prewhere,omitempty"`
-	Where     *Expr            `cbor:"where,omitempty"`
-	GroupBy   *GroupByClause   `cbor:"group_by,omitempty"`
-	Having    *Expr            `cbor:"having,omitempty"`
-	OrderBy   *OrderByClause   `cbor:"order_by,omitempty"`
-	LimitBy   *LimitByClause   `cbor:"limit_by,omitempty"`
-	Limit     *LimitClause     `cbor:"limit,omitempty"`
-	Settings  []SettingPair    `cbor:"settings,omitempty"`
+	With      []Expr    `cbor:"with,omitempty"`
+	CTEs      []CTE     `cbor:"sel_ctes,omitempty"`
+	Recursive bool      `cbor:"sel_rec,omitempty"`
+	From      *JoinExpr `cbor:"from,omitempty"`
+	// ArrayJoin is the first ARRAY JOIN clause after FROM and
+	// MoreArrayJoins the clauses after it, in order: each unfolds over the
+	// rows the one before it made.
+	ArrayJoin      *ArrayJoinClause  `cbor:"array_join,omitempty"`
+	MoreArrayJoins []ArrayJoinClause `cbor:"more_array_joins,omitempty"`
+	WindowDef      *WindowDefClause  `cbor:"window_def,omitempty"`
+	Qualify        *Expr             `cbor:"qualify,omitempty"`
+	Prewhere       *Expr             `cbor:"prewhere,omitempty"`
+	Where          *Expr             `cbor:"where,omitempty"`
+	GroupBy        *GroupByClause    `cbor:"group_by,omitempty"`
+	Having         *Expr             `cbor:"having,omitempty"`
+	OrderBy        *OrderByClause    `cbor:"order_by,omitempty"`
+	LimitBy        *LimitByClause    `cbor:"limit_by,omitempty"`
+	Limit          *LimitClause      `cbor:"limit,omitempty"`
+	Settings       []SettingPair     `cbor:"settings,omitempty"`
 }
 
 // ============================================================================
@@ -82,6 +86,17 @@ type ExceptClause struct {
 type ArrayJoinClause struct {
 	Kind  ArrayJoinKindE `cbor:"kind,omitempty"`
 	Exprs []Expr         `cbor:"exprs"`
+}
+
+// ArrayJoins returns the SELECT's ARRAY JOIN clauses in source order.
+func (inst Select) ArrayJoins() (clauses []ArrayJoinClause) {
+	if inst.ArrayJoin == nil {
+		return nil
+	}
+	clauses = make([]ArrayJoinClause, 0, 1+len(inst.MoreArrayJoins))
+	clauses = append(clauses, *inst.ArrayJoin)
+	clauses = append(clauses, inst.MoreArrayJoins...)
+	return
 }
 
 type WindowDefClause struct {

@@ -1201,3 +1201,20 @@ func TestGenerated_T090_materialized_cte(t *testing.T) {
 	_, err = nanopass.Parse(sql)
 	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
 }
+
+// Source: 091_array_joins
+// SQL: SELECT k, x, y, z FROM t LEFT ARRAY JOIN a AS x, b AS y ARRAY JOIN arrayFilter(i -> i IN (SELECT k FROM u), c) AS z I...
+func TestGenerated_T091_array_joins(t *testing.T) {
+	q, err := Select(Col("k"), Col("x"), Col("y"), Col("z")).
+		From("t").
+		LeftArrayJoin(Col("a").As("x"), Col("b").As("y")).
+		ArrayJoin(Func("arrayFilter", Raw("i -> i IN (SELECT k FROM u)"), Col("c")).As("z")).
+		ArrayJoin(Func("array", Raw("1"), Raw("2")).As("w")).
+		Where(Col("x").Gt(Raw("0"))).
+		OrderBy(Col("k").Order()).
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}

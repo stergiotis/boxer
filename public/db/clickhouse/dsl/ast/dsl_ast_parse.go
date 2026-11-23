@@ -383,7 +383,11 @@ func convertSelectStmt(pr *nanopass.ParseResult, ctx *grammar2.SelectStmtContext
 		case *grammar2.ArrayJoinClauseContext:
 			var aj ArrayJoinClause
 			aj, err = convertArrayJoinClause(pr, c)
-			sel.ArrayJoin = &aj
+			if sel.ArrayJoin == nil {
+				sel.ArrayJoin = &aj
+			} else {
+				sel.MoreArrayJoins = append(sel.MoreArrayJoins, aj)
+			}
 		case *grammar2.WindowClauseContext:
 			var wd WindowDefClause
 			wd, err = convertWindowClause(pr, c)

@@ -89,13 +89,13 @@ func (inst *goEmitter) emitSelect(sel Select) {
 		inst.w(".\n\tFinal()")
 	}
 
-	if sel.ArrayJoin != nil {
-		if sel.ArrayJoin.Kind == ArrayJoinLeft {
+	for _, aj := range sel.ArrayJoins() {
+		if aj.Kind == ArrayJoinLeft {
 			inst.w(".\n\tLeftArrayJoin(")
 		} else {
 			inst.w(".\n\tArrayJoin(")
 		}
-		inst.emitExprList(sel.ArrayJoin.Exprs)
+		inst.emitExprList(aj.Exprs)
 		inst.w(")")
 	}
 

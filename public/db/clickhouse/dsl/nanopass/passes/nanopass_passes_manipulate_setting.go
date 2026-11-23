@@ -457,8 +457,8 @@ func findLastSelectStmtClause(stmt *grammar1.SelectStmtContext) antlr.ParserRule
 	if stmt.WindowClause() != nil {
 		return stmt.WindowClause().(antlr.ParserRuleContext)
 	}
-	if stmt.ArrayJoinClause() != nil {
-		return stmt.ArrayJoinClause().(antlr.ParserRuleContext)
+	if joins := stmt.AllArrayJoinClause(); len(joins) > 0 {
+		return joins[len(joins)-1].(antlr.ParserRuleContext)
 	}
 	if stmt.FromClause() != nil {
 		return stmt.FromClause().(antlr.ParserRuleContext)

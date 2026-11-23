@@ -130,7 +130,7 @@ type projItem struct {
 // refused.
 func (inst *evaluator) evalSelect(sel *grammar1.SelectStmtContext, visible int) (batch arrow.RecordBatch, err error) {
 	switch {
-	case sel.ArrayJoinClause() != nil:
+	case len(sel.AllArrayJoinClause()) > 0:
 		return nil, refuse("ARRAY JOIN")
 	case sel.WindowClause() != nil, sel.QualifyClause() != nil:
 		return nil, refuse("WINDOW or QUALIFY")

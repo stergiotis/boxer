@@ -116,7 +116,7 @@ selectStmtWithParens: selectStmt | (LPAREN selectUnionStmt RPAREN);
 selectStmt:
     projectionClause
     fromClause?
-    arrayJoinClause?
+    arrayJoinClause*
     windowClause?
     qualifyClause?
     prewhereClause?
@@ -141,6 +141,12 @@ dynamicColumnSelection
     : COLUMNS LPAREN STRING_LITERAL RPAREN;
 topClause: TOP DECIMAL_LITERAL (WITH TIES)?;
 fromClause: FROM joinExpr;
+// A FROM may be followed by several ARRAY JOIN clauses, each LEFT, INNER or
+// plain; each unfolds over the rows the one before it made, which is not what
+// one clause listing all the arrays does (that one walks them in step), so
+// the clauses are kept apart. ClickHouse also takes a JOIN after an ARRAY
+// JOIN; this grammar keeps every JOIN inside the fromClause, ahead of the
+// first ARRAY JOIN.
 arrayJoinClause: (LEFT | INNER)? ARRAY JOIN columnExprList;
 windowClause: WINDOW identifier AS LPAREN windowExpr RPAREN;
 qualifyClause: QUALIFY columnExpr;

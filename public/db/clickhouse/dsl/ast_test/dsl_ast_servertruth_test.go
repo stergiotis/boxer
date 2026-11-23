@@ -376,3 +376,51 @@ func TestServerTruthMaterializedCTE(t *testing.T) {
 		})
 	}
 }
+
+// TestServerTruthArrayJoins: the server prints several ARRAY JOIN clauses as
+// the clauses they are, the canonical form and the canonical AST's rendering
+// keep them apart in their order, and the three evaluate alike. The row
+// counts show why: two clauses multiply, one clause walks in step.
+func TestServerTruthArrayJoins(t *testing.T) {
+	requireClickhouse(t)
+
+	queries := []string{
+		"SELECT number, T, tau FROM numbers(2) ARRAY JOIN [1.0, 1.5, 2.0] AS T ARRAY JOIN [0.5, 0.7] AS tau ORDER BY number, T, tau",
+		"SELECT count() FROM numbers(2) ARRAY JOIN [1, 2, 3] AS a ARRAY JOIN [4, 5] AS b",
+		"SELECT count() FROM numbers(2) ARRAY JOIN [1, 2, 3] AS a, [4, 5, 6] AS b",
+		"SELECT number, a, b FROM numbers(3) LEFT ARRAY JOIN range(number) AS a ARRAY JOIN [10, 20] AS b ORDER BY number, a, b",
+		"SELECT number, a, b FROM numbers(3) ARRAY JOIN [10, 20] AS b LEFT ARRAY JOIN range(number) AS a ORDER BY number, a, b",
+		"SELECT a, b, c FROM numbers(1) INNER ARRAY JOIN [1, 2] AS a ARRAY JOIN arrayMap(i -> i * a, [1, 2]) AS b ARRAY JOIN [b, b + 1] AS c WHERE c > 2 ORDER BY a, b, c",
+	}
+
+	for _, sql := range queries {
+		t.Run(sql, func(t *testing.T) {
+			formatted, err := chFormat(sql)
+			require.NoError(t, err)
+			canonical, err := fullPipeline(sql)
+			require.NoError(t, err)
+			pr, err := nanopass.ParseCanonical(canonical)
+			require.NoError(t, err)
+			query, err := ast.ConvertCSTToAST(pr)
+			require.NoError(t, err)
+			rendered := query.ToSQL()
+			assert.Equal(t, strings.Count(formatted, "ARRAY JOIN"), strings.Count(canonical, "ARRAY JOIN"), "canonical: %s", canonical)
+			assert.Equal(t, strings.Count(formatted, "ARRAY JOIN"), strings.Count(rendered, "ARRAY JOIN"), "rendered: %s", rendered)
+
+			want, err := chLocal(t, sql)
+			require.NoError(t, err)
+			got, err := chLocal(t, canonical)
+			require.NoError(t, err)
+			assert.Equal(t, want, got, "canonical: %s", canonical)
+			got, err = chLocal(t, rendered)
+			require.NoError(t, err)
+			assert.Equal(t, want, got, "rendered: %s", rendered)
+		})
+	}
+	two, err := chLocal(t, queries[1])
+	require.NoError(t, err)
+	one, err := chLocal(t, queries[2])
+	require.NoError(t, err)
+	assert.Equal(t, "12", two, "two clauses over 3 and 2 elements, for 2 rows")
+	assert.Equal(t, "6", one, "one clause over two arrays of 3 elements, for 2 rows")
+}
