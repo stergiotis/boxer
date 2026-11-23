@@ -46,6 +46,11 @@ type BundleSpec struct {
 	// statement as the producer ran it, and the datasets it read.
 	SourceSql    string
 	InputHandles []string
+	// DerivedFromSealed says the rows derive from sealed data, as
+	// adhocdata.BundleProvenance has it: a producer that computed them
+	// from a result or a dataset it holds as sealed sets it, whatever
+	// tier the call that asked for the publish declared.
+	DerivedFromSealed bool
 	// KeepAfterClose and OnBehalfOf are the publish's, as
 	// adhocdata.BundlePublishInput has them.
 	KeepAfterClose bool
@@ -142,7 +147,7 @@ func PublishBundle(ctx context.Context, bus app.BusI, spec BundleSpec) (res adho
 	return adhocdata.PublishBundleRequest(ctx, bus, adhocdata.BundlePublishInput{
 		Alias: spec.Alias, Document: doc, Datasets: spec.Datasets,
 		KeepAfterClose: spec.KeepAfterClose, OnBehalfOf: spec.OnBehalfOf,
-		Provenance: adhocdata.BundleProvenance{SourceSql: spec.SourceSql, InputHandles: spec.InputHandles},
+		Provenance: adhocdata.BundleProvenance{SourceSql: spec.SourceSql, InputHandles: spec.InputHandles, DerivedFromSealed: spec.DerivedFromSealed},
 	})
 }
 
