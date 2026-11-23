@@ -902,15 +902,33 @@ func (inst *coordinator) dispatch(ctx context.Context, o toolOrigin, call openai
 }
 
 // describeApp runs describe_app: what the model reads of the apps and
-// their operations.
+// their operations, by name or in full as detail says. Without detail an
+// app or an operation named reads in full and the catalog by name.
 func (inst *coordinator) describeApp(ctx context.Context, asked agent.Asked, args map[string]any) (content string, activity string) {
-	apps, err := inst.cli.Describe(ctx, agent.DescribeRequest{App: argString(args, "app"), Search: argString(args, "search"), Operation: argString(args, "operation"),
+	appName, operation := argString(args, "app"), argString(args, "operation")
+	detail := argString(args, "detail")
+	switch detail {
+	case "":
+		detail = describeDetailNames
+		if appName != "" || operation != "" {
+			detail = describeDetailFull
+		}
+	case describeDetailNames, describeDetailFull:
+	default:
+		return "error: detail is names or full, not " + strconv.Quote(detail), "describe: detail " + strconv.Quote(detail)
+	}
+	apps, err := inst.cli.Describe(ctx, agent.DescribeRequest{App: appName, Search: argString(args, "search"), Operation: operation,
 		Asked: asked})
 	if err != nil {
 		return "error: " + err.Error(), "describe: " + err.Error()
 	}
 	inst.noteEffects(apps)
-	b, _ := json.Marshal(describeView(apps, inst.directOps(ctx)))
+	var b []byte
+	if detail == describeDetailNames {
+		b, _ = json.Marshal(describeNames(apps, inst.directOps(ctx)))
+	} else {
+		b, _ = json.Marshal(describeView(apps, inst.directOps(ctx)))
+	}
 	return string(b), "described " + strconv.Itoa(len(apps)) + " app(s)"
 }
 

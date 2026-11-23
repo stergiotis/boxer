@@ -201,6 +201,38 @@ func TestTheAppsNoteGivesAdviceAndToolsFirst(t *testing.T) {
 	assert.Contains(t, got, `"tool":"zcalc_get_note"`)
 }
 
+// describe_app lists the apps by name without an app and in full with one;
+// detail overrides either, and a detail it does not know is refused.
+func TestDescribeAppReadsByNameOrInFull(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	calc := app.Manifest{Id: "github.com/x/apps/zcalc", Display: "Calc", Summary: "compute over a note",
+		WhenToUse: "Use for sums the note cannot do by itself.",
+		Surface:   app.SurfaceWindowed, Topics: []app.TopicT{app.Topics()[0]}, Operations: noteOpsSet("get_note").Catalog()}
+	_, coord, _, _, ctx := coordRigCfg(t, bus, &scriptedModel{}, false, noteOps, nil, nil, calc)
+
+	names, activity := coord.describeApp(ctx, agent.Asked{}, map[string]any{})
+	var listed []describedAppNames
+	require.NoError(t, json.Unmarshal([]byte(names), &listed), names)
+	require.NotEmpty(t, listed)
+	assert.Contains(t, names, `"operations":["get_note","count_words"`)
+	assert.Contains(t, names, `"tools":["zcalc_get_note"]`)
+	assert.Contains(t, names, `"when_to_use":"Use for sums the note cannot do by itself."`)
+	assert.NotContains(t, names, `"effect"`, "by name, no operation's description")
+	assert.Contains(t, activity, "described")
+
+	full, _ := coord.describeApp(ctx, agent.Asked{}, map[string]any{"detail": "full"})
+	assert.Contains(t, full, `"effect"`)
+	assert.Greater(t, len(full), len(names))
+
+	one, _ := coord.describeApp(ctx, agent.Asked{}, map[string]any{"app": "zcalc"})
+	assert.Contains(t, one, `"effect"`, "an app named reads in full")
+	oneNames, _ := coord.describeApp(ctx, agent.Asked{}, map[string]any{"app": "zcalc", "detail": "names"})
+	assert.Contains(t, oneNames, `"operations":["get_note","count_words"`)
+
+	refused, _ := coord.describeApp(ctx, agent.Asked{}, map[string]any{"detail": "all"})
+	assert.Equal(t, `error: detail is names or full, not "all"`, refused)
+}
+
 // The direct tools are bounded, in the order the host lists the apps.
 func TestDirectToolsAreBounded(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())

@@ -284,8 +284,8 @@ var coordinatorTools = []toolSpec{
 			return inst.listWindows(ctx, inst.asked(o, call.Id))
 		}},
 	{name: "describe_app", group: toolGroupFixed,
-		description:  "With no arguments, list every app and the operations it offers you; with app, that app's; with app and operation, the operation's argument schema.",
-		schema:       `{"type":"object","properties":{"app":{"type":"string","description":"an app id as describe_app lists it"},"search":{"type":"string","description":"filter apps and operations by a word"},"operation":{"type":"string"}},"additionalProperties":false}`,
+		description:  "With no arguments, list every app with the names of its operations; with app, that app's operations, each with its summary, effect and what it reads; with app and operation, the operation's argument schema. detail chooses: names for the names alone, full for every operation in full.",
+		schema:       `{"type":"object","properties":{"app":{"type":"string","description":"an app id as describe_app lists it"},"search":{"type":"string","description":"filter apps and operations by a word"},"operation":{"type":"string"},"detail":{"type":"string","enum":["names","full"],"description":"names: each app and its operations by name; full: each operation in full. Without app the default is names, with app full; full over every app is long"}},"additionalProperties":false}`,
 		parallelSafe: true,
 		exec: func(ctx context.Context, inst *coordinator, spec *toolSpec, o toolOrigin, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
 			return inst.describeApp(ctx, inst.asked(o, call.Id), args)

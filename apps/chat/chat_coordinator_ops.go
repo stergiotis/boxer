@@ -95,6 +95,44 @@ type describedApp struct {
 	Operations []describedOperation `json:"operations"`
 }
 
+// The detail describe_app reads at: the apps and the names of their
+// operations, or every operation in full.
+const (
+	describeDetailNames = "names"
+	describeDetailFull  = "full"
+)
+
+// describedAppNames is an app as describe_app lists it by name: what the
+// app is, and its operations by name.
+type describedAppNames struct {
+	App       string `json:"app"`
+	Display   string `json:"display"`
+	Summary   string `json:"summary,omitempty"`
+	WhenToUse string `json:"when_to_use,omitempty"`
+	Help      bool   `json:"help,omitempty"`
+	// Tools are the app's direct tools, which call an operation without a
+	// window.
+	Tools      []string `json:"tools,omitempty"`
+	Operations []string `json:"operations"`
+}
+
+// describeNames is what the model reads of describe_app by name: each app
+// with its operations' names and its direct tools among directs.
+func describeNames(apps []agent.AppOperations, directs []directOp) (out []describedAppNames) {
+	out = make([]describedAppNames, 0, len(apps))
+	for _, a := range apps {
+		d := describedAppNames{App: a.App, Display: a.Display, Summary: a.Summary, WhenToUse: a.WhenToUse, Help: a.Help, Operations: make([]string, 0, len(a.Operations))}
+		for _, o := range a.Operations {
+			d.Operations = append(d.Operations, o.Name)
+			if t := directToolFor(directs, a.App, o.Name); t != "" {
+				d.Tools = append(d.Tools, t)
+			}
+		}
+		out = append(out, d)
+	}
+	return
+}
+
 // describeView is what the model reads of describe_app: the schemas as JSON
 // objects rather than text holding JSON, and each direct operation's tool
 // among directs.

@@ -49,8 +49,9 @@ asked the same way. A grant dies with this window's instance (ADR-0322).
 
 ## Calling an operation
 
-`describe_app` lists the apps and their operations, with each one's effect
-and argument schema; `read_help` reads the books apps ship, this one
+`describe_app` lists the apps and their operations by name, one app's
+operations with each one's effect, and an operation's argument schema; its
+`detail` option asks for names or the full description; `read_help` reads the books apps ship, this one
 included. `call_operation` takes `window`, `operation`, `args` and a
 one-line `reason` shown to you. With **A tool per operation** on, each
 operation of the task's windows is also a typed tool of its own,
