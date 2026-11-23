@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +15,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/extbin"
 )
 
 // requireBinary skips the test if no clickhouse binary resolves the way an
@@ -120,9 +123,23 @@ func TestNew_RejectsMissingBinary(t *testing.T) {
 	assert.Contains(t, err.Error(), "binary")
 }
 
-// An unset BinaryPath resolves to the packaged path when it exists and to
-// the PATH binary otherwise; with neither, New fails naming the default.
+// The BOXER_CLICKHOUSE_LOCAL override names the binary an unset BinaryPath
+// resolves to, where the packaged path exists too.
+func TestNew_TheOverrideWinsOverThePackagedPath(t *testing.T) {
+	chosen := filepath.Join(t.TempDir(), "clickhouse")
+	t.Cleanup(extbin.ClickHouseLocalBin.ClearOverride)
+	extbin.ClickHouseLocalBin.Override(chosen)
+	assert.Equal(t, chosen, resolveBinaryPath())
+	extbin.ClickHouseLocalBin.Override("")
+	assert.NotEqual(t, chosen, resolveBinaryPath())
+}
+
+// With no override, an unset BinaryPath resolves to the packaged path when
+// it exists and to the PATH binary otherwise; with neither, New fails naming
+// the default.
 func TestNew_UnsetBinaryPathResolves(t *testing.T) {
+	t.Cleanup(extbin.ClickHouseLocalBin.ClearOverride)
+	extbin.ClickHouseLocalBin.Override("")
 	resolved := resolveBinaryPath()
 	if _, statErr := os.Stat(DefaultBinaryPath); statErr == nil {
 		assert.Equal(t, DefaultBinaryPath, resolved, "the packaged path wins when present")

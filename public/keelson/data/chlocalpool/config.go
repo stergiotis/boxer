@@ -2,6 +2,7 @@ package chlocalpool
 
 import (
 	"os"
+	"strings"
 	"time"
 
 	"github.com/stergiotis/boxer/public/extbin"
@@ -28,9 +29,9 @@ const (
 // to accept all defaults.
 type Config struct {
 	// BinaryPath names the multi-call `clickhouse` binary. Empty resolves at
-	// New: DefaultBinaryPath when the packaged install put it there, else what
-	// the extbin declaration resolves — the BOXER_CLICKHOUSE_LOCAL override,
-	// then a `clickhouse` on PATH. A path set here is taken as written, and
+	// New: the BOXER_CLICKHOUSE_LOCAL override when it is set, else
+	// DefaultBinaryPath when the packaged install put it there, else a
+	// `clickhouse` on PATH. A path set here is taken as written, and
 	// a missing one is a startup error rather than a fallback, since an
 	// operator who names a binary means that binary.
 	BinaryPath          string
@@ -89,13 +90,17 @@ func (inst Config) validate() (err error) {
 	return
 }
 
-// resolveBinaryPath is what an unset Config.BinaryPath means: the packaged
-// install's DefaultBinaryPath when it exists, else whatever the extbin
-// declaration resolves on this host — the BOXER_CLICKHOUSE_LOCAL override,
-// then a `clickhouse` on PATH, which is where a single-binary install lands
-// (ADR-0028's 2026-09-13 update). With neither it returns the default path,
-// so the startup error names where the packaged install would have put it.
+// resolveBinaryPath is what an unset Config.BinaryPath means: the binary
+// BOXER_CLICKHOUSE_LOCAL names when it is set — a path someone chose wins
+// over one found —, else the packaged install's DefaultBinaryPath when it
+// exists, else a `clickhouse` on PATH, which is where a single-binary
+// install lands (ADR-0028's 2026-09-13 and 2026-11-23 updates). With none
+// it returns the default path, so the startup error names where the
+// packaged install would have put it.
 func resolveBinaryPath() string {
+	if bin := strings.TrimSpace(extbin.ClickHouseLocalBin.Get()); bin != "" {
+		return bin
+	}
 	if _, err := os.Stat(DefaultBinaryPath); err == nil {
 		return DefaultBinaryPath
 	}

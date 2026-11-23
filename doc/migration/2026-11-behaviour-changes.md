@@ -78,6 +78,12 @@ relied on the old behaviour.
   resolving the program returns `extbin.ErrUndeclaredVariable` instead of
   panicking; `extbin.CheckDeclarations(t)` finds it in a unit test (ADR-0118,
   update of 2026-11-21).
+- **`BOXER_CLICKHOUSE_LOCAL` chooses the pool's binary too.** With the
+  variable set, the `clickhouse local` worker pool runs the binary it names
+  even where a packaged `/usr/bin/clickhouse` exists; before, the packaged
+  path won there and the variable reached only direct invocations
+  ([ADR-0028](../adr/0028-chlocal-low-latency-sql-cap.md), update of
+  2026-11-23).
 - **Tombstones and start-up warnings.** A set variable the registry retired,
   or a set `BOXER_*` / `IMZERO2_*` variable nothing declares, is warned
   about once at start; a conflicting second declaration is logged as an

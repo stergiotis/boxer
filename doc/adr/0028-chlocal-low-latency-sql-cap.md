@@ -596,6 +596,19 @@ second shape in
 (withdrawn). The proposal was withdrawn: the gain had no consumer that needed
 it, at the cost of a second worker shape. One-shot stays the only shape.
 
+### 2026-11-23 — the override is asked before the packaged path
+
+An unset `BinaryPath` resolves to the binary `BOXER_CLICKHOUSE_LOCAL` names
+when the variable is set, then to `DefaultBinaryPath`, then to a `clickhouse`
+on `PATH`. The 2026-09-13 order asked the packaged path first, so on a machine
+with a packaged install the variable chose the binary for direct
+`clickhouse local` invocations and not for the pool.
+
+**Why.** A release check that pins the oldest supported ClickHouse build set
+the variable and still ran every pool-backed test on the newer packaged one;
+the mismatch showed only in an error text that carried the version. A path
+someone chose means that binary, as `Config.BinaryPath` already does.
+
 ## References
 
 - [ADR-0026 — App runtime and capability subjects](./0026-app-runtime-and-capability-subjects.md) — parent framework; this ADR extends §SD3 (subject taxonomy) and §SD10 (capslock).
