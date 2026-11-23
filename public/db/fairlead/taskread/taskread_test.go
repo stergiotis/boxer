@@ -25,6 +25,11 @@ func TestPassLetsATasksReadThroughAndRefusesTheRest(t *testing.T) {
 		// left to a leading keyword that does not prove one.
 		{name: "a task's select with an aggregate filter", sql: "SELECT quantile(0.05)(L) FILTER (WHERE L BETWEEN 177 AND 1502) AS p05 FROM t", task: "t1"},
 		{name: "a task's filter hiding a nested comment", sql: "SELECT sum(x) FILTER (WHERE /* /* */ y > 0 */ 1) FROM t", task: "t1", refused: true},
+		// EXISTS parses, in both spellings, so a SELECT using it is a
+		// proven read; nothing but a query stands in its parentheses.
+		{name: "a task's select with exists", sql: "SELECT a FROM t WHERE exists(SELECT 1 FROM u WHERE u.k = t.k) AND NOT EXISTS (SELECT 1 FROM v)", task: "t1"},
+		{name: "a task's exists hiding a nested comment", sql: "SELECT exists(SELECT /* /* */ 1 FROM u */ 1)", task: "t1", refused: true},
+		{name: "a task's exists around an insert", sql: "SELECT exists(INSERT INTO t SELECT 1)", task: "t1", refused: true},
 		{name: "a task's insert", sql: "INSERT INTO t VALUES (1)", task: "t1", refused: true},
 		{name: "a task's insert wrapper", sql: "INSERT INTO t SELECT 1", task: "t1", refused: true},
 		{name: "a task's create", sql: "CREATE TABLE t (a UInt8) ENGINE = Memory", task: "t1", refused: true},

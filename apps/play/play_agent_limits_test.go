@@ -48,6 +48,12 @@ func TestAgentLimits(t *testing.T) {
 		// The aggregate filter's condition is read like any expression.
 		"an aggregate filter":        {"SELECT quantile(0.05)(L) FILTER (WHERE L BETWEEN 177 AND 1502) AS p05 FROM t", remote, grant, true},
 		"an egress read in a filter": {"SELECT count() FILTER (WHERE L IN (SELECT L FROM url('http://x/', 'CSV'))) FROM t", remote, grant, false},
+		// The query of an EXISTS is read like any subquery, in the spelling
+		// whose words also read as an expression.
+		"an exists":                    {"SELECT a FROM t WHERE exists(SELECT 1 FROM u WHERE u.k = t.k)", remote, grant, true},
+		"an egress read in an exists":  {"SELECT exists(SELECT * FROM url('http://x/', 'CSV'))", remote, grant, false},
+		"a keelson table in an exists": {"SELECT * FROM keelson('apps') WHERE EXISTS (SELECT * FROM keelson('windows'))", local, narrow, false},
+		"an exists the grant covers":   {"SELECT * FROM keelson('apps') AS a WHERE NOT EXISTS (SELECT 1 FROM keelson('apps') AS b WHERE b.id = a.id)", local, narrow, true},
 	} {
 		err := checkAgentLimits(tc.sql, tc.dec, tc.obo, nil)
 		if tc.pass {
