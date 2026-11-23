@@ -2160,4 +2160,9 @@ its knobs as a `Style` embedded in its `Input` (`boxenplot`, `ecdf`,
   zero `State` or a fresh `New` (`egui2test.Install()`), and a widget that
   reacts to input has one scripted-input test in the
   `egui2test` pattern. A multi-frame test calls
-  `StateManager.ScriptReset()` between frames.
+  `StateManager.ScriptReset()` between frames. A test that renders while
+  it waits polls with `egui2test.Eventually`, which asks on the test's own
+  goroutine — testify's `Eventually` asks on another, where an imzero2 call
+  panics. One that asks which calls a table's cells or a tab's body made
+  uses `egui2test.InstallTracing`: a recording holds those only as bytes
+  of their owner's payload.

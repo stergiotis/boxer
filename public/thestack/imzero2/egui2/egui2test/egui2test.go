@@ -9,6 +9,7 @@ package egui2test
 
 import (
 	"iter"
+	"time"
 
 	"github.com/zeebo/xxh3"
 
@@ -44,6 +45,24 @@ func Install() (reset func()) {
 	sm := c.CurrentApplicationState.StateManager
 	sm.ScriptReset()
 	return sm.ScriptReset
+}
+
+// Eventually polls cond every tick until it holds or wait has passed, and
+// says whether it held. cond runs on the calling goroutine, the one Install
+// bound the frame to, so it may render: a helper that polls on a goroutine
+// of its own (testify's Eventually does) panics at the first imzero2 call.
+// cond is asked at least once, and once more after wait has passed.
+func Eventually(cond func() bool, wait time.Duration, tick time.Duration) (ok bool) {
+	deadline := time.Now().Add(wait)
+	for {
+		if cond() {
+			return true
+		}
+		if !time.Now().Before(deadline) {
+			return false
+		}
+		time.Sleep(tick)
+	}
 }
 
 // countingChannel discards like discardChannel but counts the messages, so a

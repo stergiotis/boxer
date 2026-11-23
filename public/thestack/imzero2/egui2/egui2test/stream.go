@@ -23,7 +23,10 @@ import (
 //
 // Only the message's own opcode is read. Calls spliced into a message (a
 // retained builder's argument, a deferred block's captured messages) are
-// part of its payload and are not visited.
+// part of its payload and are not visited: where they sit in the payload
+// depends on the owner's other arguments. A test that asks about the calls
+// inside deferred blocks — a table's cells, a tab's body — uses
+// InstallTracing, which sees each message as it is sent.
 
 // Message is one message of a recorded stream.
 type Message struct {
@@ -115,4 +118,56 @@ func InstallRecording() (take func() []byte, reset func()) {
 		return
 	}
 	return take, sm.ScriptReset
+}
+
+// Sent is one message as the bindings sent it.
+type Sent struct {
+	// Opcode is the call the message carries.
+	Opcode c.FuncProcIdE
+	// Depth is the number of deferred-block captures open around the
+	// call: 0 for a message that reaches the host on its own, n for one
+	// taken into a block n captures deep.
+	Depth int
+	// Payload is a copy of the message's bytes after the opcode.
+	Payload []byte
+}
+
+// InstallTracing is Install with a trace of every message in the order the
+// calls were made, the ones a deferred block captured included: a block's
+// messages come before the message of the call that owns the block, since
+// the owner is sent once its blocks are closed. take returns the messages
+// sent since the last take (or the install). A call written into another's
+// payload without being sent (a retained builder's argument) is not a
+// message and is not seen.
+func InstallTracing() (take func() []Sent, reset func()) {
+	f := runtime.NewFffi2[*runtime.Unmarshaller](discardChannel{})
+	typed.SetCurrentFffiVar(f)
+	var sent []Sent
+	f.SetSendTrace(func(payload []byte, depth int) {
+		if len(payload) < 4 {
+			return
+		}
+		sent = append(sent, Sent{
+			Opcode:  c.FuncProcIdE(binary.LittleEndian.Uint32(payload)),
+			Depth:   depth,
+			Payload: slices.Clone(payload[4:]),
+		})
+	})
+	sm := c.CurrentApplicationState.StateManager
+	sm.ScriptReset()
+	take = func() (out []Sent) {
+		out, sent = sent, nil
+		return
+	}
+	return take, sm.ScriptReset
+}
+
+// CountSent is the number of traced messages carrying op, at any depth.
+func CountSent(sent []Sent, op c.FuncProcIdE) (n int) {
+	for _, m := range sent {
+		if m.Opcode == op {
+			n++
+		}
+	}
+	return
 }

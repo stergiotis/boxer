@@ -27,6 +27,9 @@ func (inst *Fffi2[U]) SyncRetained(id uint64, buf []byte) (err error) {
 func (inst *Fffi2[U]) SendIntermediate(buf []byte) (err error) {
 	inst.checkOwner()
 	inst.msgs++
+	if inst.trace != nil {
+		inst.trace(buf, len(inst.captureStack))
+	}
 	if n := len(inst.captureStack); n > 0 {
 		// During deferred block capture: write framed message to the innermost
 		// capture buffer. Wire format matches what Rust's begin_consume_message
@@ -42,6 +45,18 @@ func (inst *Fffi2[U]) SendIntermediate(buf []byte) (err error) {
 	}
 	inst.channel.SendSingleUseMsg(buf)
 	return
+}
+
+// SetSendTrace has f called with every message SendIntermediate takes, in
+// the order the calls are made, and with the number of deferred-block
+// captures open around it: 0 for a message that reaches the pipe on its
+// own, n for one taken into a block n captures deep. It is how a test
+// harness sees the calls inside deferred blocks, which a recording holds
+// only as bytes of their owner's payload. payload is the caller's buffer
+// and valid during the call only. nil removes the trace.
+func (inst *Fffi2[U]) SetSendTrace(f func(payload []byte, depth int)) {
+	inst.checkOwner()
+	inst.trace = f
 }
 
 // BeginRecording starts keeping a copy of every message sent to the pipe,

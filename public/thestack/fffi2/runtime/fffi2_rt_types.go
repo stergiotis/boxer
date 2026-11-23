@@ -47,6 +47,9 @@ type Fffi2[U UnmarshallReaderI] struct {
 	// (ADR-0281 §SD4).
 	recording   []byte
 	recordingOn bool
+	// trace, when set, sees every message SendIntermediate takes; see
+	// SetSendTrace.
+	trace func(payload []byte, depth int)
 }
 
 type MarshallWriterI interface {
