@@ -261,6 +261,19 @@ and carrying the images along with Copy and Open in mdedit.
 (proposed) takes up the durable storage §SD6 deferred, as an export the person
 confirms. It ends §SD1's guarantee for what is exported, and only for that.
 
+### 2026-11-23 — a capture in JPEG, cut to one pane
+
+`artefact_capture` takes `format` (`png`, the default, or `jpeg`) and a
+JPEG's `quality`, through ADR-0281's JPEG format (its update of
+2026-11-23); a JPEG capture is named `.jpg`, as an uploaded JPEG is
+(ADR-0385). Its description tells the model that PNG keeps a chart's
+lines and text sharp and JPEG pays only for continuous colour. To put one
+plot in a data story, the model crops to a pane: an app may report where
+its panes are among its operations — play's `list_panes` does (ADR-0270,
+update of 2026-11-23) — and that rect is the crop. Nothing else of SD3
+changes: the capture is of the task's windows, under the grant, untrusted
+and labelled.
+
 ### 2026-11-20 — the set takes uploads, and JPEG
 
 [ADR-0385](./0385-images-the-person-adds-to-the-chats-artefact-and-sends-with-a-message.md)

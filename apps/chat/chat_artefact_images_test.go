@@ -6,7 +6,9 @@ import (
 	"encoding/json/v2"
 	"image"
 	"image/color"
+	"image/jpeg"
 	"image/png"
+	"maps"
 	"testing"
 	"time"
 
@@ -275,6 +277,37 @@ func TestImageToolsCaptureCopyCropRemove(t *testing.T) {
 	// The text is untouched by every change of the set.
 	_, text := art.head()
 	assert.Empty(t, text)
+}
+
+// A capture names its format; a JPEG is named .jpg, and what is neither
+// format, or a quality on a PNG, is refused before anything is captured.
+func TestImageCaptureTakesAFormat(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 32, 24))
+	var buf bytes.Buffer
+	require.NoError(t, jpeg.Encode(&buf, img, nil))
+	captures := 0
+	coord, _ := imageRig(t, func([]uint64, *[4]float32) ([]byte, string) {
+		captures++
+		return buf.Bytes(), ""
+	})
+	content, _ := callTool(t, coord, "artefact_capture", map[string]any{"base_revision": 0.0, "windows": []any{1.0}, "format": "jpeg", "quality": 80.0})
+	var w imageWriteView
+	require.NoError(t, json.Unmarshal([]byte(content), &w), content)
+	require.NotNil(t, w.Image)
+	assert.Equal(t, "screenshot-1.jpg", w.Image.Name)
+
+	for _, bad := range []map[string]any{
+		{"format": "gif"},
+		{"format": "png", "quality": 80.0},
+		{"format": "jpeg", "quality": 0.0},
+		{"format": "jpeg", "quality": 80.5},
+	} {
+		args := map[string]any{"base_revision": 1.0, "windows": []any{1.0}}
+		maps.Copy(args, bad)
+		content, _ = callTool(t, coord, "artefact_capture", args)
+		assert.Contains(t, content, "error:", bad)
+	}
+	assert.Equal(t, 1, captures, "a refused format captures nothing")
 }
 
 func TestImageToolsAreWritesUnderTheSettings(t *testing.T) {

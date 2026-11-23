@@ -13,6 +13,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/v2"
+	"math"
 	"strconv"
 	"strings"
 
@@ -154,11 +155,16 @@ func (inst *coordinator) imageCall(ctx context.Context, o toolOrigin, name strin
 			return fail(errImageBudget{what: "names", used: int64(len(set) + 1), limit: int64(art.store.limits.count)}.Error())
 		}
 		// A copy keeps its source's bytes, so its name ends as the source's
-		// does; a capture and a crop are PNGs.
+		// does; a crop is a PNG, and a capture is in the format it asks for.
 		ext := extPNG
-		if name == "artefact_copy_image" {
+		switch name {
+		case "artefact_copy_image":
 			if i := findImage(set, args.str("from")); i >= 0 {
 				ext = imageExt(set[i].name)
+			}
+		case "artefact_capture":
+			if f, _, _ := captureFormat(args); f == agent.CaptureFormatJpeg {
+				ext = extJPEG
 			}
 		}
 		nm, reason := imageName(args.str("name"), set, stemScreenshot, ext)
@@ -247,6 +253,10 @@ func (inst *coordinator) newImage(ctx context.Context, o toolOrigin, name string
 		if reason != "" {
 			return e, nil, reason
 		}
+		format, quality, reason := captureFormat(args)
+		if reason != "" {
+			return e, nil, reason
+		}
 		auto := false
 		if crop == nil {
 			// A capture is of the whole frame with only the granted windows
@@ -255,7 +265,7 @@ func (inst *coordinator) newImage(ctx context.Context, o toolOrigin, name string
 			crop = inst.windowBounds(ctx, windows)
 			auto = crop != nil
 		}
-		data, reason := inst.capturePNG(ctx, o, windows, crop)
+		data, reason := inst.captureImage(ctx, o, windows, crop, format, quality)
 		if reason != "" {
 			return e, nil, reason
 		}
@@ -296,6 +306,28 @@ func (inst *coordinator) newImage(ctx context.Context, o toolOrigin, name string
 		e.source, e.from, e.rect, e.root, e.uploaded = imageSourceCrop, src.name, [4]int{x, y, w, h}, src.rootHash(), src.uploaded
 	default:
 		return e, nil, "no tool " + name
+	}
+	return
+}
+
+// captureFormat reads artefact_capture's format and a JPEG's quality; PNG
+// when the model names none.
+func captureFormat(args toolArgs) (format string, quality int, reason string) {
+	format = agent.CaptureFormatPng
+	if f, ok := args["format"].(string); ok && f != "" {
+		format = f
+	}
+	if format != agent.CaptureFormatPng && format != agent.CaptureFormatJpeg {
+		return "", 0, "format is png or jpeg, not " + strconv.Quote(format)
+	}
+	if q, ok := args["quality"].(float64); ok {
+		if format != agent.CaptureFormatJpeg {
+			return "", 0, "quality is a jpeg's; a png is lossless"
+		}
+		if q < 1 || q > 100 || q != math.Trunc(q) {
+			return "", 0, "quality is a whole number from 1 to 100"
+		}
+		quality = int(q)
 	}
 	return
 }
@@ -389,10 +421,10 @@ func unionBounds(geoms []windowGeom) (crop *[4]float32) {
 	return &[4]float32{float32(minX), float32(minY), float32(maxX - minX), float32(maxY - minY)}
 }
 
-// capturePNG captures windows of the task as a PNG through the host's
-// capture service (ADR-0281) and returns its bytes. The host marks every
-// capture untrusted and taints the conversation; the chat mirrors that.
-func (inst *coordinator) capturePNG(ctx context.Context, o toolOrigin, windows []uint64, crop *[4]float32) (data []byte, reason string) {
+// captureImage captures windows of the task as a PNG or a JPEG through the
+// host's capture service (ADR-0281) and returns its bytes. The host marks
+// every capture untrusted and taints the conversation; the chat mirrors that.
+func (inst *coordinator) captureImage(ctx context.Context, o toolOrigin, windows []uint64, crop *[4]float32, format string, quality int) (data []byte, reason string) {
 	if inst.captureHook != nil {
 		return inst.captureHook(ctx, windows, crop)
 	}
@@ -404,7 +436,7 @@ func (inst *coordinator) capturePNG(ctx context.Context, o toolOrigin, windows [
 		return nil, "no task yet; call request_access for the windows first"
 	}
 	key := o.key()
-	out, err := inst.cli.CaptureWith(ctx, agent.CaptureRequest{Handle: h, Instances: windows, Format: agent.CaptureFormatPng, Crop: crop, Key: key})
+	out, err := inst.cli.CaptureWith(ctx, agent.CaptureRequest{Handle: h, Instances: windows, Format: format, Crop: crop, Quality: quality, Key: key})
 	if err != nil {
 		return nil, err.Error()
 	}
@@ -433,8 +465,8 @@ func (inst *coordinator) capturePNG(ctx context.Context, o toolOrigin, windows [
 		inst.confined = true
 		inst.mu.Unlock()
 	}
-	if len(res.Data) == 0 || res.MediaType != "image/png" {
-		return nil, "the capture returned no PNG"
+	if want := "image/" + format; len(res.Data) == 0 || res.MediaType != want {
+		return nil, "the capture returned no " + strings.ToUpper(format)
 	}
 	return res.Data, ""
 }

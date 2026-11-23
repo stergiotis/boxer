@@ -69,7 +69,7 @@ shows under the buttons, with **Anyway**.
 | --- | --- |
 | `artefact_read`, `artefact_outline`, `artefact_find`, `artefact_inspect`, `artefact_lint` | read: the text by numbered lines, the headings, matches of a text or RE2 pattern, the parsed structure, the lint findings |
 | `artefact_write`, `artefact_edit`, `artefact_insert`, `artefact_replace_section`, `artefact_set_frontmatter` | write: the whole text, one unique occurrence, lines at a place, a section's body, top-level properties |
-| `artefact_images`, `artefact_capture`, `artefact_copy_image`, `artefact_crop_image`, `artefact_remove_image` | the screenshot set: list, capture windows of the task, name a copy, crop, remove or purge |
+| `artefact_images`, `artefact_capture`, `artefact_copy_image`, `artefact_crop_image`, `artefact_remove_image` | the screenshot set: list, capture windows of the task as PNG or JPEG — or one pane of a window, at the rect its app reports (play: `list_panes`) — name a copy, crop, remove or purge |
 | `artefact_view_image` | look at an image of the set, as Pixels allows |
 
 Every write names the `base_revision` it was made against; a write against
