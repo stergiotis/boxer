@@ -241,7 +241,7 @@ const tipNoDocument = "This conversation has no document. Whether it has one is 
 
 // renderConversationFacts is the state chip's inspector body (ADR-0404
 // §SD7): the conversation's id, what its first message fixed, the model and
-// its endpoint, the context used, and the task — each with a copy.
+// its endpoint, the context used, its label, and the task.
 func (inst *App) renderConversationFacts() {
 	conv := inst.conv
 	d := styletokens.ActiveDensity()
@@ -278,6 +278,8 @@ func (inst *App) renderConversationFacts() {
 	if inst.coord == nil {
 		return
 	}
+	c.AddSpace(styletokens.PaddingInner(d))
+	inst.renderLabelFacts()
 	task, _, _ := inst.coord.stateOrNone()
 	if task == "" {
 		return

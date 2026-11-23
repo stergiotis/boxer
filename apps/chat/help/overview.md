@@ -57,14 +57,23 @@ and on the audit trail — with a button that opens its trail rows in play;
 what its first message fixed (**Keep** and whether the host kept it,
 **Apps**, **Questions**, **Document**); the model and the endpoint it is
 reached at, and whether that is on this machine; how much of the model's
-context the last call used; and, while the model holds one, the **task**'s
-id and what it was granted. Under the facts are the turn's states and how
-one leads to the next, as a table, a graph and a history.
+context the last call used; the conversation's **label**; and, while the
+model holds one, the **task**'s id and what it was granted. Under the facts
+are the turn's states and how one leads to the next, as a table, a graph and
+a history.
 
-While the model holds a task, a row under the bar has **Stop task** and the
-marks the conversation carries: **read untrusted content**, **holds confined
-content**. A conversation that read untrusted content without a task, such as
-an image you sent, carries the mark too. Under that, at most one notice: why
+The label is the conversation's traffic-light tier (TLP), the highest of
+what it has read; it only rises. The inspector names the tier with who it
+lets read the conversation ("CLEAR: lets it be shared with anyone."), the
+read that raised it, whether the conversation read untrusted content and a
+read that brought some, and the remote providers its content was sent to.
+The host checks the label before a model call goes out and before an export
+is written; the document carries it when it is exported.
+
+A row under the bar holds the marks the conversation carries, **read
+untrusted content** and **holds confined content**, and, while the model
+holds a task, **Stop task**. The marks are the conversation's: they stay
+when the task ends. Under that, at most one notice: why
 the conversation is not kept, or that closing the window ends it here and it
 is read in play.
 

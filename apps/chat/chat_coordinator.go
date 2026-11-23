@@ -185,6 +185,9 @@ type coordinator struct {
 	tasks    []string
 	tainted  bool
 	confined bool
+	// labelSeen is what raised the label, as last read from the journal
+	// for the inspector (chat_label.go).
+	labelSeen labelCauses
 	// lastExportMount is the mount the artefact was last exported to
 	// (chat_artefact_export.go); the journal holds it too.
 	lastExportMount uint64

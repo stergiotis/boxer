@@ -366,19 +366,11 @@ func (inst *App) renderExportAsk(p *exportPlan, head int) {
 
 // exportTierWords says who the export's label lets read it.
 func exportTierWords(t agentrun.TierE) string {
-	switch t {
-	case agentrun.TierClear:
-		return "Its label lets it be shared with anyone."
-	case agentrun.TierGreen:
-		return "Its label lets it be shared within your community, not published."
-	case agentrun.TierAmber:
-		return "Its label keeps it to your organisation and those it works with, as they need it."
-	case agentrun.TierAmberStrict:
-		return "Its label keeps it to your organisation."
-	case agentrun.TierRed:
-		return "Its label keeps it to the people it is given to."
+	reach, known := tierReach(t)
+	if !known {
+		return "Its label is not one the chat knows: " + t.String() + "."
 	}
-	return "Its label is not one the chat knows: " + t.String() + "."
+	return "Its label " + reach + "."
 }
 
 // export runs exportNow off the frame goroutine.

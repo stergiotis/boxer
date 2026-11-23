@@ -23,9 +23,12 @@ stands in for the person's approval.
 
 - Before a task, the bar says in words what the settings let the model do:
   edit and run things in the windows the person shares. Nothing is shared
-  yet. The state chip's inspector holds the conversation's id.
+  yet. The state chip's inspector holds the conversation's id and its
+  label: CLEAR, nothing untrusted read.
 - Turn 1 opens the demo app and writes its note. The task now holds a window
-  it may edit; the state chip's inspector says what the task was granted.
+  it may edit; the state chip's inspector says what the task was granted,
+  and that the conversation read untrusted content and which call brought
+  it.
 - The person opens Settings from those words and sets *At most* to Read. The
   bar follows: the host caps what the task was granted.
 - Turn 2 tries the same write. The host refuses it, with the settings as the
@@ -37,6 +40,8 @@ stands in for the person's approval.
 {"do":"wait","contains":"Model: may edit and run in your windows","role":"button"}
 {"do":"click","name":"Conversation","role":"unknown","pointer":true,"comment":"the state chip's inspector"}
 {"do":"wait","valueContains":"chat-","role":"label","nth":0,"comment":"the conversation's id, readable in the inspector, ahead of the roster, which names an untitled run of the same store by its id"}
+{"do":"wait","valueContains":"CLEAR: lets it be shared with anyone.","role":"label","comment":"the conversation's label: nothing read yet"}
+{"do":"wait","valueContains":"No untrusted content read.","role":"label"}
 {"do":"click","name":"Conversation","role":"unknown","pointer":true,"comment":"closed again"}
 {"do":"click","contains":"Send","role":"button","comment":"turn 1, the seeded draft"}
 {"do":"wait","valueContains":"The note is written.","role":"label","settleMs":1000}
@@ -44,6 +49,7 @@ stands in for the person's approval.
 {"do":"wait","value":"answered","role":"label","comment":"the state chip: the turn ended answered"}
 {"do":"click","name":"Conversation","role":"unknown","pointer":true,"comment":"the state chip's inspector"}
 {"do":"wait","valueContains":"Granted: edit windows you share","role":"label","comment":"the demo app's catalog offers edits, and the task acts in it"}
+{"do":"wait","valueContains":"Read untrusted content, from request_access","role":"label","comment":"the label names the read that brought window titles in"}
 {"do":"click","name":"Conversation","role":"unknown","pointer":true}
 {"do":"click","contains":"Model:","role":"button","comment":"the bar's words open Settings"}
 {"do":"wait","valueContains":"What the model may do","role":"label"}

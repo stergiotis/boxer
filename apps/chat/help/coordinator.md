@@ -88,7 +88,8 @@ A result derived from sealed data is **confined**: the model gets a data
 handle it can pass to another operation and cannot read, every later call
 of the conversation is labelled confined, and the host sends it only to a
 loopback or trusted endpoint. Reading a window the host says holds sealed
-data is held once, so the model can choose not to.
+data is held once, so the model can choose not to. The state chip's
+inspector names the read that confined the conversation.
 
 ## Questions, the queue and the journal
 

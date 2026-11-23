@@ -137,13 +137,17 @@ data. They have not read the harness.
 - **One bar row**, which wraps where the window is narrow: New
   conversation, the title, the state chip, the ceiling on what the model
   may do in words. The words open the settings. What is used rarely is
-  in the window's menu bar (SD8), not in a button of the bar's own. While a
-  task runs a second row holds stopping it and the marks that the
-  conversation read untrusted or holds confined content; at most one
-  notice follows.
+  in the window's menu bar (SD8), not in a button of the bar's own. A
+  second row holds the marks that the conversation read untrusted or
+  holds confined content, which are the conversation's and outlast a
+  task, and, while a task runs, stopping it; at most one notice follows.
 - **Facts behind the chip.** The conversation's id, the endpoint, the
-  context used, what the first message fixed, and the task's id with what
-  it was granted are in the state chip's inspector, each with a copy.
+  context used, what the first message fixed, its label, and the task's
+  id with what it was granted are in the state chip's inspector. The
+  label is stated as the tier with who it lets read the conversation,
+  the read that raised it, whether untrusted content was read, and the
+  providers the content was sent to (ADR-0311): the two marks say that
+  something happened, the inspector says what.
   The chip names the state in the reader's word; the operations keep the
   machine's.
 - **The side pane appears when it has something to show**: the
