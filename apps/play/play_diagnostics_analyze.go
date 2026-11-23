@@ -27,6 +27,7 @@ import (
 	"github.com/stergiotis/boxer/public/hmi/gloss"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sectionhead"
 )
 
 // analyzeHotSteps is how many of the costliest steps the profile names above
@@ -174,7 +175,7 @@ func analyzeTone(share float64) gloss.ToneE {
 
 // renderDiagAnalyze is the Execution profile section.
 func (inst *PlayApp) renderDiagAnalyze() {
-	diagHeading("Execution profile")
+	sectionhead.New("Execution profile").Send()
 	d := inst.diag
 	if d == nil || d.analyzeLane == nil {
 		diagWeak("Needs a connected endpoint.")

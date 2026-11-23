@@ -17,6 +17,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sectionhead"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 )
@@ -327,7 +328,7 @@ func (inst *App) renderStopsTab() {
 	if inst.bus == nil {
 		weak("This host gives the window no SQL worker: a conversation with a stop is stopped at its first check.")
 	}
-	section("In force · " + strconv.Itoa(len(set)))
+	sectionhead.New("In force · " + strconv.Itoa(len(set))).Send()
 	if len(set) == 0 {
 		weak("None. A turn ends with the model's answer, with its rounds, or when you stop it.")
 	}
@@ -355,7 +356,7 @@ func (inst *App) renderStopsTab() {
 		inst.removeStop(remove)
 	}
 
-	section("Add a stop of your own")
+	sectionhead.New("Add a stop of your own").Send()
 	weak("In force from the next turn, in this window.")
 	// The options wrap: six kinds do not fit the column's width in a row.
 	kind := selector.Segmented(inst.ids, "kind", &v.kind).Style(selector.StyleRadio).Inline()
@@ -425,7 +426,7 @@ func (inst *App) renderStopsTab() {
 	if inst.coord != nil {
 		events = inst.coord.stopEvents()
 	}
-	section("Fired in this conversation · " + strconv.Itoa(len(events)))
+	sectionhead.New("Fired in this conversation · " + strconv.Itoa(len(events))).Send()
 	if len(events) == 0 {
 		weak("Nothing yet.")
 	}

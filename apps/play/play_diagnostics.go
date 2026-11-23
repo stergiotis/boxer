@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sectionhead"
 )
 
 // play_diagnostics.go is the Diagnostics dock tab: the single owner of the
@@ -416,22 +417,16 @@ func adjustProbeLineNumbers(s string) string {
 // renderDiagnosticsTab is the Diagnostics dock tab body. The caller wraps it
 // in a ScrollArea (server error texts can be long).
 func (inst *PlayApp) renderDiagnosticsTab(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error) {
+	// Each section opens with its own heading and rule (sectionhead).
 	inst.renderDiagStatement()
-	c.Separator().Send()
 	inst.renderDiagRewrites()
-	c.Separator().Send()
 	if inst.diag != nil && inst.diag.resolveDiag != nil {
 		inst.renderDiagColumnResolution()
-		c.Separator().Send()
 	}
 	inst.renderDiagSecurityContext()
-	c.Separator().Send()
 	inst.renderDiagSplit()
-	c.Separator().Send()
 	inst.renderDiagSignalEmits()
-	c.Separator().Send()
 	inst.renderDiagLastRun(numRows, elapsed, summary, executed, err, inst.activeTruncation())
-	c.Separator().Send()
 	inst.renderDiagAnalyze()
 }
 
@@ -441,7 +436,7 @@ func (inst *PlayApp) renderDiagnosticsTab(numRows int64, elapsed time.Duration, 
 // though it published and a reader keeps showing the previous value — so the
 // notice stands here until that name emits something encodable.
 func (inst *PlayApp) renderDiagSignalEmits() {
-	diagHeading("Signal emits")
+	sectionhead.New("Signal emits").Send()
 	if inst.graph == nil {
 		return
 	}
@@ -471,7 +466,7 @@ func (inst *PlayApp) renderDiagSignalEmits() {
 // follows the tab's standing division of labour — that pane shows where in the
 // sequence a unit sits, this one owns the prose.
 func (inst *PlayApp) renderDiagRewrites() {
-	diagHeading("Pre-execute rewrites")
+	sectionhead.New("Pre-execute rewrites").Send()
 	trace, ok := inst.rewriteTraceFor()
 	if !ok {
 		if inst.rewriteTracePending() {
@@ -506,7 +501,7 @@ func (inst *PlayApp) renderDiagRewrites() {
 // `geoPoint:lat` is caught before any round-trip to the server. Empty when
 // every handle resolves.
 func (inst *PlayApp) renderDiagColumnResolution() {
-	diagHeading("Column resolution")
+	sectionhead.New("Column resolution").Send()
 	if inst.diag == nil {
 		return
 	}
@@ -541,12 +536,6 @@ func (inst *PlayApp) SetColumnResolver(resolver passes.ColumnResolverI) {
 	}
 }
 
-func diagHeading(text string) {
-	for rt := range c.RichTextLabel(text) {
-		rt.Strong()
-	}
-}
-
 func diagWeak(text string) {
 	for rt := range c.RichTextLabel(text) {
 		rt.Small().Weak()
@@ -556,7 +545,7 @@ func diagWeak(text string) {
 // renderDiagStatement is the parse-status section: the grammar verdict for
 // the debounced buffer, refined by the EXPLAIN probe when the grammar said no.
 func (inst *PlayApp) renderDiagStatement() {
-	diagHeading("Statement")
+	sectionhead.New("Statement").Send()
 	raw := strings.TrimSpace(inst.sql)
 	switch {
 	case raw == "":
@@ -598,7 +587,7 @@ func (inst *PlayApp) renderDiagStatement() {
 // gets the conservative presentation of each (strongest class, no passthrough
 // claim).
 func (inst *PlayApp) renderDiagSecurityContext() {
-	diagHeading("Security context")
+	sectionhead.New("Security context").Send()
 	if inst.diag == nil {
 		return
 	}
@@ -696,7 +685,7 @@ func passthroughTableName(t analysis.TableRef) string {
 
 // renderDiagSplit is the ADR-0097 split status of the last Run.
 func (inst *PlayApp) renderDiagSplit() {
-	diagHeading("Query graph")
+	sectionhead.New("Query graph").Send()
 	switch {
 	case inst.lastSentSql == "":
 		diagWeak("Run a query to see how it splits.")
@@ -713,7 +702,7 @@ func (inst *PlayApp) renderDiagSplit() {
 // (whose only other surface is the status bar's truncated first line), or the
 // same summary line the status bar shows.
 func (inst *PlayApp) renderDiagLastRun(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error, truncation string) {
-	diagHeading("Last run")
+	sectionhead.New("Last run").Send()
 	if err != nil {
 		c.Label("The query failed:").Send()
 		// Selectable so the ClickHouse diagnostic (folded into err.Error() by

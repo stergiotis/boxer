@@ -15,6 +15,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sectionhead"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
@@ -157,7 +158,7 @@ func (inst *App) renderSurface(w float32) {
 	if inst.coord == nil {
 		return
 	}
-	section("Agent surface")
+	sectionhead.New("Agent surface").Send()
 	sv := &inst.surface
 	refresh := false
 	for range c.HorizontalTop().KeepIter() {

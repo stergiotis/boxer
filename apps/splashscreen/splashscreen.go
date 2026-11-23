@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/runinfo"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sectionhead"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
@@ -204,11 +205,7 @@ func (inst *App) renderAbout(p party) {
 			c.Label(line).Send()
 		}
 		if p.notice != "" {
-			c.AddSpace(styletokens.PaddingOuter(inst.density))
-			c.Separator().Horizontal().Send()
-			c.AddSpace(styletokens.GapItems(inst.density))
-			heading("NOTICE")
-			c.AddSpace(styletokens.GapItems(inst.density))
+			sectionhead.New("NOTICE").Send()
 			inst.renderVerbatim(p.notice)
 		}
 	}

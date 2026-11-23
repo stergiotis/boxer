@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/bandscale"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sectionhead"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
@@ -360,14 +361,6 @@ func heading(text string) {
 	}
 }
 
-func section(text string) {
-	c.AddSpace(styletokens.PaddingOuter(styletokens.ActiveDensity()))
-	for rt := range c.RichTextLabel(text) {
-		rt.Strong()
-	}
-	c.Separator().Horizontal().Send()
-}
-
 func weak(text string) {
 	for rt := range c.RichTextLabel(text) {
 		rt.Small().Weak()
@@ -391,7 +384,7 @@ func (inst *App) renderSettings() {
 
 // renderMaySection is the scale and the options that move it.
 func (inst *App) renderMaySection() {
-	section("What the model may do")
+	sectionhead.New("What the model may do").Send()
 	may, now := inst.scores()
 	bandscale.Render(bandscale.Input{Ids: inst.ids, ScopeKey: "scale", Bands: ladder, Markers: markers(may, now),
 		Width: settingsPanelW - 36})
@@ -543,7 +536,7 @@ func (inst *App) renderHarnessSection() {
 }
 
 func (inst *App) renderConversationSection() {
-	section("Conversation")
+	sectionhead.New("Conversation").Send()
 	conv := inst.conv
 	for range c.HorizontalTop().KeepIter() {
 		c.Label("Id").Selectable(false).Send()
@@ -581,7 +574,7 @@ func (inst *App) renderConversationSection() {
 }
 
 func (inst *App) renderModelSection() {
-	section("Model")
+	sectionhead.New("Model").Send()
 	switch {
 	case !inst.answered:
 		weak("asking the host for a model…")

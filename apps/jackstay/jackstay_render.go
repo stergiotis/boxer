@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/bgjobrow"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/breadcrumbs"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sectionhead"
 )
 
 // footer is what a page puts in the bottom bar besides Back: the step Next
@@ -120,7 +121,6 @@ func (inst *App) renderBrief() {
 		small("step " + strconv.Itoa(int(st)+1) + " of " + strconv.Itoa(len(allSteps)))
 		space()
 		note(st.describe())
-		space()
 		shown := false
 		for _, s := range allSteps {
 			done, summary := inst.stepDone(s)
@@ -128,7 +128,7 @@ func (inst *App) renderBrief() {
 				continue
 			}
 			if !shown {
-				heading("So far")
+				sectionhead.New("So far").Send()
 				shown = true
 			}
 			for range c.IdScope(inst.ids.PrepareStr("sofar-" + s.String())) {
@@ -528,7 +528,7 @@ func (inst *App) renderConnect() {
 	if len(inst.recent) > 0 {
 		inst.renderRecent()
 	}
-	heading("New sync")
+	sectionhead.New("New sync").Send()
 	for range c.Grid(inst.ids.PrepareStr("endpoints")).NumColumns(3).KeepIter() {
 		c.Label("").Send()
 		heading("source")
@@ -581,7 +581,7 @@ func (inst *App) renderConnect() {
 
 // renderRecent lists the plans this window used before, newest first.
 func (inst *App) renderRecent() {
-	heading("Resume a plan")
+	sectionhead.New("Resume a plan").Send()
 	small("A plan file records what each step found and did. Opening one lands on the step it was left at.")
 	for range c.Grid(inst.ids.PrepareStr("recent")).NumColumns(4).Striped(true).KeepIter() {
 		for i, r := range inst.recent {

@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sectionhead"
 )
 
 // The conversation's label as the window states it (ADR-0311; ADR-0404
@@ -222,7 +223,7 @@ func containsStr(set []string, s string) bool {
 // renderLabelFacts is the label's section of the inspector.
 func (inst *App) renderLabelFacts() {
 	f := inst.coord.labelFacts()
-	factHead("Label", tipLabel)
+	sectionhead.New("Label").Tip(tipLabel).Send()
 	c.Label(labelTierLine(f.tier)).Wrap().Send()
 	if f.tierBy != "" {
 		c.Label("Raised by " + f.tierBy + ".").Wrap().Send()

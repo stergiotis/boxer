@@ -9,6 +9,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sectionhead"
 )
 
 const (
@@ -58,7 +59,7 @@ func (inst *App) renderStatsTab(pane float32) {
 
 // renderTokenStats is the section of turns, calls and tokens.
 func (inst *App) renderTokenStats(w float32) {
-	section("Answers and tokens")
+	sectionhead.New("Answers and tokens").Send()
 	s := &inst.stats
 	turns, answered, calls, in, out := s.totals()
 	if turns == 0 {

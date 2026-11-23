@@ -28,6 +28,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/schemaview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sectionhead"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
@@ -256,8 +257,7 @@ func (inst *App) renderDetail(spec CapSpec) {
 			BeginRichText("Backend: ").End().
 			BeginRichText(spec.Backend).Monospace().End().
 			Keep()).Send()
-		c.AddSpace(styletokens.PaddingOuter(inst.density))
-		heading("Wiring")
+		sectionhead.New("Wiring").Send()
 		inst.renderGraph(spec)
 		c.AddSpace(styletokens.GapItems(inst.density))
 		inst.renderLiveConsumers(spec)

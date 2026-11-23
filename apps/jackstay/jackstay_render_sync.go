@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sectionhead"
 )
 
 // --- 4 Differences ---------------------------------------------------------------
@@ -498,8 +499,7 @@ func (inst *App) renderReports() {
 	if n == 0 {
 		return
 	}
-	space()
-	heading("tables")
+	sectionhead.New("Tables").Send()
 	for range c.Grid(inst.ids.PrepareStr("reports")).NumColumns(8).Striped(true).KeepIter() {
 		heading("table")
 		heading("copied")

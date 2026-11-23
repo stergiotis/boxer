@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pipelineview"
 	pview "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pipelineview/view"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sectionhead"
 )
 
 // play_passes_tab.go is the ADR-0119 M3 consumer: the Passes dock tab draws
@@ -65,15 +66,9 @@ type passesTabState struct {
 
 func passStageID(name string) string { return passesStagePrefix + name }
 
-// passesHeading / passesWeak are this tab's section chrome, matching the
-// Diagnostics pane's diagHeading / diagWeak rather than sharing them: the two
-// tabs are free to diverge, and a shared helper would make that a refactor.
-func passesHeading(text string) {
-	for rt := range c.RichTextLabel(text) {
-		rt.Strong()
-	}
-}
-
+// passesWeak is this tab's caption text, matching the Diagnostics pane's
+// diagWeak rather than sharing it: the two tabs are free to diverge. Section
+// headings are sectionhead's, shared by every app.
 func passesWeak(text string) {
 	for rt := range c.RichTextLabel(text) {
 		rt.Small().Weak()
@@ -638,8 +633,7 @@ const passesCostVizIDSalt uint64 = 0xc057000000000000
 // the culprit by looking. Prose is one hovered-row caption; the caveats live in
 // the heading badge's tooltip.
 func (inst *PlayApp) renderPassesCost(elapsed time.Duration, summary Summary) {
-	c.Separator().Horizontal().Send()
-	passesHeading("Rewrite cost")
+	sectionhead.New("Rewrite cost").Send()
 	trace, ok := inst.rewriteTraceFor()
 	if !ok {
 		if inst.rewriteTracePending() {
