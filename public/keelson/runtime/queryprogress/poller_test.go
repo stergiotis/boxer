@@ -347,7 +347,7 @@ func TestPollerStartStop(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, p.Watch("a"))
 
-	p.Start()
+	p.Start(t.Context())
 	require.Eventually(t, func() bool {
 		_, ticks := bus.seen()
 		return len(ticks) > 0

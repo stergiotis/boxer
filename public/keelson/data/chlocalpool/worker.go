@@ -135,10 +135,9 @@ func newWorker(ctx context.Context, cfg Config, release procpool.ReleaseFunc) (w
 // and closes stdin so the worker can execute. The format argument
 // may be empty if the SQL already contains a FORMAT clause.
 // Idempotent: subsequent calls return the first error.
-func (inst *Worker) WriteSQL(sql string, format string) (err error) {
-	// The pool's exit point (ADR-0367 §SD1). This form takes its text
-	// without a context, so the passes run under the background one.
-	err = inst.WriteStatement(context.Background(), "", sql, format)
+func (inst *Worker) WriteSQL(ctx context.Context, sql string, format string) (err error) {
+	// The pool's exit point (ADR-0367 §SD1): the passes run under ctx.
+	err = inst.WriteStatement(ctx, "", sql, format)
 	return
 }
 

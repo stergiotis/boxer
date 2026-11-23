@@ -179,12 +179,12 @@ func (inst *Poller) Watched() (ids []string) {
 	return
 }
 
-// Start begins ticking until Close.
-func (inst *Poller) Start() {
+// Start begins ticking until Close, or until ctx ends.
+func (inst *Poller) Start(ctx context.Context) {
 	if inst.cancel != nil {
 		return
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	inst.cancel = cancel
 	inst.done = make(chan struct{})
 	go inst.loop(ctx)

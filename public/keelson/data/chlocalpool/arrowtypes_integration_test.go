@@ -35,7 +35,7 @@ func runOutput(tb testing.TB, sql string, format string) (out []byte, stderr str
 	w, err := newWorker(context.Background(), m0Config(tb), nil)
 	require.NoError(tb, err)
 	defer func() { _ = w.Close() }()
-	if err = w.WriteSQL(sql, format); err != nil {
+	if err = w.WriteSQL(context.Background(), sql, format); err != nil {
 		return
 	}
 	out, err = io.ReadAll(w.Stdout())

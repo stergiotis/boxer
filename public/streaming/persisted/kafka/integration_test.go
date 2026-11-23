@@ -280,7 +280,7 @@ func runConsumerLag(t *testing.T, brokerAddr, topic, group string) {
 	}
 
 	lag := kafka.NewConsumerLag(admClient, group, 500*time.Millisecond, nil, sink)
-	lag.Start()
+	lag.Start(t.Context())
 
 	deadline := time.Now().Add(8 * time.Second)
 	for time.Now().Before(deadline) && callCount.Load() == 0 {

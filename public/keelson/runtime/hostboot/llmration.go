@@ -65,7 +65,7 @@ func (rt *Runtime) bootModerator() {
 	}
 	cfg := moderator.DefaultConfig()
 	cfg.Trail = rt.Trail
-	svc, err := moderator.NewService(rt.Bus, logger, cfg)
+	svc, err := moderator.NewService(rt.ctx, rt.Bus, logger, cfg)
 	if err != nil {
 		logger.Warn().Err(err).Msg("moderator: start failed; no moderator")
 		return

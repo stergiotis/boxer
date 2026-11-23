@@ -102,12 +102,12 @@ func (inst *FileDumpService) ServeHTTP(writer http.ResponseWriter, request *http
 // Listen binds the configured address and serves until the listener fails.
 // The service has no authentication and writes every body it accepts to
 // disk; whatever stands in front of the address decides who may post.
-func (inst *FileDumpService) Listen() (err error) {
+func (inst *FileDumpService) Listen(ctx context.Context) (err error) {
 	err = inst.skipExistingFiles()
 	if err != nil {
 		return eh.Errorf("unable to skip already existing files: %w", err)
 	}
-	ln, err := loopback.Gate{Name: "http serve"}.Listen(context.Background(), inst.config.Listen)
+	ln, err := loopback.Gate{Name: "http serve"}.Listen(ctx, inst.config.Listen)
 	if err != nil {
 		return
 	}
@@ -203,7 +203,7 @@ func NewCommand() *cli.Command {
 				return eb.Build().Int("nMessages", nMessages).Errorf("invalid configuration: message count out of range")
 			}
 			f := NewFileDumpService(&cfg)
-			return f.Listen()
+			return f.Listen(ctx)
 		},
 	}
 }

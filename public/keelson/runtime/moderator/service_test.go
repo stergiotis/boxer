@@ -57,7 +57,7 @@ func TestTheLadderActsThroughTheServices(t *testing.T) {
 	agentSvc.SetModerators([]string{string(AppId)})
 	cfg := DefaultConfig()
 	cfg.Tick = time.Hour
-	mod, err := NewService(bus, zerolog.Nop(), cfg)
+	mod, err := NewService(t.Context(), bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(mod.Close)
 

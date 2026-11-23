@@ -95,6 +95,8 @@ that depend on it; or first make the callers compile against the old API
 | `chstore.NewWithFallback(cfg, …)`; `headstore.AllI.All()`, `(*anchor.MemStore).All()`, `(*anchorsql.Store).All()`; `adr.RunQuery`, `adr.RunOverview`; `capslock.Run(args)`; `driver.GenerateRustFiles(path)`; `tabhost.ReportOf(pkg)`; `scctree.RepoRoot()`, `RepoRootAt(dir)` | ctx first |
 | `scctree.RunScc(root)`, `scctree.RunSccContext(ctx, root)` | `RunScc(ctx, root)` |
 | `auditrectest.FullContext()` | `FullContext(ctx)` |
+| `moderator.NewService(bus, …)`, `(*queryprogress.Poller).Start()`, `(*chserver.ObservingEngine).Start()`, `(*kafka.ConsumerLag).Start()` | ctx first — the object's lifetime, beside its `Close` or `Stop` |
+| `(*serve.FileDumpService).Listen()`, `(*chlocalpool.Worker).WriteSQL(sql, format)` | ctx first |
 
 New: `app.Msg.Context()`, `app.Msg.WithContext(ctx)`, `app.ContextOf(mc)`,
 `app.RequestWithin`, `(*hostboot.Runtime).Context()`, `introspect.BoundRead`.

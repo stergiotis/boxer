@@ -73,7 +73,7 @@ func m0Config(tb testing.TB) (cfg Config) {
 // exit — it carries the error surface — so total is what a request costs.
 func submitTimed(w *Worker, q m0Query) (firstByte time.Duration, total time.Duration, err error) {
 	t0 := time.Now()
-	if err = w.WriteSQL(q.sql, q.format); err != nil {
+	if err = w.WriteSQL(context.Background(), q.sql, q.format); err != nil {
 		return
 	}
 	var one [1]byte
@@ -172,7 +172,7 @@ func BenchmarkM0_WarmWorkerArrowEOS(b *testing.B) {
 				for _, w := range workers {
 					b.StartTimer()
 					t0 := time.Now()
-					require.NoError(b, w.WriteSQL(q.sql, q.format))
+					require.NoError(b, w.WriteSQL(context.Background(), q.sql, q.format))
 					r, err := ipc.NewReader(w.Stdout(), ipc.WithAllocator(memory.DefaultAllocator))
 					require.NoError(b, err)
 					for r.Next() {

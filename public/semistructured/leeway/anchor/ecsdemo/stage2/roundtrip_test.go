@@ -71,7 +71,7 @@ func runClickHouseLocal(t *testing.T, script string) string {
 	}
 	defer func() { _ = w.Close() }()
 
-	require.NoError(t, w.WriteSQL(script, "TSV"))
+	require.NoError(t, w.WriteSQL(context.Background(), script, "TSV"))
 	out, err := io.ReadAll(w.Stdout())
 	require.NoError(t, err)
 	require.NoError(t, w.Wait())

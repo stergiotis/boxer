@@ -94,8 +94,8 @@ func NewConsumerLag(client *kgo.Client, consumerGroup string, refreshPeriod time
 // Start launches the refresh goroutine. Calling Start more than once
 // without an intervening Stop leaks the prior goroutine; the package
 // does not detect this.
-func (inst *ConsumerLag) Start() {
-	ctx, cancel := context.WithCancel(context.Background())
+func (inst *ConsumerLag) Start(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
 	inst.cancel = cancel
 	inst.done = make(chan struct{})
 	go inst.run(ctx)

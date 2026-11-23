@@ -39,5 +39,5 @@ func TestFileDumpServiceBoundsTheBody(t *testing.T) {
 
 func TestFileDumpServiceReturnsAFailedBind(t *testing.T) {
 	svc := NewFileDumpService(&Config{Listen: "no-port", OutputDirectory: t.TempDir(), FilePattern: "b-%d"})
-	require.Error(t, svc.Listen())
+	require.Error(t, svc.Listen(t.Context()))
 }

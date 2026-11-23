@@ -166,7 +166,7 @@ func TestPool_RoundTrip_SelectOne(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = w.Close() }()
 
-	require.NoError(t, w.WriteSQL("SELECT 1", "TabSeparated"))
+	require.NoError(t, w.WriteSQL(context.Background(), "SELECT 1", "TabSeparated"))
 	var buf bytes.Buffer
 	_, err = io.Copy(&buf, w.Stdout())
 	require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestPool_DifferentFormats(t *testing.T) {
 			w, err := pool.Acquire(ctx)
 			require.NoError(t, err)
 			defer func() { _ = w.Close() }()
-			require.NoError(t, w.WriteSQL("SELECT 1", tc.format))
+			require.NoError(t, w.WriteSQL(context.Background(), "SELECT 1", tc.format))
 			var buf bytes.Buffer
 			_, err = io.Copy(&buf, w.Stdout())
 			require.NoError(t, err)
@@ -213,7 +213,7 @@ func TestPool_BadSQLSurfacesStderr(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = w.Close() }()
 
-	require.NoError(t, w.WriteSQL("SELECT * FROM nonexistent_table_x_y_z", "TabSeparated"))
+	require.NoError(t, w.WriteSQL(context.Background(), "SELECT * FROM nonexistent_table_x_y_z", "TabSeparated"))
 	_, _ = io.Copy(io.Discard, w.Stdout())
 	err = w.Wait()
 	require.Error(t, err)
@@ -248,7 +248,7 @@ func TestPool_AcquireBlocksUntilCloseFreesSlot(t *testing.T) {
 	}
 
 	// Closing w1 frees the slot; refill spawns a replacement.
-	require.NoError(t, w1.WriteSQL("SELECT 1", "TabSeparated"))
+	require.NoError(t, w1.WriteSQL(context.Background(), "SELECT 1", "TabSeparated"))
 	_, _ = io.Copy(io.Discard, w1.Stdout())
 	require.NoError(t, w1.Wait())
 	require.NoError(t, w1.Close())
@@ -388,7 +388,7 @@ func TestWorker_CloseIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 
 	// SELECT then close cleanly.
-	require.NoError(t, w.WriteSQL("SELECT 1", "TabSeparated"))
+	require.NoError(t, w.WriteSQL(context.Background(), "SELECT 1", "TabSeparated"))
 	_, _ = io.Copy(io.Discard, w.Stdout())
 	require.NoError(t, w.Wait())
 	require.NoError(t, w.Close())
@@ -430,7 +430,7 @@ func TestPool_ConcurrentAcquireRoundTripSafely(t *testing.T) {
 				return
 			}
 			defer func() { _ = w.Close() }()
-			if err = w.WriteSQL("SELECT 1", "TabSeparated"); err != nil {
+			if err = w.WriteSQL(context.Background(), "SELECT 1", "TabSeparated"); err != nil {
 				errCh <- err
 				return
 			}

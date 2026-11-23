@@ -1,6 +1,7 @@
 package chserver
 
 import (
+	"context"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -100,9 +101,9 @@ func (inst *ObservingEngine) Poller() (poller *queryprogress.Poller) {
 	return
 }
 
-// Start begins observing until Close.
-func (inst *ObservingEngine) Start() {
-	inst.poller.Start()
+// Start begins observing until Close, or until ctx ends.
+func (inst *ObservingEngine) Start(ctx context.Context) {
+	inst.poller.Start(ctx)
 }
 
 // Close stops observation and waits for the tick loop to finish. It does

@@ -105,10 +105,11 @@ type Service struct {
 	dropped uint64
 }
 
-// NewService subscribes the moderator and starts it. The caller MUST
+// NewService subscribes the moderator and starts it. ctx is the service's
+// lifetime: its work ends when ctx does, or at Close. The caller MUST
 // invoke Close. The model service must list AppId as a moderator, and the
 // agent dispatcher as well, for its actions to be admitted.
-func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service, err error) {
+func NewService(ctx context.Context, bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service, err error) {
 	if bus == nil {
 		err = eh.Errorf("moderator: nil bus")
 		return
@@ -117,7 +118,7 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 	s = &Service{cfg: cfg, log: log.With().Str("app", string(AppId)).Logger(), bus: client, llmCli: llm.NewClient(client),
 		mod: llm.NewModerator(client), agentCli: agent.NewClient(client), in: make(chan input, inputQueueLen),
 		eng: NewEngine(cfg.Thresholds), done: make(chan struct{})}
-	s.ctx, s.cancel = context.WithCancel(context.Background())
+	s.ctx, s.cancel = context.WithCancel(ctx)
 	for _, sub := range []struct {
 		subject string
 		handler app.MsgHandlerFunc
