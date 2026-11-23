@@ -95,6 +95,11 @@ func TestExpressionBounds(t *testing.T) {
 	require.ErrorContains(t, err, "terms")
 	_, err = ParseExpression(strings.Repeat(" ", maxTextBytes) + "a")
 	require.ErrorContains(t, err, "bytes")
+	// Within the limit as written, past it once the spaces are written.
+	tight := strings.Repeat("a", maxTextBytes-3) + "+a"
+	require.Less(t, len(tight), maxTextBytes)
+	_, err = ParseExpression(tight)
+	require.ErrorContains(t, err, "canonical spelling")
 }
 
 // evalOne evaluates an expression over one pixel of each named input.

@@ -123,7 +123,8 @@ func (inst *ParseError) Error() string {
 }
 
 // ParseExpression parses an expression of the grammar in the package
-// documentation. A text that does not parse is a [*ParseError].
+// documentation. A text that does not parse is a [*ParseError], and so is
+// one whose canonical spelling is longer than a text may be.
 func ParseExpression(src string) (e Expression, err error) {
 	if len(src) > maxTextBytes {
 		return e, &ParseError{Column: maxTextBytes + 1, Expected: "at most " + strconv.Itoa(maxTextBytes) + " bytes", Found: "more"}
@@ -139,7 +140,15 @@ func ParseExpression(src string) (e Expression, err error) {
 	if p.tok.kind != tokEnd {
 		return e, p.fail("an operator or the end")
 	}
-	return Expression{root: root}, nil
+	e = Expression{root: root}
+	// The canonical spelling is what a record holds and what is parsed
+	// again from it, and it can be longer than the text: it writes spaces
+	// the text left out. A text whose spelling would not be read back is
+	// refused here, not when the record is read.
+	if n := len(e.String()); n > maxTextBytes {
+		return Expression{}, &ParseError{Column: len(src) + 1, Expected: "a canonical spelling of at most " + strconv.Itoa(maxTextBytes) + " bytes", Found: strconv.Itoa(n)}
+	}
+	return e, nil
 }
 
 // IsZero reports whether the expression holds nothing.

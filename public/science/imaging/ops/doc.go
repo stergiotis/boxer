@@ -137,5 +137,6 @@
 // compiled to a flat program that runs over whole rows; a text that does
 // not parse is a [*ParseError] naming the column and what was expected.
 // It is held in a record in its canonical spelling ([Expression.String]).
-// At most 4096 bytes, 1024 terms and 64 levels of nesting are read.
+// At most 4096 bytes, 1024 terms and 64 levels of nesting are read, and
+// the canonical spelling is held to the same 4096 bytes.
 package ops
