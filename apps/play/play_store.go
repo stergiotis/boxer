@@ -419,6 +419,15 @@ func (inst *QueryStore) Confined() (confined bool) {
 	return inst.confined
 }
 
+// LabelOf reports the label of the result id, and whether the store still
+// holds that result: a caller that took a snapshot asks with the
+// snapshot's id, so the label it gets is the label of the rows it holds.
+func (inst *QueryStore) LabelOf(id ResultID) (confined bool, held bool) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	return inst.confined, id != 0 && inst.resultID == id
+}
+
 // ResultID names the result the store holds; 0 before any run.
 func (inst *QueryStore) ResultID() (id ResultID) {
 	inst.mu.RLock()

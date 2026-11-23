@@ -126,3 +126,52 @@ func TestAPublishedResultOpensInAnotherWindow(t *testing.T) {
 	assert.Equal(t, "SELECT * FROM keelson('result')", l.inner.sql)
 	assert.True(t, adhocdata.IsHandle(l.inner.client.datasetBindings["result"]))
 }
+
+// A published result carries its own label: the rows of a result read from
+// sealed data are published as derived from it, whatever tier the call
+// that asked for the publish declared, and a result the window no longer
+// holds when it is published is taken as labelled.
+func TestPublishResultCarriesTheResultsLabel(t *testing.T) {
+	fakeAppletDocs(t)
+	l, h, reader := bundleLauncher(t)
+	obo := agentCall
+	ownClear := func(bundle string) (yes bool) {
+		t.Helper()
+		_, err := publishResultOp(t, h, PublishResultArgs{Bundle: bundle})
+		require.NoError(t, err)
+		require.Empty(t, waitPublished(t, l).Error)
+		// The publishing window reads as the task's call: the dataset
+		// service says whether the revision is the task's own clear work.
+		got, err := adhocdata.ReadAll(t.Context(), l.bus, bundle+"__result", &obo)
+		require.NoError(t, err)
+		_, err = adhocdata.ReadAll(t.Context(), reader, bundle+"__result", nil)
+		require.NoError(t, err, "anyone still reads it")
+		return got.OwnClear
+	}
+	store := l.inner.graph.mainLane
+
+	mainIntResult(t, l, runstream.Terminal{}, 0, 1, 2)
+	assert.True(t, ownClear("plain"), "a result of nothing sealed is the task's clear work")
+
+	store.mu.Lock()
+	store.runConfined = true
+	store.mu.Unlock()
+	mainIntResult(t, l, runstream.Terminal{}, 0, 1, 2)
+	require.True(t, l.inner.graph.MainConfined())
+	assert.False(t, ownClear("derived"), "a confined result is published as derived from sealed data, at whatever tier")
+
+	store.mu.Lock()
+	store.runConfined = false
+	store.mu.Unlock()
+	mainIntResult(t, l, runstream.Terminal{}, 0, 1, 2)
+	confined, held := l.inner.graph.MainLabelOf(0)
+	assert.False(t, confined)
+	assert.False(t, held, "no result id names nothing the window holds")
+	rec, _, _, _, _, _, _, _, id := l.inner.graph.MainSnapshot()
+	rec.Release()
+	_, held = l.inner.graph.MainLabelOf(id)
+	assert.True(t, held)
+	mainIntResult(t, l, runstream.Terminal{}, 3)
+	_, held = l.inner.graph.MainLabelOf(id)
+	assert.False(t, held, "the window ran past the result")
+}

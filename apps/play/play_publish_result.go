@@ -151,7 +151,12 @@ func (inst *PlayLauncher) publishResult(call app.OperationCall, in PublishResult
 	if !validDatasetIdentifier(local) {
 		return out, app.RefuseOperation("a local name is a bare identifier: letters, digits and _")
 	}
-	rec, _, _, loading, _, _, _, runErr, _ := p.graph.MainSnapshot()
+	rec, _, _, loading, _, _, _, runErr, resultId := p.graph.MainSnapshot()
+	// The label of the rows held, not of whatever result the window holds
+	// a moment later: a result that moved on meanwhile is taken as
+	// labelled.
+	confined, held := p.graph.MainLabelOf(resultId)
+	derived := confined || !held
 	trunc := p.graph.MainTruncation()
 	var refusal string
 	switch {
@@ -204,7 +209,10 @@ func (inst *PlayLauncher) publishResult(call app.OperationCall, in PublishResult
 	}
 	go func() {
 		_ = task.RunToCompletion(api, task.SpawnOpts{Kind: "play.publish", Title: "publish " + in.Bundle}, func() error {
-			return inst.publishBundleOff(rec, in.Bundle, local, doc, adhocdata.BundleProvenance{SourceSql: source, InputHandles: inputs}, call.OnBehalfOf)
+			// The published rows carry the result's own label: the tier
+			// the call declared is the conversation's before this result
+			// arrived in it.
+			return inst.publishBundleOff(rec, in.Bundle, local, doc, adhocdata.BundleProvenance{SourceSql: source, InputHandles: inputs, DerivedFromSealed: derived}, call.OnBehalfOf)
 		})
 	}()
 	return
