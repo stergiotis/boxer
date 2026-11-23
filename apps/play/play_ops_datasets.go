@@ -228,17 +228,21 @@ func listDatasets(ctx context.Context, client *Client, obo *app.OnBehalfOf, only
 		dec := client.dispatchResidual(residual, "")
 		// The decision says the dataset is sealed, which is where a read
 		// of it may go. Whether reading it labels the result is the
-		// dataset service's answer for this task: a listing asks it, and
-		// a read of the columns carries the run's own label.
+		// dataset service's answer for this task, which the read of the
+		// columns carries as its run's label. A listing makes that read,
+		// without being asked for the dataset by name, only for a dataset
+		// the task published, and shows its columns only when the run came
+		// back unlabelled: the service is asked about a label where a run
+		// read the dataset, not for the listing itself.
 		sealed := dec.sensitivity == queryengine.SensitivityConfined
 		d.Confined = sealed
-		if sealed && d.Granted && only == "" {
-			d.Confined = !client.ownClearHandles(ctx, sealedNames(residual), obo)
-		}
-		if d.Granted && (!d.Confined || only != "") {
+		if d.Granted && (!sealed || only != "" || d.Published) {
 			var confined bool
 			d.Columns, d.Error, confined = datasetColumns(client, stmt, dec, obo)
 			d.Confined = sealed && confined
+			if d.Confined && only == "" {
+				d.Columns, d.Error = nil, ""
+			}
 			out.sealedShown = out.sealedShown || (d.Confined && len(d.Columns) > 0)
 		}
 		out.Datasets = append(out.Datasets, d)

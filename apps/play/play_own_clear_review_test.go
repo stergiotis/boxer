@@ -1,7 +1,9 @@
 package play
 
 import (
+	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -301,4 +303,83 @@ func TestACarelessAppsPublicationIsSealedToItsTask(t *testing.T) {
 	exp := r.call(opExposeDataset, jsonArgs(t, map[string]any{"name": "leak__result"}))
 	require.Equal(t, "refused", exp.Phase)
 	assert.Contains(t, exp.Reason, "not known to derive from nothing sealed")
+}
+
+// labelAsks counts the requests a client sends on the dataset service's
+// read subject: on this process's plane those are questions about a label.
+type labelAsks struct {
+	app.BusI
+	n atomic.Int64
+}
+
+func (inst *labelAsks) Request(ctx context.Context, subject string, payload []byte) ([]byte, error) {
+	if subject == adhocdata.SubjectRead {
+		inst.n.Add(1)
+	}
+	return inst.BusI.Request(ctx, subject, payload)
+}
+
+// The dataset service is asked about a label where a run read the dataset,
+// and only there. A statement refused before it was sent read nothing: it
+// keeps the statement's label and no question is asked. A listing asks
+// nothing for itself: the one question is the one its read of the columns
+// of the task's own dataset makes.
+func TestALabelIsAskedOnlyWhereARunReadTheDataset(t *testing.T) {
+	r := newOwnClearRig(t)
+	handle := r.appPublishes("kernel_top")
+	r.personPublishes("people")
+	for _, alias := range []string{"kernel_top__result", "people__result"} {
+		out := r.call(opQuery, jsonArgs(t, map[string]any{"sql": "SELECT x FROM keelson('" + alias + "')"}))
+		require.Equal(t, "completed", out.Phase, out.Reason)
+	}
+	out := r.call(opQuery, jsonArgs(t, map[string]any{"sql": "SELECT 1"}))
+	require.Equal(t, "completed", out.Phase, out.Reason)
+	obo := r.attestedCall()
+	asks := &labelAsks{BusI: r.win}
+	r.cl.SetSessionBus(asks)
+	runs := func() int {
+		r.plane.mu.Lock()
+		defer r.plane.mu.Unlock()
+		return len(r.plane.runs)
+	}
+
+	// Refused before it is sent: the agent limits turn back a statement
+	// that is not a plain read, though all it names of sealed data is the
+	// task's own.
+	require.NotEmpty(t, handle)
+	broken := "SELECT x, file('/etc/passwd') FROM keelson('kernel_top__result')"
+	dec := r.cl.Dispatch(broken, "")
+	require.True(t, dec.Confined(), "the statement names sealed data")
+	sent := runs()
+	_, _, _, err := r.cl.ExecuteArrowStream(t.Context(), broken, memory.NewGoAllocator(), &ExecOptions{Agent: obo}, nil, dec)
+	require.Error(t, err)
+	require.Equal(t, sent, runs(), "nothing was sent")
+	assert.False(t, failedOwnClear(err), "a statement that read nothing keeps the statement's label")
+	assert.Zero(t, asks.n.Load(), "and nobody is asked about a read that did not happen")
+
+	// Sent and failed: the run named what it read, and the label is asked.
+	r.plane.mu.Lock()
+	r.plane.failRuns = true
+	r.plane.mu.Unlock()
+	good := "SELECT x FROM keelson('kernel_top__result')"
+	_, _, _, err = r.cl.ExecuteArrowStream(t.Context(), good, memory.NewGoAllocator(), &ExecOptions{Agent: obo}, nil, r.cl.Dispatch(good, ""))
+	require.Error(t, err)
+	assert.True(t, failedOwnClear(err))
+	assert.Equal(t, int64(1), asks.n.Load())
+	r.plane.mu.Lock()
+	r.plane.failRuns = false
+	r.plane.mu.Unlock()
+
+	// A listing: one run, over the columns of the task's own dataset, and
+	// the one question that run makes; none for the person's dataset.
+	asks.n.Store(0)
+	sent = runs()
+	out = r.call(opListDatasets, `{}`)
+	require.Equal(t, "completed", out.Phase, out.Reason)
+	assert.False(t, out.Confined)
+	assert.NotEmpty(t, listed(t, out.Text, "kernel_top__result")["columns"])
+	assert.Equal(t, true, listed(t, out.Text, "people__result")["confined"])
+	assert.Empty(t, listed(t, out.Text, "people__result")["columns"])
+	assert.Equal(t, sent+1, runs(), "the listing read the columns of the one dataset the task published")
+	assert.Equal(t, int64(1), asks.n.Load(), "and the label was asked once, by that run")
 }

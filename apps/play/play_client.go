@@ -1348,11 +1348,15 @@ func (inst *Client) executeArrowStream(ctx context.Context, authored string, sen
 	agent, ownStatement := inst.runAgent(opts)
 	var skipped failedRewrites
 	residual, params, _ := inst.rewriteFor(agent, sql, skipped.observe)
-	// A run that fails names what it would have read, and its error is
+	// A run that was sent and fails names what it read, and its error is
 	// read as its result would be: it is marked when everything sealed in
 	// it is the task's own publication at TLP:CLEAR (play_own_clear.go).
+	// A statement refused here before it was sent read nothing: it keeps
+	// the statement's label, and the dataset service is not asked about a
+	// read that did not happen.
+	sent := false
 	defer func() {
-		if err != nil {
+		if err != nil && sent {
 			err = inst.markOwnClearFailure(ctx, err, dec, residual, agent, hold)
 		}
 	}()
@@ -1479,6 +1483,7 @@ func (inst *Client) executeArrowStream(ctx context.Context, authored string, sen
 		rs, dErr = openResultStream(st)
 		return
 	}
+	sent = true
 	err = deliver()
 	if level, retry := inst.learnReadonlyLevel(ctx, eng, target, sentLevel, err); retry {
 		degradeForReadonly(&req, level)

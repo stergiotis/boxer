@@ -124,15 +124,25 @@ func (inst *Service) Read(ctx context.Context, alias string, by Identity, obo *a
 	return
 }
 
-// AuditReadLabel is the audited answer that a dataset a task reads by its
-// handle is that task's own publication at TLP:CLEAR.
+// AuditReadLabel is the audited answer to a question about a label: that
+// the dataset under a handle is the asking task's own publication at
+// TLP:CLEAR, so a run of that task that reads it by the handle is not
+// labelled for it. The row records the question and the answer; no rows of
+// the dataset pass through the service for it.
 const AuditReadLabel = "read-label"
 
 // ownClearReason is what the trail row of a read says when the read was
 // taken as the reading task's own publication: why sealed data was read
 // and no label followed.
 func ownClearReason(pub published) (reason string) {
-	return "read as the task's own publication at TLP:CLEAR (published by its call " + pub.context.Val.Call + ", from no sealed data): the read is not labelled"
+	return "read as the task's own publication at TLP:CLEAR (published by its call " + pub.context.Val.Call + ", asserted to derive from nothing sealed): the read is not labelled"
+}
+
+// ownClearLabelReason is what the trail row of a label asked by handle
+// says: what was asked, what was answered and why, and that the answer
+// itself read nothing.
+func ownClearLabelReason(pub published) (reason string) {
+	return "label asked for a read by handle, no rows handed out: the dataset is the task's own publication at TLP:CLEAR (published by its call " + pub.context.Val.Call + ", asserted to derive from nothing sealed), so a run that reads it is not labelled for it"
 }
 
 // LabelResult is the service's answer about a dataset a call reads by its
@@ -175,14 +185,16 @@ func (inst *Service) ReadLabel(ctx context.Context, handle string, by Identity, 
 	rec.mu.RLock()
 	pub := published{revision: rec.revision, context: rec.context, derived: rec.derived}
 	alias, bundle := rec.alias, rec.bundle
-	digest, rows, plain := rec.streamDigest, rec.rows, rec.plainBytes
+	digest := rec.streamDigest
 	rec.mu.RUnlock()
 	res.OwnClear = bundle != "" && standingOf(pub.context, pub.derived, cc.Val.Task) == standingOwnClear
 	if res.OwnClear {
 		res.Alias, res.Bundle, res.Revision = alias, bundle, pub.revision
-		inst.audit(ctx, AuditRecord{Operation: AuditReadLabel, Outcome: AuditApplied, Reason: ownClearReason(pub), Bundle: res.Bundle,
+		// The handle, alias and digest name the revision the answer is
+		// about; rows and bytes stay empty, since none were handed out.
+		inst.audit(ctx, AuditRecord{Operation: AuditReadLabel, Outcome: AuditApplied, Reason: ownClearLabelReason(pub), Bundle: res.Bundle,
 			Revision: res.Revision, By: by, Context: cc, Aliases: []string{res.Alias}, Handles: []string{handle},
-			Rows: []uint64{rows}, Bytes: []uint64{plain}, StreamDigests: []string{digest}})
+			StreamDigests: []string{digest}})
 	}
 	return
 }

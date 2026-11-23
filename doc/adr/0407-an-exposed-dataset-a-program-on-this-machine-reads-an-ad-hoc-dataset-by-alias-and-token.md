@@ -522,7 +522,12 @@ every byte involved was the task's own work at TLP:CLEAR.
 - **The trail.** The dataset service's row of a read taken as the task's
   own says so and names the call that published the revision; an answer by
   handle is a row of its own (`read-label`), written only when it is
-  own-clear. The row of a publish an agent's call caused says when the
+  own-clear. That row says a label was asked and what was answered, and
+  counts no rows or bytes, since the answer hands none out. Play asks
+  only for a run that was sent: a statement refused before it was sent
+  keeps the statement's label and leaves no row, and `list_datasets`
+  asks nothing for the listing itself — the one question is the one its
+  read of the columns of a dataset the task published makes. The row of a publish an agent's call caused says when the
   revision does not stand as that task's own clear work, and whether
   because nothing was asserted or because an input contradicted it. The session data service's attach, define and replay rows name
   the attachments read as the task's own (`own-clear`) and the label that
@@ -627,7 +632,8 @@ dataset labelled. No live run of a model is behind the change.
   rows the task never had that standing for. The person's own exposure
   follows a republish as before.
 - A failed run is judged as a successful one; a statement refused before
-  it is placed keeps the statement's label.
+  it is placed, or before it is sent (the agent limits), keeps the
+  statement's label.
 - A replay the person causes leaves a kept data set confined; the label
   lifts again only on a replay by the task that reads its own clear
   publication.

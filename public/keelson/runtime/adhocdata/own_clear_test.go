@@ -202,6 +202,11 @@ func TestAHandlesLabelIsItsPublications(t *testing.T) {
 	assert.Equal(t, AuditReadLabel, last.Operation)
 	assert.Equal(t, []string{handle}, last.Handles)
 	assert.Contains(t, last.Reason, "the task's own publication at TLP:CLEAR")
+	assert.Contains(t, last.Reason, "label asked for a read by handle, no rows handed out", "the row says a label was asked, not that rows were read")
+	assert.NotContains(t, last.Reason, "read as the task's own")
+	assert.Empty(t, last.Rows, "and counts no rows or bytes, since the answer handed none out")
+	assert.Empty(t, last.Bytes)
+	assert.Len(t, last.StreamDigests, 1, "the digest names the revision the answer is about")
 	require.True(t, last.Context.Has)
 	assert.Equal(t, "conv-9", last.Context.Val.Conversation, "the row is attributed to the reading call")
 
