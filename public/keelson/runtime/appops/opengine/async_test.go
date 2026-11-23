@@ -3,6 +3,7 @@ package opengine
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,8 +22,11 @@ type work struct {
 	done   bool
 	failed error
 	// settleRuns makes the settlement handler move runs, as a handler that
-	// starts a run for its call does.
-	settleRuns bool
+	// starts a run for its call does; settleOther moves other, which the
+	// command does not declare, at the same moment.
+	settleRuns  bool
+	settleOther bool
+	other       int
 }
 
 type workResult struct{ Runs int }
@@ -30,6 +34,7 @@ type workResult struct{ Runs int }
 func workSet() *appops.Set[*work, struct{}] {
 	s := appops.NewSet(func(*work) struct{} { return struct{}{} })
 	s.Resource("runs", "how many ran", func(w *work) any { return w.runs })
+	s.Resource("other", "what something else moved", func(w *work) any { return w.other })
 	appops.Command(s, app.OperationSpec{Name: "start", Version: 1, Summary: "start the work",
 		Effect: app.OperationEffectRun, Writes: []string{"runs"}, Agents: true, Async: true, AnyRevision: true},
 		func(w *work, _ app.OperationCall, _ appops.None) (workResult, error) {
@@ -40,6 +45,10 @@ func workSet() *appops.Set[*work, struct{}] {
 		if w.settleRuns {
 			w.settleRuns = false
 			w.runs++
+		}
+		if w.settleOther {
+			w.settleOther = false
+			w.other++
 		}
 		return workResult{Runs: w.runs}, w.done || w.failed != nil, w.failed
 	})
@@ -201,4 +210,26 @@ func TestASettlementWithoutAWriterIsTheApps(t *testing.T) {
 	require.NotEmpty(t, entries)
 	assert.Equal(t, opwire.WriterApp, entries[0].Writer)
 	assert.Equal(t, "c1", entries[0].CallId)
+}
+
+// A settlement handler's call is the writer only of the resources it
+// declares: a resource it does not write, moved at the same moment, is
+// left to the next frame's start.
+func TestASettlementClaimsOnlyItsDeclaredWrites(t *testing.T) {
+	w, eng, frame := workEngine(t)
+	eng.Submit(t.Context(), "start", opwire.CallRequest{CallId: "c1", Writer: "task:t"})
+	frame()
+	since := eng.LogSeq()
+	w.done, w.settleRuns, w.settleOther = true, true, true
+	frame()
+	frame()
+	var otherWriter string
+	for _, e := range eng.LogSince(since) {
+		if slices.Contains(e.Resources, "other") {
+			otherWriter = e.Writer
+			assert.Empty(t, e.CallId, "the call does not claim a resource it does not write")
+		}
+	}
+	assert.Equal(t, opwire.WriterPerson, otherWriter)
+	assert.Equal(t, "task:t", eng.Writer("runs"))
 }

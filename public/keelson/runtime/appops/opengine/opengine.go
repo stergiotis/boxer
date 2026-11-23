@@ -17,7 +17,8 @@
 //	EndFrame       changes the app's own frame logic made are bumped with
 //	               the app as writer; then each running asynchronous
 //	               command is asked whether it settled, and what its
-//	               handler changed is bumped with the command's writer
+//	               handler changed of the command's writes is bumped
+//	               with the command's writer
 //
 // Submit, Status, Cancel, SinceDrawn and Stalled are safe from any
 // goroutine; everything else runs on the render goroutine.
@@ -817,17 +818,19 @@ func (inst *Engine) settleRunning() {
 	inst.running = still
 }
 
-// observeSettle takes what c's settlement handler changed as c's work, with
-// c's writer (ADR-0358 §SD1, ADR-0269 §SD8): the handler runs after the
-// frame's end observed the app's changes, so without this the next frame's
-// start would take a change it made, such as a run it started for the
-// call, for the person's edit.
+// observeSettle takes what c's settlement handler changed of the resources
+// c declares it writes as c's work, with c's writer (ADR-0358 §SD1,
+// ADR-0269 §SD8): the handler runs after the frame's end observed the
+// app's changes, so without this the next frame's start would take a
+// change it made, such as a run it started for the call, for the person's
+// edit. A resource c does not declare is left to the next frame's start:
+// a goroutine may move it at any time, and c is not its writer.
 func (inst *Engine) observeSettle(c *call) {
 	writer := c.call.Writer
 	if writer == "" {
 		writer = opwire.WriterApp
 	}
-	if changed := inst.observe(writer, inst.resourceSet); len(changed) > 0 {
+	if changed := inst.observe(writer, c.spec.Writes); len(changed) > 0 {
 		inst.appendLog(LogEntry{Frame: inst.frame, Writer: writer, Op: c.spec.Name, CallId: c.id, Phase: opwire.PhaseApplied,
 			Resources: changed, Revisions: pick(inst.revs, changed)})
 	}
