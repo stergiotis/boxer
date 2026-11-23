@@ -89,10 +89,13 @@ that depend on it; or first make the callers compile against the old API
 | `(*heartbeat.Inst).Stop()`, `(*supervisor.Supervisor).Start()`, `(*taskmonitor.Monitor).Start()` | ctx first |
 | `colwidth.New(store, opts)`, `filepicker.NewColumnWidths(store)`, `attention.AttachPersonStore(levels, store, log)`, `appletstore.Start(reg, …)`, `workstatelet.StartStore(reg, …)`, `agent.NewService(bus, …)`, `covtrail.New(opts)`, `sysmtee.Start(opts)`, `adhocdata.NewFollower(cfg)`, `adhocdata.NewDeferredFollower(cfg)` | ctx first — the object's lifetime |
 | `(*play.PlayApp).SetCapabilities(bus, storage, log)`, `sqlapplet.NewEmbedded(def, cfg)`, `(*externaledit.Editing).Start(bus, …)` | ctx first |
+| `introspect.Provider.Snapshot(proj)`, `ArgProvider.SnapshotArgs(proj, args)`, `FilteredProvider.SnapshotWhere(proj, where)`; the functions `introspect.SnapshotWhere`, `SnapshotCall`, `SnapshotCallFile`, `SnapshotStream`, `SnapshotFile` | ctx first — the query's. A provider that answers from memory takes it and ignores it; one that reads a store reads under it, bounding a read of its own with `introspect.BoundRead(ctx, d)` |
+| `trivialsql.Read(reg, …)`, `trivialsql.ReadTables(reg, …)` | ctx first |
+| `factsstore.RunEventReaderI.ListRunEvents(filter)` | `ListRunEvents(ctx, filter)` |
 
 New: `app.Msg.Context()`, `app.Msg.WithContext(ctx)`, `app.ContextOf(mc)`,
-`app.RequestWithin`, `(*hostboot.Runtime).Context()`. `editexternally.Input`
-gains `BusCtx`.
+`app.RequestWithin`, `(*hostboot.Runtime).Context()`, `introspect.BoundRead`.
+`editexternally.Input` gains `BusCtx`.
 
 ## Verify
 

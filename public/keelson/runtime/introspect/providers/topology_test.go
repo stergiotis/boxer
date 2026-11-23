@@ -28,7 +28,7 @@ func col(t *testing.T, rec arrow.RecordBatch, name string) arrow.Array {
 
 func TestComponentsProvider_ServesRegistry(t *testing.T) {
 	p := componentsProvider{}
-	rec, err := p.Snapshot(introspect.AllColumns())
+	rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 
@@ -81,7 +81,7 @@ func TestTopologyProviders_PlaneFed(t *testing.T) {
 	require.True(t, ok)
 
 	// Before any bundle arrives both tables are empty, not absent.
-	rec, err := procs.Snapshot(introspect.AllColumns())
+	rec, err := procs.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	require.EqualValues(t, 0, rec.NumRows())
 	rec.Release()
@@ -107,7 +107,7 @@ func TestTopologyProviders_PlaneFed(t *testing.T) {
 	})
 	require.NoError(t, pub.Publish(sysmetricsbus.BundleSubject("box-a"), payload))
 
-	rec, err = procs.Snapshot(introspect.AllColumns())
+	rec, err = procs.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 	require.EqualValues(t, 2, rec.NumRows())
@@ -121,7 +121,7 @@ func TestTopologyProviders_PlaneFed(t *testing.T) {
 	assert.Equal(t, int64(42_000), col(t, rec, "sampled_at_unix_ms").(*array.Int64).Value(0))
 	assert.Equal(t, "", col(t, rec, "component").(*array.String).Value(1))
 
-	srec, err := sockets.Snapshot(introspect.AllColumns())
+	srec, err := sockets.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer srec.Release()
 	require.EqualValues(t, 1, srec.NumRows())
@@ -138,7 +138,7 @@ func TestTopologyProviders_PlaneFed(t *testing.T) {
 	// substrate — and the listener edge attributes the socket.
 	nodes, ok := reg.Lookup("topology_nodes")
 	require.True(t, ok)
-	nrec, err := nodes.Snapshot(introspect.AllColumns())
+	nrec, err := nodes.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer nrec.Release()
 	kinds := col(t, nrec, "kind").(*array.String)
@@ -160,7 +160,7 @@ func TestTopologyProviders_PlaneFed(t *testing.T) {
 
 	edges, ok := reg.Lookup("topology_edges")
 	require.True(t, ok)
-	erec, err := edges.Snapshot(introspect.AllColumns())
+	erec, err := edges.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer erec.Release()
 	ekinds := col(t, erec, "edge_kind").(*array.String)
@@ -185,7 +185,7 @@ func TestTopologyProviders_NilHolder(t *testing.T) {
 	for _, name := range []string{"procs", "sockets"} {
 		p, ok := reg.Lookup(name)
 		require.True(t, ok, name)
-		rec, err := p.Snapshot(introspect.AllColumns())
+		rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 		require.NoError(t, err)
 		require.EqualValues(t, 0, rec.NumRows(), name)
 		rec.Release()
@@ -193,7 +193,7 @@ func TestTopologyProviders_NilHolder(t *testing.T) {
 
 	nodes, ok := reg.Lookup("topology_nodes")
 	require.True(t, ok)
-	nrec, err := nodes.Snapshot(introspect.AllColumns())
+	nrec, err := nodes.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer nrec.Release()
 	require.Positive(t, nrec.NumRows(), "declared rows remain")
@@ -204,7 +204,7 @@ func TestTopologyProviders_NilHolder(t *testing.T) {
 
 	edges, ok := reg.Lookup("topology_edges")
 	require.True(t, ok)
-	erec, err := edges.Snapshot(introspect.AllColumns())
+	erec, err := edges.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	erec.Release()
 }

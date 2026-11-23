@@ -7,6 +7,8 @@
 package providers
 
 import (
+	"context"
+
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -61,7 +63,7 @@ func (topologyNodesProvider) Name() string                         { return "top
 func (topologyNodesProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (topologyNodesProvider) Schema() *arrow.Schema                { return topologyNodesTable(nil).Schema() }
 
-func (p topologyNodesProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p topologyNodesProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	nodes := topo.AssembleNodes(graphInput(p.holder))
 	return topologyNodesTable(nodes).Build(proj, len(nodes)), nil
 }
@@ -85,7 +87,7 @@ func (topologyEdgesProvider) Name() string                         { return "top
 func (topologyEdgesProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (topologyEdgesProvider) Schema() *arrow.Schema                { return topologyEdgesTable(nil).Schema() }
 
-func (p topologyEdgesProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p topologyEdgesProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	edges := topo.AssembleEdges(graphInput(p.holder))
 	return topologyEdgesTable(edges).Build(proj, len(edges)), nil
 }
@@ -110,7 +112,7 @@ func (componentsProvider) Name() string                         { return "compon
 func (componentsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
 func (componentsProvider) Schema() *arrow.Schema                { return componentsTable(nil).Schema() }
 
-func (componentsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (componentsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	cs := topo.Registry() // sorted by Token
 	return componentsTable(cs).Build(proj, len(cs)), nil
 }
@@ -142,7 +144,7 @@ type procRow struct {
 	info       *sysmsnap.ProcInfo
 }
 
-func (p procsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p procsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []procRow
 	for _, hs := range p.holder.Hosts() {
 		for i := range hs.Snap.Procs {
@@ -205,7 +207,7 @@ type socketRow struct {
 	info        *sysmsnap.SocketInfo
 }
 
-func (p socketsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p socketsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []socketRow
 	for _, hs := range p.holder.Hosts() {
 		if hs.Snap.Sockets == nil {

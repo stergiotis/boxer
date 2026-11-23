@@ -245,7 +245,7 @@ func (inst *record) Revision() (r uint64) {
 
 // Snapshot is never valid for a sealed dataset; the honest answer to an
 // accidental snapshot is an error, not ciphertext.
-func (inst *record) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (inst *record) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	return nil, eb.Build().Str("name", inst.handle).Errorf("adhocdata: the table is a sealed dataset; it is read through /table, not Snapshot")
 }
 

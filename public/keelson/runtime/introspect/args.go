@@ -1,6 +1,7 @@
 package introspect
 
 import (
+	"context"
 	"math"
 	"slices"
 	"strconv"
@@ -64,7 +65,7 @@ type ArgsProviderI interface {
 	Args() []ArgSpec
 	// SnapshotArgs materialises the rows for args, which ResolveArgs has
 	// already checked against Args. Ownership and proj are as for Snapshot.
-	SnapshotArgs(proj Projection, args Args) (arrow.RecordBatch, error)
+	SnapshotArgs(ctx context.Context, proj Projection, args Args) (arrow.RecordBatch, error)
 }
 
 // Args are a call's resolved, typed argument values.
@@ -192,14 +193,14 @@ func parseArg(t ArgTypeE, text string) (v argVal, err error) {
 // SnapshotCall materialises what a call of p with raw arguments reads: an
 // ArgsProviderI's rows for the resolved arguments, or, for a provider that
 // takes none, its plain snapshot — which a call with arguments is refused.
-func SnapshotCall(p Provider, proj Projection, raw map[string]string) (batch arrow.RecordBatch, err error) {
+func SnapshotCall(ctx context.Context, p Provider, proj Projection, raw map[string]string) (batch arrow.RecordBatch, err error) {
 	ap, takes := p.(ArgsProviderI)
 	if !takes {
 		if len(raw) > 0 {
 			err = eb.Build().Str("table", p.Name()).Errorf("introspect: the table takes no arguments")
 			return
 		}
-		return p.Snapshot(proj)
+		return p.Snapshot(ctx, proj)
 	}
 	var args Args
 	args, err = ResolveArgs(ap.Args(), raw)
@@ -207,13 +208,13 @@ func SnapshotCall(p Provider, proj Projection, raw map[string]string) (batch arr
 		err = eb.Build().Str("table", p.Name()).Errorf("%w", err)
 		return
 	}
-	return ap.SnapshotArgs(proj, args)
+	return ap.SnapshotArgs(ctx, proj, args)
 }
 
 // SnapshotCallFile is SnapshotCall encoded as an Arrow IPC file, as
 // SnapshotFile is for Snapshot.
-func SnapshotCallFile(p Provider, proj Projection, raw map[string]string) (b []byte, err error) {
-	batch, err := SnapshotCall(p, proj, raw)
+func SnapshotCallFile(ctx context.Context, p Provider, proj Projection, raw map[string]string) (b []byte, err error) {
+	batch, err := SnapshotCall(ctx, p, proj, raw)
 	if err != nil {
 		return nil, err
 	}

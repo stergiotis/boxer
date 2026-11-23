@@ -374,7 +374,7 @@ func (callsProvider) Name() string                         { return TableCalls }
 func (callsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (callsProvider) Schema() *arrow.Schema                { return callsTable(nil).Schema() }
 
-func (p callsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (p callsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	var rows []CallRecord
 	if p.calls != nil {
 		rows = p.calls.Calls()

@@ -178,7 +178,7 @@ type heldProvider struct{ batch arrow.RecordBatch }
 func (heldProvider) Name() string                         { return "held" }
 func (heldProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
 func (inst heldProvider) Schema() *arrow.Schema           { return inst.batch.Schema() }
-func (inst heldProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (inst heldProvider) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	inst.batch.Retain()
 	return inst.batch, nil
 }
@@ -206,7 +206,7 @@ func TestColumns_ShareTheSourceBuffers(t *testing.T) {
 		"SELECT w AS word, v, 1 AS one FROM keelson('held') LIMIT 10 OFFSET 5",
 		"WITH q AS (SELECT w AS x, v FROM keelson('held')), r AS (SELECT x AS y, v AS n FROM q) SELECT y AS word, n AS v FROM r",
 	} {
-		out, _, err := Read(r, sql, nil)
+		out, _, err := Read(t.Context(), r, sql, nil)
 		require.NoError(t, err, sql)
 		assert.Equal(t, "word", out.Schema().Field(0).Name, sql)
 		assert.Equal(t, "v", out.Schema().Field(1).Name, sql)
@@ -215,7 +215,7 @@ func TestColumns_ShareTheSourceBuffers(t *testing.T) {
 		out.Release()
 	}
 	// Without LIMIT the very array is handed on.
-	out, _, err := Read(r, "SELECT w AS word FROM keelson('held')", nil)
+	out, _, err := Read(t.Context(), r, "SELECT w AS word FROM keelson('held')", nil)
 	require.NoError(t, err)
 	defer out.Release()
 	assert.Same(t, src.Column(1).Data(), out.Column(0).Data())
@@ -251,7 +251,7 @@ var tableCases = []struct {
 
 func boundTables(t *testing.T) map[string]arrow.RecordBatch {
 	t.Helper()
-	batch, _, err := Read(reg(t), "SELECT * FROM "+t3, nil)
+	batch, _, err := Read(t.Context(), reg(t), "SELECT * FROM "+t3, nil)
 	require.NoError(t, err)
 	t.Cleanup(batch.Release)
 	return map[string]arrow.RecordBatch{"t": batch}
@@ -260,7 +260,7 @@ func boundTables(t *testing.T) map[string]arrow.RecordBatch {
 func TestReadTables_EvaluatorSide(t *testing.T) {
 	tables := boundTables(t)
 	for _, c := range tableCases {
-		ans, err := ReadTables(reg(t), c.sql, nil, tables)
+		ans, err := ReadTables(t.Context(), reg(t), c.sql, nil, tables)
 		isRefusal := errors.Is(err, ErrNeedsClickHouse)
 		switch c.want {
 		case same:
@@ -279,7 +279,7 @@ func TestReadTables_EvaluatorSide(t *testing.T) {
 // and the bound tables it read; a column of it is the bound table's array.
 func TestReadTables_ReturnsTheWithQueries(t *testing.T) {
 	tables := boundTables(t)
-	ans, err := ReadTables(reg(t), "WITH edges AS (SELECT a AS source, b AS target FROM t), opts AS (SELECT 'hierarchical' AS layout) SELECT * FROM edges LIMIT 2", nil, tables)
+	ans, err := ReadTables(t.Context(), reg(t), "WITH edges AS (SELECT a AS source, b AS target FROM t), opts AS (SELECT 'hierarchical' AS layout) SELECT * FROM edges LIMIT 2", nil, tables)
 	require.NoError(t, err)
 	defer ans.Release()
 	assert.EqualValues(t, 2, ans.Main.NumRows())
@@ -292,7 +292,7 @@ func TestReadTables_ReturnsTheWithQueries(t *testing.T) {
 	assert.EqualValues(t, 1, ans.With[1].Batch.NumRows())
 	assert.Equal(t, []string{"t"}, ans.Tables)
 
-	lit, err := ReadTables(reg(t), "SELECT 1 AS one", nil, tables)
+	lit, err := ReadTables(t.Context(), reg(t), "SELECT 1 AS one", nil, tables)
 	require.NoError(t, err)
 	defer lit.Release()
 	assert.Empty(t, lit.Tables)
@@ -300,6 +300,6 @@ func TestReadTables_ReturnsTheWithQueries(t *testing.T) {
 
 // Read binds no table, and a bare table name stays a refusal there.
 func TestRead_ABareTableIsStillRefused(t *testing.T) {
-	_, _, err := Read(reg(t), "SELECT * FROM t", nil)
+	_, _, err := Read(t.Context(), reg(t), "SELECT * FROM t", nil)
 	assert.ErrorIs(t, err, ErrNeedsClickHouse)
 }

@@ -1,6 +1,10 @@
 package introspect
 
-import "github.com/apache/arrow-go/v18/arrow"
+import (
+	"context"
+
+	"github.com/apache/arrow-go/v18/arrow"
+)
 
 // RegisterCatalog adds the self-describing catalog tables `tables` and
 // `columns` to r — the keelson equivalent of ClickHouse's system.tables
@@ -26,7 +30,7 @@ func (*tablesProvider) Name() string              { return "tables" }
 func (*tablesProvider) Freshness() FreshnessClass { return FreshnessStatic }
 func (p *tablesProvider) Schema() *arrow.Schema   { return tablesTable(nil).Schema() }
 
-func (p *tablesProvider) Snapshot(proj Projection) (arrow.RecordBatch, error) {
+func (p *tablesProvider) Snapshot(ctx context.Context, proj Projection) (arrow.RecordBatch, error) {
 	ps := p.reg.Providers()
 	return tablesTable(ps).Build(proj, len(ps)), nil
 }
@@ -45,7 +49,7 @@ func (*columnsProvider) Name() string              { return "columns" }
 func (*columnsProvider) Freshness() FreshnessClass { return FreshnessStatic }
 func (p *columnsProvider) Schema() *arrow.Schema   { return columnsTable(nil).Schema() }
 
-func (p *columnsProvider) Snapshot(proj Projection) (arrow.RecordBatch, error) {
+func (p *columnsProvider) Snapshot(ctx context.Context, proj Projection) (arrow.RecordBatch, error) {
 	rows := flattenColumns(p.reg.Providers())
 	return columnsTable(rows).Build(proj, len(rows)), nil
 }

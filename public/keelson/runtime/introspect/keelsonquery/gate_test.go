@@ -1,6 +1,7 @@
 package keelsonquery
 
 import (
+	"context"
 	"io"
 	"testing"
 
@@ -81,7 +82,7 @@ func (inst sealedTable) Schema() *arrow.Schema                    { return arrow
 func (inst sealedTable) Structure() string                        { return "v Int64" }
 func (inst sealedTable) Revision() uint64                         { return 1 }
 func (inst sealedTable) Open() (io.ReadSeekCloser, uint64, error) { return nil, 0, io.EOF }
-func (inst sealedTable) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (inst sealedTable) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	return nil, io.EOF
 }
 

@@ -41,7 +41,7 @@ func BenchmarkEvidenceChecksJournal(b *testing.B) {
 	require.True(b, ok)
 	b.ReportAllocs()
 	for b.Loop() {
-		rec, err := p.Snapshot(introspect.AllColumns())
+		rec, err := p.Snapshot(b.Context(), introspect.AllColumns())
 		if err != nil {
 			b.Fatal(err)
 		}

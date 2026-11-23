@@ -1,6 +1,8 @@
 package providers
 
 import (
+	"context"
+
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
@@ -23,7 +25,7 @@ func (sqlPassesProvider) Name() string                         { return "sql_pas
 func (sqlPassesProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (sqlPassesProvider) Schema() *arrow.Schema                { return sqlPassesTable(nil).Schema() }
 
-func (sqlPassesProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (sqlPassesProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	rows := passreg.Default.Catalog()
 	return sqlPassesTable(rows).Build(proj, len(rows)), nil
 }

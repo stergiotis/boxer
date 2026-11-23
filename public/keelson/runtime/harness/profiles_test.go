@@ -37,7 +37,7 @@ func TestPublishedProfilesAreALiveLongTable(t *testing.T) {
 	p, ok := reg.Lookup(TableProfiles)
 	require.True(t, ok)
 	assert.Equal(t, introspect.FreshnessLive, p.Freshness())
-	rec, err := p.Snapshot(introspect.Projection{})
+	rec, err := p.Snapshot(t.Context(), introspect.Projection{})
 	require.NoError(t, err)
 	defer rec.Release()
 	var got []string

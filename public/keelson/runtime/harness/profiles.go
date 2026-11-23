@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"context"
 	"maps"
 	"sort"
 	"sync"
@@ -91,7 +92,7 @@ type profileField struct {
 	app, id, fingerprint, field, value string
 }
 
-func (profilesProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (profilesProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	var rows []profileField
 	for _, p := range PublishedProfiles() {
 		names := make([]string, 0, len(p.Fields))

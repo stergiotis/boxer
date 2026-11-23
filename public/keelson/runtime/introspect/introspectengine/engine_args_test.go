@@ -20,13 +20,13 @@ func (seqProvider) Freshness() introspect.FreshnessClass { return introspect.Fre
 func (seqProvider) Schema() *arrow.Schema {
 	return introspect.NewTable().Uint64("v", func(int) uint64 { return 0 }).Schema()
 }
-func (seqProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (seqProvider) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	return nil, assert.AnError
 }
 func (seqProvider) Args() []introspect.ArgSpec {
 	return []introspect.ArgSpec{{Name: "n", Type: introspect.ArgTypeUInt64, Required: true}}
 }
-func (seqProvider) SnapshotArgs(proj introspect.Projection, args introspect.Args) (arrow.RecordBatch, error) {
+func (seqProvider) SnapshotArgs(ctx context.Context, proj introspect.Projection, args introspect.Args) (arrow.RecordBatch, error) {
 	n := int(args.UInt64("n"))
 	return introspect.NewTable().Uint64("v", func(i int) uint64 { return uint64(i + 1) }).Build(proj, n), nil
 }

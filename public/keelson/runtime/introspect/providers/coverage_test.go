@@ -80,7 +80,7 @@ func TestCoverageTablesEmptyWithoutSource(t *testing.T) {
 	} {
 		require.NotNil(t, p.Schema(), p.Name())
 		require.Equal(t, introspect.FreshnessLive, p.Freshness())
-		batch, err := p.Snapshot(introspect.AllColumns())
+		batch, err := p.Snapshot(t.Context(), introspect.AllColumns())
 		require.NoError(t, err, p.Name())
 		require.EqualValues(t, 0, batch.NumRows(), p.Name())
 		batch.Release()
@@ -101,7 +101,7 @@ func TestCoverageTablesOverFakeSource(t *testing.T) {
 		seq: 17,
 	}
 
-	status, err := coverageStatusProvider{src: src}.Snapshot(introspect.AllColumns())
+	status, err := coverageStatusProvider{src: src}.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer status.Release()
 	require.EqualValues(t, 1, status.NumRows())
@@ -113,7 +113,7 @@ func TestCoverageTablesOverFakeSource(t *testing.T) {
 	require.Equal(t, "9", status.Column(5).ValueStr(0))  // total_units
 	require.Equal(t, "13", status.Column(7).ValueStr(0)) // total_stmts
 
-	pkgs, err := coveragePkgsProvider{src: src}.Snapshot(introspect.AllColumns())
+	pkgs, err := coveragePkgsProvider{src: src}.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer pkgs.Release()
 	require.EqualValues(t, 2, pkgs.NumRows())
@@ -126,7 +126,7 @@ func TestCoverageTablesOverFakeSource(t *testing.T) {
 	require.Equal(t, "1", pkgs.Column(2).ValueStr(1)) // m/b covered_units
 	require.Equal(t, "1", pkgs.Column(6).ValueStr(1)) // m/b covered_funcs
 
-	funcs, err := coverageFuncsProvider{src: src}.Snapshot(introspect.AllColumns())
+	funcs, err := coverageFuncsProvider{src: src}.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer funcs.Release()
 	require.EqualValues(t, 3, funcs.NumRows())

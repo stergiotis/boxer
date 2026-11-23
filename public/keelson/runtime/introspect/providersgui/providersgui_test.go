@@ -55,7 +55,7 @@ func TestWindowsProviderEmptyHost(t *testing.T) {
 	// A nil host is the headless/no-window case: an empty table, not an
 	// error and not an absent one.
 	p := windowsProvider{}
-	rec, err := p.Snapshot(introspect.AllColumns())
+	rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.Zero(t, rec.NumRows())
@@ -98,7 +98,7 @@ func TestFrameTimesTable(t *testing.T) {
 
 func TestFrameTimesProviderNilHost(t *testing.T) {
 	p := frameTimesProvider{}
-	rec, err := p.Snapshot(introspect.AllColumns())
+	rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.Zero(t, rec.NumRows())
@@ -168,7 +168,7 @@ func TestDesktopTable(t *testing.T) {
 	defer idle.Release()
 	assert.Equal(t, []string{""}, stringColumn(t, idle, "arranging"), "no arrangement reads as empty")
 
-	empty, err := desktopProvider{}.Snapshot(introspect.AllColumns())
+	empty, err := desktopProvider{}.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer empty.Release()
 	assert.Zero(t, empty.NumRows())
@@ -213,7 +213,7 @@ func TestMarksTable(t *testing.T) {
 	}
 	assert.Equal(t, []string{"window:7", "window:7@1,2,3.5,4", "viewport@0,0,10,10"}, got)
 
-	empty, err := marksProvider{}.Snapshot(introspect.AllColumns())
+	empty, err := marksProvider{}.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer empty.Release()
 	assert.EqualValues(t, 0, empty.NumRows())

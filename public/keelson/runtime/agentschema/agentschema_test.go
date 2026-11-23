@@ -200,7 +200,7 @@ func TestTheRelationsAreAnIntrospectionTable(t *testing.T) {
 	require.NoError(t, RegisterIntrospect(reg, append(JournalRelations(), withholding())))
 	p, ok := reg.Lookup(TableName)
 	require.True(t, ok)
-	rec, err := p.Snapshot(introspect.Projection{})
+	rec, err := p.Snapshot(t.Context(), introspect.Projection{})
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.EqualValues(t, 4, rec.NumRows())

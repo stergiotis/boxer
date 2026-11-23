@@ -47,7 +47,7 @@ var (
 func (mixProvider) Name() string                         { return "mix" }
 func (mixProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (mixProvider) Schema() *arrow.Schema                { return mixSchema }
-func (mixProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (mixProvider) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	b := array.NewRecordBuilder(memory.DefaultAllocator, mixSchema)
 	defer b.Release()
 	for i, f := range mixFloats {

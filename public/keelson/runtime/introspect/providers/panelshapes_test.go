@@ -28,7 +28,7 @@ func TestPanelShapes_MatchesTheBattery(t *testing.T) {
 	p, has := r.Lookup("panel_shapes")
 	require.True(t, has)
 
-	batch, err := p.Snapshot(introspect.Projection{})
+	batch, err := p.Snapshot(t.Context(), introspect.Projection{})
 	require.NoError(t, err)
 	defer batch.Release()
 

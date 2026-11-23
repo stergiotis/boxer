@@ -80,10 +80,10 @@ func (appRunsProvider) Name() string                         { return TableAppRu
 func (appRunsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (appRunsProvider) Schema() *arrow.Schema                { return appRunsTable(nil).Schema() }
 
-func (p appRunsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p appRunsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []factsstore.AppRunRow
 	if p.reader != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), appTrailTimeout)
+		ctx, cancel := introspect.BoundRead(ctx, appTrailTimeout)
 		defer cancel()
 		var err error
 		if rows, err = p.reader.AppRuns(ctx, appTrailFilter(appRunsLimit)); err != nil {
@@ -126,10 +126,10 @@ func (appLogsProvider) Name() string                         { return TableAppLo
 func (appLogsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (appLogsProvider) Schema() *arrow.Schema                { return appLogsTable(nil).Schema() }
 
-func (p appLogsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p appLogsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []factsstore.AppLogRow
 	if p.reader != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), appTrailTimeout)
+		ctx, cancel := introspect.BoundRead(ctx, appTrailTimeout)
 		defer cancel()
 		var err error
 		if rows, err = p.reader.AppLogTail(ctx, appTrailFilter(appLogsLimit), appLogsPerApp); err != nil {
@@ -162,10 +162,10 @@ func (appAuditProvider) Name() string                         { return TableAppA
 func (appAuditProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (appAuditProvider) Schema() *arrow.Schema                { return appAuditTable(nil).Schema() }
 
-func (p appAuditProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p appAuditProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []factsstore.AppAuditRow
 	if p.reader != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), appTrailTimeout)
+		ctx, cancel := introspect.BoundRead(ctx, appTrailTimeout)
 		defer cancel()
 		var err error
 		if rows, err = p.reader.AppAuditSummary(ctx, appTrailFilter(appAuditLimit)); err != nil {

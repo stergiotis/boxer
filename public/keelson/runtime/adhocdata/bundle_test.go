@@ -199,7 +199,7 @@ func TestBundleCatalogs(t *testing.T) {
 	for _, r := range svc.catalogRows() {
 		assert.Equal(t, "sales", r.bundle)
 	}
-	batch, err := newBundleCatalogProvider(svc).Snapshot(introspect.AllColumns())
+	batch, err := newBundleCatalogProvider(svc).Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer batch.Release()
 	assert.Equal(t, int64(1), batch.NumRows())

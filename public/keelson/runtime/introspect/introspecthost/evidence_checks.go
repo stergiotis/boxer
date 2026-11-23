@@ -85,8 +85,8 @@ func (evidenceChecksProvider) Name() string                         { return Tab
 func (evidenceChecksProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (evidenceChecksProvider) Schema() *arrow.Schema                { return evidenceChecksTable(nil).Schema() }
 
-func (inst evidenceChecksProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
-	return inst.SnapshotWhere(proj, nil)
+func (inst evidenceChecksProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+	return inst.SnapshotWhere(ctx, proj, nil)
 }
 
 var _ introspect.FilteredProvider = evidenceChecksProvider{}
@@ -96,8 +96,8 @@ var _ introspect.FilteredProvider = evidenceChecksProvider{}
 // reader of the trail's rows alone should not pay for — and filters the
 // rows by the other columns after. The exits' rows need the journal's
 // approvals, so they read the journal even when its own rows are left out.
-func (inst evidenceChecksProvider) SnapshotWhere(proj introspect.Projection, where introspect.Where) (rec arrow.RecordBatch, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), checkTimeout)
+func (inst evidenceChecksProvider) SnapshotWhere(ctx context.Context, proj introspect.Projection, where introspect.Where) (rec arrow.RecordBatch, err error) {
+	ctx, cancel := introspect.BoundRead(ctx, checkTimeout)
 	defer cancel()
 	var rows []evidenceCheck
 	journal, exits := where.Admits("store", storeJournal), where.Admits("store", storeExits)

@@ -57,7 +57,7 @@ func TestAppTrailTablesRenderRows(t *testing.T) {
 	for _, name := range []string{TableAppRuns, TableAppLogs, TableAppAudit} {
 		p, ok := r.Lookup(name)
 		require.True(t, ok, name)
-		rec, err := p.Snapshot(introspect.AllColumns())
+		rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 		require.NoError(t, err, name)
 		assert.EqualValues(t, 1, rec.NumRows(), name)
 		rec.Release()
@@ -87,7 +87,7 @@ func TestAppTrailWithoutAReaderIsEmpty(t *testing.T) {
 	for _, name := range []string{TableAppRuns, TableAppLogs, TableAppAudit} {
 		p, ok := r.Lookup(name)
 		require.True(t, ok, name)
-		rec, err := p.Snapshot(introspect.AllColumns())
+		rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 		require.NoError(t, err)
 		assert.Zero(t, rec.NumRows())
 		rec.Release()
@@ -98,6 +98,6 @@ func TestAppTrailReportsAFailedRead(t *testing.T) {
 	r := introspect.NewRegistry()
 	require.NoError(t, RegisterAppTrail(r, trailFacts{FactsStoreI: factsstore.NewInMemoryFactsStore(), fakeTrail: &fakeTrail{err: errors.New("down")}}))
 	p, _ := r.Lookup(TableAppLogs)
-	_, err := p.Snapshot(introspect.AllColumns())
+	_, err := p.Snapshot(t.Context(), introspect.AllColumns())
 	assert.ErrorContains(t, err, "down")
 }

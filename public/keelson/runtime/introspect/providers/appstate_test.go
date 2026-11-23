@@ -64,7 +64,7 @@ func TestAppStateTableShape(t *testing.T) {
 // not an absent one — the keelson('windows') precedent.
 func TestAppStateProviderWithoutAStore(t *testing.T) {
 	p := appStateProvider{}
-	rec, err := p.Snapshot(introspect.AllColumns())
+	rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.EqualValues(t, 0, rec.NumRows())
@@ -104,7 +104,7 @@ func TestAppStateProviderReadsTheStore(t *testing.T) {
 		ColumnKey: "ab12", Points: 90, FontSize: 12, Ts: past,
 	}))
 
-	rec, err := appStateProvider{persistExec: exec}.Snapshot(introspect.AllColumns())
+	rec, err := appStateProvider{persistExec: exec}.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 

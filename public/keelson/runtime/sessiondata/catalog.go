@@ -1,6 +1,7 @@
 package sessiondata
 
 import (
+	"context"
 	"sort"
 	"strings"
 
@@ -62,7 +63,7 @@ func (inst *catalogProvider) Freshness() (f introspect.FreshnessClass) {
 
 func (inst *catalogProvider) Schema() (s *arrow.Schema) { return catalogTable(nil).Schema() }
 
-func (inst *catalogProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (inst *catalogProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	rows := inst.svc.catalogRows()
 	return catalogTable(rows).Build(proj, len(rows)), nil
 }

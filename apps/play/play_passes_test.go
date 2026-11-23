@@ -149,7 +149,7 @@ func TestKeelsonLwComponentsPublishesWhatPlayRegistered(t *testing.T) {
 		t.Fatal("keelson('lw_components') is not registered")
 	}
 
-	batch, err := p.Snapshot(introspect.AllColumns())
+	batch, err := p.Snapshot(t.Context(), introspect.AllColumns())
 	if err != nil {
 		t.Fatalf("snapshot: %v", err)
 	}

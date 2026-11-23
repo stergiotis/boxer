@@ -11,6 +11,7 @@
 package providers
 
 import (
+	"context"
 	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -95,7 +96,7 @@ func (goModulesProvider) Name() string                         { return "go_modu
 func (goModulesProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
 func (goModulesProvider) Schema() *arrow.Schema                { return goModulesTable(nil).Schema() }
 
-func (inst goModulesProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (inst goModulesProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	mods, _ := inst.src.Get()
 	return goModulesTable(mods).Build(proj, len(mods)), nil
 }
@@ -130,7 +131,7 @@ func (goSymbolsProvider) Name() string                         { return "go_symb
 func (goSymbolsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
 func (goSymbolsProvider) Schema() *arrow.Schema                { return goSymbolsTable(nil, false).Schema() }
 
-func (inst goSymbolsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (inst goSymbolsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	_, rep := inst.src.Get()
 	return goSymbolsTable(rep.Packages, rep.ModuleExact).Build(proj, len(rep.Packages)), nil
 }

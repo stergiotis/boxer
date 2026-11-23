@@ -81,7 +81,7 @@ func (inst *Source) database() (db string) {
 // journal rows verify every run the journal store lists, which the viewer
 // does not read and which cost it most of a core before the filter. ok is
 // false when no registry serves the relation.
-func (inst *Source) evidenceChecks(run string) (checks []verdict.Check, ok bool, err error) {
+func (inst *Source) evidenceChecks(ctx context.Context, run string) (checks []verdict.Check, ok bool, err error) {
 	if inst == nil || inst.Registry == nil {
 		return
 	}
@@ -89,7 +89,7 @@ func (inst *Source) evidenceChecks(run string) (checks []verdict.Check, ok bool,
 	if !found {
 		return
 	}
-	rec, err := introspect.SnapshotWhere(p, introspect.Columns("store", "scope", "law", "holds", "broken", "why"),
+	rec, err := introspect.SnapshotWhere(ctx, p, introspect.Columns("store", "scope", "law", "holds", "broken", "why"),
 		introspect.Where{"store": "trail", "scope": run})
 	if err != nil {
 		return nil, true, err

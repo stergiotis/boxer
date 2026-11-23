@@ -59,7 +59,7 @@ func TestLawChecksOverLiveRows(t *testing.T) {
 	t.Cleanup(func() { _ = stop(context.Background()) })
 	p, ok := reg.Lookup(TableEvidenceChecks)
 	require.True(t, ok)
-	rec, err := p.Snapshot(introspect.AllColumns())
+	rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 	type row struct {

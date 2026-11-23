@@ -27,7 +27,7 @@ func TestCatalog_TablesListsEveryProviderIncludingItself(t *testing.T) {
 
 	tp, ok := r.Lookup("tables")
 	require.True(t, ok)
-	rec, err := tp.Snapshot(AllColumns())
+	rec, err := tp.Snapshot(t.Context(), AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 
@@ -42,7 +42,7 @@ func TestCatalog_ColumnsFlattensSchemas(t *testing.T) {
 
 	cp, ok := r.Lookup("columns")
 	require.True(t, ok)
-	rec, err := cp.Snapshot(AllColumns())
+	rec, err := cp.Snapshot(t.Context(), AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 
@@ -56,7 +56,7 @@ func TestCatalog_Projection(t *testing.T) {
 	r := NewRegistry()
 	require.NoError(t, RegisterCatalog(r))
 	tp, _ := r.Lookup("tables")
-	rec, err := tp.Snapshot(Columns("name"))
+	rec, err := tp.Snapshot(t.Context(), Columns("name"))
 	require.NoError(t, err)
 	defer rec.Release()
 	require.EqualValues(t, 1, rec.NumCols())

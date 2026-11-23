@@ -276,7 +276,7 @@ func (s *Server) handleTable(w http.ResponseWriter, r *http.Request) {
 	if cols := r.URL.Query().Get("cols"); cols != "" {
 		proj = introspect.Columns(splitCols(cols)...)
 	}
-	b, err := introspect.SnapshotStream(p, proj)
+	b, err := introspect.SnapshotStream(r.Context(), p, proj)
 	if err != nil {
 		s.log.Warn().Err(err).Str("table", name).Msg("introspecthttp: snapshot failed")
 		http.Error(w, "snapshot failed", http.StatusInternalServerError)

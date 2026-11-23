@@ -231,7 +231,7 @@ func TestColumnValuesAreReadAsTheDataIs(t *testing.T) {
 	require.ErrorAs(t, err, &ge, "another task needs the grant for the values")
 	assert.Equal(t, "keelson-bundle:sales", ge.Destination)
 
-	batch, err := newBundleCatalogProvider(svc).Snapshot(introspect.AllColumns())
+	batch, err := newBundleCatalogProvider(svc).Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer batch.Release()
 	for _, f := range batch.Schema().Fields() {

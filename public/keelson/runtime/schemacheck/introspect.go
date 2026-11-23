@@ -1,6 +1,7 @@
 package schemacheck
 
 import (
+	"context"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -25,7 +26,7 @@ func (tablesProvider) Name() string                         { return TableName }
 func (tablesProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (tablesProvider) Schema() *arrow.Schema                { return verdictTable(nil).Schema() }
 
-func (p tablesProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (p tablesProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	vs := p.board.Verdicts()
 	rec = verdictTable(vs).Build(proj, len(vs))
 	return

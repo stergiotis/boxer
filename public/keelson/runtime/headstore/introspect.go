@@ -1,6 +1,7 @@
 package headstore
 
 import (
+	"context"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -32,7 +33,7 @@ func (anchorsProvider) Name() string                         { return TableAncho
 func (anchorsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (anchorsProvider) Schema() *arrow.Schema                { return anchorsTable(nil).Schema() }
 
-func (inst anchorsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (inst anchorsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	var rows []anchor.Anchored
 	if inst.all != nil {
 		rows = inst.all.All()

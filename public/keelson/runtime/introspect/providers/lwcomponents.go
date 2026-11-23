@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"sort"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -42,7 +43,7 @@ func (lwComponentsProvider) Name() string                         { return "lw_c
 func (lwComponentsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (lwComponentsProvider) Schema() *arrow.Schema                { return lwComponentsTable(nil).Schema() }
 
-func (lwComponentsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (lwComponentsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	rows := lwComponentRows()
 	return lwComponentsTable(rows).Build(proj, len(rows)), nil
 }

@@ -73,7 +73,7 @@ func TestCheckOverClickhouseLocal(t *testing.T) {
 	require.NoError(t, RegisterIntrospect(reg, b))
 	p, found := reg.Lookup(TableName)
 	require.True(t, found)
-	rec, err := p.Snapshot(introspect.AllColumns())
+	rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.EqualValues(t, 3, rec.NumRows())

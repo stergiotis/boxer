@@ -1,6 +1,8 @@
 package providers
 
 import (
+	"context"
+
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -18,7 +20,7 @@ func (listenersProvider) Name() string                         { return "listene
 func (listenersProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (listenersProvider) Schema() *arrow.Schema                { return listenersTable(nil).Schema() }
 
-func (listenersProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (listenersProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	rows := loopback.OpenListeners()
 	return listenersTable(rows).Build(proj, len(rows)), nil
 }

@@ -675,7 +675,7 @@ func TestCatalogShowsEverySessionWithoutTicketsOrText(t *testing.T) {
 	r.define(r.fullAgent("t1"), "a", "SELECT 1 AS x")
 	p, ok := r.reg.Lookup(CatalogTableName)
 	require.True(t, ok)
-	rec, err := p.Snapshot(introspect.Projection{})
+	rec, err := p.Snapshot(t.Context(), introspect.Projection{})
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.Equal(t, int64(1), rec.NumRows())

@@ -6,6 +6,8 @@
 package providers
 
 import (
+	"context"
+
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -30,7 +32,7 @@ func (workstateletsProvider) Name() string                         { return "wor
 func (workstateletsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (workstateletsProvider) Schema() *arrow.Schema                { return workstateletsTable(nil).Schema() }
 
-func (p workstateletsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p workstateletsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []workstatelet.Entry
 	if p.cat != nil {
 		rows = p.cat.Entries()

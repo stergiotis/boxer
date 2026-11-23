@@ -14,6 +14,7 @@ package providers
 // navigable from any surface.
 
 import (
+	"context"
 	"strings"
 	"sync"
 
@@ -55,7 +56,7 @@ func (helpsectionsProvider) Name() string                         { return "help
 func (helpsectionsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (helpsectionsProvider) Schema() *arrow.Schema                { return helpsectionsTable(nil).Schema() }
 
-func (helpsectionsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (helpsectionsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	rows := helpSectionRows(help.DefaultLibrary)
 	return helpsectionsTable(rows).Build(proj, len(rows)), nil
 }
@@ -120,7 +121,7 @@ func (adrsectionsProvider) Name() string                         { return "adrse
 func (adrsectionsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (adrsectionsProvider) Schema() *arrow.Schema                { return adrsectionsTable(nil).Schema() }
 
-func (adrsectionsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (adrsectionsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	rows := adrSectionRows(adrcorpus.LoadContents())
 	return adrsectionsTable(rows).Build(proj, len(rows)), nil
 }

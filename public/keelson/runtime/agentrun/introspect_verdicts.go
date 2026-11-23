@@ -22,10 +22,10 @@ func (verdictsProvider) Name() string                         { return TableVerd
 func (verdictsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (verdictsProvider) Schema() *arrow.Schema                { return verdictsTable(nil).Schema() }
 
-func (inst verdictsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (inst verdictsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	var entries []Entry
 	if inst.store != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+		ctx, cancel := introspect.BoundRead(ctx, DefaultTimeout)
 		defer cancel()
 		if entries, err = allEntries(ctx, inst.store); err != nil {
 			return

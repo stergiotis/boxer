@@ -50,7 +50,7 @@ func TestRegisterEffects_NilSourcesGiveEmptyTables(t *testing.T) {
 		p, ok := r.Lookup(name)
 		require.True(t, ok, "%s registered", name)
 		assert.Equal(t, introspect.FreshnessLive, p.Freshness())
-		rec, err := p.Snapshot(introspect.AllColumns())
+		rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 		require.NoError(t, err)
 		assert.EqualValues(t, 0, rec.NumRows(), "%s is empty, not absent", name)
 		assert.Equal(t, p.Schema().NumFields(), rec.Schema().NumFields())
@@ -74,7 +74,7 @@ func TestSubscriptionsAndClientCaps_AttributeToInstance(t *testing.T) {
 	b.AddCap(app.SubjectFilter{Pattern: "runtime.fs.handle.x.>", Direction: app.CapDirectionBoth, Reason: "granted"})
 
 	subs, _ := r.Lookup("subscriptions")
-	rec, err := subs.Snapshot(introspect.AllColumns())
+	rec, err := subs.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 	require.EqualValues(t, 2, rec.NumRows())
@@ -86,7 +86,7 @@ func TestSubscriptionsAndClientCaps_AttributeToInstance(t *testing.T) {
 	assert.Equal(t, "t.two", columnString(t, rec, "pattern", 1))
 
 	caps, _ := r.Lookup("client_caps")
-	rec2, err := caps.Snapshot(introspect.AllColumns())
+	rec2, err := caps.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec2.Release()
 	require.EqualValues(t, 3, rec2.NumRows(), "two manifest-shaped caps and one grant")
@@ -102,11 +102,11 @@ func TestSubscriptionsAndClientCaps_AttributeToInstance(t *testing.T) {
 
 	// Closing a client removes its rows from both tables (ADR-0188 §SD1).
 	require.NoError(t, b.Close())
-	rec3, err := subs.Snapshot(introspect.AllColumns())
+	rec3, err := subs.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec3.Release()
 	assert.EqualValues(t, 1, rec3.NumRows())
-	rec4, err := caps.Snapshot(introspect.AllColumns())
+	rec4, err := caps.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec4.Release()
 	assert.EqualValues(t, 1, rec4.NumRows())
@@ -130,7 +130,7 @@ func TestTasks_ShowInflightAttributedToOwner(t *testing.T) {
 	var rec arrow.RecordBatch
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		rec, err = tasks.Snapshot(introspect.AllColumns())
+		rec, err = tasks.Snapshot(t.Context(), introspect.AllColumns())
 		require.NoError(t, err)
 		if rec.NumRows() == 1 || time.Now().After(deadline) {
 			break
@@ -150,7 +150,7 @@ func TestTasks_ShowInflightAttributedToOwner(t *testing.T) {
 	require.NoError(t, h.Done(nil))
 	deadline = time.Now().Add(2 * time.Second)
 	for {
-		rec2, err := tasks.Snapshot(introspect.AllColumns())
+		rec2, err := tasks.Snapshot(t.Context(), introspect.AllColumns())
 		require.NoError(t, err)
 		n := rec2.NumRows()
 		rec2.Release()

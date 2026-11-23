@@ -1,6 +1,7 @@
 package agentschema
 
 import (
+	"context"
 	"encoding/json/v2"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -48,7 +49,7 @@ func (relationsProvider) Name() string                         { return TableNam
 func (relationsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
 func (relationsProvider) Schema() *arrow.Schema                { return relationsTable(nil).Schema() }
 
-func (inst relationsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (inst relationsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	rec = relationsTable(inst.rows).Build(proj, len(inst.rows))
 	return
 }

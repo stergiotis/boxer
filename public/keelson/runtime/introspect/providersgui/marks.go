@@ -1,6 +1,7 @@
 package providersgui
 
 import (
+	"context"
 	"strconv"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -28,7 +29,7 @@ func (marksProvider) Schema() *arrow.Schema                { return marksTable(n
 
 // Snapshot reads the scene, which is safe off the render goroutine: the
 // agent service writes it from the bus.
-func (inst marksProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (inst marksProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var items []inscribe.Item
 	if inst.host != nil {
 		items = inst.host.Marks().Snapshot()

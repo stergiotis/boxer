@@ -89,7 +89,7 @@ func TestStart_RegistersWorkingsetsFromState(t *testing.T) {
 	if !ok {
 		t.Fatalf("workingsets not registered; tables = %v", reg.Names())
 	}
-	rec, err := p.Snapshot(introspect.AllColumns())
+	rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 	if err != nil {
 		t.Fatalf("workingsets Snapshot: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestStart_CoverageTablesPresentWithoutSampler(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s must register even without a sampler; tables = %v", name, reg.Names())
 		}
-		rec, err := p.Snapshot(introspect.AllColumns())
+		rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 		if err != nil {
 			t.Fatalf("%s Snapshot: %v", name, err)
 		}
@@ -146,7 +146,7 @@ func TestStart_WorkingsetsPresentWithoutState(t *testing.T) {
 	if !ok {
 		t.Fatalf("workingsets must register even without a state store; tables = %v", reg.Names())
 	}
-	rec, err := p.Snapshot(introspect.AllColumns())
+	rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 	if err != nil {
 		t.Fatalf("workingsets Snapshot: %v", err)
 	}

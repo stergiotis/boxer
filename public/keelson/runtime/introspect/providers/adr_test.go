@@ -138,7 +138,7 @@ func TestAdrTablesAreLive(t *testing.T) {
 func TestAdrTablesAreEmptyWithNoCorpus(t *testing.T) {
 	t.Setenv(adrcorpus.EnvAdrDirName, t.TempDir()) // a real dir, no ADRs in it
 	for _, p := range []introspect.Provider{adrProvider{}, subtaskProvider{}, coderefProvider{}, adrcontentProvider{}} {
-		rec, err := p.Snapshot(introspect.AllColumns())
+		rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 		require.NoError(t, err, "table %q must not error off-repo", p.Name())
 		require.NotNil(t, rec, "table %q keeps its schema", p.Name())
 		assert.Zero(t, rec.NumRows(), "table %q", p.Name())
@@ -155,7 +155,7 @@ func TestAdrTablesEmptyOnUnresolvableDir(t *testing.T) {
 	require.Error(t, err, "resolution reports the bad path")
 	assert.Contains(t, err.Error(), adrcorpus.EnvAdrDirName, "the message names the variable to fix")
 
-	rec, snapErr := adrProvider{}.Snapshot(introspect.AllColumns())
+	rec, snapErr := adrProvider{}.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, snapErr)
 	assert.Zero(t, rec.NumRows())
 	rec.Release()

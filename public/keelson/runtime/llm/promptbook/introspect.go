@@ -1,6 +1,7 @@
 package promptbook
 
 import (
+	"context"
 	"math"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -27,7 +28,7 @@ func (promptsProvider) Name() string                         { return TableName 
 func (promptsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (promptsProvider) Schema() *arrow.Schema                { return promptsTable(nil).Schema() }
 
-func (promptsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (promptsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	docs := AllDocuments()
 	rec = promptsTable(docs).Build(proj, len(docs))
 	return

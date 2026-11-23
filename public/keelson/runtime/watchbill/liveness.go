@@ -37,8 +37,8 @@ func NewRunEventLiveness(facts factsstore.FactsStoreI) (inst *RunEventLiveness) 
 	return
 }
 
-func (inst *RunEventLiveness) Alive(_ context.Context, runId string, since time.Time) (alive bool, err error) {
-	rows, err := inst.reader.ListRunEvents(factsstore.RunEventFilter{RunId: runId, Since: since, Limit: 1})
+func (inst *RunEventLiveness) Alive(ctx context.Context, runId string, since time.Time) (alive bool, err error) {
+	rows, err := inst.reader.ListRunEvents(ctx, factsstore.RunEventFilter{RunId: runId, Since: since, Limit: 1})
 	if err != nil {
 		return false, eb.Build().Str("runId", runId).Errorf("liveness: %w", err)
 	}

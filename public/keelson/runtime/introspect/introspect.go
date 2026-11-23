@@ -16,7 +16,9 @@
 package introspect
 
 import (
+	"context"
 	"io"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 )
@@ -66,10 +68,10 @@ type Provider interface {
 	// superset is always safe (ADR-0094 §SD4). The returned batch is
 	// owned by the caller, which must Release it.
 	//
-	// deferred: Snapshot, SnapshotArgs and SnapshotWhere take the query's
-	// context (ADR-0395). The providers that read a store root their own
-	// until then; codelint CS020's baseline holds them.
-	Snapshot(proj Projection) (arrow.RecordBatch, error)
+	// ctx is the query's (ADR-0395): a provider that reads a store or
+	// waits reads under it, bounding a read of its own with BoundRead; a
+	// provider that answers from memory ignores it.
+	Snapshot(ctx context.Context, proj Projection) (arrow.RecordBatch, error)
 }
 
 // Where is a best-effort row filter for a snapshot: the rows whose named
@@ -94,16 +96,27 @@ func (w Where) Admits(column, value string) bool {
 type FilteredProvider interface {
 	Provider
 	// SnapshotWhere is Snapshot over the rows where admits, at least.
-	SnapshotWhere(proj Projection, where Where) (arrow.RecordBatch, error)
+	SnapshotWhere(ctx context.Context, proj Projection, where Where) (arrow.RecordBatch, error)
+}
+
+// BoundRead is the context a provider's own read of a store runs under:
+// ctx as it is when it carries a deadline, and ctx ending after d when it
+// has none. A query's deadline is not shortened, and a caller without one
+// still gets a bounded wait (ADR-0395 §5).
+func BoundRead(ctx context.Context, d time.Duration) (bounded context.Context, cancel context.CancelFunc) {
+	if _, has := ctx.Deadline(); has {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, d)
 }
 
 // SnapshotWhere snapshots p with the filter when p can take one, and
 // without it otherwise; the caller filters the rows either way.
-func SnapshotWhere(p Provider, proj Projection, where Where) (arrow.RecordBatch, error) {
+func SnapshotWhere(ctx context.Context, p Provider, proj Projection, where Where) (arrow.RecordBatch, error) {
 	if f, ok := p.(FilteredProvider); ok {
-		return f.SnapshotWhere(proj, where)
+		return f.SnapshotWhere(ctx, proj, where)
 	}
-	return p.Snapshot(proj)
+	return p.Snapshot(ctx, proj)
 }
 
 // EncryptedDatasetI marks a Provider that is a sealed dataset (ADR-0240,

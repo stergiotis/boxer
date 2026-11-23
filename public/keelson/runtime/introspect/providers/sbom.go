@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 
@@ -84,7 +85,7 @@ func (sbomProvider) Name() string                         { return "sbom" }
 func (sbomProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
 func (sbomProvider) Schema() *arrow.Schema                { return sbomTable(nil).Schema() }
 
-func (sbomProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (sbomProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	comps := loadSbomComponents()
 	return sbomTable(comps).Build(proj, len(comps)), nil
 }

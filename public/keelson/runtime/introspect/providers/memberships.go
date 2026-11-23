@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"sort"
 	"sync"
 
@@ -85,7 +86,7 @@ func (membershipsProvider) Freshness() introspect.FreshnessClass {
 
 func (membershipsProvider) Schema() *arrow.Schema { return membershipsTable(nil).Schema() }
 
-func (membershipsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (membershipsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	rows := membershipRows()
 	return membershipsTable(rows).Build(proj, len(rows)), nil
 }

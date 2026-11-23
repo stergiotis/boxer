@@ -114,10 +114,14 @@ the interface change, and the stopgap timeouts, to this decision.
 - The window host, the column-width resolver, the task supervisor, the
   agent service, the coverage trail, sysmtee and the log bridge take a
   lifetime ctx at construction instead of a ctx per call.
-- Deferred: the introspect providers' `Snapshot` / `SnapshotArgs` /
-  `SnapshotWhere` take no ctx yet (a `// deferred:` note on
-  `introspect.Provider`); the providers that read a store are in CS020's
-  baseline. The persist backend's round trip stays inside its lock (the
+- The introspect providers' `Snapshot` / `SnapshotArgs` / `SnapshotWhere`
+  take the query's ctx, as every provider in the tree does, whether it
+  reads a store or answers from memory: one interface, and a provider
+  that starts reading a store later has the ctx already. A provider's own
+  timeout follows item 5 through `introspect.BoundRead`. A cache filled
+  once per process (the Go dependency graph's) still roots its own: what
+  it loads outlives the query that asked first.
+- Deferred: the persist backend's round trip stays inside its lock (the
   ADR-0386 deferral stands).
 
 ## Status

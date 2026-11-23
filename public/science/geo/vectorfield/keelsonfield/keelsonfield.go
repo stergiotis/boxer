@@ -12,6 +12,7 @@
 package keelsonfield
 
 import (
+	"context"
 	"math"
 	"slices"
 	"strconv"
@@ -182,7 +183,7 @@ var relationSchema = arrow.NewSchema([]arrow.Field{
 func (inst relationProvider) Name() string                    { return inst.name }
 func (relationProvider) Schema() *arrow.Schema                { return relationSchema }
 func (relationProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
-func (inst relationProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (inst relationProvider) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	f, err := inst.src.get()
 	if err != nil {
 		return nil, err
@@ -230,7 +231,7 @@ var optsSchema = arrow.NewSchema([]arrow.Field{
 func (inst optsProvider) Name() string                    { return inst.name }
 func (optsProvider) Schema() *arrow.Schema                { return optsSchema }
 func (optsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
-func (inst optsProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (inst optsProvider) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	f, err := inst.src.get()
 	if err != nil {
 		return nil, err
@@ -321,13 +322,13 @@ var stepsSchema = arrow.NewSchema([]arrow.Field{
 func (inst stepsProvider) Name() string                    { return inst.name }
 func (stepsProvider) Schema() *arrow.Schema                { return stepsSchema }
 func (stepsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
-func (inst stepsProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (inst stepsProvider) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	return nil, noSnapshot(inst.name)
 }
 func (stepsProvider) Args() []introspect.ArgSpec {
 	return []introspect.ArgSpec{req("cap", introspect.ArgTypeUInt64)}
 }
-func (inst stepsProvider) SnapshotArgs(_ introspect.Projection, a introspect.Args) (arrow.RecordBatch, error) {
+func (inst stepsProvider) SnapshotArgs(ctx context.Context, _ introspect.Projection, a introspect.Args) (arrow.RecordBatch, error) {
 	f, err := inst.src.get()
 	if err != nil {
 		return nil, err
@@ -372,13 +373,13 @@ var geometrySchema = arrow.NewSchema([]arrow.Field{
 func (inst geometryProvider) Name() string                    { return inst.name }
 func (geometryProvider) Schema() *arrow.Schema                { return geometrySchema }
 func (geometryProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
-func (inst geometryProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (inst geometryProvider) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	return nil, noSnapshot(inst.name)
 }
 func (geometryProvider) Args() []introspect.ArgSpec {
 	return []introspect.ArgSpec{req("t", introspect.ArgTypeString)}
 }
-func (inst geometryProvider) SnapshotArgs(_ introspect.Projection, a introspect.Args) (arrow.RecordBatch, error) {
+func (inst geometryProvider) SnapshotArgs(ctx context.Context, _ introspect.Projection, a introspect.Args) (arrow.RecordBatch, error) {
 	f, err := inst.src.get()
 	if err != nil {
 		return nil, err
@@ -444,7 +445,7 @@ var regularitySchema = arrow.NewSchema([]arrow.Field{
 func (inst regularityProvider) Name() string                    { return inst.name }
 func (regularityProvider) Schema() *arrow.Schema                { return regularitySchema }
 func (regularityProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
-func (inst regularityProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (inst regularityProvider) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	return nil, noSnapshot(inst.name)
 }
 func (regularityProvider) Args() []introspect.ArgSpec {
@@ -454,7 +455,7 @@ func (regularityProvider) Args() []introspect.ArgSpec {
 		req("dlon", introspect.ArgTypeFloat64), req("dlat", introspect.ArgTypeFloat64),
 	}
 }
-func (inst regularityProvider) SnapshotArgs(_ introspect.Projection, a introspect.Args) (arrow.RecordBatch, error) {
+func (inst regularityProvider) SnapshotArgs(ctx context.Context, _ introspect.Projection, a introspect.Args) (arrow.RecordBatch, error) {
 	f, err := inst.src.get()
 	if err != nil {
 		return nil, err
@@ -498,7 +499,7 @@ var windowSchema = arrow.NewSchema([]arrow.Field{
 func (inst windowProvider) Name() string                    { return inst.name }
 func (windowProvider) Schema() *arrow.Schema                { return windowSchema }
 func (windowProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
-func (inst windowProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (inst windowProvider) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	return nil, noSnapshot(inst.name)
 }
 func (windowProvider) Args() []introspect.ArgSpec {
@@ -515,7 +516,7 @@ type binAcc struct {
 	valid       uint32
 }
 
-func (inst windowProvider) SnapshotArgs(_ introspect.Projection, a introspect.Args) (batch arrow.RecordBatch, err error) {
+func (inst windowProvider) SnapshotArgs(ctx context.Context, _ introspect.Projection, a introspect.Args) (batch arrow.RecordBatch, err error) {
 	f, err := inst.src.get()
 	if err != nil {
 		return nil, err
@@ -631,11 +632,11 @@ var summarySchema = arrow.NewSchema([]arrow.Field{
 func (inst summaryProvider) Name() string                    { return inst.name }
 func (summaryProvider) Schema() *arrow.Schema                { return summarySchema }
 func (summaryProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
-func (inst summaryProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (inst summaryProvider) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	return nil, noSnapshot(inst.name)
 }
 func (summaryProvider) Args() []introspect.ArgSpec { return planeArgs }
-func (inst summaryProvider) SnapshotArgs(_ introspect.Projection, a introspect.Args) (batch arrow.RecordBatch, err error) {
+func (inst summaryProvider) SnapshotArgs(ctx context.Context, _ introspect.Projection, a introspect.Args) (batch arrow.RecordBatch, err error) {
 	f, err := inst.src.get()
 	if err != nil {
 		return nil, err

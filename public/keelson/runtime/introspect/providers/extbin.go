@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"encoding/hex"
 	"io"
 	"os"
@@ -31,7 +32,7 @@ func (extbinProvider) Name() string                         { return "extbin" }
 func (extbinProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (extbinProvider) Schema() *arrow.Schema                { return extbinTable(nil).Schema() }
 
-func (extbinProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (extbinProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	progs := extbin.Registry()
 	rows := make([]extbinRow, len(progs))
 	for i, p := range progs {

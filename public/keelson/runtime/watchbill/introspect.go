@@ -88,8 +88,8 @@ func (workerProvider) Name() string                         { return TableWorker
 func (workerProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (workerProvider) Schema() *arrow.Schema                { return workerTable(nil).Schema() }
 
-func (p workerProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
-	rows, err := p.rows(context.Background(), time.Now())
+func (p workerProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+	rows, err := p.rows(ctx, time.Now())
 	if err != nil {
 		return
 	}
@@ -177,10 +177,10 @@ func (jobsProvider) Name() string                         { return TableJobs }
 func (jobsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (jobsProvider) Schema() *arrow.Schema                { return jobsTable(nil).Schema() }
 
-func (p jobsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (p jobsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	var rows []watchbillstore.Job
 	if p.lister != nil {
-		if rows, err = p.lister.ListJobs(context.Background(), snapshotLimit); err != nil {
+		if rows, err = p.lister.ListJobs(ctx, snapshotLimit); err != nil {
 			return
 		}
 	}
@@ -226,10 +226,10 @@ func (eventsProvider) Name() string                         { return TableEvent 
 func (eventsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (eventsProvider) Schema() *arrow.Schema                { return eventsTable(nil).Schema() }
 
-func (p eventsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (p eventsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	var rows []EventRow
 	if p.lister != nil {
-		if rows, err = p.lister.ListEvents(context.Background(), snapshotLimit); err != nil {
+		if rows, err = p.lister.ListEvents(ctx, snapshotLimit); err != nil {
 			return
 		}
 	}

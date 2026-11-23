@@ -583,7 +583,7 @@ func TestCaptureAndRecords(t *testing.T) {
 	for _, name := range []string{TableGrants, TableActions} {
 		p, ok := reg.Lookup(name)
 		require.True(t, ok)
-		rec, err := p.Snapshot(introspect.Projection{})
+		rec, err := p.Snapshot(t.Context(), introspect.Projection{})
 		require.NoError(t, err)
 		assert.Positive(t, rec.NumRows(), name)
 		rec.Release()

@@ -2,6 +2,7 @@ package introspect
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -137,7 +138,7 @@ func (s *stubProvider) Schema() *arrow.Schema {
 	return NewTable().String("x", func(int) string { return "" }).Schema()
 }
 func (s *stubProvider) Freshness() FreshnessClass { return FreshnessStatic }
-func (s *stubProvider) Snapshot(proj Projection) (arrow.RecordBatch, error) {
+func (s *stubProvider) Snapshot(ctx context.Context, proj Projection) (arrow.RecordBatch, error) {
 	return NewTable().String("x", func(int) string { return "" }).Build(proj, 0), nil
 }
 
@@ -152,13 +153,13 @@ func TestWhereAdmitsAndFallsBack(t *testing.T) {
 	assert.False(t, w.Admits("store", "journal"))
 	assert.True(t, w.Admits("law", "L34"), "a column the filter does not name admits every value")
 
-	rec, err := SnapshotWhere(&stubProvider{name: "x"}, AllColumns(), w)
+	rec, err := SnapshotWhere(t.Context(), &stubProvider{name: "x"}, AllColumns(), w)
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.EqualValues(t, 0, rec.NumRows())
 
 	var filtered filteredStub
-	rec, err = SnapshotWhere(&filtered, AllColumns(), w)
+	rec, err = SnapshotWhere(t.Context(), &filtered, AllColumns(), w)
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.Equal(t, w, filtered.got, "a provider that takes the filter is handed it")
@@ -170,7 +171,7 @@ type filteredStub struct {
 	got Where
 }
 
-func (s *filteredStub) SnapshotWhere(proj Projection, where Where) (arrow.RecordBatch, error) {
+func (s *filteredStub) SnapshotWhere(ctx context.Context, proj Projection, where Where) (arrow.RecordBatch, error) {
 	s.got = where
-	return s.Snapshot(proj)
+	return s.Snapshot(ctx, proj)
 }

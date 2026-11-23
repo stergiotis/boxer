@@ -15,6 +15,7 @@
 package providers
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"time"
@@ -53,7 +54,7 @@ func (subscriptionsProvider) Name() string                         { return "sub
 func (subscriptionsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (subscriptionsProvider) Schema() *arrow.Schema                { return subscriptionsTable(nil).Schema() }
 
-func (p subscriptionsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p subscriptionsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []inprocbus.SubscriptionInfo
 	if p.bus != nil {
 		rows = p.bus.Subscriptions()
@@ -96,7 +97,7 @@ type clientCapRow struct {
 	declared    bool
 }
 
-func (p clientCapsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p clientCapsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []clientCapRow
 	if p.bus != nil {
 		clients := p.bus.LiveClients()
@@ -157,7 +158,7 @@ func (tasksProvider) Name() string                         { return "tasks" }
 func (tasksProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (tasksProvider) Schema() *arrow.Schema                { return tasksTable(nil).Schema() }
 
-func (p tasksProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p tasksProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []supervisor.InflightEntry
 	if p.sup != nil {
 		rows = p.sup.InflightSnapshot()

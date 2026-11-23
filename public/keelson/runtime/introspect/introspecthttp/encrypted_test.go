@@ -36,7 +36,7 @@ func (s *sealedStub) Schema() *arrow.Schema {
 }
 func (s *sealedStub) Structure() string { return "id Int64" }
 func (s *sealedStub) Revision() uint64  { return s.revision }
-func (s *sealedStub) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (s *sealedStub) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	return nil, assert.AnError
 }
 func (s *sealedStub) Open() (io.ReadSeekCloser, uint64, error) {

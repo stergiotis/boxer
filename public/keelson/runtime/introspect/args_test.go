@@ -1,6 +1,7 @@
 package introspect
 
 import (
+	"context"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -16,7 +17,7 @@ type seqProvider struct{}
 func (seqProvider) Name() string              { return "seq" }
 func (seqProvider) Freshness() FreshnessClass { return FreshnessLive }
 func (seqProvider) Schema() *arrow.Schema     { return seqTable(0, "").Schema() }
-func (seqProvider) Snapshot(Projection) (arrow.RecordBatch, error) {
+func (seqProvider) Snapshot(context.Context, Projection) (arrow.RecordBatch, error) {
 	return nil, assert.AnError
 }
 func (seqProvider) Args() []ArgSpec {
@@ -25,7 +26,7 @@ func (seqProvider) Args() []ArgSpec {
 		{Name: "label", Type: ArgTypeString, Default: "x"},
 	}
 }
-func (seqProvider) SnapshotArgs(proj Projection, args Args) (arrow.RecordBatch, error) {
+func (seqProvider) SnapshotArgs(ctx context.Context, proj Projection, args Args) (arrow.RecordBatch, error) {
 	n := int(args.UInt64("n"))
 	return seqTable(n, args.String("label")).Build(proj, n), nil
 }
@@ -74,18 +75,18 @@ func TestArgsKey_IsCanonical(t *testing.T) {
 }
 
 func TestSnapshotCall(t *testing.T) {
-	batch, err := SnapshotCall(seqProvider{}, AllColumns(), map[string]string{"n": "4", "label": "z"})
+	batch, err := SnapshotCall(t.Context(), seqProvider{}, AllColumns(), map[string]string{"n": "4", "label": "z"})
 	require.NoError(t, err)
 	defer batch.Release()
 	assert.Equal(t, int64(4), batch.NumRows())
 	assert.Equal(t, uint64(4), batch.Column(0).(*array.Uint64).Value(3))
 	assert.Equal(t, "z", batch.Column(1).(*array.String).Value(0))
 
-	_, err = SnapshotCall(seqProvider{}, AllColumns(), map[string]string{})
+	_, err = SnapshotCall(t.Context(), seqProvider{}, AllColumns(), map[string]string{})
 	assert.Error(t, err, "a required argument is missing")
 }
 
 func TestSnapshotCall_ArgumentsToAPlainProviderAreRefused(t *testing.T) {
-	_, err := SnapshotCall(&tablesProvider{reg: NewRegistry()}, AllColumns(), map[string]string{"n": "1"})
+	_, err := SnapshotCall(t.Context(), &tablesProvider{reg: NewRegistry()}, AllColumns(), map[string]string{"n": "1"})
 	assert.Error(t, err)
 }

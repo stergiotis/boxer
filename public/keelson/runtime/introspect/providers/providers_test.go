@@ -32,7 +32,7 @@ func TestProvidersSnapshotWell(t *testing.T) {
 	for _, p := range r.Providers() {
 		t.Run(p.Name(), func(t *testing.T) {
 			require.Greater(t, p.Schema().NumFields(), 0)
-			rec, err := p.Snapshot(introspect.AllColumns())
+			rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 			require.NoError(t, err)
 			defer rec.Release()
 			assert.EqualValues(t, p.Schema().NumFields(), rec.NumCols(),
@@ -44,7 +44,7 @@ func TestProvidersSnapshotWell(t *testing.T) {
 func TestEnvProviderHasRows(t *testing.T) {
 	// config/env and runinfo register at least BOXER_RUN_ID and
 	// KEELSON_INTROSPECT_SBOM_PATH, so the live registry is non-empty.
-	rec, err := envProvider{}.Snapshot(introspect.AllColumns())
+	rec, err := envProvider{}.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.Positive(t, rec.NumRows())
@@ -61,7 +61,7 @@ func TestEnvProviderRedactsSensitive(t *testing.T) {
 }
 
 func TestEnvProviderProjection(t *testing.T) {
-	rec, err := envProvider{}.Snapshot(introspect.Columns("name"))
+	rec, err := envProvider{}.Snapshot(t.Context(), introspect.Columns("name"))
 	require.NoError(t, err)
 	defer rec.Release()
 	require.EqualValues(t, 1, rec.NumCols())
@@ -71,7 +71,7 @@ func TestEnvProviderProjection(t *testing.T) {
 func TestExtbinProviderHasRows(t *testing.T) {
 	// extbin's package init declares the central host programs (git, scc, …),
 	// so the live registry is non-empty.
-	rec, err := extbinProvider{}.Snapshot(introspect.AllColumns())
+	rec, err := extbinProvider{}.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.Positive(t, rec.NumRows())

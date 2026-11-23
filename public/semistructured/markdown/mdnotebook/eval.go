@@ -1,6 +1,7 @@
 package mdnotebook
 
 import (
+	"context"
 	"errors"
 	"strings"
 
@@ -87,7 +88,9 @@ func Evaluate(statement string, records map[string]arrow.RecordBatch) (res *Resu
 	if records == nil {
 		records = map[string]arrow.RecordBatch{}
 	}
-	ans, err := trivialsql.ReadTables(noTables, statement, nil, records)
+	// The registry names no table: no provider is asked, and nothing is
+	// read or waited for under this context.
+	ans, err := trivialsql.ReadTables(context.Background(), noTables, statement, nil, records) //boxer:lint disable=CS020 reason="documented root: the statement is evaluated over records in memory against a registry that names no table"
 	if err != nil {
 		var r *trivialsql.RefusalError
 		switch {

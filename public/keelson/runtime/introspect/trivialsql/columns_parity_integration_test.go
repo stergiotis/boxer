@@ -83,7 +83,7 @@ func TestReadTables_AnswerAsClickHouseDoes(t *testing.T) {
 	for _, c := range tableCases {
 		ch, chFailed := clickhouseLocal(t, withFormat(boundAsWith(c.sql)))
 		var body []byte
-		ans, err := ReadTables(reg(t), c.sql, nil, tables)
+		ans, err := ReadTables(t.Context(), reg(t), c.sql, nil, tables)
 		if err == nil {
 			body, err = Encode(ans.Main, FormatTabSeparatedWithNames)
 			ans.Release()

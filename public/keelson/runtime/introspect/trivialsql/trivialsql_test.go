@@ -23,13 +23,13 @@ type seqProvider struct{}
 func (seqProvider) Name() string                         { return "seq" }
 func (seqProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (seqProvider) Schema() *arrow.Schema                { return seqTable().Schema() }
-func (seqProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (seqProvider) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	return nil, assert.AnError
 }
 func (seqProvider) Args() []introspect.ArgSpec {
 	return []introspect.ArgSpec{{Name: "n", Type: introspect.ArgTypeUInt64, Required: true}}
 }
-func (seqProvider) SnapshotArgs(proj introspect.Projection, args introspect.Args) (arrow.RecordBatch, error) {
+func (seqProvider) SnapshotArgs(ctx context.Context, proj introspect.Projection, args introspect.Args) (arrow.RecordBatch, error) {
 	return seqTable().Build(proj, int(args.UInt64("n"))), nil
 }
 
@@ -46,7 +46,7 @@ type plainProvider struct{}
 func (plainProvider) Name() string                         { return "plain" }
 func (plainProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
 func (plainProvider) Schema() *arrow.Schema                { return seqTable().Schema() }
-func (plainProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (plainProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	return seqTable().Build(proj, 2), nil
 }
 
@@ -117,7 +117,7 @@ func TestRun_Shapes(t *testing.T) {
 }
 
 func TestRun_ArrowStream(t *testing.T) {
-	batch, format, err := Read(reg(t), "SELECT * FROM keelson('seq', n = 4) FORMAT ArrowStream", nil)
+	batch, format, err := Read(t.Context(), reg(t), "SELECT * FROM keelson('seq', n = 4) FORMAT ArrowStream", nil)
 	require.NoError(t, err)
 	defer batch.Release()
 	assert.Equal(t, FormatArrowStream, format)

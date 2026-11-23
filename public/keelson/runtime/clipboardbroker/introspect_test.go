@@ -33,7 +33,7 @@ func TestCopiesTable(t *testing.T) {
 		assert.NotEqual(t, "handle", f.Name, "the handle resolves to the text")
 	}
 
-	empty, err := copiesProvider{}.Snapshot(introspect.AllColumns())
+	empty, err := copiesProvider{}.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer empty.Release()
 	assert.EqualValues(t, 0, empty.NumRows())

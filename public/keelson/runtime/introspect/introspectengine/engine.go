@@ -252,7 +252,7 @@ func (e *Engine) exec(ctx context.Context, sql, format string, params map[string
 		if !ok {
 			return nil, "", eb.Build().Str("table", c.Table).Errorf("introspectengine: the keelson table was unregistered during the run")
 		}
-		b, snapErr := introspect.SnapshotCallFile(prov, introspect.AllColumns(), c.Raw)
+		b, snapErr := introspect.SnapshotCallFile(ctx, prov, introspect.AllColumns(), c.Raw)
 		if snapErr != nil {
 			return nil, "", eb.Build().Str("table", c.Table).Errorf("introspectengine: snapshot failed: %w", snapErr)
 		}
@@ -280,7 +280,7 @@ func (e *Engine) exec(ctx context.Context, sql, format string, params map[string
 		if !ok {
 			pj = introspect.AllColumns()
 		}
-		b, snapErr := introspect.SnapshotFile(prov, pj)
+		b, snapErr := introspect.SnapshotFile(ctx, prov, pj)
 		if snapErr != nil {
 			return nil, "", eb.Build().Str("table", t).Errorf("introspectengine: snapshot failed: %w", snapErr)
 		}

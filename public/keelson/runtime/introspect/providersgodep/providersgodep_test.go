@@ -186,7 +186,7 @@ func TestRegisterAddsTheFourTables(t *testing.T) {
 func TestPackagePropsTableIsStatic(t *testing.T) {
 	p := packagePropsProvider{}
 	assert.Equal(t, introspect.FreshnessStatic, p.Freshness())
-	rec, err := p.Snapshot(introspect.AllColumns())
+	rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.Positive(t, rec.NumRows(), "the generated whole-repo table is not empty")

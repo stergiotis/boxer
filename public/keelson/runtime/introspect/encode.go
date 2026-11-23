@@ -2,6 +2,7 @@ package introspect
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
@@ -49,8 +50,8 @@ func EncodeFile(batch arrow.RecordBatch) (b []byte, err error) {
 
 // SnapshotStream snapshots p under proj and returns ArrowStream bytes,
 // releasing the intermediate batch. Used by the HTTP table source.
-func SnapshotStream(p Provider, proj Projection) (b []byte, err error) {
-	batch, err := p.Snapshot(proj)
+func SnapshotStream(ctx context.Context, p Provider, proj Projection) (b []byte, err error) {
+	batch, err := p.Snapshot(ctx, proj)
 	if err != nil {
 		return nil, err
 	}
@@ -61,8 +62,8 @@ func SnapshotStream(p Provider, proj Projection) (b []byte, err error) {
 // SnapshotFile snapshots p under proj and returns Arrow file bytes,
 // releasing the intermediate batch. Used to populate chlocalbroker
 // InputTables.
-func SnapshotFile(p Provider, proj Projection) (b []byte, err error) {
-	batch, err := p.Snapshot(proj)
+func SnapshotFile(ctx context.Context, p Provider, proj Projection) (b []byte, err error) {
+	batch, err := p.Snapshot(ctx, proj)
 	if err != nil {
 		return nil, err
 	}

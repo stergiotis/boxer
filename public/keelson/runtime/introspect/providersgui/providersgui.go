@@ -7,6 +7,7 @@
 package providersgui
 
 import (
+	"context"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -72,7 +73,7 @@ func (demosProvider) Name() string                         { return "demos" }
 func (demosProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
 func (demosProvider) Schema() *arrow.Schema                { return demosTable(nil).Schema() }
 
-func (demosProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (demosProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	ds := demoreg.All() // sorted by Name
 	return demosTable(ds).Build(proj, len(ds)), nil
 }
@@ -122,7 +123,7 @@ func (windowsProvider) Name() string                         { return TableWindo
 func (windowsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (p windowsProvider) Schema() *arrow.Schema              { return windowsTable(nil, nil).Schema() }
 
-func (p windowsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p windowsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var infos []windowhost.WindowInfo
 	if p.host != nil {
 		infos = p.host.WindowInfos()
@@ -213,7 +214,7 @@ func (desktopProvider) Name() string                         { return TableDeskt
 func (desktopProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (desktopProvider) Schema() *arrow.Schema                { return desktopTable(nil).Schema() }
 
-func (p desktopProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p desktopProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []windowhost.DesktopInfo
 	if p.host != nil {
 		rows = append(rows, p.host.DesktopInfo())
@@ -260,7 +261,7 @@ func (frameTimesProvider) Name() string                         { return TableFr
 func (frameTimesProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (frameTimesProvider) Schema() *arrow.Schema                { return frameTimesTable(nil).Schema() }
 
-func (p frameTimesProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p frameTimesProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []windowhost.FrameTimeInfo
 	if p.host != nil {
 		rows = p.host.FrameTimes()

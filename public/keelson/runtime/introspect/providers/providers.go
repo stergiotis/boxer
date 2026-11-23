@@ -10,6 +10,7 @@
 package providers
 
 import (
+	"context"
 	"sort"
 	"time"
 
@@ -70,7 +71,7 @@ func (envProvider) Name() string                         { return "env" }
 func (envProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (envProvider) Schema() *arrow.Schema                { return envTable(nil).Schema() }
 
-func (envProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (envProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	specs := env.All()
 	sort.Slice(specs, func(i, j int) bool { return specs[i].Name < specs[j].Name })
 	return envTable(specs).Build(proj, len(specs)), nil
@@ -120,7 +121,7 @@ func (appsProvider) Name() string { return "apps" }
 func (appsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (appsProvider) Schema() *arrow.Schema                { return appsTable(nil, nil).Schema() }
 
-func (inst appsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (inst appsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	reg := inst.reg
 	if reg == nil {
 		reg = app.DefaultRegistry
@@ -242,7 +243,7 @@ func (buildProvider) Name() string                         { return "build" }
 func (buildProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
 func (buildProvider) Schema() *arrow.Schema                { return buildTable(nil).Schema() }
 
-func (buildProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (buildProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []*runinfo.Inst
 	if inst, err := runinfo.Get(); err == nil {
 		rows = []*runinfo.Inst{inst}

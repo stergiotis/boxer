@@ -33,10 +33,10 @@ func (runsProvider) Name() string                         { return TableRuns }
 func (runsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (runsProvider) Schema() *arrow.Schema                { return runsTable(nil).Schema() }
 
-func (inst runsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (inst runsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	var runs []Run
 	if inst.store != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+		ctx, cancel := introspect.BoundRead(ctx, DefaultTimeout)
 		defer cancel()
 		if runs, err = inst.store.ListRuns(ctx, "", 0); err != nil {
 			return
@@ -77,10 +77,10 @@ func (entriesProvider) Name() string                         { return TableEntri
 func (entriesProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (entriesProvider) Schema() *arrow.Schema                { return entriesTable(nil).Schema() }
 
-func (inst entriesProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (inst entriesProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	var entries []Entry
 	if inst.store != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+		ctx, cancel := introspect.BoundRead(ctx, DefaultTimeout)
 		defer cancel()
 		if entries, err = allEntries(ctx, inst.store); err != nil {
 			return

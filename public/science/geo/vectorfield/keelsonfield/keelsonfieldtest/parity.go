@@ -129,14 +129,14 @@ type trivialQueryer struct {
 	canonical bool
 }
 
-func (inst trivialQueryer) Query(_ context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
+func (inst trivialQueryer) Query(ctx context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
 	if inst.canonical {
 		statement, err = passes.CanonicalizeFull(100).Run(statement)
 		if err != nil {
 			return nil, err
 		}
 	}
-	rec, _, err = trivialsql.Read(inst.reg, statement, params)
+	rec, _, err = trivialsql.Read(ctx, inst.reg, statement, params)
 	return
 }
 

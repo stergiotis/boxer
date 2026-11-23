@@ -1,6 +1,7 @@
 package adhocdata
 
 import (
+	"context"
 	"slices"
 	"strings"
 
@@ -85,7 +86,7 @@ func (c *catalogProvider) Freshness() introspect.FreshnessClass { return introsp
 
 func (c *catalogProvider) Schema() *arrow.Schema { return catalogTable(nil).Schema() }
 
-func (c *catalogProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (c *catalogProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	rows := c.svc.catalogRows()
 	return catalogTable(rows).Build(proj, len(rows)), nil
 }
@@ -195,7 +196,7 @@ func (c *bundleCatalogProvider) Freshness() introspect.FreshnessClass {
 
 func (c *bundleCatalogProvider) Schema() *arrow.Schema { return bundleCatalogTable(nil).Schema() }
 
-func (c *bundleCatalogProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (c *bundleCatalogProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	rows := c.svc.bundleCatalogRows()
 	return bundleCatalogTable(rows).Build(proj, len(rows)), nil
 }

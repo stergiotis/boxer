@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"context"
 	"slices"
 	"sync"
 
@@ -72,7 +73,7 @@ type toolsProvider struct{}
 func (toolsProvider) Name() string                         { return TableTools }
 func (toolsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (toolsProvider) Schema() *arrow.Schema                { return toolsTable(nil).Schema() }
-func (toolsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (toolsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	rows := PublishedTools()
 	rec = toolsTable(rows).Build(proj, len(rows))
 	return

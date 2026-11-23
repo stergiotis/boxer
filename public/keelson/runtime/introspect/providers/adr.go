@@ -1,6 +1,8 @@
 package providers
 
 import (
+	"context"
+
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/gov/adrcorpus"
@@ -63,7 +65,7 @@ func (adrProvider) Name() string                         { return "adr" }
 func (adrProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (adrProvider) Schema() *arrow.Schema                { return adrTable(nil).Schema() }
 
-func (adrProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (adrProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	rows, _, _ := adrcorpus.Load()
 	return adrTable(rows).Build(proj, len(rows)), nil
 }
@@ -82,7 +84,7 @@ func (subtaskProvider) Name() string                         { return "subtask" 
 func (subtaskProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (subtaskProvider) Schema() *arrow.Schema                { return subtaskTable(nil).Schema() }
 
-func (subtaskProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (subtaskProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	_, rows, _ := adrcorpus.Load()
 	return subtaskTable(rows).Build(proj, len(rows)), nil
 }
@@ -109,7 +111,7 @@ func (adrcontentProvider) Name() string                         { return "adrcon
 func (adrcontentProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (adrcontentProvider) Schema() *arrow.Schema                { return adrcontentTable(nil).Schema() }
 
-func (adrcontentProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (adrcontentProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	rows := adrcorpus.LoadContents()
 	return adrcontentTable(rows).Build(proj, len(rows)), nil
 }
@@ -123,7 +125,7 @@ func (coderefProvider) Name() string                         { return "coderef" 
 func (coderefProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (coderefProvider) Schema() *arrow.Schema                { return coderefTable(nil).Schema() }
 
-func (coderefProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (coderefProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	_, _, rows := adrcorpus.Load()
 	return coderefTable(rows).Build(proj, len(rows)), nil
 }

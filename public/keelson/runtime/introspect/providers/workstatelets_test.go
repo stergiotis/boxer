@@ -15,7 +15,7 @@ import (
 // The provider serves what the catalog holds, and a nil catalog is an empty
 // table with the same columns rather than an absent one.
 func TestWorkstateletsProviderReadsCatalog(t *testing.T) {
-	empty, err := workstateletsProvider{}.Snapshot(introspect.AllColumns())
+	empty, err := workstateletsProvider{}.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer empty.Release()
 	assert.EqualValues(t, 0, empty.NumRows())
@@ -30,7 +30,7 @@ func TestWorkstateletsProviderReadsCatalog(t *testing.T) {
 	id, err := cat.Mint(reg, composed, workstatelet.OriginStored, "")
 	require.NoError(t, err)
 
-	rec, err := workstateletsProvider{cat: cat}.Snapshot(introspect.AllColumns())
+	rec, err := workstateletsProvider{cat: cat}.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 	require.EqualValues(t, 1, rec.NumRows())

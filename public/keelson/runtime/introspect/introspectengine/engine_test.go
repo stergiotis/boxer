@@ -46,7 +46,7 @@ func TestPlan_SingleTablePrunes(t *testing.T) {
 	require.False(t, p.proj["env"].IsAll())
 
 	prov, _ := e.reg.Lookup("env")
-	rec, err := prov.Snapshot(p.proj["env"])
+	rec, err := prov.Snapshot(t.Context(), p.proj["env"])
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.ElementsMatch(t, []string{"name", "category", "sensitive"}, fieldNames(rec))
@@ -73,7 +73,7 @@ func TestPlan_QuotedColumnSurvivesPruning(t *testing.T) {
 	require.True(t, p.pruned)
 
 	prov, _ := e.reg.Lookup("adrcontent")
-	rec, err := prov.Snapshot(p.proj["adrcontent"])
+	rec, err := prov.Snapshot(t.Context(), p.proj["adrcontent"])
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.ElementsMatch(t, []string{"num", "content@text/markdown"}, fieldNames(rec),
@@ -91,7 +91,7 @@ func TestPlan_AdrContentPrunesToMetadata(t *testing.T) {
 	require.True(t, p.pruned)
 
 	prov, _ := e.reg.Lookup("adrcontent")
-	rec, err := prov.Snapshot(p.proj["adrcontent"])
+	rec, err := prov.Snapshot(t.Context(), p.proj["adrcontent"])
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.ElementsMatch(t, []string{"num", "path"}, fieldNames(rec))
@@ -261,7 +261,7 @@ func (s *sealedStub) Freshness() introspect.FreshnessClass { return introspect.F
 func (s *sealedStub) Schema() *arrow.Schema                { return arrow.NewSchema(nil, nil) }
 func (s *sealedStub) Structure() string                    { return s.structure }
 func (s *sealedStub) Revision() uint64                     { return 1 }
-func (s *sealedStub) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (s *sealedStub) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	return nil, assert.AnError
 }
 func (s *sealedStub) Open() (io.ReadSeekCloser, uint64, error) { return nil, 0, assert.AnError }

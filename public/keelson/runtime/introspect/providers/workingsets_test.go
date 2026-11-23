@@ -60,7 +60,7 @@ func TestWorkingsetsProviderReadsStore(t *testing.T) {
 	require.NoError(t, err)
 
 	p := workingsetsProvider{state: store}
-	rec, err := p.Snapshot(introspect.AllColumns())
+	rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 	require.EqualValues(t, 2, rec.NumRows())
@@ -73,7 +73,7 @@ func TestWorkingsetsProviderReadsStore(t *testing.T) {
 // table is empty rather than absent, the keelson('windows') precedent.
 func TestWorkingsetsProviderNilStore(t *testing.T) {
 	p := workingsetsProvider{}
-	rec, err := p.Snapshot(introspect.AllColumns())
+	rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.EqualValues(t, 0, rec.NumRows())
@@ -87,7 +87,7 @@ func TestWorkingsetsProviderNilStore(t *testing.T) {
 // silently report.
 func TestWorkingsetsProviderSurfacesStoreError(t *testing.T) {
 	p := workingsetsProvider{state: failingWorkingsetStore{statestore.NewMemory()}}
-	_, err := p.Snapshot(introspect.AllColumns())
+	_, err := p.Snapshot(t.Context(), introspect.AllColumns())
 	require.Error(t, err)
 }
 

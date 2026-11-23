@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"encoding/hex"
 	"strings"
 	"sync"
@@ -91,7 +92,7 @@ func (competenceProvider) Name() string                         { return "compet
 func (competenceProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (competenceProvider) Schema() *arrow.Schema                { return competenceTable(nil).Schema() }
 
-func (competenceProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (competenceProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	rows := capmapcorpus.Load().Competences
 	return competenceTable(rows).Build(proj, len(rows)), nil
 }
@@ -117,7 +118,7 @@ func (competencesectionProvider) Freshness() introspect.FreshnessClass {
 }
 func (competencesectionProvider) Schema() *arrow.Schema { return competencesectionTable(nil).Schema() }
 
-func (competencesectionProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (competencesectionProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	rows := flattenSections(capmapcorpus.Load().Competences)
 	return competencesectionTable(rows).Build(proj, len(rows)), nil
 }
@@ -139,7 +140,7 @@ func (competencerelationProvider) Schema() *arrow.Schema {
 	return competencerelationTable(nil).Schema()
 }
 
-func (competencerelationProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (competencerelationProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	rows := capmapcorpus.Load().Relations
 	return competencerelationTable(rows).Build(proj, len(rows)), nil
 }
@@ -160,7 +161,7 @@ func (competenceclaimProvider) Name() string                         { return "c
 func (competenceclaimProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (competenceclaimProvider) Schema() *arrow.Schema                { return competenceclaimTable(nil).Schema() }
 
-func (competenceclaimProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (competenceclaimProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	rows := flattenClaims(capmapcorpus.Load())
 	return competenceclaimTable(rows).Build(proj, len(rows)), nil
 }
@@ -180,7 +181,7 @@ func (competenceevidenceProvider) Schema() *arrow.Schema {
 	return competenceevidenceTable(nil).Schema()
 }
 
-func (competenceevidenceProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (competenceevidenceProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	rows := allSignals(capmapcorpus.Load())
 	return competenceevidenceTable(rows).Build(proj, len(rows)), nil
 }

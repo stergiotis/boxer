@@ -78,7 +78,7 @@ var _ factsstore.RunEventReaderI = (*Store)(nil)
 // carry no run id, so the only thing that can place them is their timestamp,
 // and a second boxer process overlapping this one lands its rows here too.
 // Rows written since carry the run and are selected by name.
-func (inst *Store) ListRunEvents(filter factsstore.RunEventFilter) (rows []factsstore.RunEventRow, err error) {
+func (inst *Store) ListRunEvents(ctx context.Context, filter factsstore.RunEventFilter) (rows []factsstore.RunEventRow, err error) {
 	if filter.RunId == "" {
 		err = eh.Errorf("chstore: ListRunEvents requires a non-empty RunId")
 		return
@@ -89,7 +89,7 @@ func (inst *Store) ListRunEvents(filter factsstore.RunEventFilter) (rows []facts
 	}
 	rows = []factsstore.RunEventRow{}
 	b := binds{}
-	err = inst.readRows(context.Background(), "run events",
+	err = inst.readRows(ctx, "run events",
 		composeRunEventsSql(inst.readTable(), filter, limit, b), b, 7, func(r row) {
 			rows = append(rows, factsstore.RunEventRow{
 				FactId:      r.str(0),

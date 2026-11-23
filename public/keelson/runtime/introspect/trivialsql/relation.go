@@ -2,6 +2,7 @@ package trivialsql
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"slices"
 	"strings"
@@ -39,7 +40,7 @@ type namedSelect struct {
 // readCtes takes the WITH queries of su; a WITH constant is the scope's.
 // Any other WITH item is refused even when nothing names it: ClickHouse
 // evaluates it, and may fail on it, which is not modelled here.
-func (inst *evaluator) readCtes(su *grammar1.SelectUnionStmtContext) (err error) {
+func (inst *evaluator) readCtes(ctx context.Context, su *grammar1.SelectUnionStmtContext) (err error) {
 	c := su.Ctes()
 	if c == nil {
 		return nil
@@ -128,7 +129,7 @@ type projItem struct {
 // table, or one row when there is no FROM — then its SELECT list of *,
 // columns and constants. A clause that filters, groups, orders or joins is
 // refused.
-func (inst *evaluator) evalSelect(sel *grammar1.SelectStmtContext, visible int) (batch arrow.RecordBatch, err error) {
+func (inst *evaluator) evalSelect(ctx context.Context, sel *grammar1.SelectStmtContext, visible int) (batch arrow.RecordBatch, err error) {
 	switch {
 	case len(sel.AllArrayJoinClause()) > 0:
 		return nil, refuse("ARRAY JOIN")
@@ -151,7 +152,7 @@ func (inst *evaluator) evalSelect(sel *grammar1.SelectStmtContext, visible int) 
 	if sel.FromClause() == nil {
 		src = array.NewRecordBatch(arrow.NewSchema(nil, nil), nil, 1)
 	} else {
-		src, err = inst.from(sel.FromClause().(*grammar1.FromClauseContext), visible)
+		src, err = inst.from(ctx, sel.FromClause().(*grammar1.FromClauseContext), visible)
 		if err != nil {
 			return nil, err
 		}
@@ -303,7 +304,7 @@ func defaultName(v keelsonsql.Constant) (name string) {
 }
 
 // from reads the FROM clause: one table, not joined.
-func (inst *evaluator) from(fc *grammar1.FromClauseContext, visible int) (batch arrow.RecordBatch, err error) {
+func (inst *evaluator) from(ctx context.Context, fc *grammar1.FromClauseContext, visible int) (batch arrow.RecordBatch, err error) {
 	var je *grammar1.JoinExprTableContext
 	switch j := fc.JoinExpr().(type) {
 	case *grammar1.JoinExprTableContext:
@@ -329,7 +330,7 @@ func (inst *evaluator) from(fc *grammar1.FromClauseContext, visible int) (batch 
 			if rErr != nil {
 				return nil, constantErr(rErr)
 			}
-			batch, err = introspect.SnapshotCall(p, introspect.AllColumns(), raw)
+			batch, err = introspect.SnapshotCall(ctx, p, introspect.AllColumns(), raw)
 			if err != nil {
 				return nil, err
 			}
@@ -346,7 +347,7 @@ func (inst *evaluator) from(fc *grammar1.FromClauseContext, visible int) (batch 
 				if inst.ctes[i].name != name {
 					continue
 				}
-				batch, err = inst.evalSelect(inst.ctes[i].sel, i)
+				batch, err = inst.evalSelect(ctx, inst.ctes[i].sel, i)
 				if err != nil {
 					return nil, err
 				}

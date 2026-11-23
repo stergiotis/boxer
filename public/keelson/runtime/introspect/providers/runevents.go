@@ -66,8 +66,8 @@ func (runEventsProvider) Name() string                         { return "runtime
 func (runEventsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (runEventsProvider) Schema() *arrow.Schema                { return runEventsTable(nil).Schema() }
 
-func (p runEventsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
-	rows := p.collect()
+func (p runEventsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
+	rows := p.collect(ctx)
 	sortRunEventsByTime(rows)
 	return runEventsTable(rows).Build(proj, len(rows)), nil
 }
@@ -85,7 +85,7 @@ func sortRunEventsByTime(rows []factsstore.RunEventRow) {
 // than to an error: this is a view of what a process did, and a reader
 // looking at it during an incident is worse served by an empty table than by
 // a partial one. The absence is visible — the trail simply stops.
-func (p runEventsProvider) collect() (rows []factsstore.RunEventRow) {
+func (p runEventsProvider) collect(ctx context.Context) (rows []factsstore.RunEventRow) {
 	inst, err := runinfo.Get()
 	if err != nil {
 		// No runinfo means no run identity, and every row here is scoped to
@@ -93,7 +93,7 @@ func (p runEventsProvider) collect() (rows []factsstore.RunEventRow) {
 		return
 	}
 	if p.reader != nil {
-		got, rerr := p.reader.ListRunEvents(factsstore.RunEventFilter{
+		got, rerr := p.reader.ListRunEvents(ctx, factsstore.RunEventFilter{
 			RunId: inst.RunId,
 			Since: inst.StartedAt,
 		})
@@ -101,7 +101,7 @@ func (p runEventsProvider) collect() (rows []factsstore.RunEventRow) {
 			rows = got
 		}
 	}
-	rows = append(rows, p.persistRows(inst.RunId, inst.StartedAt.UnixMilli())...)
+	rows = append(rows, p.persistRows(ctx, inst.RunId, inst.StartedAt.UnixMilli())...)
 	return
 }
 
@@ -116,13 +116,12 @@ func (p runEventsProvider) collect() (rows []factsstore.RunEventRow) {
 //
 // Rows written since ADR-0191 §SD5 name their run; older ones name none and
 // are placed by timestamp, the same rule the facts half applies.
-func (p runEventsProvider) persistRows(runId string, sinceMs int64) (rows []factsstore.RunEventRow) {
+func (p runEventsProvider) persistRows(ctx context.Context, runId string, sinceMs int64) (rows []factsstore.RunEventRow) {
 	if p.persistExec == nil {
 		return
 	}
 	store := persiststore.NewPersistStore(p.persistExec, nil, persiststore.PersistStoreConfig{})
 	defer store.Close()
-	ctx := context.Background()
 	for ent, serr := range store.ScanOwner(ctx, recordstore.ScanOpts{}) {
 		if serr != nil {
 			// Partial is better than nothing; the caller sees a short trail.

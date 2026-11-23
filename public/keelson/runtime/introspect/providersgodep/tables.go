@@ -1,6 +1,7 @@
 package providersgodep
 
 import (
+	"context"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -20,7 +21,7 @@ func (packagesProvider) Name() string                         { return "go_packa
 func (packagesProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (packagesProvider) Schema() *arrow.Schema                { return packagesTable(nil, nil).Schema() }
 
-func (inst packagesProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (inst packagesProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	s := inst.cache.get()
 	return packagesTable(s, inst.cache.vol).Build(proj, len(s.man.Packages)), nil
 }
@@ -111,7 +112,7 @@ func (importsProvider) Name() string                         { return "go_import
 func (importsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (importsProvider) Schema() *arrow.Schema                { return importsTable(nil).Schema() }
 
-func (inst importsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (inst importsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	s := inst.cache.get()
 	return importsTable(s).Build(proj, len(s.edges)), nil
 }
@@ -139,7 +140,7 @@ func (collectionProvider) Name() string                         { return "go_col
 func (collectionProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (collectionProvider) Schema() *arrow.Schema                { return collectionTable(nil, Config{}).Schema() }
 
-func (inst collectionProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (inst collectionProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	s := inst.cache.get()
 	return collectionTable(s, inst.cache.cfg).Build(proj, 1), nil
 }
@@ -189,7 +190,7 @@ func (packagePropsProvider) Name() string                         { return "go_p
 func (packagePropsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
 func (packagePropsProvider) Schema() *arrow.Schema                { return packagePropsTable().Schema() }
 
-func (packagePropsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (packagePropsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	return packagePropsTable().Build(proj, len(proptable.Table)), nil
 }
 

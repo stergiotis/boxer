@@ -43,7 +43,7 @@ func sampleVault() map[string]string {
 // cheapest assertion that the provider is wired and reading.
 func snapshotRows(t *testing.T, p introspect.Provider) (n int64) {
 	t.Helper()
-	batch, err := p.Snapshot(introspect.AllColumns())
+	batch, err := p.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer batch.Release()
 	return batch.NumRows()
@@ -78,7 +78,7 @@ func TestCapmapClaimsAndEvidenceReadTheTree(t *testing.T) {
 	writeCompVault(t, sampleVault())
 	installAnchorResolver()
 
-	claims, err := competenceclaimProvider{}.Snapshot(introspect.AllColumns())
+	claims, err := competenceclaimProvider{}.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer claims.Release()
 	byDim := map[string]map[string]string{}
@@ -100,7 +100,7 @@ func TestCapmapClaimsAndEvidenceReadTheTree(t *testing.T) {
 	// the anchors support rung 3 beside the claimed 7.
 	assert.Equal(t, "3", byDim["readiness"]["supported_rung"])
 
-	evidence, err := competenceevidenceProvider{}.Snapshot(introspect.AllColumns())
+	evidence, err := competenceevidenceProvider{}.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer evidence.Release()
 	signals := map[string]string{}
@@ -159,7 +159,7 @@ func TestCapsectionWordsCountsWhitespaceTokens(t *testing.T) {
 		"analytics/competence.md": "---\nname: Analytics\nlevel: 1\n---\n\n" +
 			"# Vision and Scope\n\none two  three\nfour\n",
 	})
-	batch, err := (competencesectionProvider{}).Snapshot(introspect.AllColumns())
+	batch, err := (competencesectionProvider{}).Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer batch.Release()
 	require.Equal(t, int64(1), batch.NumRows())

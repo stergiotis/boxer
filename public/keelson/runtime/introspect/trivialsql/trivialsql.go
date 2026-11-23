@@ -56,8 +56,8 @@ func Run(ctx context.Context, reg *introspect.Registry, sql string, params map[s
 
 // Read is Run without the encoding: the record the statement reads, which
 // the caller releases, and the format it asked for.
-func Read(reg *introspect.Registry, sql string, params map[string]string) (batch arrow.RecordBatch, format string, err error) {
-	batch, format, _, err = read(reg, sql, params, nil, nil)
+func Read(ctx context.Context, reg *introspect.Registry, sql string, params map[string]string) (batch arrow.RecordBatch, format string, err error) {
+	batch, format, _, err = read(ctx, reg, sql, params, nil, nil)
 	return
 }
 
@@ -104,18 +104,18 @@ func (inst *Answer) Release() {
 // stored result, say — and it returns the statement's WITH queries beside
 // its own relation, for a caller that reads more than one relation of a
 // statement.
-func ReadTables(reg *introspect.Registry, sql string, params map[string]string, tables map[string]arrow.RecordBatch) (ans *Answer, err error) {
+func ReadTables(ctx context.Context, reg *introspect.Registry, sql string, params map[string]string, tables map[string]arrow.RecordBatch) (ans *Answer, err error) {
 	if tables == nil {
 		tables = map[string]arrow.RecordBatch{}
 	}
-	main, _, ev, err := read(reg, sql, params, nil, tables)
+	main, _, ev, err := read(ctx, reg, sql, params, nil, tables)
 	if err != nil {
 		return nil, err
 	}
 	ans = &Answer{Main: main}
 	for i, cte := range ev.ctes {
 		var batch arrow.RecordBatch
-		batch, err = ev.evalSelect(cte.sel, i)
+		batch, err = ev.evalSelect(ctx, cte.sel, i)
 		if err != nil {
 			ans.Release()
 			return nil, err
@@ -153,7 +153,7 @@ func answer(ctx context.Context, reg *introspect.Registry, sql string, params ma
 	if err = ctx.Err(); err != nil {
 		return nil, "", err
 	}
-	batch, format, _, err := read(reg, sql, params, settings, nil)
+	batch, format, _, err := read(ctx, reg, sql, params, settings, nil)
 	if err != nil {
 		return nil, "", err
 	}
@@ -167,7 +167,7 @@ func answer(ctx context.Context, reg *introspect.Registry, sql string, params ma
 const defaultFormatSetting = "default_format"
 
 // read answers sql. tables is nil for a statement that may name none.
-func read(reg *introspect.Registry, sql string, params map[string]string, settings map[string]string, tables map[string]arrow.RecordBatch) (batch arrow.RecordBatch, format string, ev *evaluator, err error) {
+func read(ctx context.Context, reg *introspect.Registry, sql string, params map[string]string, settings map[string]string, tables map[string]arrow.RecordBatch) (batch arrow.RecordBatch, format string, ev *evaluator, err error) {
 	for name := range settings {
 		if name != defaultFormatSetting && !ignorableSetting(name) {
 			return nil, "", nil, refuse("the setting " + name)
@@ -207,7 +207,7 @@ func read(reg *introspect.Registry, sql string, params map[string]string, settin
 	}
 	ev = &evaluator{reg: reg, scope: scope, tables: tables}
 	su := q.SelectUnionStmt().(*grammar1.SelectUnionStmtContext)
-	if err = ev.readCtes(su); err != nil {
+	if err = ev.readCtes(ctx, su); err != nil {
 		return nil, "", nil, err
 	}
 	sel, err := single(su)
@@ -223,7 +223,7 @@ func read(reg *introspect.Registry, sql string, params map[string]string, settin
 	if err != nil {
 		return nil, "", nil, err
 	}
-	batch, err = ev.evalSelect(sel, len(ev.ctes))
+	batch, err = ev.evalSelect(ctx, sel, len(ev.ctes))
 	if err != nil {
 		return nil, "", nil, err
 	}

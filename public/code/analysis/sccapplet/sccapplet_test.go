@@ -44,7 +44,7 @@ func rowsOf(t *testing.T, doc []byte) (rows map[string]row) {
 	require.GreaterOrEqual(t, start, 0)
 	end := strings.Index(s[start+7:], "```")
 	require.GreaterOrEqual(t, end, 0)
-	batch, _, err := trivialsql.Read(introspect.NewRegistry(), s[start+7:start+7+end]+"FORMAT ArrowStream", nil)
+	batch, _, err := trivialsql.Read(t.Context(), introspect.NewRegistry(), s[start+7:start+7+end]+"FORMAT ArrowStream", nil)
 	require.NoError(t, err)
 	defer batch.Release()
 	col := func(name string) arrow.Array {

@@ -62,21 +62,21 @@ func (appStateProvider) Schema() *arrow.Schema                { return appStateT
 // rendered as an empty table: "nothing is stored" and "the store did not
 // answer" are different claims to a user deciding what to clear — the
 // keelson('workingsets') stance.
-func (p appStateProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
-	rows, err := p.collect()
+func (p appStateProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
+	rows, err := p.collect(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return appStateTable(rows).Build(proj, len(rows)), nil
 }
 
-func (p appStateProvider) collect() (rows []appStateRow, err error) {
+func (p appStateProvider) collect(ctx context.Context) (rows []appStateRow, err error) {
 	if p.persistExec == nil {
 		return
 	}
 	store := persiststore.NewPersistStore(p.persistExec, nil, persiststore.PersistStoreConfig{})
 	defer store.Close()
-	for ent, serr := range store.ScanLiveOwner(context.Background(), recordstore.ScanOpts{}) {
+	for ent, serr := range store.ScanLiveOwner(ctx, recordstore.ScanOpts{}) {
 		if serr != nil {
 			err = eh.Errorf("app_state: scan the state store: %w", serr)
 			rows = nil

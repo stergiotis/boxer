@@ -47,7 +47,7 @@ func TestSinksAreDerivedFromTheDeclaration(t *testing.T) {
 	require.NoError(t, RegisterIntrospect(reg, func() Declaration { return d }))
 	p, ok := reg.Lookup(TableSinks)
 	require.True(t, ok)
-	rec, err := p.Snapshot(introspect.Projection{})
+	rec, err := p.Snapshot(t.Context(), introspect.Projection{})
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.EqualValues(t, 5, rec.NumRows())

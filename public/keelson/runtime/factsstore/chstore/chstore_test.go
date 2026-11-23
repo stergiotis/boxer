@@ -388,7 +388,7 @@ func TestStore_ListRunEvents_LiveCH(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	rows, err := s.ListRunEvents(factsstore.RunEventFilter{RunId: runId, Since: t0})
+	rows, err := s.ListRunEvents(t.Context(), factsstore.RunEventFilter{RunId: runId, Since: t0})
 	require.NoError(t, err)
 	require.Len(t, rows, 3, "one row per written kind, oldest first")
 
@@ -437,13 +437,13 @@ func TestStore_ListRunEvents_SelectsOneRun_LiveCH(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	rows, err := s.ListRunEvents(factsstore.RunEventFilter{RunId: runId, Since: t0})
+	rows, err := s.ListRunEvents(t.Context(), factsstore.RunEventFilter{RunId: runId, Since: t0})
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "another run's named row must not be in this run's trail")
 	assert.Equal(t, uint64(3), rows[0].InstanceKey)
 
 	// With no Since, only exactly-attributed rows are eligible at all.
-	strict, err := s.ListRunEvents(factsstore.RunEventFilter{RunId: runId})
+	strict, err := s.ListRunEvents(t.Context(), factsstore.RunEventFilter{RunId: runId})
 	require.NoError(t, err)
 	require.Len(t, strict, 1)
 }
@@ -453,6 +453,6 @@ func TestStore_ListRunEvents_SelectsOneRun_LiveCH(t *testing.T) {
 func TestStore_ListRunEvents_RejectsEmptyRunId(t *testing.T) {
 	s, err := chstore.New(chstore.Defaults())
 	require.NoError(t, err)
-	_, err = s.ListRunEvents(factsstore.RunEventFilter{})
+	_, err = s.ListRunEvents(t.Context(), factsstore.RunEventFilter{})
 	require.Error(t, err)
 }

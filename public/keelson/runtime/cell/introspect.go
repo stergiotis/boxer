@@ -1,6 +1,8 @@
 package cell
 
 import (
+	"context"
+
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -21,7 +23,7 @@ func (sinksProvider) Name() string                         { return TableSinks }
 func (sinksProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (sinksProvider) Schema() *arrow.Schema                { return sinksTable(nil).Schema() }
 
-func (inst sinksProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (inst sinksProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	var sinks []Sink
 	if inst.decl != nil {
 		sinks = inst.decl().Sinks()

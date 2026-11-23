@@ -58,7 +58,7 @@ func TestRunEventsTableRendersRow(t *testing.T) {
 // deployment wired.
 func TestRunEventsProviderWithoutAReader(t *testing.T) {
 	p := runEventsProvider{reader: nil, persistExec: nil}
-	rec, err := p.Snapshot(introspect.AllColumns())
+	rec, err := p.Snapshot(t.Context(), introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.EqualValues(t, 0, rec.NumRows())

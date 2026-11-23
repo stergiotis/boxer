@@ -1,6 +1,7 @@
 package servicehost
 
 import (
+	"context"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -26,7 +27,7 @@ func (servicesProvider) Name() string                         { return TableName
 func (servicesProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (servicesProvider) Schema() *arrow.Schema                { return servicesTable(nil).Schema() }
 
-func (p servicesProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p servicesProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []Row
 	if p.host != nil {
 		rows = p.host.Rows()

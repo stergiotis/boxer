@@ -6,6 +6,7 @@
 package providers
 
 import (
+	"context"
 	"encoding/hex"
 
 	"github.com/RoaringBitmap/roaring"
@@ -62,7 +63,7 @@ type covStatusRow struct {
 	status      covsnap.RunStatus
 }
 
-func (p coverageStatusProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p coverageStatusProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []covStatusRow
 	if p.src != nil {
 		meta := p.src.Meta()
@@ -111,7 +112,7 @@ type covPkgRow struct {
 	totalFuncs int
 }
 
-func (p coveragePkgsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p coveragePkgsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []covPkgRow
 	if p.src != nil {
 		meta := p.src.Meta()
@@ -172,7 +173,7 @@ type covFuncRow struct {
 	totalStmts   uint32
 }
 
-func (p coverageFuncsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p coverageFuncsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []covFuncRow
 	if p.src != nil {
 		meta := p.src.Meta()

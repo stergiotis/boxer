@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -18,7 +19,7 @@ func (usageProvider) Name() string                         { return TableUsage }
 func (usageProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (usageProvider) Schema() *arrow.Schema                { return usageTable(nil).Schema() }
 
-func (p usageProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (p usageProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	var rows []ration.AccountUsage
 	if p.ledger != nil {
 		rows = p.ledger.Accounts()
@@ -58,7 +59,7 @@ func (rationsProvider) Name() string                         { return TableRatio
 func (rationsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (rationsProvider) Schema() *arrow.Schema                { return rationsTable(nil).Schema() }
 
-func (p rationsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (p rationsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	var rows []ration.RuleState
 	if p.ledger != nil {
 		rows = p.ledger.States()

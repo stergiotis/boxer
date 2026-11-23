@@ -98,7 +98,7 @@ func TestWorkerDeclaresPresenceAndTableMergesIt(t *testing.T) {
 	assert.EqualValues(t, 4, byRun["run-other"].MaxWorkers)
 	assert.False(t, byRun["run-gone"].Alive)
 
-	rec, err := p.Snapshot(introspect.Projection{})
+	rec, err := p.Snapshot(t.Context(), introspect.Projection{})
 	require.NoError(t, err)
 	assert.EqualValues(t, 3, rec.NumRows())
 	rec.Release()

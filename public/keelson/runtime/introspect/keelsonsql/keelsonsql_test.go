@@ -1,6 +1,7 @@
 package keelsonsql
 
 import (
+	"context"
 	"io"
 	"testing"
 
@@ -186,7 +187,7 @@ func (s *sealedStub) Freshness() introspect.FreshnessClass { return introspect.F
 func (s *sealedStub) Schema() *arrow.Schema                { return arrow.NewSchema(nil, nil) }
 func (s *sealedStub) Structure() string                    { return s.structure }
 func (s *sealedStub) Revision() uint64                     { return s.revision }
-func (s *sealedStub) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (s *sealedStub) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	return nil, assert.AnError
 }
 func (s *sealedStub) Open() (io.ReadSeekCloser, uint64, error) { return nil, 0, assert.AnError }

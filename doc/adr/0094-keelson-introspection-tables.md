@@ -275,6 +275,13 @@ measured bounds and say so in their prose.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 
+### 2026-11-23 — a snapshot takes the query's context
+
+`Provider.Snapshot`, and the argument and filter forms beside it, take a
+`context.Context` first ([ADR-0395](0395-io-takes-a-context.md), proposed):
+a provider that reads a store reads under the query's deadline and stops
+when the query is given up, where it used to root a context of its own.
+
 ## Update (2026-06-27) — wiring `apps/play` to the `/query` endpoint
 
 `apps/play` (the external-over-HTTP SQL playground) could not query keelson

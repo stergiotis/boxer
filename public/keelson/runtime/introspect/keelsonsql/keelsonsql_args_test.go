@@ -1,6 +1,7 @@
 package keelsonsql
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -19,7 +20,7 @@ func (seqProvider) Freshness() introspect.FreshnessClass { return introspect.Fre
 func (seqProvider) Schema() *arrow.Schema {
 	return introspect.NewTable().Uint64("v", func(int) uint64 { return 0 }).Schema()
 }
-func (seqProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (seqProvider) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	return nil, assert.AnError
 }
 func (seqProvider) Args() []introspect.ArgSpec {
@@ -28,7 +29,7 @@ func (seqProvider) Args() []introspect.ArgSpec {
 		{Name: "label", Type: introspect.ArgTypeString, Default: "x"},
 	}
 }
-func (seqProvider) SnapshotArgs(proj introspect.Projection, args introspect.Args) (arrow.RecordBatch, error) {
+func (seqProvider) SnapshotArgs(ctx context.Context, proj introspect.Projection, args introspect.Args) (arrow.RecordBatch, error) {
 	n := int(args.UInt64("n"))
 	return introspect.NewTable().Uint64("v", func(i int) uint64 { return uint64(i + 1) }).Build(proj, n), nil
 }
@@ -119,7 +120,7 @@ func (signedProvider) Freshness() introspect.FreshnessClass { return introspect.
 func (signedProvider) Schema() *arrow.Schema {
 	return introspect.NewTable().Int64("i", func(int) int64 { return 0 }).Schema()
 }
-func (signedProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+func (signedProvider) Snapshot(context.Context, introspect.Projection) (arrow.RecordBatch, error) {
 	return nil, assert.AnError
 }
 func (signedProvider) Args() []introspect.ArgSpec {
@@ -128,6 +129,6 @@ func (signedProvider) Args() []introspect.ArgSpec {
 		{Name: "s", Type: introspect.ArgTypeString, Required: true},
 	}
 }
-func (signedProvider) SnapshotArgs(proj introspect.Projection, args introspect.Args) (arrow.RecordBatch, error) {
+func (signedProvider) SnapshotArgs(ctx context.Context, proj introspect.Projection, args introspect.Args) (arrow.RecordBatch, error) {
 	return introspect.NewTable().Int64("i", func(int) int64 { return args.Int64("i") }).Build(proj, 1), nil
 }

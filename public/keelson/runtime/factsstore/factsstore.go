@@ -395,7 +395,7 @@ type RunEventFilter struct {
 // method they cannot serve. Consumers type-assert, the ADR-0382 §SD4
 // optional-capability pattern, and treat absence as an empty trail.
 type RunEventReaderI interface {
-	ListRunEvents(filter RunEventFilter) (rows []RunEventRow, err error)
+	ListRunEvents(ctx context.Context, filter RunEventFilter) (rows []RunEventRow, err error)
 }
 
 // AppLaunchStat is one app's aggregated launch history: how many times it has

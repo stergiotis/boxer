@@ -1,6 +1,8 @@
 package clipboardbroker
 
 import (
+	"context"
+
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -28,7 +30,7 @@ type copiesProvider struct{ recs RecordsI }
 func (copiesProvider) Name() string                         { return TableCopies }
 func (copiesProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (copiesProvider) Schema() *arrow.Schema                { return copiesTable(nil).Schema() }
-func (inst copiesProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (inst copiesProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []CopyRecord
 	if inst.recs != nil {
 		rows = inst.recs.Records()

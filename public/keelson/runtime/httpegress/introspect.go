@@ -129,7 +129,7 @@ func (callsProvider) Name() string                         { return TableCalls }
 func (callsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (callsProvider) Schema() *arrow.Schema                { return callsTable(nil).Schema() }
 
-func (p callsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (p callsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	var rows []CallRecord
 	if p.svc != nil {
 		rows = p.svc.Calls()
@@ -166,7 +166,7 @@ func (destinationsProvider) Name() string                         { return Table
 func (destinationsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (destinationsProvider) Schema() *arrow.Schema                { return destinationsTable(nil).Schema() }
 
-func (p destinationsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (p destinationsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	var rows []DestinationRecord
 	if p.svc != nil {
 		rows = p.svc.Destinations()

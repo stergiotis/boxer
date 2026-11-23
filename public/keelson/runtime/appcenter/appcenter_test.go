@@ -57,7 +57,7 @@ type adhocStub struct{}
 func (adhocStub) Name() string                         { return adhocdata.CatalogTableName }
 func (adhocStub) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (adhocStub) Schema() *arrow.Schema                { return adhocStubTable().Schema() }
-func (adhocStub) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (adhocStub) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	return adhocStubTable().Build(proj, 0), nil
 }
 func adhocStubTable() *introspect.Table {

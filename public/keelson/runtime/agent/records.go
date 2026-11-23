@@ -462,7 +462,7 @@ type grantsProvider struct{ svc RecordsI }
 func (grantsProvider) Name() string                         { return TableGrants }
 func (grantsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (inst grantsProvider) Schema() *arrow.Schema           { return grantsTable(nil).Schema() }
-func (inst grantsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (inst grantsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []GrantRow
 	if inst.svc != nil {
 		rows = inst.svc.Grants()
@@ -501,7 +501,7 @@ type actionsProvider struct{ svc RecordsI }
 func (actionsProvider) Name() string                         { return TableActions }
 func (actionsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (inst actionsProvider) Schema() *arrow.Schema           { return actionsTable(nil).Schema() }
-func (inst actionsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (inst actionsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []ActionRecord
 	if inst.svc != nil {
 		rows = inst.svc.Actions()

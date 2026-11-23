@@ -1,6 +1,7 @@
 package attention
 
 import (
+	"context"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -30,7 +31,7 @@ type queueProvider struct{ q PendingI }
 func (queueProvider) Name() string                         { return TableQueue }
 func (queueProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (queueProvider) Schema() *arrow.Schema                { return queueTable(nil).Schema() }
-func (inst queueProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (inst queueProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []Entry
 	if inst.q != nil {
 		rows = inst.q.Pending(time.Now())

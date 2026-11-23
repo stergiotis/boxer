@@ -1,6 +1,7 @@
 package moderator
 
 import (
+	"context"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -67,7 +68,7 @@ func (signalsProvider) Name() string                         { return TableSigna
 func (signalsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (signalsProvider) Schema() *arrow.Schema                { return signalsTable(nil).Schema() }
 
-func (p signalsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+func (p signalsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	var rows []State
 	if p.states != nil {
 		rows = p.states.States()

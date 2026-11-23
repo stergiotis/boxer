@@ -2,6 +2,7 @@ package introspect
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"testing"
 
@@ -29,7 +30,7 @@ func (s *sealedStub) Freshness() FreshnessClass { return FreshnessLive }
 func (s *sealedStub) Schema() *arrow.Schema     { return s.schema }
 func (s *sealedStub) Structure() string         { return s.structure }
 func (s *sealedStub) Revision() uint64          { return s.revision }
-func (s *sealedStub) Snapshot(Projection) (arrow.RecordBatch, error) {
+func (s *sealedStub) Snapshot(context.Context, Projection) (arrow.RecordBatch, error) {
 	return nil, assert.AnError
 }
 func (s *sealedStub) Open() (io.ReadSeekCloser, uint64, error) {

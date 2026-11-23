@@ -1,6 +1,8 @@
 package providers
 
 import (
+	"context"
+
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -23,7 +25,7 @@ func (operationsProvider) Name() string                         { return TableAp
 func (operationsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
 func (operationsProvider) Schema() *arrow.Schema                { return operationsTable(nil).Schema() }
 
-func (operationsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (operationsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	vs := appops.Views(app.AllRegistrations())
 	return operationsTable(vs).Build(proj, len(vs)), nil
 }

@@ -24,6 +24,8 @@
 package providers
 
 import (
+	"context"
+
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/gov/datacatalog/panelshapes"
@@ -41,7 +43,7 @@ func (panelShapesProvider) Freshness() introspect.FreshnessClass { return intros
 
 func (panelShapesProvider) Schema() *arrow.Schema { return panelShapesTable(nil).Schema() }
 
-func (panelShapesProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (panelShapesProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	rows := panelShapeRows()
 	return panelShapesTable(rows).Build(proj, len(rows)), nil
 }

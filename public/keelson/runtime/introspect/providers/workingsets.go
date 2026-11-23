@@ -50,12 +50,11 @@ func (workingsetsProvider) Schema() *arrow.Schema                { return workin
 // Snapshot runs on the HTTP handler goroutine, so a ClickHouse round-trip per
 // query is affordable here — unlike the restore lookup, which sits on the
 // window opener's thread.
-func (p workingsetsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+func (p workingsetsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []statestore.WorkingsetRow
 	if p.state != nil {
 		var err error
-		// deferred: the query's ctx, once Snapshot takes one (ADR-0395).
-		rows, err = p.state.ListWorkingsets(context.TODO())
+		rows, err = p.state.ListWorkingsets(ctx)
 		if err != nil {
 			return nil, err
 		}
