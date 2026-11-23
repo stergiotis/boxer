@@ -1,10 +1,12 @@
 package play
 
 import (
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,6 +33,9 @@ type dispatchHost struct {
 	appId  app.AppIdT
 	scene  *inscribe.Scene
 	frames sync.Mutex
+	// body is the app's frame between the snapshot and the frame's end;
+	// nil latches the data session's listing alone.
+	body func()
 }
 
 var _ agent.HostI = (*dispatchHost)(nil)
@@ -91,29 +96,39 @@ func (inst *dispatchHost) Marks() *inscribe.Scene {
 }
 
 // frame runs one frame of the window as the window host does: queued
-// calls, the snapshot, the launcher's latch of the data session's listing
-// in place of its frame, and the frame's end, where asynchronous commands
-// settle.
+// calls, the snapshot, the app's frame (by default the launcher's latch of
+// the data session's listing alone), and the frame's end, where
+// asynchronous commands settle.
 func (inst *dispatchHost) frame() {
 	inst.frames.Lock()
 	defer inst.frames.Unlock()
 	inst.eng.BeginFrame()
 	inst.eng.ApplyQueued()
 	inst.eng.TakeSnapshot()
-	inst.l.inner.latchSessions()
+	if inst.body != nil {
+		inst.body()
+	} else {
+		inst.l.inner.latchSessions()
+	}
 	inst.eng.EndFrame()
 }
 
-// TestTheDataSetCatalogNeverHoldsAQueryBackThroughTheDispatcher: through the
-// agent dispatcher, as a model drives play, drop_dataset needs no read of
-// the data-set catalog first, a plain query afterwards does not conflict on
-// it, the drop's settled revisions are the window's own once its listing
-// landed, list_datasets reads the catalog, and keep_as needs no read of it.
-func TestTheDataSetCatalogNeverHoldsAQueryBackThroughTheDispatcher(t *testing.T) {
+// dispatchRig is one play window served to the agent dispatcher over a
+// bus, a coordinator's client, and a task granted act on the window with
+// the session data service's destinations.
+type dispatchRig struct {
+	host *dispatchHost
+	cli  *agent.Client
+	g    agent.Grant
+	obo  *app.OnBehalfOf
+}
+
+// newDispatchRig serves l's catalog through h to a dispatcher, draws a frame
+// whenever a query waits on one, as the host's repaint does, and grants a
+// task act on the window with r's destinations.
+func newDispatchRig(t *testing.T, r *sdRig, l *PlayLauncher, h app.OperationsHandlerI) (rig *dispatchRig) {
+	t.Helper()
 	ctx := t.Context()
-	r := newSdRig(t)
-	l, h := opsLauncher(t)
-	l.inner.client = r.client("github.com/x/play", 1)
 	playId := app.AppIdT("github.com/stergiotis/boxer/apps/play")
 	catalog := (&PlayLauncher{}).Manifest().Operations
 
@@ -165,8 +180,54 @@ func TestTheDataSetCatalogNeverHoldsAQueryBackThroughTheDispatcher(t *testing.T)
 		Entries: []agent.GrantEntry{{Instance: key, Mode: agent.ModeAct}}, Destinations: dests})
 	require.NoError(t, err)
 	r.grant(g.Task, dests...)
-	obo := &app.OnBehalfOf{Task: g.Task, Epoch: 1, Call: "c0", Destinations: dests}
-	_, err = l.inner.client.defineSession(ctx, obo, "", "top", "SELECT 1 AS x", nil)
+	return &dispatchRig{host: host, cli: cli, g: g, obo: &app.OnBehalfOf{Task: g.Task, Epoch: 1, Call: "c0", Destinations: dests}}
+}
+
+// call makes a call of the task under key k, as the chat does in a turn.
+func (inst *dispatchRig) call(t *testing.T, k string, op string, args string) agent.Outcome {
+	t.Helper()
+	out, err := inst.cli.Call(t.Context(), agent.CallRequest{Handle: inst.g.Handle, Instance: inst.host.key, Operation: op, Args: args, Key: k, Turn: "turn-1"})
+	require.NoError(t, err)
+	return out
+}
+
+// final steps frames until the call under key k ended.
+func (inst *dispatchRig) final(t *testing.T, k string) agent.Outcome {
+	t.Helper()
+	var out agent.Outcome
+	require.Eventually(t, func() bool {
+		inst.host.frame()
+		st, err := inst.cli.Status(t.Context(), inst.g.Handle, k, 0)
+		require.NoError(t, err)
+		out = st
+		return st.Phase == "completed" || st.Phase == "refused" || st.Phase == "conflict" || st.Phase == "failed"
+	}, 5*time.Second, 5*time.Millisecond)
+	return out
+}
+
+// applied is a command's outcome once a frame applied it: a call answers
+// accepted, and a conflict is found when the frame applies it.
+func (inst *dispatchRig) applied(t *testing.T, k string) agent.Outcome {
+	t.Helper()
+	inst.host.frame()
+	st, err := inst.cli.Status(t.Context(), inst.g.Handle, k, 0)
+	require.NoError(t, err)
+	return st
+}
+
+// TestTheDataSetCatalogNeverHoldsAQueryBackThroughTheDispatcher: through the
+// agent dispatcher, as a model drives play, drop_dataset needs no read of
+// the data-set catalog first, a plain query afterwards does not conflict on
+// it, the drop's settled revisions are the window's own once its listing
+// landed, list_datasets reads the catalog, and keep_as needs no read of it.
+func TestTheDataSetCatalogNeverHoldsAQueryBackThroughTheDispatcher(t *testing.T) {
+	ctx := t.Context()
+	r := newSdRig(t)
+	l, h := opsLauncher(t)
+	l.inner.client = r.client("github.com/x/play", 1)
+	rig := newDispatchRig(t, r, l, h)
+	host, obo := rig.host, rig.obo
+	_, err := l.inner.client.defineSession(ctx, obo, "", "top", "SELECT 1 AS x", nil)
 	require.NoError(t, err)
 	// A run for the task put its mark on the window, as the live turn's
 	// runs did before the drop.
@@ -174,31 +235,15 @@ func TestTheDataSetCatalogNeverHoldsAQueryBackThroughTheDispatcher(t *testing.T)
 
 	call := func(k string, op string, args string) agent.Outcome {
 		t.Helper()
-		out, cErr := cli.Call(ctx, agent.CallRequest{Handle: g.Handle, Instance: key, Operation: op, Args: args, Key: k, Turn: "turn-1"})
-		require.NoError(t, cErr)
-		return out
+		return rig.call(t, k, op, args)
 	}
 	final := func(k string) agent.Outcome {
 		t.Helper()
-		var out agent.Outcome
-		require.Eventually(t, func() bool {
-			host.frame()
-			st, sErr := cli.Status(ctx, g.Handle, k, 0)
-			require.NoError(t, sErr)
-			out = st
-			return st.Phase == "completed" || st.Phase == "refused" || st.Phase == "conflict" || st.Phase == "failed"
-		}, 5*time.Second, 5*time.Millisecond)
-		return out
+		return rig.final(t, k)
 	}
-
-	// applied is a command's outcome once a frame applied it: a call
-	// answers accepted, and a conflict is found when the frame applies it.
 	applied := func(k string) agent.Outcome {
 		t.Helper()
-		host.frame()
-		st, sErr := cli.Status(ctx, g.Handle, k, 0)
-		require.NoError(t, sErr)
-		return st
+		return rig.applied(t, k)
 	}
 
 	call("drop", opDropDataset, `{"name":"top"}`)
@@ -226,4 +271,110 @@ func TestTheDataSetCatalogNeverHoldsAQueryBackThroughTheDispatcher(t *testing.T)
 	call("keep", opQuery, `{"sql":"SELECT 2 AS y","keep_as":"again"}`)
 	out = applied("keep")
 	assert.NotEqual(t, "conflict", out.Phase, "keeping needs no read of the catalog: %s", out.Reason)
+}
+
+// playFrame is play's frame short of drawing, as the window host runs it
+// for a launcher: the agent mark judged after the write-back, the listings
+// latched, the result the panels draw, the run asked for started, and the
+// mark settled once the frame's own changes are in.
+func playFrame(p *PlayApp) func() {
+	return func() {
+		p.checkAgentMark()
+		p.latchSessions()
+		p.latchExposures()
+		rec, _, _, _, _, _, _, _, id := p.activeSnapshot()
+		if rec != nil {
+			rec.Release()
+		}
+		p.audioFollowResult(id)
+		if p.requestRun && !p.graph.MainLoading() {
+			p.requestRun = false
+			auto := p.runIsAuto
+			p.runIsAuto = false
+			sub := p.requestSubquery
+			p.requestSubquery = false
+			p.runAgent = p.takeAgentForRun(auto)
+			p.executeRun(auto, sub)
+			p.runAgent = nil
+		}
+		p.settleAgentMark()
+	}
+}
+
+// TestAKeepLeavesTheTaskCurrentAndOnlyThePersonPausesIt: through the agent
+// dispatcher, with frames that run play's runs, a task that read the window
+// keeps a data set and calls query again at once, with keep_as and
+// without: no call is refused, every change to the buffer the keeps made
+// is the task's, and the settled keep reports the revisions the window
+// holds. An edit of the person's between two of the task's calls still
+// pauses it until its next turn.
+func TestAKeepLeavesTheTaskCurrentAndOnlyThePersonPausesIt(t *testing.T) {
+	r := newSdRig(t)
+	cl := r.client("github.com/x/play", 1)
+	cl.reach.record(r.stub.url())
+	p := NewPlayApp(cl, newLiveQueryGraph(cl, memory.NewGoAllocator(), 4), "SELECT 1", nil)
+	t.Cleanup(p.graph.close)
+	l := &PlayLauncher{inner: p}
+	rig := newDispatchRig(t, r, l, l.Operations())
+	rig.host.body = playFrame(p)
+	task := opwire.WriterTask(rig.g.Task)
+	notRefused := func(k string, args string) agent.Outcome {
+		t.Helper()
+		out := rig.call(t, k, opQuery, args)
+		require.NotEqual(t, "refused", out.Phase, "%s: %s", k, out.Reason)
+		out = rig.final(t, k)
+		require.Equal(t, "completed", out.Phase, "%s: %s", k, out.Reason)
+		return out
+	}
+
+	// The task reads the window first, as a model's get_state does, so a
+	// change to the buffer by anyone else would pause it.
+	out := rig.call(t, "state", opGetState, `{}`)
+	require.Equal(t, "completed", out.Phase, out.Reason)
+	require.Contains(t, out.Revisions, opsResSql)
+	since := rig.host.eng.LogSeq()
+
+	out = notRefused("keep1", `{"sql":"SELECT 1 AS x","keep_as":"traindocs"}`)
+	revs, _ := rig.host.eng.SnapshotRevisions()
+	assert.Equal(t, revs[opsResSql], out.Revisions[opsResSql], "the keep reports the buffer's revision the window holds")
+	assert.Equal(t, "SELECT * FROM session('traindocs') LIMIT 20", p.sql, "the window samples the data set as its main run")
+	// At once, as a model's next call is sent: with keep_as, then without.
+	notRefused("keep2", `{"sql":"SELECT 2 AS x","keep_as":"maskdocs"}`)
+	notRefused("plain", `{"sql":"SELECT * FROM session('maskdocs')"}`)
+	// The frames after a settle, in which a sample run lands and the editor
+	// draws its buffer again, change nothing of the person's either.
+	notRefused("keep3", `{"sql":"SELECT 3 AS x","keep_as":"traindocs"}`)
+	for range 5 {
+		rig.host.frame()
+	}
+	notRefused("plain2", `{"sql":"SELECT 4"}`)
+	for _, e := range rig.host.eng.LogSince(since) {
+		if slices.Contains(e.Resources, opsResSql) {
+			assert.Equal(t, task, e.Writer, "change %d to sql (%s, %s) is the task's", e.Seq, e.Op, e.Phase)
+		}
+	}
+
+	// The person edits the buffer between two of the task's calls: the
+	// write-back lands before the next frame.
+	rig.host.frames.Lock()
+	p.sql = "SELECT 42 AS mine"
+	rig.host.frames.Unlock()
+	rig.host.frame()
+	out = rig.call(t, "after", opQuery, `{"sql":"SELECT 5"}`)
+	require.Equal(t, "refused", out.Phase)
+	assert.Contains(t, out.Reason, "paused: person changed sql")
+	changes, err := rig.cli.Turn(t.Context(), rig.g.Handle)
+	require.NoError(t, err)
+	var persons int
+	for _, c := range changes {
+		if c.Writer == opwire.WriterPerson {
+			persons++
+			assert.Equal(t, []string{opsResSql}, c.Resources)
+		}
+	}
+	assert.Equal(t, 1, persons, "the turn lists the person's one edit and nothing of the task's as the person's: %+v", changes)
+	// Read again, as the turn's note asks, the task writes once more.
+	out = rig.call(t, "reread", opGetState, `{}`)
+	require.Equal(t, "completed", out.Phase, out.Reason)
+	notRefused("resumed", `{"sql":"SELECT 6"}`)
 }
