@@ -603,7 +603,17 @@ dataset labelled. No live run of a model is behind the change.
   came back unlabelled.
 - The publisher states what its rows derive from, the service adds what
   the named inputs show, and a publisher that does neither is judged by
-  its call's tier.
+  its call's tier. Open, review of 2026-11-23: the zero value of
+  `DerivedFromSealed` is the relaxed one. An app that reads a person's
+  dataset on a task's behalf and publishes what it made of it under a
+  call of the same round, stating nothing, gets a revision that reads
+  back as the task's own clear work and that the task exposes
+  (`TestAPublisherThatStatesNothingAfterASealedReadIsNotClear`,
+  skipped). Two ways to close it: the service remembers that a task read
+  sealed data that is not its own and takes that task's later
+  publications as derived; or a revision is clear only when its
+  publisher asserts so. The first reverses the line above, the second
+  changes the wire field's meaning.
 - A task's exposure ends on a republish that derives from sealed data.
   Review, 2026-11-23: it ends on any republish that is not the exposing
   task's own clear publication, the person's and another task's under
