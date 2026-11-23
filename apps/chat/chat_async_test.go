@@ -396,6 +396,44 @@ func TestAWithheldCompletionWaitsForThePerson(t *testing.T) {
 	assert.True(t, told)
 }
 
+// A call's line said it was running when its turn landed; once the call
+// settles in the background the line says how it ended, not that it runs.
+func TestTheLineOfACallSettledInTheBackgroundSaysHowItEnded(t *testing.T) {
+	model := asyncScript(openaichat.CompletionResponse{Content: "noted", FinishReason: "stop"})
+	inst, host := asyncApp(t, model, func(p *ProfileT) { p.WakesMax = 0 })
+	startJob(t, inst)
+	line := func() (text string, call string) {
+		for _, e := range inst.conv.entries {
+			if e.speaker == speakerTool && strings.Contains(e.text, " in window ") {
+				return e.text, e.call
+			}
+		}
+		return
+	}
+	text, call := line()
+	assert.Contains(t, text, " · running")
+	assert.NotEmpty(t, call, "the line knows its call")
+	inst.drain()
+	text, _ = line()
+	assert.Contains(t, text, " · running", "nothing settled yet")
+
+	host.notes[100].jobDone.Store(true)
+	require.Eventually(t, func() bool {
+		inst.drain()
+		text, call = line()
+		return call == ""
+	}, 5*time.Second, 5*time.Millisecond)
+	assert.Contains(t, text, " · completed in the background")
+	assert.NotContains(t, text, "running")
+}
+
+func TestSettledLineSaysHowTheCallEnded(t *testing.T) {
+	assert.Equal(t, "query in window 2 · completed in the background", settledLine("query in window 2", "completed", "ignored"))
+	assert.Equal(t, "query in window 2 · refused in the background · no live dataset under x", settledLine("query in window 2", "refused", "no live dataset under x"))
+	assert.Equal(t, "query in window 2 · its end was not seen · no end was seen after 5m0s", settledLine("query in window 2", completedFormUnknown, "no end was seen after 5m0s"))
+	assert.Equal(t, "k · its end was not seen", settledLine("k", completedFormUnknown, ""))
+}
+
 // A conversation that ends while work runs records that its end was not seen,
 // and the run still closes (ADR-0358 §SD6).
 func TestRetiringEndsWatchersAsUnknown(t *testing.T) {

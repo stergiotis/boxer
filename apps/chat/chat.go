@@ -402,6 +402,7 @@ func (inst *App) drain() {
 		}
 		inst.model, inst.answered = llm.Description{Reason: reason}, true
 	}
+	inst.conv.settleCalls(inst.coord)
 	inst.syncWake()
 	p := inst.pending
 	if p == nil {

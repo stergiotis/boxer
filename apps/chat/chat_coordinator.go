@@ -271,6 +271,9 @@ type coordinator struct {
 	wakes        int
 	wakesHeld    bool
 	lastDecided  string
+	// settled is the transcript's line for each call a watcher saw settle,
+	// by key, for the line that said it was running (settledLine).
+	settled map[string]string
 	// scope is the conversation's lifetime (ADR-0322, proposed): a turn
 	// counts itself in, retire retires it, and the run closes once the last
 	// turn has written its tail (chat_journal.go retire). A child of the
@@ -1248,7 +1251,7 @@ func (inst *coordinator) callWith(ctx context.Context, o toolOrigin, toolCall st
 		// The work outlives the wait: the model is told when it settles
 		// (ADR-0358 §SD3).
 		co.Reason = runningReason
-		inst.notePending(pendingCall{handle: h, key: key, turn: o.turn, op: op, where: where})
+		inst.notePending(pendingCall{handle: h, key: key, turn: o.turn, op: op, where: where, title: title})
 	}
 	untrustedSource, _ := inst.readResult(ctx, h, key, out, &co)
 	b, err := json.Marshal(co)
@@ -1312,6 +1315,10 @@ type turnResult struct {
 	omitTo   int
 	final    llm.Response
 	activity []string
+	// pending is, beside each activity line, the key of its call when the
+	// call was still running as the turn's wait ended, "" otherwise: the
+	// line is rewritten once a watcher sees the call settle.
+	pending []string
 	// steps are the turn's steps, every model and tool call in order.
 	steps   []turnStep
 	stopped string

@@ -385,6 +385,11 @@ func (sequentialTools) run(s *roundState) {
 			st.result, st.activity, st.refused = clip(content, stepResultMax), activity, strings.HasPrefix(content, "error:") || callRefused(content)
 		})
 		s.out.activity = append(s.out.activity, activity)
+		pendingKey := ""
+		if pending != nil {
+			pendingKey = pending.key
+		}
+		s.out.pending = append(s.out.pending, pendingKey)
 		untrusted, confined := coord.lastResultLabel()
 		writer, decided := coord.takeWriter()
 		if effect == agentrun.EffectConsequential && decided == endorsedByPerson && callCompleted(content) {

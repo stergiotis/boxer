@@ -151,6 +151,22 @@ func TestTheTranscriptRebuildsFromTheJournal(t *testing.T) {
 	assert.Equal(t, "done", out[2].text)
 }
 
+// A resumed call that was still running when its round ended reads as
+// settled when the journal holds its completion, and as running otherwise.
+func TestTheTranscriptSaysHowAPendingCallSettled(t *testing.T) {
+	entries := []agentrun.Entry{
+		{Ordinal: 1, Kind: agentrun.KindUser, Body: "run both", At: time.Unix(1, 0)},
+		{Ordinal: 2, Kind: agentrun.KindReply, Key: "r1", Body: "", Calls: projection.CallsBody([]openaichat.ToolCall{{Id: "c1"}, {Id: "c2"}})},
+		{Ordinal: 3, Kind: agentrun.KindOutcome, Key: "r1#0", Name: "c1", Role: projection.RoleTool, Body: "{}", Form: agentrun.FormPending},
+		{Ordinal: 4, Kind: agentrun.KindOutcome, Key: "r1#1", Name: "c2", Role: projection.RoleTool, Body: "{}", Form: agentrun.FormPending},
+		{Ordinal: 5, Kind: agentrun.KindCompleted, Key: "r1#0", Name: "query", Form: "completed", Body: "{}"},
+	}
+	out := transcriptOf(entries)
+	require.Len(t, out, 3)
+	assert.Equal(t, "r1#0 · completed in the background", out[1].text)
+	assert.Equal(t, "r1#1 · still running when its round ended", out[2].text)
+}
+
 // ctxStore is a journal store that honours its context, as the host's
 // service does and MemStore does not: a write under a done context fails.
 type ctxStore struct{ agentrun.StoreI }

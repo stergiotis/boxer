@@ -557,6 +557,14 @@ func transcriptOf(entries []agentrun.Entry) (out []entry) {
 			out = append(out, entry{speaker: speakerUser, text: text, sent: sent, atMs: e.At.UnixMilli(), failed: true, reason: "the host stopped before the turn was answered"})
 		}
 	}
+	// A call still running when its round ended may have settled since:
+	// its completed entry says how.
+	completed := map[string]string{}
+	for _, e := range entries {
+		if e.Kind == agentrun.KindCompleted {
+			completed[e.Key] = e.Form
+		}
+	}
 	for _, e := range liveMessages(entries) {
 		at := e.At.UnixMilli()
 		switch e.Kind {
@@ -582,6 +590,9 @@ func transcriptOf(entries []agentrun.Entry) (out []entry) {
 			}
 			if line == agentrun.FormPending {
 				line = e.Key + " · still running when its round ended"
+				if form, ok := completed[e.Key]; ok {
+					line = settledLine(e.Key, form, "")
+				}
 			}
 			out = append(out, entry{speaker: speakerTool, text: line, atMs: at})
 		}

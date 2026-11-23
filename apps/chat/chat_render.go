@@ -493,6 +493,11 @@ func (inst *App) renderComposer() {
 			for rt := range c.RichTextLabel(line) {
 				rt.Small().Weak()
 			}
+			if running > 0 {
+				// A watcher settles the call off the render thread, and
+				// only a frame lands it: its line, and the turn it wakes.
+				c.RequestRepaintAfter(backgroundRepaintSeconds)
+			}
 		}
 	}
 	if inst.editing != nil {

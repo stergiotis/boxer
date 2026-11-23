@@ -1,0 +1,9 @@
+# The scripted model of chat-play-query-keelson.scene.md: one reply per
+# line, picked by the conversation's position.
+# Turn 1: open play, read a table of the host's introspection plane with
+# query, then read an alias nothing is published under.
+{"tool":"request_access","args":{"plan":"list the host's tables in play","open":[{"app":"play"}],"destinations":["keelson:tables","keelson:nothing_here"]}}
+{"tool":"open_window","args":{"app":"play"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"query","args":{"sql":"SELECT name FROM keelson('tables') ORDER BY name LIMIT 3"},"title":"Reading the host's tables"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"query","args":{"sql":"SELECT * FROM keelson('nothing_here')"},"title":"Reading an alias nothing publishes"}}
+{"content":"Play read the host's tables; nothing is published under nothing_here."}

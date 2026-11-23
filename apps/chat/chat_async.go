@@ -34,6 +34,9 @@ const (
 	// see a cancel, so a poll holds a retiring conversation's drain up for as
 	// long as it lasts.
 	watchPoll = 250 * time.Millisecond
+	// backgroundRepaintSeconds is how often a window asks for a frame while
+	// a call runs in the background, so its settling lands without input.
+	backgroundRepaintSeconds = 1.0
 	// runningReason is what the model reads of a pending call.
 	runningReason = "still running when the wait ended. Its result reaches you in a note when it settles, and a new turn starts for it if none is running; do other work or answer in the meantime, and do not poll for it"
 )
@@ -58,8 +61,10 @@ type pendingCall struct {
 	key    string
 	turn   string
 	op     string
-	// where says which window and operation, as the person reads it.
+	// where says which window and operation, as the person reads it;
+	// title is the model's title for the call, which its line leads with.
 	where string
+	title string
 }
 
 // completion is a settled call the model has not been told of.
@@ -103,13 +108,21 @@ func (inst *coordinator) watch(w *agentrun.Writer, p pendingCall) {
 		defer leave()
 		ctx := inst.scope.Ctx()
 		jctx := inst.scope.Tail(ctx)
-		content, phase, label, settled := inst.follow(ctx, p)
-		inst.mu.Lock()
-		delete(inst.pendingCalls, p.key)
-		inst.mu.Unlock()
+		content, phase, reason, label, settled := inst.follow(ctx, p)
 		if !settled {
 			phase, label = completedFormUnknown, harnessLabel()
 		}
+		inst.mu.Lock()
+		delete(inst.pendingCalls, p.key)
+		if inst.settled == nil {
+			inst.settled = map[string]string{}
+		}
+		line := settledLine(p.where, phase, reason)
+		if p.title != "" {
+			line = p.title + " · " + line
+		}
+		inst.settled[p.key] = line
+		inst.mu.Unlock()
 		// A note's label raises the run when it is written; this one raises
 		// it now, whether or not the model is in a turn (ADR-0358 §SD4).
 		if _, err := inst.append(jctx, w, agentrun.Entry{Kind: agentrun.KindCompleted, Key: p.key, Name: p.op, Form: phase, Body: content, Turn: p.turn, Label: label}); err != nil {
@@ -127,8 +140,9 @@ func (inst *coordinator) watch(w *agentrun.Writer, p pendingCall) {
 }
 
 // follow polls the call until it is final. settled is false when its end was
-// not seen, and content then says so.
-func (inst *coordinator) follow(ctx context.Context, p pendingCall) (content string, phase string, label agentrun.Label, settled bool) {
+// not seen, and content then says so; reason is the line's account of how it
+// ended.
+func (inst *coordinator) follow(ctx context.Context, p pendingCall) (content string, phase string, reason string, label agentrun.Label, settled bool) {
 	_, pendingMax, _ := inst.callLimits()
 	deadline := time.Now().Add(pendingMax)
 	for ctx.Err() == nil && time.Now().Before(deadline) {
@@ -137,7 +151,8 @@ func (inst *coordinator) follow(ctx context.Context, p pendingCall) (content str
 			if ctx.Err() != nil {
 				break
 			}
-			return "error: its status could not be read: " + err.Error(), "", agentrun.Label{}, false
+			reason = "its status could not be read: " + err.Error()
+			return "error: " + reason, "", reason, agentrun.Label{}, false
 		}
 		if !out.Final() {
 			continue
@@ -146,18 +161,48 @@ func (inst *coordinator) follow(ctx context.Context, p pendingCall) (content str
 		untrustedSource, confined := inst.readResult(ctx, p.handle, p.key, out, &co)
 		b, err := json.Marshal(co)
 		if err != nil {
-			return "error: " + err.Error(), "", agentrun.Label{}, false
+			return "error: " + err.Error(), "", err.Error(), agentrun.Label{}, false
 		}
 		content = string(b)
 		if untrustedSource != "" {
 			content = wrapUntrusted(untrustedSource, content)
 		}
-		return content, out.Phase, outcomeLabel(untrustedSource != "", confined, inst.confinedTier), true
+		return content, out.Phase, out.Reason, outcomeLabel(untrustedSource != "", confined, inst.confinedTier), true
 	}
 	if ctx.Err() != nil {
-		return "error: the conversation ended while the work ran; read its state before relying on it", "", agentrun.Label{}, false
+		return "error: the conversation ended while the work ran; read its state before relying on it", "", "the conversation ended while it ran", agentrun.Label{}, false
 	}
-	return "error: no end was seen after " + pendingMax.String() + "; read its state before relying on it", "", agentrun.Label{}, false
+	reason = "no end was seen after " + pendingMax.String()
+	return "error: " + reason + "; read its state before relying on it", "", reason, agentrun.Label{}, false
+}
+
+// settledLine is the transcript's line for a call that settled after its
+// turn's wait ended, in place of the line that said it was running: the
+// phase it ended in, or that its end was not seen, and why when the call's
+// own line would say.
+func settledLine(where string, phase string, reason string) (line string) {
+	if phase == completedFormUnknown {
+		line = where + " · its end was not seen"
+	} else {
+		line = where + " · " + phase + " in the background"
+		if phase == "completed" || phase == "rendered" {
+			reason = ""
+		}
+	}
+	if reason != "" {
+		line += " · " + reason
+	}
+	return
+}
+
+// settledLineOf is the transcript's line for the call under key once it has
+// settled in the background; ok is false while it runs, and for a call this
+// coordinator did not follow.
+func (inst *coordinator) settledLineOf(key string) (line string, ok bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	line, ok = inst.settled[key]
+	return
 }
 
 // completionBody is the note's text for a settled call.

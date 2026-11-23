@@ -55,6 +55,10 @@ type entry struct {
 	// steps are a tool entry's steps of the turn: the model call that
 	// asked for it, on a round's first tool, and the tool call itself.
 	steps []turnStep
+	// call is the key of a tool line's call that was still running when
+	// its turn's wait ended; settleCalls rewrites the line once the call
+	// settles, and clears it.
+	call string
 	// cites are a reply's verdicts (ADR-0340 §SD6), the latest per
 	// assertion of its turn; shownText is the text with them, built on
 	// first draw (entry.shown).
@@ -396,6 +400,24 @@ func (inst *conversation) land(req llm.Request, res *llm.Response, err error, at
 	}
 }
 
+// settleCalls rewrites the line of each tool call that was still running
+// when its turn's wait ended and has since settled in the background
+// (ADR-0358): the line said running, and the call has ended.
+func (inst *conversation) settleCalls(coord *coordinator) {
+	if coord == nil {
+		return
+	}
+	for i := range inst.entries {
+		e := &inst.entries[i]
+		if e.call == "" {
+			continue
+		}
+		if line, ok := coord.settledLineOf(e.call); ok {
+			e.text, e.call = line, ""
+		}
+	}
+}
+
 // landTurn applies a turn that ran the tool loop (ADR-0269 M5): the
 // activity lines first, as system entries, then the answer.
 func (inst *conversation) landTurn(req llm.Request, res *turnResult, err error, atMs int64) {
@@ -409,6 +431,9 @@ func (inst *conversation) landTurn(req llm.Request, res *turnResult, err error, 
 		e := entry{speaker: speakerTool, text: a, atMs: atMs}
 		if i < len(steps) {
 			e.steps = steps[i]
+		}
+		if i < len(res.pending) {
+			e.call = res.pending[i]
 		}
 		inst.entries = append(inst.entries, e)
 	}
