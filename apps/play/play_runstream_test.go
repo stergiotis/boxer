@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -222,4 +223,40 @@ func TestResultStreamSkipsProgressFrames(t *testing.T) {
 	term, tErr := rs.terminal()
 	require.NoError(t, tErr)
 	assert.Equal(t, runstream.TerminalComplete, term.State)
+}
+
+// TestOpenResultStreamSurfacesAnExceptionInTheBody: a server that fails once
+// it has sent its response header writes the exception where the result
+// would be. Opening the stream reports that text, in whatever chunks it
+// arrived, where the Arrow decoder would read its first bytes as a length.
+func TestOpenResultStreamSurfacesAnExceptionInTheBody(t *testing.T) {
+	for _, chunks := range [][]string{
+		{"Code: 572. DB::Exception: Too many optimizations applied to query plan. (TOO_MANY_QUERY_PLAN_OPTIMIZATIONS)\n"},
+		{"Co", "de: 5", "72. DB::Exception: Too many optimizations applied to query plan. ", "(TOO_MANY_QUERY_PLAN_OPTIMIZATIONS)\n"},
+	} {
+		frames := append(dataFrames(1, chunks...), runstream.TerminalFrame[[]byte](9, runstream.Complete()))
+		src := &scriptedStream{frames: frames}
+		rs, err := openResultStream(src)
+		require.Error(t, err)
+		assert.Nil(t, rs)
+		assert.Contains(t, err.Error(), "Code: 572. DB::Exception: Too many optimizations applied to query plan. (TOO_MANY_QUERY_PLAN_OPTIMIZATIONS)")
+		assert.NotContains(t, err.Error(), "\n")
+		assert.Equal(t, 1, src.closed, "a stream nobody will read must not be left open")
+	}
+}
+
+// TestOpenResultStreamLeavesAResultAlone: bytes that only resemble an
+// exception's first word are the result's, and nothing of them is lost.
+func TestOpenResultStreamLeavesAResultAlone(t *testing.T) {
+	for _, chunks := range [][]string{{"\xff\xff\xff\xff", "rest"}, {"Code", ": none"}, {"Co"}, {"Code: "}} {
+		frames := append(dataFrames(1, chunks...), runstream.TerminalFrame[[]byte](9, runstream.Complete()))
+		rs, err := openResultStream(&scriptedStream{frames: frames})
+		require.NoError(t, err)
+		body, rErr := io.ReadAll(rs)
+		require.NoError(t, rErr)
+		assert.Equal(t, strings.Join(chunks, ""), string(body))
+		term, tErr := rs.terminal()
+		require.NoError(t, tErr)
+		assert.Equal(t, runstream.TerminalComplete, term.State)
+	}
 }

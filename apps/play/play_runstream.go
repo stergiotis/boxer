@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // play_runstream.go — play's side of the E3 frame contract (runstream) and
@@ -117,7 +118,43 @@ func openResultStream(st queryengine.StreamI) (rs *resultStream, err error) {
 		rs = nil
 		return
 	}
+	if text, is := rs.exceptionInPlaceOfResult(); is {
+		err = eh.Errorf("clickhouse failed after it began to answer: %s", text)
+		_ = st.Close()
+		rs = nil
+		return
+	}
 	return
+}
+
+// exceptionLimit bounds how much of a server's exception text is read from
+// a body that holds it in place of a result.
+const exceptionLimit = 16 << 10
+
+// exceptionInPlaceOfResult reports the exception text of a body that begins
+// with one. A server that fails once it has sent its response header has
+// no status left to report the failure with and writes the exception where
+// the result would be; an Arrow stream never begins with those bytes.
+func (inst *resultStream) exceptionInPlaceOfResult() (text string, is bool) {
+	const mark = "Code: "
+	for len(inst.pending) <= len(mark) && !inst.hasTerm {
+		f, ok := inst.st.Next()
+		if !ok {
+			break
+		}
+		switch f.Kind {
+		case runstream.KindData:
+			inst.pending = append(inst.pending[:len(inst.pending):len(inst.pending)], f.Data...)
+		case runstream.KindTerminal:
+			inst.term = f.Terminal
+			inst.hasTerm = true
+		}
+	}
+	if len(inst.pending) <= len(mark) || string(inst.pending[:len(mark)]) != mark || inst.pending[len(mark)] < '0' || inst.pending[len(mark)] > '9' {
+		return
+	}
+	body, _ := io.ReadAll(io.LimitReader(inst, exceptionLimit))
+	return strings.TrimSpace(string(body)), true
 }
 
 // pull advances until there are bytes to read or the stream is over.
