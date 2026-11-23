@@ -35,6 +35,9 @@ func TestPassLetsATasksReadThroughAndRefusesTheRest(t *testing.T) {
 		{name: "a task's materialized cte", sql: "WITH a AS MATERIALIZED (SELECT k FROM t), b AS MATERIALIZED (SELECT k FROM a) SELECT count() FROM b", task: "t1"},
 		{name: "a task's not materialized, which the server does not have", sql: "WITH a AS NOT MATERIALIZED (SELECT 1) SELECT * FROM a", task: "t1", refused: true},
 		{name: "a task's materialized cte around an insert", sql: "WITH a AS MATERIALIZED (INSERT INTO t SELECT 1) SELECT 1", task: "t1", refused: true},
+		// Several ARRAY JOIN clauses on one FROM parse.
+		{name: "a task's select with two array joins", sql: "SELECT x, T, tau FROM t ARRAY JOIN [1.0, 1.5, 2.0] AS T LEFT ARRAY JOIN [0.5, 0.7] AS tau", task: "t1"},
+		{name: "a task's later array join around an insert", sql: "SELECT x FROM t ARRAY JOIN a AS x ARRAY JOIN (INSERT INTO t SELECT 1) AS y", task: "t1", refused: true},
 		{name: "a task's insert", sql: "INSERT INTO t VALUES (1)", task: "t1", refused: true},
 		{name: "a task's insert wrapper", sql: "INSERT INTO t SELECT 1", task: "t1", refused: true},
 		{name: "a task's create", sql: "CREATE TABLE t (a UInt8) ENGINE = Memory", task: "t1", refused: true},

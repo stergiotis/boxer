@@ -53,7 +53,11 @@ func TestAgentLimits(t *testing.T) {
 		"an exists":                    {"SELECT a FROM t WHERE exists(SELECT 1 FROM u WHERE u.k = t.k)", remote, grant, true},
 		"an egress read in an exists":  {"SELECT exists(SELECT * FROM url('http://x/', 'CSV'))", remote, grant, false},
 		"a keelson table in an exists": {"SELECT * FROM keelson('apps') WHERE EXISTS (SELECT * FROM keelson('windows'))", local, narrow, false},
-		"an exists the grant covers":   {"SELECT * FROM keelson('apps') AS a WHERE NOT EXISTS (SELECT 1 FROM keelson('apps') AS b WHERE b.id = a.id)", local, narrow, true},
+		// Every ARRAY JOIN clause of a statement is read, not the first alone.
+		"two array joins":                       {"SELECT x, T, tau FROM t ARRAY JOIN [1.0, 1.5, 2.0] AS T ARRAY JOIN [0.5, 0.7] AS tau", remote, grant, true},
+		"an egress read in a later array join":  {"SELECT x FROM t ARRAY JOIN a AS x LEFT ARRAY JOIN (SELECT groupArray(k) FROM url('http://x/', 'CSV')) AS y", remote, grant, false},
+		"a keelson table in a later array join": {"SELECT x FROM keelson('apps') ARRAY JOIN a AS x ARRAY JOIN (SELECT groupArray(id) FROM keelson('windows')) AS y", local, narrow, false},
+		"an exists the grant covers":            {"SELECT * FROM keelson('apps') AS a WHERE NOT EXISTS (SELECT 1 FROM keelson('apps') AS b WHERE b.id = a.id)", local, narrow, true},
 	} {
 		err := checkAgentLimits(tc.sql, tc.dec, tc.obo, nil)
 		if tc.pass {
