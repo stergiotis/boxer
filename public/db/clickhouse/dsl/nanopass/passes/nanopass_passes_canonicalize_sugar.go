@@ -23,6 +23,7 @@ import (
 //	f(params)(args) FILTER (WHERE c)      → fIf(params)(args, c)
 //	f(DISTINCT args) FILTER (WHERE c)     → fDistinctIf(args, c)
 //	f(args) FILTER (WHERE c) OVER …       → fIf(args, c) OVER …
+//	EXISTS (query), exists(query)         → "exists"((query))
 //
 // The target functions are the server's own canonical rewrites (verified
 // against `clickhouse format`, ClickHouse 26.x). In particular
@@ -35,6 +36,10 @@ import (
 // DISTINCT into the Distinct combinator ahead of If, and for a call named
 // exactly count without DISTINCT drops the asterisk arguments
 // (count(*) FILTER (WHERE c) → countIf(c)). The rule writes the same call.
+// EXISTS the server holds as the call exists with the query as a subquery
+// argument. The rule writes the name quoted: bare, the word followed by a
+// parenthesis is the predicate again, quoted it is a call like any other,
+// which the server reads alike.
 //
 // Sugar forms nest (SUBSTRING(DATE '…' FROM 1), EXTRACT(DAY FROM DATE '…'));
 // each apply rewrites the outermost occurrences only, so the pass declares
@@ -43,7 +48,7 @@ var CanonicalizeSugar = nanopass.LiftBodyPass(
 	"CanonicalizeSugar",
 	func(sql string) (string, error) {
 		return rewriteNodes(sql, "CanonicalizeSugar",
-			sugarDateRule, sugarTimestampRule, sugarExtractRule, sugarSubstringRule, sugarTrimRule, sugarFilterRule)
+			sugarDateRule, sugarTimestampRule, sugarExtractRule, sugarSubstringRule, sugarTrimRule, sugarFilterRule, sugarExistsRule)
 	},
 	nanopass.PassProperties{
 		NeedsFixedPoint: true,
@@ -242,6 +247,48 @@ func sugarFilterRule(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (st
 	b.WriteString(")")
 	b.WriteString(text(fc.GetStop().GetTokenIndex()+1, node.GetStop().GetTokenIndex()))
 	return b.String(), true
+}
+
+// EXISTS (query) → "exists"((query)), the call ClickHouse's parser holds.
+// Grammar: EXISTS LPAREN selectUnionStmt RPAREN
+// A query already in parentheses of its own, `exists((SELECT 1))`, keeps
+// them and gains none. A comment between the keyword and its parenthesis is
+// kept; whitespace alone is not.
+func sugarExistsRule(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (string, bool) {
+	c, ok := node.(*grammar1.ColumnExprExistsContext)
+	if !ok {
+		return "", false
+	}
+	union, ok := c.SelectUnionStmt().(*grammar1.SelectUnionStmtContext)
+	if !ok || c.EXISTS() == nil || c.LPAREN() == nil || c.RPAREN() == nil {
+		return "", false
+	}
+	text := func(start, stop int) string {
+		if start > stop {
+			return ""
+		}
+		return pr.TokenStream.GetTextFromInterval(antlr.NewInterval(start, stop))
+	}
+	open, shut := c.LPAREN().GetSymbol().GetTokenIndex(), c.RPAREN().GetSymbol().GetTokenIndex()
+	gap := text(c.EXISTS().GetSymbol().GetTokenIndex()+1, open-1)
+	if strings.TrimSpace(gap) == "" {
+		gap = ""
+	}
+	query := text(open+1, shut-1)
+	if !isParenthesisedQuery(union) {
+		query = "(" + query + ")"
+	}
+	return nanopass.QuoteIdentifier("exists") + gap + "(" + query + ")", true
+}
+
+// isParenthesisedQuery reports whether a query is one parenthesised query
+// and nothing else: no WITH ahead of it and no set operation after it.
+func isParenthesisedQuery(union *grammar1.SelectUnionStmtContext) (parenthesised bool) {
+	if union.Ctes() != nil || len(union.AllSelectUnionStmtItem()) > 0 {
+		return false
+	}
+	head, ok := union.SelectStmtWithParens().(*grammar1.SelectStmtWithParensContext)
+	return ok && head.LPAREN() != nil
 }
 
 // columnsExprArgs is the argument list of a window call, one node per argument.

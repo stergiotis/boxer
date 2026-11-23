@@ -1,0 +1,2 @@
+go test fuzz v1
+string("SELECT EXISTS /* c */ (SELECT 1 FROM t WHERE exists(SELECT DATE '2020-01-01')), exists((SELECT 1)), 1 AS exists")

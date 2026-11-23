@@ -278,3 +278,54 @@ func TestServerTruthAggregateFilter(t *testing.T) {
 		})
 	}
 }
+
+// TestServerTruthExists: the server's parser reads EXISTS, in either
+// spelling, as the call CanonicalizeSugar writes for it — both format to the
+// same text — and the original, its canonical form and the canonical AST's
+// rendering evaluate alike.
+func TestServerTruthExists(t *testing.T) {
+	requireClickhouse(t)
+
+	queries := []string{
+		"SELECT exists(SELECT 1 FROM numbers(3) WHERE number > 5) AS a, EXISTS (SELECT 1 FROM numbers(3)) AS b",
+		"SELECT number FROM numbers(6) AS o WHERE exists(SELECT 1 FROM numbers(3) AS i WHERE i.number = o.number) ORDER BY number",
+		"SELECT number FROM numbers(6) AS o WHERE NOT EXISTS (SELECT 1 FROM numbers(3) AS i WHERE i.number = o.number) ORDER BY number",
+		"SELECT exists((SELECT 1 WHERE 0)), EXISTS ((SELECT 1)), exists((SELECT 1 WHERE 0) UNION ALL (SELECT 2))",
+		"SELECT exists(SELECT 1 WHERE 0 UNION ALL SELECT 2 WHERE 0), exists(WITH 3 AS x SELECT x WHERE x > 2)",
+		"SELECT exists(SELECT * FROM numbers(0)), exists(SELECT 1, 2 FROM numbers(0)), exists(SELECT number FROM numbers(1))",
+		"SELECT Exists (SELECT 1 WHERE EXISTS (SELECT 2 WHERE 0)), EXISTS/* c */(SELECT 1) + 1",
+		"SELECT number, EXISTS (SELECT 1 FROM numbers(3) AS i WHERE i.number = o.number) AS e FROM numbers(5) AS o ORDER BY number",
+		"SELECT count() FILTER (WHERE EXISTS (SELECT 1 FROM numbers(3) WHERE number = 2)), count() FILTER (WHERE exists(SELECT 1 WHERE 0)) FROM numbers(10)",
+		"SELECT number % 2 AS k FROM numbers(10) GROUP BY k HAVING exists(SELECT 1 FROM numbers(1)) ORDER BY k",
+	}
+
+	for _, sql := range queries {
+		t.Run(sql, func(t *testing.T) {
+			sugar, err := nanopass.FixedPoint(passes.CanonicalizeSugar, 16).Run(sql)
+			require.NoError(t, err)
+			require.NotEqual(t, sql, sugar)
+			wantFormat, err := chFormat(sql)
+			require.NoError(t, err)
+			gotFormat, err := chFormat(sugar)
+			require.NoError(t, err)
+			assert.Equal(t, wantFormat, gotFormat, "the server parses EXISTS and its call differently:\n  sugar: %s", sugar)
+
+			want, err := chLocal(t, sql)
+			require.NoError(t, err)
+			canonical, err := fullPipeline(sql)
+			require.NoError(t, err)
+			got, err := chLocal(t, canonical)
+			require.NoError(t, err)
+			assert.Equal(t, want, got, "canonical: %s", canonical)
+
+			pr, err := nanopass.ParseCanonical(canonical)
+			require.NoError(t, err)
+			query, err := ast.ConvertCSTToAST(pr)
+			require.NoError(t, err)
+			rendered := query.ToSQL()
+			got, err = chLocal(t, rendered)
+			require.NoError(t, err)
+			assert.Equal(t, want, got, "rendered: %s", rendered)
+		})
+	}
+}

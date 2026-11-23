@@ -1,0 +1,2 @@
+go test fuzz v1
+string("SELECT exists(SELECT * FROM t), EXISTS ((SELECT 1) UNION ALL (SELECT 2)), exists FROM t WHERE NOT exists(SELECT x)")
