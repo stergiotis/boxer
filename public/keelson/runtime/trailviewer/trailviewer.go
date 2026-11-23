@@ -218,6 +218,8 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.grid.release()
 	inst.an.close()
 	inst.views.runner.Invalidate()
+	// The write the runner dropped is adopted by no frame.
+	inst.views.writing, inst.views.unadopted = nil, false
 	inst.send.runner.Invalidate()
 	return
 }

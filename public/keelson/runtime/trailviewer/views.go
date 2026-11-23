@@ -194,20 +194,22 @@ type viewStore struct {
 	// read.
 	wantOpen string
 	name     string
-	// writing is the list a write in flight carries, so the views resource
-	// moves with the command that wrote it rather than with the frame the
-	// write lands in; nil when none is in flight.
-	writing []SavedView
+	// writing is the list a write carries until a frame adopts its result,
+	// so the views resource moves with the command that wrote it rather
+	// than with the frame the write lands in. unadopted says there is such
+	// a write; an empty list is one too.
+	writing   []SavedView
+	unadopted bool
 }
 
 // tick adopts a finished read or write, and starts the first read.
 func (inst *App) tickViews() {
 	vs := &inst.views
 	if res, _, ok := vs.runner.TakeResult(); ok {
-		vs.list, vs.loaded, vs.err, vs.writing = *res, true, nil, nil
+		vs.list, vs.loaded, vs.err, vs.writing, vs.unadopted = *res, true, nil, nil, false
 	}
 	if snap := vs.runner.Snapshot(); snap.State == bgjob.StateFailed && snap.Err != nil {
-		vs.err, vs.loaded, vs.writing = snap.Err, true, nil
+		vs.err, vs.loaded, vs.writing, vs.unadopted = snap.Err, true, nil, false
 		vs.runner.Invalidate()
 	}
 	if vs.store == nil {
@@ -238,17 +240,19 @@ func (inst *App) tickViews() {
 }
 
 // writeViews stores list off the frame; a write in flight refuses the
-// next, as a click on a busy control is dropped.
+// next, as a click on a busy control is dropped. A write that has landed
+// but that no frame has adopted yet refuses it too: the next list would be
+// built on the one before it and drop what it wrote.
 func (inst *App) writeViews(list []SavedView, note string) (err error) {
 	vs := &inst.views
 	switch {
 	case vs.store == nil:
 		return app.RefuseOperation("this window has no persist store, so a view cannot be saved or deleted")
-	case vs.runner.Running():
+	case vs.runner.Running() || vs.unadopted:
 		return app.RefuseOperation("the saved views are being written; ask again shortly")
 	}
 	st := vs.store
-	vs.err, vs.note, vs.writing = nil, note, list
+	vs.err, vs.note, vs.writing, vs.unadopted = nil, note, list, true
 	vs.runner.Start(nil, bgjob.Spec{Kind: "trailviewer.views", Title: "Trail viewer saved views"},
 		func(ctx context.Context) (out *[]SavedView, err error) {
 			if err = storeViews(ctx, st, list); err != nil {
@@ -318,7 +322,7 @@ func (inst *App) openViewGesture(name string) {
 // resource's: the list a write in flight carries, else the list held.
 func (inst *viewStore) namesKey() string {
 	list := inst.list
-	if inst.writing != nil {
+	if inst.unadopted {
 		list = inst.writing
 	}
 	names := make([]string, 0, len(list))

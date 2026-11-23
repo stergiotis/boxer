@@ -398,7 +398,7 @@ func TestASavedViewRoundTrips(t *testing.T) {
 	inst.picker.fromExpr = "anchor_now - INTERVAL 6 HOUR"
 
 	settle := func(a *App) {
-		require.Eventually(t, func() bool { a.tickViews(); return a.views.loaded && !a.views.runner.Running() }, 5*time.Second, 5*time.Millisecond)
+		require.Eventually(t, func() bool { a.tickViews(); return a.views.loaded && !a.views.runner.Running() && !a.views.unadopted }, 5*time.Second, 5*time.Millisecond)
 	}
 	settle(inst)
 	assert.Empty(t, inst.views.list)

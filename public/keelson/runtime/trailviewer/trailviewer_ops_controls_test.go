@@ -149,11 +149,11 @@ func TestTheControlsRouteThroughTheirCommands(t *testing.T) {
 
 	w.frame(func() { w.inst.saveViewGesture("new") })
 	person(resViews)
-	require.Eventually(t, func() bool { inst.tickViews(); return !inst.views.runner.Running() }, 5*time.Second, 5*time.Millisecond)
+	require.Eventually(t, func() bool { inst.tickViews(); return !inst.views.runner.Running() && !inst.views.unadopted }, 5*time.Second, 5*time.Millisecond)
 	assert.Equal(t, []string{"saved", "new"}, inst.views.names())
 	w.frame(func() { w.inst.deleteViewGesture("saved") })
 	person(resViews)
-	require.Eventually(t, func() bool { inst.tickViews(); return !inst.views.runner.Running() }, 5*time.Second, 5*time.Millisecond)
+	require.Eventually(t, func() bool { inst.tickViews(); return !inst.views.runner.Running() && !inst.views.unadopted }, 5*time.Second, 5*time.Millisecond)
 	assert.Equal(t, []string{"new"}, inst.views.names())
 
 	// The export refuses without a bus, and the refusal reaches the line
@@ -400,7 +400,10 @@ func TestSavedViewCommands(t *testing.T) {
 	inst.views.store = st
 	settle := func() {
 		t.Helper()
-		require.Eventually(t, func() bool { inst.tickViews(); return inst.views.loaded && !inst.views.runner.Running() }, 5*time.Second, 5*time.Millisecond)
+		require.Eventually(t, func() bool {
+			inst.tickViews()
+			return inst.views.loaded && !inst.views.runner.Running() && !inst.views.unadopted
+		}, 5*time.Second, 5*time.Millisecond)
 	}
 	assert.NotNil(t, refusal(command(t, inst, opSaveView, ViewNameArgs{Name: "early"})), "refused until the list is read")
 	settle()
