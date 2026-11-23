@@ -479,6 +479,34 @@ if {{EguiUiOptionalOuter}}.is_some() {
     debug_assert_eq!(self.r21_ui_rect_seqs.len(), self.r21_ui_rect_max_y.len());
 }
 `)).Build())
+	// captureUiClipRect — the third r21 rect: ui.clip_rect(), the part of
+	// the Ui that is drawn. Inside a scroll area that is the visible
+	// viewport, where available_rect_before_wrap is shifted by the scroll
+	// offset; captured at the top of a pane's body it is where the pane
+	// shows on screen, in the frame's logical points — what a capture's crop
+	// takes (ADR-0281). Shares r21 and its caveats with captureUiRect: one
+	// seq names one kind of rect, and with no Ui in scope the seq stays
+	// absent from the drain.
+	specials = append(specials,
+		idl.NewProceduralNode("captureUiClipRect").WithEffect(ir.EffectLocal).
+			AddArguments(idl.NewArgumentsBuilder().
+				PlainArg("seq", ctabb.U64).
+				Build()).
+			WithApplyCodeClientRust(rustClientCode(`
+if {{EguiUiOptionalOuter}}.is_some() {
+    let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
+    let r = ui.clip_rect();
+    self.r21_ui_rect_seqs.push(seq);
+    self.r21_ui_rect_min_x.push(r.min.x);
+    self.r21_ui_rect_min_y.push(r.min.y);
+    self.r21_ui_rect_max_x.push(r.max.x);
+    self.r21_ui_rect_max_y.push(r.max.y);
+    debug_assert_eq!(self.r21_ui_rect_seqs.len(), self.r21_ui_rect_min_x.len());
+    debug_assert_eq!(self.r21_ui_rect_seqs.len(), self.r21_ui_rect_min_y.len());
+    debug_assert_eq!(self.r21_ui_rect_seqs.len(), self.r21_ui_rect_max_x.len());
+    debug_assert_eq!(self.r21_ui_rect_seqs.len(), self.r21_ui_rect_max_y.len());
+}
+`)).Build())
 	// paintAbsoluteOverlay — drains paint_cmds into an Order::Foreground
 	// viewport-absolute painter that sits above every egui::Window. Use
 	// when a connector / annotation / debug-overlay needs to cross window

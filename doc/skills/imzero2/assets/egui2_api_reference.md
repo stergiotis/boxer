@@ -28,6 +28,7 @@ status: draft
 | Button | BuilderFactory | Yes | 0 | 1 | 13 | Immediate, Retained |
 | CaptureReplay | Procedural | No | 3 | 0 | - | - |
 | CaptureUiAvailableRect | Procedural | No | 1 | 0 | - | - |
+| CaptureUiClipRect | Procedural | No | 1 | 0 | - | - |
 | CaptureUiRect | Procedural | No | 1 | 0 | - | - |
 | Checkbox | BuilderFactory | Yes | 2 | 0 | 1 | Immediate |
 | CodeView | BuilderFactory | Yes | 0 | 1 | 4 | Immediate, Retained |
@@ -2900,6 +2901,19 @@ Block
 ---
 
 ### CaptureUiAvailableRect
+
+- **Type:** Procedural
+- **Identity:** No
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| seq | plain | u64 |
+
+---
+
+### CaptureUiClipRect
 
 - **Type:** Procedural
 - **Identity:** No

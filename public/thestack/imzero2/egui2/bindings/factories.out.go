@@ -158,6 +158,14 @@ func CaptureUiAvailableRect(seq uint64) {
 	r.SendIntermediate()
 }
 
+func CaptureUiClipRect(seq uint64) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdCaptureUiClipRect))
+	r.WriteUint64(seq)
+
+	r.SendIntermediate()
+}
+
 func CaptureUiRect(seq uint64) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdCaptureUiRect))

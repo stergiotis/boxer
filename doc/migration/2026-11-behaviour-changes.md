@@ -220,7 +220,10 @@ relied on the old behaviour.
   ([ADR-0404](../adr/0404-what-a-person-reads-in-a-window-a-stated-reader-one-way-to-draw-a-decision-and-the-chat-window-as-the-first-case.md)
   §SD8). The IDL moved with it: the dock gained `Closable`,
   `CloseRequested` and `HideTabBarWhenAlone`, the button `Extend`,
-  `HoverText`, `ReserveFrame` and `Fill`. A native host or a browser host
+  `HoverText`, `ReserveFrame` and `Fill`; on 2026-11-23 it gained
+  `CaptureUiClipRect`, which renumbers the procedures after it
+  ([ADR-0270](../adr/0270-play-operations-catalog-and-agent-limits.md),
+  update of 2026-11-23). A native host or a browser host
   built before the change refuses a Go side built after it, and the other
   way round; build both from one boxer version, as the fingerprint line
   under *Processes, listeners and hosts* says.

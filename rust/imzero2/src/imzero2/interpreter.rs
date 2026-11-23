@@ -2651,6 +2651,31 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                     debug_assert_eq!(self.r21_ui_rect_seqs.len(), self.r21_ui_rect_max_y.len());
                 }
             }
+            FuncProcId::CaptureUiClipRect => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::CaptureUiClipRect");
+                // arguments
+                let mut seq = self.io.read_plain_u64()?;
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                if u.is_some() {
+                    let ui = u.as_mut().unwrap();
+                    let r = ui.clip_rect();
+                    self.r21_ui_rect_seqs.push(seq);
+                    self.r21_ui_rect_min_x.push(r.min.x);
+                    self.r21_ui_rect_min_y.push(r.min.y);
+                    self.r21_ui_rect_max_x.push(r.max.x);
+                    self.r21_ui_rect_max_y.push(r.max.y);
+                    debug_assert_eq!(self.r21_ui_rect_seqs.len(), self.r21_ui_rect_min_x.len());
+                    debug_assert_eq!(self.r21_ui_rect_seqs.len(), self.r21_ui_rect_min_y.len());
+                    debug_assert_eq!(self.r21_ui_rect_seqs.len(), self.r21_ui_rect_max_x.len());
+                    debug_assert_eq!(self.r21_ui_rect_seqs.len(), self.r21_ui_rect_max_y.len());
+                }
+            }
             FuncProcId::CaptureUiRect => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::CaptureUiRect");
