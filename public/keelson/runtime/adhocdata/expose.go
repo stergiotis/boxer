@@ -163,9 +163,9 @@ type exposures struct {
 // on this machine that present the token the answer carries (ADR-0407, proposed).
 // A person's request needs nothing more; an agent's call is attested, its
 // task's grant must list expose:<prefix> for a prefix of the alias, the
-// task must have published the dataset, and neither that publish nor the
-// call may be labelled above TLP:CLEAR. Every request is audited, refused
-// or not.
+// task must have published the dataset, neither that publish nor the call
+// may be labelled above TLP:CLEAR, and the dataset must not derive from
+// sealed data. Every request is audited, refused or not.
 func (inst *Service) Expose(ctx context.Context, in ExposeInput) (res ExposeResult, err error) {
 	cc, err := inst.attest(in.By, in.OnBehalfOf)
 	if err == nil {
@@ -274,20 +274,24 @@ func (inst *Service) checkExposeGrant(obo *app.OnBehalfOf, alias string) (err er
 }
 
 // checkTaskMayExpose refuses an agent's exposure of a dataset its task did
-// not publish, or one published or asked for under a label above
-// TLP:CLEAR: what leaves by an exposure is the task's own work, at the
-// lowest tier.
+// not publish, one published or asked for under a label above TLP:CLEAR,
+// and one that derives from sealed data: what leaves by an exposure is the
+// task's own work, at the lowest tier.
 func checkTaskMayExpose(rec *record, cc app.CallContext) (err error) {
 	rec.mu.RLock()
-	pub := rec.context
+	pub, derived := rec.context, rec.derived
 	alias := rec.alias
 	rec.mu.RUnlock()
-	switch {
-	case !pub.Has || pub.Val.Task != cc.Task:
-		return eb.Build().Str("alias", alias).Str("task", cc.Task).Errorf("%w; %s was not published by this task's call, so only the person exposes it, from play's Data sets tab", ErrNotTheTasks, alias) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text and names who may expose it"
-	case pub.Val.Tier > uint8(agentrun.TierClear):
+	switch standingOf(pub, derived, cc.Task) {
+	case standingOwnClear:
+	case standingLabelled:
 		return eb.Build().Str("alias", alias).Errorf("%s was published by a call labelled %s; a task exposes only what it published at TLP:CLEAR, and the person exposes the rest", alias, agentrun.TierE(pub.Val.Tier)) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text"
-	case cc.Tier > uint8(agentrun.TierClear):
+	case standingDerived:
+		return eb.Build().Str("alias", alias).Errorf("%s derives from sealed data: the result it was published from read data that is not this task's own publication at TLP:CLEAR; a task exposes only its own work, and the person exposes the rest, from play's Data sets tab", alias) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text and names who may expose it"
+	default:
+		return eb.Build().Str("alias", alias).Str("task", cc.Task).Errorf("%w; %s was not published by this task's call, so only the person exposes it, from play's Data sets tab", ErrNotTheTasks, alias) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text and names who may expose it"
+	}
+	if cc.Tier > uint8(agentrun.TierClear) {
 		return eb.Build().Str("alias", alias).Errorf("the call is labelled %s; a task exposes data only from a run at TLP:CLEAR, and the person exposes the rest", agentrun.TierE(cc.Tier)) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text"
 	}
 	return nil
@@ -379,6 +383,8 @@ func (inst *Service) liveFor(e *exposure) (rec *record, lapsed string) {
 		return nil, "a republish changed its columns"
 	case e.context.Has && rec.context.Has && rec.context.Val.Tier > uint8(agentrun.TierClear):
 		return nil, "a republish was labelled above TLP:CLEAR"
+	case e.context.Has && rec.derived:
+		return nil, "a republish derives from sealed data"
 	}
 	return
 }

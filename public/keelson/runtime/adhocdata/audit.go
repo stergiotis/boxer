@@ -38,9 +38,11 @@ const (
 // Context is set when an agent's call caused the operation and the
 // dispatcher attested it.
 type AuditRecord struct {
-	At         time.Time
-	Operation  string
-	Outcome    string
+	At        time.Time
+	Operation string
+	Outcome   string
+	// Reason is why a refused operation was refused. On an applied publish
+	// it says that the revision derives from sealed data.
 	Reason     string
 	Bundle     string
 	Revision   uint64

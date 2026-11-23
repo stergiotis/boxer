@@ -94,6 +94,12 @@ const (
 type BundleProvenance struct {
 	SourceSql    string
 	InputHandles []string
+	// DerivedFromSealed says the rows derive from sealed data. The
+	// publisher sets it from the label of the result it publishes, not
+	// from the tier of the call that asked for the publish: a call
+	// declares the tier its conversation had when the model asked, which
+	// a result that arrived in the same round has not raised yet.
+	DerivedFromSealed bool
 }
 
 // BundleInput is one dataset a bundle's source statement read, as the
@@ -136,6 +142,10 @@ type BundleResult struct {
 	// SourceSql and Inputs are the live revision's provenance.
 	SourceSql string
 	Inputs    []BundleInput
+	// DerivedFromSealed says the live revision derives from sealed data:
+	// its publisher declared so, or the service found an input that is
+	// not the publishing task's own publication at TLP:CLEAR.
+	DerivedFromSealed bool
 	// PublisherTask is Context's task, and what survives the bus: the
 	// task that reads and runs on the bundle without a grant entry for it
 	// (§SD4).
@@ -158,6 +168,7 @@ type bundleRec struct {
 	context        option.Option[app.CallContext]
 	sourceSql      string
 	inputs         []BundleInput
+	derived        bool
 }
 
 func (inst *bundleRec) checkOwner(by Identity) (err error) {
@@ -250,6 +261,11 @@ func (inst *Service) PublishBundle(ctx context.Context, in BundlePublishInput) (
 	r.Outcome, r.Revision, r.Owner, r.DocumentDigest = AuditApplied, res.Revision, res.Owner, res.DocumentDigest
 	r.fillDatasets(res.Datasets)
 	r.Document, r.SourceSql = res.Document, res.SourceSql
+	if res.DerivedFromSealed {
+		// On an applied publish the reason is why a later read of the
+		// revision is labelled whatever tier this call declared.
+		r.Reason = "derives from sealed data"
+	}
 	for _, in := range res.Inputs {
 		r.InputHandles = append(r.InputHandles, in.Handle)
 		r.InputAliases = append(r.InputAliases, in.Alias)
@@ -372,6 +388,8 @@ func (inst *Service) publishBundle(in BundlePublishInput, cc option.Option[app.C
 	if old != nil {
 		owner, keep, revision, createdAt = old.owner, keep || old.keepAfterClose, old.revision+1, old.createdAt
 	}
+	inputs := inst.resolveInputsLocked(in.Provenance.InputHandles)
+	derived := in.Provenance.DerivedFromSealed || inst.sealedInputLocked(in.Provenance.InputHandles, cc) != ""
 	registered := make([]*record, 0, len(sealedSet))
 	for _, s := range sealedSet {
 		handle, hErr := inst.mintHandleLocked()
@@ -382,6 +400,7 @@ func (inst *Service) publishBundle(in BundlePublishInput, cc option.Option[app.C
 				// the member sees the bundle move.
 				schema: s.stream.schema, structure: s.stream.structure, revision: revision, rows: s.stream.rows, bytes: s.bytes,
 				createdAt: now, file: s.file, streamDigest: s.stream.digest, plainBytes: s.stream.plain, columns: s.stream.columns, context: cc,
+				derived: derived,
 			}
 			hErr = inst.reg.Register(rec)
 			if hErr == nil {
@@ -409,7 +428,7 @@ func (inst *Service) publishBundle(in BundlePublishInput, cc option.Option[app.C
 	b := &bundleRec{
 		alias: in.Alias, owner: owner, keepAfterClose: keep, revision: revision,
 		document: document, documentDigest: digest, createdAt: createdAt, context: cc,
-		sourceSql: in.Provenance.SourceSql, inputs: inst.resolveInputsLocked(in.Provenance.InputHandles),
+		sourceSql: in.Provenance.SourceSql, inputs: inputs, derived: derived,
 		localNames: make([]string, 0, len(registered)), handles: make([]string, 0, len(registered)),
 	}
 	for i, r := range registered {
@@ -613,6 +632,7 @@ func (inst *bundleRec) result(recs []*record) (res BundleResult) {
 		Alias: inst.alias, Revision: inst.revision, Document: inst.document, DocumentDigest: inst.documentDigest,
 		CreatedAtUs: inst.createdAt, Datasets: make([]BundleDataset, 0, len(inst.handles)),
 		Owner: inst.owner, Context: inst.context, SourceSql: inst.sourceSql, Inputs: inst.inputs,
+		DerivedFromSealed: inst.derived,
 	}
 	if inst.context.Has {
 		res.PublisherTask = inst.context.Val.Task
@@ -627,6 +647,34 @@ func (inst *bundleRec) result(recs []*record) (res BundleResult) {
 		res.Datasets = append(res.Datasets, d)
 	}
 	return
+}
+
+// sealedInputLocked is the first input handle of a publish by cc that is
+// not cc's task's own publication at TLP:CLEAR, or one the service no
+// longer holds; empty when every input is. An ad-hoc dataset is sealed, so
+// rows read from one that is not the publishing task's own clear
+// publication derive from sealed data whatever the publisher declared. A
+// publish no agent's call caused has no task to own an input. The caller
+// holds inst.mu.
+func (inst *Service) sealedInputLocked(handles []string, cc option.Option[app.CallContext]) (handle string) {
+	for _, h := range handles {
+		r := inst.live[h]
+		if r == nil {
+			if p, ok := inst.reg.Lookup(h); ok {
+				r, _ = p.(*record)
+			}
+		}
+		if r == nil || !cc.Has {
+			return h
+		}
+		r.mu.RLock()
+		standing := standingOf(r.context, r.derived, cc.Val.Task)
+		r.mu.RUnlock()
+		if standing != standingOwnClear {
+			return h
+		}
+	}
+	return ""
 }
 
 // resolveInputsLocked finds each input handle among the datasets the

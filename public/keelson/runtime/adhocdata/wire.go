@@ -351,7 +351,7 @@ func (inst *Service) handleBundlePublish(msg *app.Msg) {
 	res, pErr := inst.PublishBundle(context.WithoutCancel(msg.Context()), BundlePublishInput{
 		Alias: req.Bundle, Document: req.Document, Datasets: datasets,
 		KeepAfterClose: req.KeepAfterClose, By: sender(msg),
-		Provenance: BundleProvenance{SourceSql: req.SourceSql, InputHandles: req.InputHandles},
+		Provenance: BundleProvenance{SourceSql: req.SourceSql, InputHandles: req.InputHandles, DerivedFromSealed: req.DerivedFromSealed},
 		OnBehalfOf: callContextFields(req.OboTask, req.OboEpoch, req.OboCall),
 	})
 	if pErr != nil {

@@ -205,6 +205,12 @@ type record struct {
 	// context is the attested call that published the live revision; set
 	// for a bundle's datasets an agent's call published.
 	context option.Option[app.CallContext]
+	// derived says the live revision derives from sealed data: its
+	// publisher declared so, or it names an input that is not the
+	// publishing task's own publication at TLP:CLEAR. A bundle's dataset
+	// is never republished in place, so context and derived belong to the
+	// bytes under the handle for as long as it is registered.
+	derived bool
 }
 
 var _ introspect.EncryptedDatasetI = (*record)(nil)
