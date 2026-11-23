@@ -305,6 +305,11 @@ func (inst *Chrome) renderList(now time.Time, ids *c.WidgetIdStack) {
 		TitleBar(true).
 		DefaultOpen(true).
 		DefaultPos(listX, listY)
+	// The title bar's own close cross, bound to listOpen, rather than a
+	// Close button among the list's actions.
+	bindId := wf.Id()
+	wf = wf.OpenBound(bindId)
+	c.CurrentApplicationState.StateManager.AddR10Databinding(bindId, &inst.listOpen)
 	for range wf.KeepIter() {
 		for range c.HorizontalTop().KeepIter() {
 			if len(inst.entries) > 0 {
@@ -319,9 +324,6 @@ func (inst *Chrome) renderList(now time.Time, ids *c.WidgetIdStack) {
 				if c.Button(ids.PrepareStr("attention-levels-open"), c.Atoms().Text("Levels").Keep()).Selected(inst.levelsOpen).SendResp().HasPrimaryClicked() {
 					inst.levelsOpen = !inst.levelsOpen
 				}
-			}
-			if c.Button(ids.PrepareStr("attention-list-close"), c.Atoms().Text("Close").Keep()).SendResp().HasPrimaryClicked() {
-				inst.listOpen = false
 			}
 		}
 		inst.renderStatus(ids)

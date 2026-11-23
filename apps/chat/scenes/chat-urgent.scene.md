@@ -39,7 +39,7 @@ once.
 {"do":"wait","contains":"Urgent ✓","role":"check_box","comment":"the window reads the host's table again"}
 {"do":"click","contains":"nothing waits on you","role":"button"}
 {"do":"click","contains":"Busy"}
-{"do":"click","name":"Close","role":"button"}
+{"do":"click","id":13336341372792958827,"comment":"the list's title-bar cross, by id, since every window has one"}
 {"do":"wait","contains":"Busy · ","role":"button"}
 {"do":"type","role":"multiline_text_input","text":"Go on.","comment":"a second message: the scripted model answers by position"}
 {"do":"click","contains":"Send","role":"button"}

@@ -34,4 +34,7 @@ a default or one left behind by an interrupted run, cannot move it.
 {"do":"capture","text":"chat-levels"}
 {"do":"click","id":6643140940500153969}
 {"do":"read","id":6060254586541539230,"on":"name","pattern":"^(?P<turn>○) highlight$","comment":"back at the default"}
+{"do":"click","id":10875425861207043668,"comment":"the grid's title-bar cross, by id, since every window has one"}
+{"do":"click","name":"Levels","role":"button","comment":"opens the grid again only if the cross cleared its open state"}
+{"do":"wait","id":10875425861207043668}
 ```

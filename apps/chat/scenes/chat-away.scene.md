@@ -35,7 +35,7 @@ host opens "While you were away" with the highlight, and Dismiss closes it.
 {"do":"read","contains":"Away · ","role":"button","on":"name","pattern":"(?P<highlights>\\d+)$","comment":"the watched turn ended while away"}
 {"do":"expect","of":"highlights","eq":1}
 {"do":"click","contains":"Here","comment":"back"}
-{"do":"click","name":"Close","role":"button","comment":"close the list, which lists the highlight too"}
+{"do":"click","id":13336341372792958827,"comment":"close the list, which lists the highlight too: its title bar's cross, by id, since every window has one"}
 {"do":"wait","contains":"While you were away","role":"window"}
 {"do":"wait","value":"\ue46a highlight","role":"label","comment":"the turn's end is in the log"}
 {"do":"capture","text":"chat-away-log"}

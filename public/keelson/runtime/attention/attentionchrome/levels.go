@@ -29,6 +29,10 @@ func (inst *Chrome) renderLevels(ids *c.WidgetIdStack) {
 		TitleBar(true).
 		DefaultOpen(true).
 		DefaultPos(listX, listY)
+	// The title bar's own close cross, bound to levelsOpen, as on the list.
+	bindId := wf.Id()
+	wf = wf.OpenBound(bindId)
+	c.CurrentApplicationState.StateManager.AddR10Databinding(bindId, &inst.levelsOpen)
 	for range wf.KeepIter() {
 		for range c.HoverText(tipLevels).KeepIter() {
 			for rt := range c.RichTextLabel("How loud each kind of event is, for every conversation.") {
@@ -41,9 +45,6 @@ func (inst *Chrome) renderLevels(ids *c.WidgetIdStack) {
 				inst.renderLevelRow(row, table, ids)
 				c.EndRow()
 			}
-		}
-		if c.Button(ids.PrepareStr("attention-levels-close"), c.Atoms().Text("Close").Keep()).SendResp().HasPrimaryClicked() {
-			inst.levelsOpen = false
 		}
 	}
 }
