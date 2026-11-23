@@ -64,3 +64,44 @@ func TestThePersonsExposureFollowsARepublishByATask(t *testing.T) {
 	require.Equal(t, http.StatusOK, status)
 	assert.Equal(t, []int64{2}, int64Values(t, body))
 }
+
+// Under a race between a reader holding a task's token and republishes by
+// the person, no read is ever answered with rows the task did not publish:
+// the revision judged is the revision opened.
+func TestATasksTokenNeverReadsThePersonsRowsUnderARace(t *testing.T) {
+	r := newExposeRig(t)
+	d := &fakeDispatcher{call: agentCall(), grants: []string{"expose:sales"}}
+	r.svc.SetDispatcher(d)
+	own := oboOf(d.call)
+	var served, ended int
+	for i := range 60 {
+		publishSales(t, r.svc, windowA, own, BundleProvenance{}, 1)
+		exp, err := r.svc.Expose(t.Context(), ExposeInput{Alias: "sales__orders", By: windowA, OnBehalfOf: own})
+		require.NoError(t, err)
+		done := make(chan struct{})
+		theirs := int64Stream(t, false, 2)
+		go func() {
+			defer close(done)
+			if _, pErr := r.svc.PublishBundle(t.Context(), BundlePublishInput{Alias: "sales", Document: []byte(testDoc), By: windowA,
+				Datasets: []BundleDatasetInput{{LocalName: "orders", ArrowIPCStream: theirs}}}); pErr != nil {
+				t.Errorf("the person's republish: %v", pErr)
+			}
+		}()
+		for range 4 {
+			status, body, _ := fetch(t, http.MethodGet, exp.URL, exp.Token)
+			switch status {
+			case http.StatusOK:
+				require.Equal(t, []int64{1}, int64Values(t, body), "round %d: the task's token read the person's rows", i)
+				served++
+			case http.StatusNotFound:
+				ended++
+			default:
+				t.Fatalf("round %d: status %d", i, status)
+			}
+		}
+		<-done
+		status, _, _ := fetch(t, http.MethodGet, exp.URL, exp.Token)
+		require.Equal(t, http.StatusNotFound, status, "round %d: after the person's republish the exposure is over", i)
+	}
+	t.Logf("%d reads of the task's revision, %d refused", served, ended)
+}
