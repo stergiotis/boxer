@@ -15,7 +15,9 @@
 //	  … the app's Frame runs; gestures it routes through its catalog are
 //	    applied with the person as writer …
 //	EndFrame       changes the app's own frame logic made are bumped with
-//	               the app as writer
+//	               the app as writer; then each running asynchronous
+//	               command is asked whether it settled, and what its
+//	               handler changed is bumped with the command's writer
 //
 // Submit, Status, Cancel, SinceDrawn and Stalled are safe from any
 // goroutine; everything else runs on the render goroutine.
@@ -780,7 +782,8 @@ func (inst *Engine) EndFrame() {
 var errNoSettler = errors.New("the handler cannot settle an asynchronous command")
 
 // settleRunning asks the handler about each Async command still running,
-// after the app's Frame: a run the frame started is in flight by then.
+// after the app's Frame: a run the frame started is in flight by then. A
+// command that completes carries the revisions its handler's changes left.
 func (inst *Engine) settleRunning() {
 	if len(inst.running) == 0 {
 		return
@@ -793,6 +796,7 @@ func (inst *Engine) settleRunning() {
 		var err error
 		if ok {
 			settled, result, err = h.SettleAsync(c.call, c.spec.Name, c.args)
+			inst.observeSettle(c)
 		} else {
 			err = errNoSettler
 		}
@@ -811,6 +815,22 @@ func (inst *Engine) settleRunning() {
 	}
 	clear(inst.running[len(still):])
 	inst.running = still
+}
+
+// observeSettle takes what c's settlement handler changed as c's work, with
+// c's writer (ADR-0358 §SD1, ADR-0269 §SD8): the handler runs after the
+// frame's end observed the app's changes, so without this the next frame's
+// start would take a change it made, such as a run it started for the
+// call, for the person's edit.
+func (inst *Engine) observeSettle(c *call) {
+	writer := c.call.Writer
+	if writer == "" {
+		writer = opwire.WriterApp
+	}
+	if changed := inst.observe(writer, inst.resourceSet); len(changed) > 0 {
+		inst.appendLog(LogEntry{Frame: inst.frame, Writer: writer, Op: c.spec.Name, CallId: c.id, Phase: opwire.PhaseApplied,
+			Resources: changed, Revisions: pick(inst.revs, changed)})
+	}
 }
 
 // Revisions returns the current revisions; render goroutine only.

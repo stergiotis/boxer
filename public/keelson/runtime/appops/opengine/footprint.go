@@ -25,7 +25,8 @@ type UndeclaredWrite struct {
 	// the command's is work the command started.
 	Frame uint64
 	// Observed is the writer the engine recorded for the change: the app,
-	// for a change its frame made; the person, for a change that landed
+	// for a change its frame made; the command's own writer, for a change
+	// its settlement handler made; the person, for a change that landed
 	// between frames, which the engine cannot tell from the person's own
 	// edit. A headless conformance run has no person, so its between-frame
 	// changes are the command's asynchronous work (§SD6).
@@ -49,6 +50,14 @@ func undeclaredWrites(entries []LogEntry) (out []UndeclaredWrite) {
 		case e.Op != "" && e.Phase == opwire.PhaseCompleted:
 			// An asynchronous command's settlement is not a new command:
 			// what follows is still that command's work (ADR-0358 §SD1).
+		case cmd != nil && e.Op != "" && e.CallId == cmd.CallId:
+			// What the command's settlement handler changed, logged under
+			// its own call: its work, declared or not.
+			for _, r := range e.Resources {
+				if !slices.Contains(cmd.Resources, r) {
+					out = append(out, UndeclaredWrite{Op: cmd.Op, CallId: cmd.CallId, Writer: cmd.Writer, Resource: r, Frame: e.Frame, Observed: e.Writer})
+				}
+			}
 		case e.Op != "":
 			cmd = nil
 			if e.Phase == opwire.PhaseApplied {

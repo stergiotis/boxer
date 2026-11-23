@@ -32,3 +32,20 @@ func TestUndeclaredWritesReadTheLog(t *testing.T) {
 	}, got)
 	assert.Empty(t, undeclaredWrites(nil))
 }
+
+// A change an asynchronous command's settlement handler made is logged under
+// the command's call id: it is still that command's work, so an undeclared
+// resource in it is the command's, and the command's footprint is not
+// replaced by what the handler changed.
+func TestASettlementsChangeIsTheCommandsWork(t *testing.T) {
+	entries := []LogEntry{
+		{Seq: 1, Frame: 1, Writer: "task:t", Op: "start", CallId: "c1", Phase: opwire.PhaseApplied, Resources: []string{"a"}},
+		{Seq: 2, Frame: 1, Writer: "task:t", Op: "start", CallId: "c1", Phase: opwire.PhaseApplied, Resources: []string{"a", "b"}},
+		{Seq: 3, Frame: 2, Writer: opwire.WriterApp, Resources: []string{"b"}},
+		{Seq: 4, Frame: 2, Writer: "task:t", Op: "start", CallId: "c1", Phase: opwire.PhaseCompleted},
+	}
+	assert.Equal(t, []UndeclaredWrite{
+		{Op: "start", CallId: "c1", Writer: "task:t", Resource: "b", Frame: 1, Observed: "task:t"},
+		{Op: "start", CallId: "c1", Writer: "task:t", Resource: "b", Frame: 2, Observed: opwire.WriterApp},
+	}, undeclaredWrites(entries))
+}

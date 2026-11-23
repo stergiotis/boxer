@@ -20,6 +20,9 @@ type work struct {
 	runs   int
 	done   bool
 	failed error
+	// settleRuns makes the settlement handler move runs, as a handler that
+	// starts a run for its call does.
+	settleRuns bool
 }
 
 type workResult struct{ Runs int }
@@ -34,6 +37,10 @@ func workSet() *appops.Set[*work, struct{}] {
 			return workResult{}, nil
 		})
 	appops.Settles(s, "start", func(w *work, _ app.OperationCall) (out workResult, settled bool, err error) {
+		if w.settleRuns {
+			w.settleRuns = false
+			w.runs++
+		}
 		return workResult{Runs: w.runs}, w.done || w.failed != nil, w.failed
 	})
 	return s
@@ -142,4 +149,56 @@ func TestASettledCommandCarriesTheRevisionItsWorkLeft(t *testing.T) {
 	st, _ := eng.Status("c1")
 	require.Equal(t, opwire.PhaseCompleted, st.Phase)
 	assert.Equal(t, eng.Revisions()["runs"], st.Revisions["runs"])
+}
+
+// A settlement handler that changes a resource carries its call on, as a
+// run it starts for the call does: the change is the call's, with its
+// writer and call id, and the completed outcome carries the revision it
+// left. The next frame's start takes nothing of it for the person's edit,
+// and a change that lands between frames still is the person's.
+func TestASettlementsChangeIsTheCallsAndNotThePersons(t *testing.T) {
+	w, eng, frame := workEngine(t)
+	out := eng.Submit(t.Context(), "start", opwire.CallRequest{CallId: "c1", Writer: "task:t"})
+	require.Equal(t, opwire.PhaseAccepted, out.Phase)
+	frame()
+	since := eng.LogSeq()
+	// The handler is asked at the frame's end; settling, it moves runs.
+	eng.BeginFrame()
+	eng.ApplyQueued()
+	w.done = true
+	w.settleRuns = true
+	eng.EndFrame()
+	eng.TakeSnapshot()
+	st, _ := eng.Status("c1")
+	require.Equal(t, opwire.PhaseCompleted, st.Phase)
+	assert.Equal(t, eng.Revisions()["runs"], st.Revisions["runs"], "the completed outcome carries the revision the handler left")
+	frame()
+	entries := eng.LogSince(since)
+	require.Len(t, entries, 2)
+	assert.Equal(t, LogEntry{Seq: entries[0].Seq, Frame: entries[0].Frame, Writer: "task:t", Op: "start", CallId: "c1",
+		Phase: opwire.PhaseApplied, Resources: []string{"runs"}, Revisions: map[string]uint64{"runs": eng.Revisions()["runs"]}}, entries[0])
+	assert.Equal(t, opwire.PhaseCompleted, entries[1].Phase)
+	assert.Equal(t, "task:t", eng.Writer("runs"))
+
+	since = eng.LogSeq()
+	w.runs++
+	frame()
+	entries = eng.LogSince(since)
+	require.Len(t, entries, 1)
+	assert.Equal(t, opwire.WriterPerson, entries[0].Writer, "a change that landed between frames is the person's")
+}
+
+// A call without a writer settles with the app as the writer of what its
+// handler changed.
+func TestASettlementWithoutAWriterIsTheApps(t *testing.T) {
+	w, eng, frame := workEngine(t)
+	eng.Submit(t.Context(), "start", opwire.CallRequest{CallId: "c1"})
+	frame()
+	since := eng.LogSeq()
+	w.done, w.settleRuns = true, true
+	frame()
+	entries := eng.LogSince(since)
+	require.NotEmpty(t, entries)
+	assert.Equal(t, opwire.WriterApp, entries[0].Writer)
+	assert.Equal(t, "c1", entries[0].CallId)
 }
