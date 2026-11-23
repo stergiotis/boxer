@@ -67,7 +67,7 @@ func serve(t *testing.T, cfg Config) (cli *Client, svc *Service, sink *audit.InM
 		cfg.Journal = AcceptAnyJournal{}
 	}
 	var err error
-	svc, err = NewService(bus, zerolog.Nop(), cfg)
+	svc, err = NewService(context.Background(), bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	cli = NewClient(bus.NewClient(appId, ClientCaps("test: ask")))
@@ -260,7 +260,7 @@ func TestFailuresKeepTheirKind(t *testing.T) {
 // Without the grant the bus refuses the publish.
 func TestNoGrantIsAPermissionError(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
-	svc, err := NewService(bus, zerolog.Nop(), Config{})
+	svc, err := NewService(context.Background(), bus, zerolog.Nop(), Config{})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	cli := NewClient(bus.NewClient(appId, nil))
@@ -540,7 +540,7 @@ func TestAnExpiredWaitCancelsTheCall(t *testing.T) {
 func TestCancelIsScopedToTheSender(t *testing.T) {
 	p := newBlockingProvider()
 	bus := inprocbus.NewInst(zerolog.Nop())
-	svc, err := NewService(bus, zerolog.Nop(), Config{Journal: AcceptAnyJournal{}, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p})
+	svc, err := NewService(context.Background(), bus, zerolog.Nop(), Config{Journal: AcceptAnyJournal{}, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	owner := bus.NewClient(appId, ClientCaps("test: ask"))

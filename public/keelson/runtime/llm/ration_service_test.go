@@ -41,7 +41,7 @@ func serveRation(t *testing.T, cfg Config) (h rationHost) {
 	cfg.Moderators = []string{string(moderatorId)}
 	var err error
 	cfg.Journal = AcceptAnyJournal{}
-	h.svc, err = NewService(bus, zerolog.Nop(), cfg)
+	h.svc, err = NewService(context.Background(), bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(h.svc.Close)
 	h.cli = NewClient(bus.NewClient(appId, ClientCaps("test: ask")))
@@ -390,7 +390,7 @@ func TestLedgerRebuildsFromTheTrail(t *testing.T) {
 	second := localCfg(p)
 	second.Trail = trail.NewRecorder(exec, "run-b", zerolog.Nop())
 	t.Cleanup(second.Trail.Close)
-	svc, err := NewService(inprocbus.NewInst(zerolog.Nop()), zerolog.Nop(), second)
+	svc, err := NewService(context.Background(), inprocbus.NewInst(zerolog.Nop()), zerolog.Nop(), second)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	byAccount := map[ration.Account]ration.AccountUsage{}

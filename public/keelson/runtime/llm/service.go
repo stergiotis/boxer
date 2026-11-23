@@ -214,9 +214,10 @@ type Service struct {
 	journalUnwired   sync.Once
 }
 
-// NewService constructs and subscribes a Service. The caller MUST invoke
-// Close.
-func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service, err error) {
+// NewService constructs and subscribes a Service. ctx is the service's
+// lifetime: every call it makes runs under it, and ends when it does or at
+// Close. The caller MUST invoke Close.
+func NewService(ctx context.Context, bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service, err error) {
 	if bus == nil {
 		err = eh.Errorf("llm: nil bus")
 		return
@@ -232,7 +233,7 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 	if s.ledger == nil {
 		s.ledger = ration.NewLedger()
 	}
-	s.base, s.cancelBase = context.WithCancel(context.Background())
+	s.base, s.cancelBase = context.WithCancel(ctx)
 	if rows, rerr := s.rebuildLedger(); rerr != nil {
 		if cfg.Unruled == UnruledRefuse {
 			s.ledger.SetRefuseAll("the usage ledger could not be rebuilt from boxer.facts and BOXER_LLM_RATION_UNRULED is refuse: " + rerr.Error())

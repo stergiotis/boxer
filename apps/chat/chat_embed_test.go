@@ -42,7 +42,7 @@ func embedded(t *testing.T, key string, layout EmbedLayoutE) (inst *App) {
 func paneOver(t *testing.T, model openaichat.ClientI, store agentrun.StoreI, key string) (inst *App) {
 	t.Helper()
 	bus := inprocbus.NewInst(zerolog.Nop())
-	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Journal: llm.StoreJournal(store), Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: model, Retain: llm.RetainRing})
+	svc, err := llm.NewService(context.Background(), bus, zerolog.Nop(), llm.Config{Journal: llm.StoreJournal(store), Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: model, Retain: llm.RetainRing})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	inst = embedded(t, key, EmbedLayoutFull)

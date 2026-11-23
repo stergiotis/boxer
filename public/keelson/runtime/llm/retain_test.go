@@ -32,7 +32,7 @@ func serveRetaining(t *testing.T, bus *inprocbus.Inst, cfg Config, id app.AppIdT
 	t.Helper()
 	var err error
 	cfg.Journal = AcceptAnyJournal{}
-	svc, err = NewService(bus, zerolog.Nop(), cfg)
+	svc, err = NewService(context.Background(), bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	cli = retainingClient(bus, id)

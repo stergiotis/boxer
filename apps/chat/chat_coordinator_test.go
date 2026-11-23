@@ -409,7 +409,7 @@ func coordRigCfg(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opTool
 	if store != nil {
 		llmJournal, intents = llm.StoreJournal(store), agent.StoreIntents(store)
 	}
-	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Journal: llmJournal, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: model})
+	svc, err := llm.NewService(context.Background(), bus, zerolog.Nop(), llm.Config{Journal: llmJournal, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: model})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 

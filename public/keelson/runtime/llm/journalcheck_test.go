@@ -127,7 +127,7 @@ func TestAServiceWithNoJournalRefuses(t *testing.T) {
 	cfg := localCfg(&fakeProvider{resp: openaichat.CompletionResponse{Content: "out"}})
 	cfg.Journal = nil
 	bus := inprocbus.NewInst(zerolog.Nop())
-	svc, err := NewService(bus, zerolog.Nop(), cfg)
+	svc, err := NewService(context.Background(), bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	cli := NewClient(bus.NewClient(appId, ClientCaps("test: ask")))

@@ -848,7 +848,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 				logger.Warn().Msg("llm: BOXER_LLM_TRANSCRIBE_SCRIPT is honoured only on a host a scene launched; refused here")
 			}
 		}
-		llmSvc, lErr := llm.NewService(rt.Bus, logger, llmCfg)
+		llmSvc, lErr := llm.NewService(rt.ctx, rt.Bus, logger, llmCfg)
 		if lErr != nil {
 			logger.Warn().Err(lErr).Msg("llm: service start failed; runtime.llm.* will be unbound")
 		} else {

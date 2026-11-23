@@ -163,7 +163,7 @@ func Open(st lading.Stores, mount identifier.TaggedId, snap time.Time, opts ...O
 		return
 	}
 	inst = &FS{
-		st: st, mount: mount, snap: snap.UTC(), ctx: context.Background(),
+		st: st, mount: mount, snap: snap.UTC(), ctx: context.Background(), //boxer:lint disable=CS020 reason="documented root: the default until WithContext binds the caller's; fs.FS carries no ctx per call"
 		entries:  map[string]*entry{},
 		dirs:     map[string][]*entry{},
 		complete: &completeness{},

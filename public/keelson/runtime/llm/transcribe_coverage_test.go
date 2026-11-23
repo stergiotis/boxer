@@ -62,7 +62,7 @@ func TestATranscriptionStreamInboxMustBeTheSenders(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
 	cfg := speechCfg(f)
 	cfg.Journal = AcceptAnyJournal{}
-	svc, err := NewService(bus, zerolog.Nop(), cfg)
+	svc, err := NewService(context.Background(), bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	var hits atomic.Int32

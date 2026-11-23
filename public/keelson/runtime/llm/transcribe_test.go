@@ -362,7 +362,7 @@ func TestTheClientGrantCoversTranscribe(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
 	cfg := speechCfg(&fakeTranscriber{resp: openaichat.Transcript{Text: "x"}})
 	cfg.Journal = AcceptAnyJournal{}
-	svc, err := NewService(bus, zerolog.Nop(), cfg)
+	svc, err := NewService(context.Background(), bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	granted := NewClient(bus.NewClient(appId, ClientCaps("test: transcribe")))

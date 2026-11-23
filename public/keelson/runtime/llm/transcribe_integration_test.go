@@ -51,7 +51,7 @@ func TestTranscribeAgainstALiveRoute(t *testing.T) {
 		t.Skip("BOXER_LLM_TRANSCRIBE_ENDPOINT and BOXER_LLM_TRANSCRIBE_MODEL are unset")
 	}
 	bus := inprocbus.NewInst(zerolog.Nop())
-	svc, err := NewService(bus, zerolog.Nop(), Config{Transcribe: tc, Journal: AcceptAnyJournal{}})
+	svc, err := NewService(context.Background(), bus, zerolog.Nop(), Config{Transcribe: tc, Journal: AcceptAnyJournal{}})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	cli := NewClient(bus.NewClient(appId, ClientCaps("test: transcribe live")))

@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -24,7 +25,7 @@ func sendRig(t *testing.T, level agent.PixelsE) (inst *App, fm *fakeModel, bus *
 	t.Helper()
 	bus = inprocbus.NewInst(zerolog.Nop())
 	fm = &fakeModel{}
-	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Journal: llm.AcceptAnyJournal{}, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: fm, Retain: llm.RetainRing})
+	svc, err := llm.NewService(context.Background(), bus, zerolog.Nop(), llm.Config{Journal: llm.AcceptAnyJournal{}, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: fm, Retain: llm.RetainRing})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	inst = newApp()
