@@ -56,7 +56,10 @@ func host(t *testing.T, cfg llm.Config) (cli *llm.Client, svc *llm.Service, fm *
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	cli = llm.NewClient(bus.NewClient(ManifestId, manifest.Caps))
-	cli.Timeout = 5 * time.Second
+	// A turn under a durable trail writes through clickhouse-local, a
+	// process per statement: seconds on a loaded machine, and a turn that
+	// times out here reads as one that was not kept.
+	cli.Timeout = 60 * time.Second
 	return
 }
 
