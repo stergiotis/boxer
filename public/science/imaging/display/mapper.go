@@ -36,6 +36,13 @@ func GrayPalette() *Palette {
 // floatTableSize is how finely a binned plane's window is divided. The log
 // transfer function is steepest at the low end, where one step of this table
 // is about half a palette level; a coarser table would band there.
+//
+// A sample gets the level of the step nearest to it, so the mapping differs
+// from the function itself by what the function moves across one step. That
+// is under a level for the functions at their usual parameters, and is not
+// for a gamma exponent far below one: at 0.02 the first step alone spans
+// some two hundred levels, and a sample just above the window's low end is
+// shown at the low end's level.
 const floatTableSize = 1 << 16
 
 // PlaneSpec is what a mapper is compiled for: a sample kind, a value

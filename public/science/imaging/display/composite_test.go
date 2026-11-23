@@ -122,10 +122,22 @@ func drawRecipe(t *rapid.T, label string, p imaging.Plane) Recipe {
 	}
 	span := hi - lo
 	a := lo + span*rapid.Float64Range(-0.3, 0.8).Draw(t, label+"-lo")
+	hi = a + span*rapid.Float64Range(0.05, 1.5).Draw(t, label+"-span")
+	transfer := rapid.SampledFrom(AllTransfers).Draw(t, label+"-transfer")
+	// A window kind is mapped through a table of the window's steps
+	// (floatTableSize), and the reference below is the function itself: the
+	// two agree to a level only where the function moves by no more than a
+	// level across a step. A gamma exponent of 0.02 moves by some two
+	// hundred levels across the first step, so gamma draws exponents the
+	// table resolves; the other functions keep the small parameter.
+	params := []float64{0, 0.02, 3}
+	if transfer == TransferGamma {
+		params = []float64{0, 0.5, 3}
+	}
 	return Recipe{
-		Limits:   Limits{Lo: a, Hi: a + span*rapid.Float64Range(0.05, 1.5).Draw(t, label+"-span")},
-		Transfer: rapid.SampledFrom(AllTransfers).Draw(t, label+"-transfer"),
-		Param:    rapid.SampledFrom([]float64{0, 0.02, 3}).Draw(t, label+"-param"),
+		Limits:   Limits{Lo: a, Hi: hi},
+		Transfer: transfer,
+		Param:    rapid.SampledFrom(params).Draw(t, label+"-param"),
 		Invert:   rapid.Bool().Draw(t, label+"-invert"),
 	}
 }
