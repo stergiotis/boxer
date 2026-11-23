@@ -12,12 +12,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/config/env/envtest"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chclient"
 	"github.com/stergiotis/boxer/public/fs/lading"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingadapter"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sealed"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
@@ -89,7 +91,9 @@ func TestAnExportLandsInTheStoreAndIsJournaled(t *testing.T) {
 // screenshot and all.
 func TestAResumedConversationGetsItsExportBack(t *testing.T) {
 	exec := liveLading(t)
-	t.Setenv("BOXER_ADHOC_DIR", t.TempDir())
+	// Through the registry, not the environment alone: the variable's
+	// first read is cached, and another test of this binary may have made it.
+	envtest.Set(t, sealed.BaseDir, t.TempDir())
 	first := exportRig(t, func(context.Context) (recordstore.ExecutorI, error) { return exec, nil })
 	name := withScreenshot(t, first.conv.art)
 	first.planExport(false)
