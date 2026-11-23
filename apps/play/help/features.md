@@ -1836,7 +1836,10 @@ names one as `keelson:<alias>`. It lists the task's session data sets
 too, which the model keeps with `query`'s `keep_as` and reads with
 `session('<name>')`, and `drop_dataset` drops one. `bind_dataset` binds an alias another window
 published — the window waits for it when nothing is published under it yet,
-and `list_datasets` lists a waiting alias with why — and runs nothing.
+and `list_datasets` lists a waiting alias with why — and runs nothing. The
+strip over the panes names each alias the window waits for, why, and
+whether binding it runs the window again: it does for an alias the
+window's launch declared, and not for one a task asked for.
 
 ## Configuration
 

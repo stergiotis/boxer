@@ -138,10 +138,10 @@ func (inst *PlayLauncher) closeBundle() {
 
 // syncBundle is the bundle's frame step: start a resolve when one is due,
 // apply an answer that arrived, keep the datasets bound.
-func (inst *PlayLauncher) syncBundle() {
+func (inst *PlayLauncher) syncBundle() (waits bool) {
 	st := inst.bundle
 	if st == nil || inst.inner == nil {
-		return
+		return false
 	}
 	now := time.Now()
 	st.mu.Lock()
@@ -179,10 +179,13 @@ func (inst *PlayLauncher) syncBundle() {
 	}
 	switch {
 	case withdrawn:
-		inst.inner.SetDatasetNotice([]byte("**Bundle `" + st.alias + "` was withdrawn.** Its publisher retracted it or closed its window. The window reloads it by itself if it is published again."))
+		inst.notices.bundle = []byte("**Bundle `" + st.alias + "` was withdrawn.** Its publisher retracted it or closed its window. The window reloads it by itself if it is published again.")
 	case st.revision == 0 && waiting != "":
-		inst.inner.SetDatasetNotice([]byte("**Waiting for bundle `" + st.alias + "`:** " + waiting + ". The window opens it by itself once it is published."))
+		inst.notices.bundle = []byte("**Waiting for bundle `" + st.alias + "`:** " + waiting + ". The window opens it by itself once it is published.")
 	}
+	// Not opened yet, or withdrawn: the window waits for a publish, and
+	// the frames that poll for it come from the repaint rule.
+	return withdrawn || st.revision == 0
 }
 
 // resolve asks the service for the bundle off the render goroutine and
@@ -210,7 +213,7 @@ func (inst *PlayLauncher) applyBundle(st *bundleState, res adhocdata.BundleResul
 	}
 	doc, err := parseAppletDoc(st.alias+".md", res.Document)
 	if err != nil {
-		p.SetDatasetNotice([]byte("**Bundle `" + st.alias + "` cannot be opened:** " + err.Error()))
+		inst.notices.bundle = []byte("**Bundle `" + st.alias + "` cannot be opened:** " + err.Error())
 		st.revision, st.digest = res.Revision, res.DocumentDigest
 		return
 	}
@@ -261,7 +264,7 @@ func (inst *PlayLauncher) applyBundle(st *bundleState, res adhocdata.BundleResul
 	}
 	st.revision, st.digest = res.Revision, res.DocumentDigest
 	st.runnable = doc.Runnable
-	p.SetDatasetNotice(nil)
+	inst.notices.bundle = nil
 	if changed && doc.Runnable {
 		p.RequestRun()
 	}

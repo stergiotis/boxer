@@ -3,10 +3,7 @@ package play
 import (
 	"context"
 	"embed"
-	"fmt"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -195,6 +192,10 @@ type PlayLauncher struct {
 	// bind_dataset on a window whose config declared none.
 	follower      *adhocdata.Follower
 	launchAliases []string
+	// notices holds what the bundle and the follower each say the window
+	// waits for; one writer composes them into the play's notice strip
+	// (play_dataset_notice.go).
+	notices datasetNotices
 	// bundle is the ad-hoc bundle the window follows (ADR-0288
 	// §SD4), from its launch config or open_bundle; nil when none.
 	bundle *bundleState
@@ -598,21 +599,7 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 		err = eh.Errorf("playlauncher: Frame called before Mount")
 		return
 	}
-	inst.syncBundle()
-	if inst.follower != nil {
-		before := inst.boundLaunchAliases()
-		bound, pendingChanged := inst.follower.Sync(inst.inner)
-		if pendingChanged {
-			inst.inner.SetDatasetNotice(launchDatasetNotice(inst.follower.Pending()))
-		}
-		if bound && inst.boundLaunchAliases() > before {
-			// AutoRun already fired against the unbound buffer at open, so
-			// a newly bound alias of the launch config needs its own run to
-			// become visible. An alias bind_dataset added runs when the
-			// task asks for it, under its limits.
-			inst.inner.RequestRun()
-		}
-	}
+	inst.syncDatasets()
 	// Every per-frame capability the engine reads off the context — the
 	// window-focus gate, the column-width store — is PlayApp.Frame's job, so
 	// this launcher and an out-of-tree re-host discharge it identically.
@@ -639,39 +626,6 @@ func launchDatasetNames(launch *launchcfg.PlayLaunch) (names map[string]string) 
 		}
 	}
 	return
-}
-
-// boundLaunchAliases counts the launch config's aliases bound now.
-func (inst *PlayLauncher) boundLaunchAliases() (n int) {
-	if len(inst.launchAliases) == 0 || inst.inner == nil || inst.inner.client == nil {
-		return
-	}
-	for _, alias := range inst.inner.client.DatasetAliases() {
-		if slices.Contains(inst.launchAliases, alias) {
-			n++
-		}
-	}
-	return
-}
-
-// launchDatasetNotice is what a launched window shows over empty panes
-// while an alias its config declared has no live dataset. play cannot know
-// what produces the alias — the launcher did, and a launcher that wants to
-// say so seeds a comment in its SQL.
-func launchDatasetNotice(pending []string) (md []byte) {
-	if len(pending) == 0 {
-		return nil
-	}
-	quoted := make([]string, 0, len(pending))
-	for _, alias := range pending {
-		quoted = append(quoted, "`"+alias+"`")
-	}
-	noun, verb := "dataset", "is"
-	if len(pending) > 1 {
-		noun, verb = "datasets", "are"
-	}
-	return []byte(fmt.Sprintf("**Waiting for %s %s.** No dataset %s live under that alias — none published yet, or its producer withdrew it. The window binds it and re-runs by itself once it appears.",
-		noun, strings.Join(quoted, ", "), verb))
 }
 
 func (inst *PlayLauncher) Unmount(ctx app.MountContextI) (err error) {

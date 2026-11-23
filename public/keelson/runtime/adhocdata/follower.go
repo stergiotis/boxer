@@ -227,8 +227,9 @@ type Follower struct {
 	inFlight bool
 	nextAt   time.Time
 
-	// pendingDirty is set whenever the pending set changed since the last
-	// Sync reported it, so the caller re-renders its notice only then.
+	// pendingDirty is set whenever the pending set, or why one of them
+	// waits, changed since the last Sync reported it, so the caller
+	// re-renders its notice only then.
 	pendingDirty bool
 }
 
@@ -241,8 +242,11 @@ func NewFollower(ctx context.Context, cfg FollowerConfig) (f *Follower, bindings
 		return
 	}
 	f = subscribedFollower(ctx, cfg)
-	bindings, unresolved := resolveAliases(ctx, cfg.Bus, cfg.Log, cfg.Aliases)
+	bindings, unresolved, why := resolveAliases(ctx, cfg.Bus, cfg.Log, cfg.Aliases)
 	f.seed(bindings, unresolved)
+	f.mu.Lock()
+	maps.Copy(f.why, why)
+	f.mu.Unlock()
 	bindings = f.localBindings(bindings)
 	return
 }
@@ -384,9 +388,10 @@ func (f *Follower) onEvent(ev Event) {
 // Sync is the caller's-thread half: it replays what arrived since the last
 // call, in order, against target, then starts a worker round if a hint
 // asked for one or the tick is due. It reports whether anything was newly
-// bound (the caller re-runs its query), and whether the pending set changed
-// since the last call (the caller re-renders whatever says what it is
-// waiting for; the first call after construction reports true).
+// bound (the caller re-runs its query), and whether the pending set or the
+// reason one of them waits changed since the last call (the caller
+// re-renders whatever says what it is waiting for; the first call after
+// construction reports true).
 //
 // Replay rules. A `published` under a pending alias marks it dirty — the
 // worker asks the service and the answer binds. A `published` onto the
@@ -596,7 +601,7 @@ func (f *Follower) reconcile(pending []string, bound map[string]string) {
 		handle, rev, _, origin, err := f.resolver.resolveVerify(alias, "")
 		if err != nil {
 			f.log.Debug().Err(err).Str("alias", alias).Msg("adhocdata: dataset alias still unresolved")
-			why[alias] = WaitUnanswered + ": " + err.Error()
+			why[alias] = waitReason(err)
 			continue
 		}
 		if handle == "" {
@@ -617,8 +622,11 @@ func (f *Follower) reconcile(pending []string, bound map[string]string) {
 	f.mu.Lock()
 	f.verdicts = append(f.verdicts, out...)
 	for alias, w := range why {
-		if _, waiting := f.pending[alias]; waiting {
+		if _, waiting := f.pending[alias]; waiting && f.why[alias] != w {
+			// A new answer about a pending alias changes what its
+			// consumer says it waits for, as much as the set does.
 			f.why[alias] = w
+			f.pendingDirty = true
 		}
 	}
 	f.inFlight = false
@@ -652,6 +660,39 @@ const (
 	WaitUnanswered = "the dataset service did not answer"
 )
 
+// waitReason is why an alias waits after a resolve that failed: nothing
+// live under it, or no answer.
+func waitReason(err error) (why string) {
+	if errors.Is(err, ErrNoLiveDataset) {
+		return WaitNoLive
+	}
+	return WaitUnanswered + ": " + err.Error()
+}
+
+// Unfollow stops following an alias that is still pending, on the caller's
+// thread: it leaves the pending set, and an answer about it that arrives
+// later binds nothing. It reports false, and changes nothing, for an alias
+// that is bound or not followed — a bound alias stays bound for the life
+// of the consumer.
+func (f *Follower) Unfollow(alias string) (removed bool) {
+	f.mu.Lock()
+	_, waiting := f.pending[alias]
+	if waiting {
+		delete(f.pending, alias)
+		delete(f.why, alias)
+		delete(f.dirty, alias)
+		f.pendingDirty = true
+	}
+	f.mu.Unlock()
+	if !waiting {
+		return false
+	}
+	f.localMu.Lock()
+	delete(f.local, alias)
+	f.localMu.Unlock()
+	return true
+}
+
 // Waiting is the pending aliases, each with why it waits.
 func (f *Follower) Waiting() (w map[string]string) {
 	f.mu.Lock()
@@ -664,6 +705,15 @@ func (f *Follower) Waiting() (w map[string]string) {
 		}
 		w[alias] = why
 	}
+	return
+}
+
+// HasPending reports whether any alias is without a live dataset, without
+// building the set: a consumer asks it every frame.
+func (f *Follower) HasPending() (yes bool) {
+	f.mu.Lock()
+	yes = len(f.pending) > 0
+	f.mu.Unlock()
 	return
 }
 
@@ -681,13 +731,19 @@ func (f *Follower) Pending() (aliases []string) {
 // nothing rather than failing the consumer's open: it keeps the miss
 // pending rather than stranding the consumer on the wrong side of a
 // capture-then-open ordering.
-func resolveAliases(ctx context.Context, bus app.BusI, logger zerolog.Logger, aliases []string) (bindings map[string]string, unresolved []string) {
+//
+// why says, per miss, what the service answered, as [Follower.Waiting]
+// reports it: the open-time resolve asked already, so a miss is never
+// "not asked yet".
+func resolveAliases(ctx context.Context, bus app.BusI, logger zerolog.Logger, aliases []string) (bindings map[string]string, unresolved []string, why map[string]string) {
 	bindings = make(map[string]string, len(aliases))
+	why = make(map[string]string)
 	for _, alias := range aliases {
 		res, err := ResolveRequest(ctx, bus, alias)
 		if err != nil {
 			logger.Warn().Err(err).Str("alias", alias).Msg("adhocdata: dataset alias unresolved at open")
 			unresolved = append(unresolved, alias)
+			why[alias] = waitReason(err)
 			continue
 		}
 		bindings[alias] = res.Handle

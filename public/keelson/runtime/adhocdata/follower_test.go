@@ -188,6 +188,58 @@ func TestFollowerFollowsAnAddedAlias(t *testing.T) {
 	assert.Contains(t, f.Waiting()["items"], WaitUnanswered)
 }
 
+// TestFollowerReportsANewReason: a new answer about a pending alias is
+// reported as a change, as a change to the set is, so a notice built from
+// the reasons follows them; the same answer again is not.
+func TestFollowerReportsANewReason(t *testing.T) {
+	r := newFakeResolver()
+	f := newFollowerWith(r, zerolog.Nop())
+	f.seed(nil, []string{"items"})
+	target := newRecordingTarget()
+	_, changed := f.Sync(target)
+	require.True(t, changed)
+
+	due(f)
+	_, changed = settle(t, f, target)
+	assert.True(t, changed, "not asked yet → nothing live")
+	assert.Equal(t, WaitNoLive, f.Waiting()["items"])
+	due(f)
+	_, changed = settle(t, f, target)
+	assert.False(t, changed, "the same answer is not a change")
+
+	r.setFailing(true)
+	due(f)
+	_, changed = settle(t, f, target)
+	assert.True(t, changed, "nothing live → no answer")
+	assert.Contains(t, f.Waiting()["items"], WaitUnanswered)
+}
+
+// TestFollowerUnfollowsAPendingAlias: an alias given up while it waits
+// leaves the pending set and its local name, and an answer already on its
+// way binds nothing; a bound alias is not unfollowed.
+func TestFollowerUnfollowsAPendingAlias(t *testing.T) {
+	r := newFakeResolver()
+	f := newFollowerWith(r, zerolog.Nop())
+	f.seed(nil, nil)
+	target := newRecordingTarget()
+
+	require.True(t, f.FollowAs("items", "mine"))
+	f.Sync(target) // starts the round that asks for it
+	r.publish("items", "adhoc_h1000000000000000")
+	require.True(t, f.Unfollow("items"))
+	assert.Empty(t, f.Pending())
+	assert.Equal(t, "items", f.LocalName("items"), "its local name goes with it")
+	_, changed := settle(t, f, target)
+	assert.True(t, changed, "leaving the pending set is reported")
+	assert.Empty(t, target.bound, "the answer on its way binds nothing")
+	assert.False(t, f.Unfollow("items"), "not followed")
+
+	require.True(t, f.Follow("items"))
+	settle(t, f, target)
+	require.Equal(t, map[string]string{"items": "adhoc_h1000000000000000"}, target.bound)
+	assert.False(t, f.Unfollow("items"), "a bound alias stays bound")
+}
+
 // TestNewDeferredFollower: no bus builds nothing; with one, the follower
 // exists with no alias declared, and a declared alias waits for the first
 // Sync instead of resolving at construction.
@@ -213,6 +265,7 @@ func TestFollowerNoopBusFallsBackToPolling(t *testing.T) {
 	assert.Nil(t, f.unsub, "no events on a NoopBus")
 	assert.Equal(t, DefaultPollInterval, f.interval, "polls at the seconds-scale interval")
 	assert.Equal(t, []string{"pprof_cpu"}, f.Pending())
+	assert.Contains(t, f.Waiting()["pprof_cpu"], WaitUnanswered, "the open-time resolve asked, so the miss says what it answered")
 
 	target := newRecordingTarget()
 	// The first Sync reports the pending set built at construction, so the
@@ -357,12 +410,15 @@ func TestFollowerReconcileCatchesLostEvents(t *testing.T) {
 	settle(t, f, target)
 	require.Equal(t, []string{"items"}, f.Pending())
 
-	// A transport failure changes nothing and is retried next tick.
+	// A transport failure binds nothing and is retried next tick; what
+	// changes is why the alias waits.
 	r.setFailing(true)
 	r.publish("items", "adhoc_h4000000000000000")
 	due(f)
-	_, changed = settle(t, f, target)
-	assert.False(t, changed)
+	bound, changed = settle(t, f, target)
+	assert.False(t, bound)
+	assert.True(t, changed, "withdrawn → no answer")
+	assert.Contains(t, f.Waiting()["items"], WaitUnanswered)
 	r.setFailing(false)
 	due(f)
 	bound, _ = settle(t, f, target)

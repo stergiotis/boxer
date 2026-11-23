@@ -307,18 +307,26 @@ func datasetColumns(client *Client, stmt string, dec dispatchDecision, obo *app.
 // none. It runs on the render goroutine and resolves nothing there: the
 // follower asks on its next Sync's worker round.
 func (inst *PlayLauncher) bindDatasetAlias(alias string, as string) (out BindDatasetResult, err error) {
+	out, _, err = inst.followDatasetAlias(alias, as)
+	return
+}
+
+// followDatasetAlias is bindDatasetAlias reporting whether this call
+// started following the alias, which a caller that gives up on it later
+// undoes with [adhocdata.Follower.Unfollow].
+func (inst *PlayLauncher) followDatasetAlias(alias string, as string) (out BindDatasetResult, added bool, err error) {
 	p := inst.inner
 	switch {
 	case p == nil:
-		return out, app.RefuseOperation("the window has not mounted")
+		return out, false, app.RefuseOperation("the window has not mounted")
 	case p.client == nil:
-		return out, app.RefuseOperation("the window has no endpoint")
+		return out, false, app.RefuseOperation("the window has no endpoint")
 	case !validDatasetIdentifier(alias):
-		return out, app.RefuseOperation("an alias is a bare identifier: letters, digits and _, at most 64 bytes")
+		return out, false, app.RefuseOperation("an alias is a bare identifier: letters, digits and _, at most 64 bytes")
 	case adhocdata.IsHandle(alias):
-		return out, app.RefuseOperation("that is a dataset handle; bind the alias its publisher names")
+		return out, false, app.RefuseOperation("that is a dataset handle; bind the alias its publisher names")
 	case as != "" && !validDatasetIdentifier(as):
-		return out, app.RefuseOperation("as is a bare identifier: letters, digits and _, at most 64 bytes")
+		return out, false, app.RefuseOperation("as is a bare identifier: letters, digits and _, at most 64 bytes")
 	}
 	local := as
 	if local == "" {
@@ -327,7 +335,7 @@ func (inst *PlayLauncher) bindDatasetAlias(alias string, as string) (out BindDat
 	out = BindDatasetResult{Alias: alias, ReadWith: "keelson('" + local + "')", Destination: DestinationKeelson(alias)}
 	if slices.Contains(p.client.DatasetAliases(), local) {
 		if n := p.client.datasetNameOf(local); n.alias != alias {
-			return out, app.RefuseOperation("the name " + local + " is bound to " + n.alias + " already; bind this alias under another name with as")
+			return out, false, app.RefuseOperation("the name " + local + " is bound to " + n.alias + " already; bind this alias under another name with as")
 		}
 		out.Bound = true
 		return
@@ -335,12 +343,13 @@ func (inst *PlayLauncher) bindDatasetAlias(alias string, as string) (out BindDat
 	if inst.follower == nil {
 		inst.follower = adhocdata.NewDeferredFollower(inst.ioCtx, adhocdata.FollowerConfig{Bus: inst.bus, Log: inst.log})
 		if inst.follower == nil {
-			return out, app.RefuseOperation("the window has no bus to resolve datasets over")
+			return out, false, app.RefuseOperation("the window has no bus to resolve datasets over")
 		}
 	}
-	if !inst.follower.FollowAs(alias, local) {
+	added = inst.follower.FollowAs(alias, local)
+	if !added {
 		if inst.follower.LocalName(alias) != local {
-			return out, app.RefuseOperation("this window follows " + alias + " under another name already, or another alias holds " + local)
+			return out, false, app.RefuseOperation("this window follows " + alias + " under another name already, or another alias holds " + local)
 		}
 	}
 	if local != alias {

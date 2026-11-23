@@ -146,7 +146,7 @@ func withQueryEndpoint(t *testing.T, url string) {
 func settleBundle(t *testing.T, l *PlayLauncher, cond func() bool) {
 	t.Helper()
 	require.Eventually(t, func() bool {
-		l.syncBundle()
+		l.syncDatasets()
 		return cond()
 	}, 5*time.Second, 5*time.Millisecond)
 }

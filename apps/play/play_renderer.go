@@ -847,6 +847,10 @@ type PlayApp struct {
 	// practice. It rides above the preamble and, unlike it, is re-set as the
 	// condition changes. nil renders nothing. See play_definition.go.
 	datasetNotice *markdown.Doc
+	// dataWait is the host's word that the window waits for an ad-hoc
+	// dataset or bundle to be published (SetDatasetNotice's conditions),
+	// which the repaint rule wakes it for (play_repaint.go).
+	dataWait bool
 
 	// Param-slot UI (see play_param_render.go). paramSlots mirrors what
 	// the debounced parse extracted from inst.sql; paramDrafts owns the
@@ -1794,6 +1798,8 @@ func (inst *PlayApp) render() error {
 	// under reactive cadence once the window settles.
 	if inst.anyRunning() {
 		c.RequestRepaint()
+	} else if after, waits := inst.waitRepaint(); waits {
+		c.RequestRepaintAfter(after)
 	}
 	return nil
 }

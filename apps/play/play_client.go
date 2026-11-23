@@ -1118,6 +1118,14 @@ func (inst *Client) unbindDataset(alias string) {
 	inst.mu.Unlock()
 }
 
+// boundHandle is the handle bound under alias, "" when none is.
+func (inst *Client) boundHandle(alias string) (handle string) {
+	inst.mu.RLock()
+	handle = inst.datasetBindings[alias]
+	inst.mu.RUnlock()
+	return
+}
+
 // DatasetAliases are the ad-hoc dataset aliases bound in this session, sorted.
 //
 // They are tables no catalogue enumerates — they exist because this session

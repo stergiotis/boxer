@@ -26,6 +26,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlcomplete"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
@@ -201,7 +202,10 @@ func inProcessCompletionProviders(aliases func() []string) (p sqlcomplete.Provid
 		return t, err == nil
 	}
 	p.IntrospectionTables = func() (items []sqlcomplete.Item, ready bool) {
-		names := introspect.Default.Names()
+		// The plane's own catalog: a host serves its registry, not
+		// introspect.Default. The datasets it holds under their handles are
+		// left out — a buffer names them by the alias it bound.
+		names := slices.DeleteFunc(introspect.LocalTableNames(), adhocdata.IsHandle)
 		var bound []string
 		if aliases != nil {
 			bound = aliases()

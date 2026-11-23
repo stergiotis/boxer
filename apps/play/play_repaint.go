@@ -32,6 +32,32 @@ func (inst *PlayApp) anyRunning() bool {
 	return inst.anyRequestBusy() || inst.anyLaneLoading()
 }
 
+// Waiting is not running: nothing in the window moves until a dataset is
+// published, and the window is told so only through what its frames read —
+// the follower's and the bundle's mailboxes, a query's wait for the alias
+// it binds. So a waiting window asks for a frame after a pause rather than
+// at once: briefly while a query waits for its bind, which ends within
+// queryBindWait, and once a second while an alias or a bundle waits for a
+// publish, which may never come.
+const (
+	queryBindRepaintSeconds = 0.1
+	dataWaitRepaintSeconds  = 1.0
+)
+
+// waitRepaint is how long until the frame a waiting window asks for; ok is
+// false when nothing waits.
+func (inst *PlayApp) waitRepaint() (seconds float64, ok bool) {
+	for _, q := range inst.queryRuns {
+		if len(q.binding) > 0 {
+			return queryBindRepaintSeconds, true
+		}
+	}
+	if inst.dataWait {
+		return dataWaitRepaintSeconds, true
+	}
+	return 0, false
+}
+
 // anyRequestBusy says a round-trip to the host — an open, a save, the file
 // picker — is in flight.
 func (inst *PlayApp) anyRequestBusy() (busy bool) {

@@ -288,7 +288,7 @@ func (inst *Client) withPublishers(ctx context.Context, residual string, obo *ap
 		if n.publisherTask != "" || n.coveredFor(obo, t) || adhocdata.IsHandle(n.alias) {
 			continue
 		}
-		if _, table := introspect.Default.Lookup(t); table && !bound {
+		if introspect.IsLocalTable(t) && !bound {
 			continue
 		}
 		rctx, cancel := context.WithTimeout(ctx, publisherLookupTimeout)

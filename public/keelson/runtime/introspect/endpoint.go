@@ -64,6 +64,59 @@ func IsLocalSealed(name string) (yes bool) {
 	return
 }
 
+// localCatalog answers which tables this process's introspection plane
+// holds, or nil when no plane runs.
+//
+// It is published beside the endpoint for the question a co-resident app
+// settles before it sends keelson('<name>') anywhere: is the name a table of
+// the plane, or an ad-hoc dataset alias the window has to bind first? A host
+// serves its own registry rather than [Default], so asking Default answers
+// no for every table the host serves. What leaves is the catalog — whether a
+// name is there, and the names, which keelson('tables') lists anyway — never
+// a provider that could read one.
+var localCatalog atomic.Pointer[localCatalogFns]
+
+type localCatalogFns struct {
+	has   func(name string) (ok bool)
+	names func() (names []string)
+}
+
+// SetLocalCatalog records reg as the catalog of this process's plane. The
+// host start hook sets it alongside [SetLocalQueryEndpoint]; nil clears it.
+func SetLocalCatalog(reg *Registry) {
+	if reg == nil {
+		localCatalog.Store(nil)
+		return
+	}
+	localCatalog.Store(&localCatalogFns{
+		has: func(name string) (ok bool) {
+			_, ok = reg.Lookup(name)
+			return
+		},
+		names: reg.Names,
+	})
+}
+
+// IsLocalTable reports whether name is a table of this process's
+// introspection plane. With no plane published, [Default] answers, as it
+// does for the plane's HTTP server when that is given no registry.
+func IsLocalTable(name string) (yes bool) {
+	if p := localCatalog.Load(); p != nil {
+		return p.has(name)
+	}
+	_, yes = Default.Lookup(name)
+	return
+}
+
+// LocalTableNames lists the tables of this process's introspection plane,
+// sorted; [Default]'s with no plane published.
+func LocalTableNames() (names []string) {
+	if p := localCatalog.Load(); p != nil {
+		return p.names()
+	}
+	return Default.Names()
+}
+
 // LocalProbeI is the reachability-probe primitive of this process's plane
 // (the E6 extension point): mint a single-use nonce URL, and afterwards ask
 // whether it was fetched.

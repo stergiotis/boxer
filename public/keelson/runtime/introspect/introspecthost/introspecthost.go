@@ -478,6 +478,9 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 		// Published together: a co-resident dispatcher needs both the plane
 		// and the one question about it that decides confinement (ADR-0145).
 		introspect.SetLocalSealedPredicate(reg.IsSealed)
+		// And its catalog: whether keelson('<name>') names a table of the
+		// plane or an ad-hoc dataset alias is the plane's answer too.
+		introspect.SetLocalCatalog(reg)
 		// And the probe primitive, so a dispatcher can establish that an
 		// engine reaches THIS plane rather than infer it (R3, ADR-0145 §SD5).
 		introspect.SetLocalProbe(srv)
@@ -494,6 +497,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 		introspect.SetLocalQueryEndpoint("")
 		retractEndpoint()
 		introspect.SetLocalSealedPredicate(nil)
+		introspect.SetLocalCatalog(nil)
 		introspect.SetLocalProbe(nil)
 		if topoHolder != nil {
 			_ = topoHolder.Close()

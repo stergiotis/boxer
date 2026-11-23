@@ -317,8 +317,7 @@ func isAdhocName(name string) (yes bool) {
 	if adhocdata.IsHandle(name) {
 		return true
 	}
-	_, table := introspect.Default.Lookup(name)
-	return !table
+	return !introspect.IsLocalTable(name)
 }
 
 // sessionStandIn is sql with each session('name') call replaced by a table

@@ -57,7 +57,10 @@ type queryRun struct {
 	// before the run starts, and bindBy when it stops waiting for them.
 	binding []string
 	bindBy  time.Time
-	obo     *app.OnBehalfOf
+	// followed are those of binding this call started following, which
+	// it stops following when it gives up on them.
+	followed []string
+	obo      *app.OnBehalfOf
 	// keep is keep_as's definition in flight, and kept what it made once
 	// the window samples it.
 	keep *sessionCall[keepResult]
@@ -108,9 +111,15 @@ func addQueryOp(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 			if err = p.refuseQuery(call.OnBehalfOf, in, len(unbound) == 0); err != nil {
 				return out, err
 			}
+			var followed []string
 			for _, alias := range unbound {
-				if _, err = inst.bindDatasetAlias(alias, ""); err != nil {
-					return out, err
+				_, added, fErr := inst.followDatasetAlias(alias, "")
+				if fErr != nil {
+					inst.unfollow(followed)
+					return out, fErr
+				}
+				if added {
+					followed = append(followed, alias)
 				}
 			}
 			before := snapshotState(p).Result.Id
@@ -119,7 +128,7 @@ func addQueryOp(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 			}
 			q := queryRun{before: ResultID(before), args: in, obo: call.OnBehalfOf}
 			if len(unbound) > 0 {
-				q.binding, q.bindBy = unbound, time.Now().Add(queryBindWait)
+				q.binding, q.bindBy, q.followed = unbound, time.Now().Add(queryBindWait), followed
 				p.queryRuns[call.Key] = q
 				return out, nil
 			}
@@ -166,6 +175,10 @@ func addQueryOp(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 				if why != "" {
 					reason += " (" + why + ")"
 				}
+				// Given up: the window stops waiting for what this call
+				// asked it to follow, rather than saying so for its life.
+				// An alias followed before the call stays followed.
+				inst.unfollow(q.followed)
 				return out, true, app.RefuseOperation(reason)
 			}
 			// Bound: the run is judged now, when the grant check knows which
@@ -282,13 +295,23 @@ func (inst *PlayApp) unboundDatasets(sql string) (aliases []string) {
 	}
 	bound := inst.client.DatasetAliases()
 	for _, name := range keelsonsql.References(sql) {
-		if _, table := introspect.Default.Lookup(name); table || slices.Contains(bound, name) || slices.Contains(aliases, name) ||
+		if introspect.IsLocalTable(name) || slices.Contains(bound, name) || slices.Contains(aliases, name) ||
 			adhocdata.IsHandle(name) || !validDatasetIdentifier(name) {
 			continue
 		}
 		aliases = append(aliases, name)
 	}
 	return
+}
+
+// unfollow stops following those of aliases still waiting for a dataset.
+func (inst *PlayLauncher) unfollow(aliases []string) {
+	if inst.follower == nil {
+		return
+	}
+	for _, alias := range aliases {
+		inst.follower.Unfollow(alias)
+	}
 }
 
 // stillUnbound are those of aliases not bound in the window yet.

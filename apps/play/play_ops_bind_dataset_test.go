@@ -156,14 +156,20 @@ func TestBindDatasetWritesOnlyTheFollowedSet(t *testing.T) {
 	assert.Equal(t, followed, h.ResourceValue(opsResFollowed), "the bind landing leaves the followed set as it was")
 }
 
-// A launch config's alias binding re-runs the buffer, as it always has; the
-// count is what tells it apart from an agent's.
-func TestBoundLaunchAliasesCountsOnlyTheConfigs(t *testing.T) {
+// A launch config's alias binding re-runs the buffer, as it always has:
+// the handles its aliases are bound to tell it apart from an agent's bind,
+// and move when a withdrawn dataset is replaced as much as when one binds.
+func TestLaunchBindingsFollowOnlyTheConfigs(t *testing.T) {
 	l, _, _ := bindLauncher(t)
 	l.launchAliases = []string{"declared"}
-	l.inner.client.bindDataset("declared", "adhoc_1")
+	empty := l.launchBindings()
 	l.inner.client.bindDataset("added", "adhoc_2")
-	assert.Equal(t, 1, l.boundLaunchAliases())
+	assert.Equal(t, empty, l.launchBindings(), "an agent's bind moves nothing")
+	l.inner.client.bindDataset("declared", "adhoc_1")
+	bound := l.launchBindings()
+	assert.NotEqual(t, empty, bound)
+	l.inner.client.bindDataset("declared", "adhoc_3")
+	assert.NotEqual(t, bound, l.launchBindings(), "the dataset that replaced a withdrawn one")
 }
 
 // A bundle's dataset bound with bind_dataset is covered by the bundle, as
