@@ -36,6 +36,9 @@ type Input struct {
 	Disabled bool
 	// Small draws small buttons, for a row beside an input.
 	Small bool
+	// NoStatus leaves the status line out, for a caller that stacks the
+	// buttons in a narrow column and draws StatusLine where it has room.
+	NoStatus bool
 }
 
 // Result is what one frame of the gesture answers.
@@ -95,7 +98,7 @@ func Render(in Input) (r Result) {
 				ed.Keep(current)
 			}
 		}
-		if line := StatusLine(ed); line != "" {
+		if line := StatusLine(ed); line != "" && !in.NoStatus {
 			for rt := range c.RichTextLabel(line) {
 				rt.Small().Weak()
 			}

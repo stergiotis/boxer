@@ -509,16 +509,13 @@ func (inst *App) renderComposer() {
 	inst.renderSendRow()
 	// The draft handed to the host's editor app, each save taking its place
 	// unless it was edited here meanwhile; drawn only where the host
-	// registers one editor app.
-	if _, ok := externaledit.Editor(); ok && inst.bus != nil {
-		for range c.HorizontalTop().KeepIter() {
-			if r := editexternally.Render(editexternally.Input{
-				Ids: inst.ids, ScopeKey: "draft-external", Editing: &inst.externalEdit, Bus: inst.bus, BusCtx: inst.ioCtx,
-				Name: "message.md", Text: inst.draft, Small: true,
-			}); r.Replace {
-				inst.draft = r.Text
-				c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.draft)
-			}
+	// registers one editor app. Its buttons stand under Send; its status
+	// line, which can be long, goes here, across the composer's width.
+	_, hasEditor := externaledit.Editor()
+	hasEditor = hasEditor && inst.bus != nil
+	if hasEditor {
+		if line := editexternally.StatusLine(&inst.externalEdit); line != "" {
+			c.LabelAtoms(c.Atoms().BeginRichText(line).Small().Weak().End().Keep()).Wrap().Send()
 		}
 	}
 	w, h, ok := c.CapturePaneSize(c.ProbeSeq("chat", "composer") ^ inst.ids.PrepareHighEntropy(composerProbeSalt).Derive())
@@ -550,17 +547,31 @@ func (inst *App) renderComposer() {
 	// and the input fills what is left — a left-to-right row lets the
 	// scroll area take the whole width and push the button out of view.
 	for range c.UiWithLayout().MainDirRightToLeft().CrossAlignMin().KeepIter() {
-		// While a turn runs, Cancel takes Send's place: Button has no
-		// disabled state, and a Send that does nothing would read as broken.
-		if !busy {
-			send = c.Button(inst.ids.PrepareStr("send"), atomsSend).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked()
-		} else {
-			for range c.HoverText("Stop waiting for this answer and tell the host to stop the call (Esc in the composer)").KeepIter() {
-				cancel = c.Button(inst.ids.PrepareStr("cancel"), atomsCancel).SendResp().HasPrimaryClicked() || cancel
+		// Send over the editor gesture, in a column at the right edge.
+		for range c.UiWithLayout().MainDirTopDown().CrossAlignMax().KeepIter() {
+			// While a turn runs, Cancel takes Send's place: Button has no
+			// disabled state, and a Send that does nothing would read as broken.
+			if !busy {
+				send = c.Button(inst.ids.PrepareStr("send"), atomsSend).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked()
+			} else {
+				for range c.HoverText("Stop waiting for this answer and tell the host to stop the call (Esc in the composer)").KeepIter() {
+					cancel = c.Button(inst.ids.PrepareStr("cancel"), atomsCancel).SendResp().HasPrimaryClicked() || cancel
+				}
+			}
+			if hasEditor {
+				// Drawn before the input, so a taken save reaches its binding
+				// in this frame.
+				if r := editexternally.Render(editexternally.Input{
+					Ids: inst.ids, ScopeKey: "draft-external", Editing: &inst.externalEdit, Bus: inst.bus, BusCtx: inst.ioCtx,
+					Name: "message.md", Text: inst.draft, Small: true, NoStatus: true,
+				}); r.Replace {
+					inst.draft = r.Text
+					c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.draft)
+				}
 			}
 		}
-		// The row so far is the button: its width, read next frame, is
-		// what the input leaves free.
+		// The row so far is the button column: its width, read next frame,
+		// is what the input leaves free.
 		c.CaptureUiRect(btnProbe)
 		// Hscroll keeps the input's width from feeding back into the
 		// window's minimum width (mdedit's editor found this). The input
