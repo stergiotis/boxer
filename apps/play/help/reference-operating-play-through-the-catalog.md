@@ -262,9 +262,12 @@ it.
   the data sets made again first and those its redefinition left stale.
   The window then runs `SELECT * FROM session('<name>') LIMIT n` as its
   main run, so the answer's `result_id` is a result `check` and a
-  citation rest on. An assertion resting on it reads `session('<name>')`,
-  the table that statement read — not the tables of the definition — as
-  the answer's `cite` says. A check that names a table its result's
+  citation rest on. The buffer shows that statement afterwards, and it
+  and the run are the task's work: the answer's revisions of `sql` and
+  `result` are the ones they left, so the task's next call writes on them,
+  and neither reads as the person's change. An assertion resting on it
+  reads `session('<name>')`, the table that statement read — not the
+  tables of the definition — as the answer's `cite` says. A check that names a table its result's
   statement did not read is refused with the tables that statement read.
 - **Joins.** `session('…')` joins server tables and `keelson('<alias>')`
   ad-hoc datasets in one statement; an ad-hoc dataset named with a server

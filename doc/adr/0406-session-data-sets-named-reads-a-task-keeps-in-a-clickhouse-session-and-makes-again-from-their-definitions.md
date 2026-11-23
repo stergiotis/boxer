@@ -271,7 +271,10 @@ binding for the statement they send.
   label, what was replayed and the data sets its redefinition left stale)
   and its first rows, which the window reads as its main run,
   `SELECT * FROM session('<name>') LIMIT n` — so the answer carries a
-  `result_id` a check and a citation rest on. `list_datasets` (version 2)
+  `result_id` a check and a citation rest on. The buffer taking that
+  statement and the run it starts are the task's work, logged with the
+  task as their writer, and the answer reports the `sql` and `result`
+  revisions they left. `list_datasets` (version 2)
   lists the session's data sets beside the ad-hoc datasets the window
   binds, each with its home, the expression that reads it, rows, bytes,
   revision and state, and a data set's definition when asked for by name;
@@ -535,6 +538,12 @@ layer's advice on the server user changes for a deployment that enables it:
   kept result refused without the tables it may name
   (`TestACitationRestsOnAKeptDataSet`); a session the server still ran a
   stopped statement in (`TestAStatementWaitsOutASessionTheServerStillRuns`).
+- **A later unattended turn's defect** (2026-11-23), with a test: the
+  buffer a keep's sample took was logged as the person's edit, so a task
+  that had read the window was paused at its next call
+  (`TestAKeepLeavesTheTaskCurrentAndOnlyThePersonPausesIt`, through the
+  agent dispatcher). The fix: the operations engine logs what a settlement
+  handler changes of its call's declared writes as that call's work.
 - **Gap.** One 26.9 server on loopback; no server user without
   `CREATE TEMPORARY TABLE`, no `readonly=1` profile, no cluster. The
   retry of a run whose session was lost between prepare and send ran
