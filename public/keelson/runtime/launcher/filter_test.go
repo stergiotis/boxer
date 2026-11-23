@@ -452,6 +452,17 @@ func TestKindFilter_DerivesFromToggleState(t *testing.T) {
 	assert.True(t, inst.kindFilter().shows(app.KindDemo))
 }
 
+func TestHiddenKindCount_FollowsToggles(t *testing.T) {
+	// The closed fold's title is the only sign the list is narrowed by kind,
+	// so the count it shows has to track the toggles.
+	inst := &Inst{}
+	inst.ensureKindShown()
+	assert.Equal(t, 0, inst.hiddenKindCount())
+	inst.kindShown[indexOfKind(t, app.KindDemo)] = false
+	inst.kindShown[indexOfKind(t, app.KindApplet)] = false
+	assert.Equal(t, 2, inst.hiddenKindCount())
+}
+
 func TestEnsureKindShown_Idempotent(t *testing.T) {
 	inst := &Inst{}
 	inst.ensureKindShown()

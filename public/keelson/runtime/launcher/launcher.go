@@ -435,17 +435,40 @@ func (inst *Inst) ensureKindShown() {
 // list, not a place an app lives — and without them that retirement would
 // simply delete two views people use.
 //
+// The checkboxes sit in a fold, closed by default: most people never narrow
+// by kind, and a row of seven checkboxes above the list is space taken from
+// the apps on every visit. The fold's title carries how many kinds are
+// hidden, so a narrowed list is visible with the fold closed — the same
+// failure emptyResultHint guards against. The change is noticed before the
+// fold is drawn, so a command that set the kinds while it was closed still
+// lands.
+//
 // scope keys the widget ids so several surfaces can draw the same toggles.
 func (inst *Inst) renderKindToggles(ids *c.WidgetIdStack, scope string) {
 	inst.ensureKindShown()
 	inst.noticeKindToggles()
-	for range c.Horizontal().KeepIter() {
-		c.Label("Show:").Send()
-		for i, k := range app.AllKinds {
-			c.Checkbox(ids.PrepareStr("kind-"+scope+"-"+k.String()), inst.kindShown[i], kindLabel(k)).
-				SendRespVal(&inst.kindShown[i])
+	title := "Kinds"
+	if n := inst.hiddenKindCount(); n > 0 {
+		title += " · " + strconv.Itoa(n) + " hidden"
+	}
+	for range c.CollapsingHeader(ids.PrepareStr("kind-"+scope+"-fold"), c.WidgetText().Text(title).Keep()).KeepIter() {
+		for range c.HorizontalWrapped().KeepIter() {
+			for i, k := range app.AllKinds {
+				c.Checkbox(ids.PrepareStr("kind-"+scope+"-"+k.String()), inst.kindShown[i], kindLabel(k)).
+					SendRespVal(&inst.kindShown[i])
+			}
 		}
 	}
+}
+
+// hiddenKindCount is how many kinds the toggles hide.
+func (inst *Inst) hiddenKindCount() (n int) {
+	for _, shown := range inst.kindShown {
+		if !shown {
+			n++
+		}
+	}
+	return
 }
 
 // presentMaturities lists the grades the launchable apps carry, weakest
