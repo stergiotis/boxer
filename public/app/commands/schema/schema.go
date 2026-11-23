@@ -315,7 +315,7 @@ func Unaccepted(ps []schemaplan.Plan, create bool, alter bool) (rest []schemapla
 func runApply(ctx context.Context, cmd *cli.Command) (err error) {
 	create, alter := cmd.Bool(flagCreate), cmd.Bool(flagAlter)
 	if !create && !alter {
-		return eh.Errorf("schema apply changes the server: name what it may run, --%s for tables that do not exist, --%s for ALTER statements on those that do; `schema plan` shows what each would run", flagCreate, flagAlter)
+		return eh.Errorf("schema apply changes the server: name what it may run, --" + flagCreate + " for tables that do not exist, --" + flagAlter + " for ALTER statements on those that do; `schema plan` shows what each would run")
 	}
 	exec, ts, ps, err := plans(ctx, cmd)
 	if err != nil {
