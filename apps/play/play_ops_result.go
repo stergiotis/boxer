@@ -316,25 +316,50 @@ func sampleResult(r *opsResults, in SampleArgs) (out SampleRows, err error) {
 	return
 }
 
-// windowConfined is the window's label (ADR-0270 §SD4, extended to lanes):
-// true while the main result, the observed intermediate's or a bound
-// node's is confined — every result a read or a capture of the window can
+// windowConfined is the window's label for every reader that is not the
+// task windowLabel names (ADR-0270 §SD4, extended to lanes): true while
+// the main result, the observed intermediate's or a bound node's was read
+// from sealed data — every result a read or a capture of the window can
 // show.
 func (inst *PlayApp) windowConfined() (confined bool) {
-	if inst.graph != nil && inst.graph.MainConfined() {
-		return true
+	confined, _ = inst.windowLabel()
+	return
+}
+
+// windowLabel is the window's label with the reader left open. confined is
+// true while any result the window can show was read from sealed data.
+// clearFor names the one task for which the window is unlabelled all the
+// same: every such result holds that task's own publications at TLP:CLEAR
+// and nothing else sealed. One result that is labelled for everyone, or
+// two that are clear for different tasks, leave no such task.
+func (inst *PlayApp) windowLabel() (confined bool, clearFor string) {
+	var labelled, several bool
+	add := func(c bool, task string) {
+		switch {
+		case c:
+			labelled = true
+		case task == "":
+		case clearFor == "":
+			clearFor = task
+		case clearFor != task:
+			several = true
+		}
+	}
+	if inst.graph != nil {
+		add(inst.graph.MainLabel())
 	}
 	split := inst.currentSplit
 	if inst.intermediateLane != nil && inst.observedNode != "" && inst.observedNode != split.Sink {
-		if _, ok := findSplitNode(split, inst.observedNode); ok && inst.intermediateLane.servesConfined() {
-			return true
+		if _, ok := findSplitNode(split, inst.observedNode); ok {
+			add(inst.intermediateLane.servesLabel())
 		}
 	}
 	// gcBoundLanes keeps one lane per node a binding names, and no other.
 	for _, lane := range inst.boundLanes {
-		if lane.servesConfined() {
-			return true
-		}
+		add(lane.servesLabel())
 	}
-	return false
+	if labelled || several {
+		return true, ""
+	}
+	return clearFor != "", clearFor
 }

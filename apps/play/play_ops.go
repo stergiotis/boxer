@@ -355,7 +355,14 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 	s.Editing(opsResSql, func(inst *PlayLauncher) bool {
 		return inst.inner != nil && inst.inner.editor != nil && appops.WidgetEditing(inst.inner.editor.TextHandle())
 	})
-	s.Confined(func(inst *PlayLauncher) bool { return inst.inner != nil && inst.inner.windowConfined() })
+	// The window's label has the reader in it: a result of one task's own
+	// clear publications is unlabelled for that task alone.
+	s.LabelFor(func(inst *PlayLauncher) (confined bool, clearFor string) {
+		if inst.inner == nil {
+			return
+		}
+		return inst.inner.windowLabel()
+	})
 	// The result's lifecycle, as the state chip draws it: query_state and
 	// query_machine, the operations every app's mounted machine offers.
 	fsmops.Mount(s, "query", "the main result's lifecycle", func(inst *PlayLauncher) opfsm.SourceI {

@@ -91,10 +91,61 @@ type snapshot struct {
 	asOf uint64
 	at   time.Time
 	// view is nil when no one could read it as the frame began.
-	view     app.OperationsSnapshotI
-	revs     map[string]uint64
-	logSeq   uint64
+	view   app.OperationsSnapshotI
+	revs   map[string]uint64
+	logSeq uint64
+	label  windowLabel
+}
+
+// windowLabel is a window's label as its handler reports it: confined for
+// every reader, except the task clearFor names when it is set.
+type windowLabel struct {
 	confined bool
+	clearFor string
+}
+
+// labelOf asks h for its window's label. A handler that does not say for
+// whom its label does not apply has one label for every reader.
+func labelOf(h app.OperationsHandlerI) (l windowLabel) {
+	if lf, ok := h.(app.OperationsLabelForI); ok {
+		l.confined, l.clearFor = lf.LabelFor()
+	} else {
+		l.confined = h.Confined()
+	}
+	if !l.confined {
+		l.clearFor = ""
+	}
+	return
+}
+
+// forCall is the label an outcome of call carries. The task the window is
+// clear for is answered unlabelled, and so is the person at the window,
+// whose gestures were answered with the window's label for that task
+// before the label had a reader in it; a call of any other task is
+// answered confined.
+func (inst windowLabel) forCall(call app.OperationCall) (confined bool) {
+	switch {
+	case !inst.confined:
+		return false
+	case inst.clearFor == "":
+		return true
+	case agentCaused(call):
+		return taskOf(call) != inst.clearFor
+	}
+	return call.Writer != opwire.WriterPerson
+}
+
+// taskOf is the task a call is work of: the one the dispatcher stamped on
+// it, or the one its writer names; empty for a call that is no task's.
+func taskOf(call app.OperationCall) (task string) {
+	if call.OnBehalfOf != nil && call.OnBehalfOf.Task != "" {
+		return call.OnBehalfOf.Task
+	}
+	task, _ = strings.CutPrefix(call.Writer, opwire.WriterTask(""))
+	if task == call.Writer {
+		task = ""
+	}
+	return
 }
 
 // Engine serves one instance's catalog.
@@ -278,8 +329,9 @@ func (inst *Engine) query(ctx context.Context, spec app.OperationSpec, req opwir
 	var result []byte
 	var confined bool
 	var err error
+	call := callOf(ctx, req)
 	if spec.Class == app.OperationClassExternalRead {
-		result, confined, err = s.view.ExternalRead(callOf(ctx, req), spec.Name, req.Args)
+		result, confined, err = s.view.ExternalRead(call, spec.Name, req.Args)
 	} else {
 		result, err = s.view.Query(spec.Name, req.Args)
 	}
@@ -287,7 +339,7 @@ func (inst *Engine) query(ctx context.Context, spec app.OperationSpec, req opwir
 	if out.Phase == opwire.PhaseUnspecified {
 		out = opwire.Outcome{Phase: opwire.PhaseCompleted, Result: result}
 	}
-	out.AsOf, out.Seq, out.Confined = s.asOf, s.logSeq, s.confined || confined
+	out.AsOf, out.Seq, out.Confined = s.asOf, s.logSeq, s.label.forCall(call) || confined
 	out.Revisions = pick(s.revs, spec.Reads)
 	if age := inst.clock().Sub(s.at); out.Phase == opwire.PhaseCompleted && age >= StallAfter {
 		out.Reason = "read as of the window's last frame; " + stallNote(age)
@@ -640,7 +692,7 @@ func (inst *Engine) apply(c *call) (out opwire.Outcome) {
 	inst.observe(c.call.Writer, c.spec.Writes)
 	c.before, c.after = before, pick(inst.revs, c.spec.Writes)
 	out = opwire.Outcome{Phase: opwire.PhaseApplied, AsOf: inst.frame, Revisions: pick(inst.revs, c.spec.Writes), Result: result,
-		Confined: inst.h.Confined()}
+		Confined: labelOf(inst.h).forCall(c.call)}
 	return
 }
 
@@ -706,11 +758,13 @@ func (inst *Engine) undo(id string) {
 		Phase: opwire.PhaseApplied, Reason: status, Resources: restored, Revisions: pick(inst.revs, restored)})
 }
 
-// Confined is the window's label as of the latest snapshot; safe from any
-// goroutine.
+// Confined is the window's label as of the latest snapshot, for a reader
+// that is no call of a task: a capture of the window, its title, its row in
+// a listing. A window whose content is unlabelled for one task alone is
+// confined here. Safe from any goroutine.
 func (inst *Engine) Confined() (confined bool) {
 	if s := inst.snap.Load(); s != nil {
-		confined = s.confined
+		confined = s.label.confined
 	}
 	return
 }
@@ -728,7 +782,7 @@ func (inst *Engine) SnapshotRevisions() (revs map[string]uint64, asOf uint64) {
 // view is built only when someone could read it: a task is attached or a
 // query waits.
 func (inst *Engine) TakeSnapshot() {
-	s := &snapshot{asOf: inst.frame, at: inst.clock(), revs: maps.Clone(inst.revs), logSeq: inst.LogSeq(), confined: inst.h.Confined()}
+	s := &snapshot{asOf: inst.frame, at: inst.clock(), revs: maps.Clone(inst.revs), logSeq: inst.LogSeq(), label: labelOf(inst.h)}
 	inst.mu.Lock()
 	wanted := inst.attached > 0 || inst.waiting > 0
 	inst.mu.Unlock()
@@ -807,7 +861,7 @@ func (inst *Engine) settleRunning() {
 		}
 		out := outcomeOfError(err)
 		if out.Phase == opwire.PhaseUnspecified {
-			out = opwire.Outcome{Phase: opwire.PhaseCompleted, AsOf: inst.frame, Revisions: pick(inst.revs, c.spec.Writes), Result: result, Confined: inst.h.Confined()}
+			out = opwire.Outcome{Phase: opwire.PhaseCompleted, AsOf: inst.frame, Revisions: pick(inst.revs, c.spec.Writes), Result: result, Confined: labelOf(inst.h).forCall(c.call)}
 		}
 		inst.mu.Lock()
 		c.outcome = out

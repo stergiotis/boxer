@@ -326,7 +326,9 @@ func TestATaskReadsPublishesAndExposesItsOwnClearWork(t *testing.T) {
 	assert.Contains(t, r.plane.lastRun().SQL, handle, "the run reads the dataset by its handle on this process's plane")
 	assert.True(t, r.p.graph.MainSealed())
 	assert.False(t, r.p.graph.MainConfined())
-	assert.False(t, r.p.windowConfined())
+	confined, clearFor := r.p.windowLabel()
+	assert.True(t, confined, "to every other reader the window holds sealed data")
+	assert.Equal(t, r.g.Task, clearFor, "and it is unlabelled for the task whose own work it is")
 	hist := r.p.graph.MainHistory()
 	assert.True(t, hist[len(hist)-1].Confined, "the person's history shows the run read sealed data")
 	// What play itself writes of such a result elsewhere is walled as
@@ -543,7 +545,9 @@ func TestAFailedRunOverTheTasksOwnPublicationIsNotLabelled(t *testing.T) {
 	require.Equal(t, "failed", field(t, out.Text, "result", "phase"), out.Text)
 	assert.Contains(t, field(t, out.Text, "result", "error"), "UNKNOWN_TABLE")
 	assert.False(t, out.Confined, "the failure quotes nothing but the task's own work")
-	assert.False(t, r.p.windowConfined())
+	confined, clearFor := r.p.windowLabel()
+	assert.True(t, confined, "to every other reader the window holds sealed data")
+	assert.Equal(t, r.g.Task, clearFor, "and it is unlabelled for the task whose own work it is")
 	assert.True(t, r.p.graph.MainSealed())
 
 	out = r.call(opQuery, jsonArgs(t, map[string]any{"sql": "SELECT nope FROM keelson('people__result')"}))

@@ -501,7 +501,8 @@ type OperationsHandlerI interface {
 	ResourceValue(name string) (v any)
 	// Confined reports the window's label (ADR-0145, ADR-0269 §SD7): true
 	// while any result it holds is confined. What its operations return
-	// carries this label.
+	// carries this label, for every reader unless the handler also says
+	// for whom it does not apply (OperationsLabelForI).
 	Confined() (confined bool)
 	// Restore puts back a value ResourceValue returned earlier, for undo
 	// (ADR-0269 §SD8). It reports false for a resource it cannot restore —
@@ -545,6 +546,21 @@ type OperationsSnapshotI interface {
 	// context against the app's agent limits (ADR-0269 §SD6). confined is
 	// set when what the probe read is confined although the window is not.
 	ExternalRead(call OperationCall, name string, args []byte) (result []byte, confined bool, err error)
+}
+
+// OperationsLabelForI is implemented by a handler whose window's label
+// depends on who reads it: the window holds sealed content that is
+// unlabelled for one task alone, the one whose own work it is. A handler
+// without it has one label for every reader, its Confined.
+type OperationsLabelForI interface {
+	// LabelFor reports the window's label with the reader left open.
+	// confined is the label for every reader, as Confined reports it;
+	// clearFor, when set, names the one task for which the window is not
+	// labelled although confined is true. The host stamps an outcome of
+	// that task's call unlabelled; a call of any other task, a capture of
+	// the window, its title and its row in a listing take confined. It
+	// runs on the render goroutine, as Confined does.
+	LabelFor() (confined bool, clearFor string)
 }
 
 // ConfinedResultI is implemented by an external read's result type whose

@@ -57,6 +57,7 @@ type Set[A any, S any] struct {
 	availMounted map[string]mountedAvail
 	snapshot     func(inst A) S
 	confined     func(inst A) bool
+	labelFor     func(inst A) (confined bool, clearFor string)
 	// mounts capture, per mounted component, the value its queries read.
 	mounts map[string]func(inst A) any
 }
@@ -109,6 +110,17 @@ func (inst *Set[A, S]) Restorable(name string, fn func(inst A, v any) bool) *Set
 // it holds is confined (ADR-0145). Without it, the window is ordinary.
 func (inst *Set[A, S]) Confined(fn func(inst A) bool) *Set[A, S] {
 	inst.confined = fn
+	return inst
+}
+
+// LabelFor declares the window's label for an app whose sealed content can
+// be unlabelled for one task alone, in place of Confined: confined is the
+// label for every reader, and clearFor, when set, the one task whose calls
+// are answered unlabelled although confined is true
+// (app.OperationsLabelForI). An app with one label for every reader
+// declares Confined and leaves this out.
+func (inst *Set[A, S]) LabelFor(fn func(inst A) (confined bool, clearFor string)) *Set[A, S] {
+	inst.labelFor = fn
 	return inst
 }
 
@@ -373,6 +385,20 @@ func (inst *bound[A, S]) ResourceValue(name string) (v any) {
 }
 
 func (inst *bound[A, S]) Confined() (confined bool) {
+	confined, _ = inst.LabelFor()
+	return
+}
+
+// LabelFor is the window's label and the task it does not apply to: what
+// the app declared with Set.LabelFor, or its Confined for every reader.
+func (inst *bound[A, S]) LabelFor() (confined bool, clearFor string) {
+	if fn := inst.set.labelFor; fn != nil {
+		confined, clearFor = fn(inst.inst)
+		if !confined {
+			clearFor = ""
+		}
+		return
+	}
 	if fn := inst.set.confined; fn != nil {
 		confined = fn(inst.inst)
 	}

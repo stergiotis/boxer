@@ -29,6 +29,7 @@ var (
 	_ nodeExecutorI          = clientExecutor{}
 	_ progressAwareExecutorI = clientExecutor{}
 	_ labelledExecutorI      = clientExecutor{}
+	_ clearForExecutorI      = clientExecutor{}
 	_ scopedExecutorI        = clientExecutor{}
 )
 
@@ -59,6 +60,14 @@ func (inst clientExecutor) executeWithProgress(ctx context.Context, c compiledNo
 // publication at TLP:CLEAR. A run that fails keeps the label of the
 // statement, from the same resolution the request is sent with.
 func (inst clientExecutor) executeLabelled(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(p runstream.Progress)) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, confined bool, err error) {
+	rec, schema, summary, confined, _, err = inst.executeClearFor(ctx, c, alloc, onProgress)
+	return
+}
+
+// executeClearFor is executeLabelled plus the task the result is unlabelled
+// for when it was read from sealed data and is not confined: the label is
+// lifted for that task's reading alone.
+func (inst clientExecutor) executeClearFor(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(p runstream.Progress)) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, confined bool, clearFor string, err error) {
 	if inst.client == nil {
 		// A playground without a client (the demo tour's seeded one) has no
 		// endpoint to run on; a lane it opens reports that instead of
@@ -78,7 +87,9 @@ func (inst clientExecutor) executeLabelled(ctx context.Context, c compiledNode, 
 	confined = dec.sensitivity == queryengine.SensitivityConfined
 	rdr, rs, summary, xErr := inst.client.ExecuteArrowStream(ctx, c.SQL, alloc, opts, c.Params, dec)
 	if xErr != nil {
-		confined = confined && !failedOwnClear(xErr)
+		if confined && failedOwnClear(xErr) {
+			confined, clearFor = false, failedClearFor(xErr)
+		}
 		err = eh.Errorf("clientExecutor.execute: %w", xErr)
 		return
 	}
@@ -88,7 +99,7 @@ func (inst clientExecutor) executeLabelled(ctx context.Context, c compiledNode, 
 	}()
 	// The stream was sent with the decision's sensitivity or more, so its
 	// label is the result's.
-	confined = rs.Confined()
+	confined, clearFor = rs.Confined(), rs.ClearFor()
 	// Same frame drain as the main lane (play_runstream.go): a stream that
 	// dies part-way is a failed terminal, never a short result.
 	batches, _, rErr := drainRun(rdr, rs)

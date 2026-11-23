@@ -637,13 +637,30 @@ dataset labelled. No live run of a model is behind the change.
   judged for. `publish_result` by the person or by another task takes a
   result of some task's own clear publications as sealed data and
   publishes it as derived, and a `check` resting on it is confined for
-  them. Open: the window's label (the catalog's `Confined`, which the
-  engine stamps on every outcome and the window host reports for
-  captures and titles) is one value for every reader and is judged for
-  the task whose run made the result, so another task that observes the
-  window reads that task's publication unlabelled. A label per reader
-  changes what the catalog handler, the engine and the dispatcher
-  exchange; it waits for a decision.
+  them.
+- The window's label has the reader in it (decided with the owner after
+  the review of 2026-11-23). The catalog handler may report, beside its
+  label for every reader, the one task for which the window is not
+  labelled (`app.OperationsLabelForI`, declared with
+  `appops.Set.LabelFor`); the engine stamps each outcome by comparing
+  that task with the task of the call. Play reports a window whose
+  results were read from sealed data as confined, and as clear for a
+  task only when every such result — main, observed, bound lanes — holds
+  that one task's own clear publications and nothing else sealed. Every
+  other reader takes the window as confined: another task, a task that
+  observes, a capture of the window (also one the clear-for task asks
+  for, since a capture draws the window for whoever looks at it), its
+  title and its row in a listing, and a lane memo served after the mark
+  moved to another task. The person's own gestures and reads at the
+  window are answered as they were before the label had a reader in it:
+  unlabelled over a result of a task's own clear work. An app that
+  declares `Confined` alone keeps one label for every reader. Nothing new
+  crosses the bus: the engine reads the task from the on-behalf-of
+  context the dispatcher already stamps on the call, and the outcome
+  carries the one `confined` flag it always did. The model JSON of
+  `get_state` and `describe_result` still says `confined` for the task
+  whose run made the result; the outcome's label is what a coordinator
+  goes by.
 - The operator's `keelson('session_datasets')` shows a data set made of a
   task's own clear publications as confined; `OwnClear` is shown only to
   the task that asks.

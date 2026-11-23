@@ -268,14 +268,22 @@ from a statement that reads one. They are decided apart.
   endpoint, and every later call of the task is labelled. A label is not
   taken off again.
 - **A task's own clear work is the exception to the label** (ADR-0407). A
-  dataset the task's own call published at TLP:CLEAR, from nothing
-  sealed, does not label the task when it reads it back: not the query,
+  dataset the task's own call published at TLP:CLEAR, whose publisher
+  asserted that it derives from nothing sealed, does not label the task
+  when it reads it back: not the query,
   not a `check`, not a data set kept from it, not a run that fails. The
   dataset service decides it for the revision read; `list_datasets` says
   so per dataset in `confined`, and `keep_as` for the data set it made.
   One other sealed input in the statement — a dataset a person or another
   task published, a confined data set — labels it. So does a dataset
-  republished since by anyone else or under a label.
+  republished since by anyone else or under a label, and one whose
+  publisher said nothing of what it derives from.
+- **The exception is that task's alone.** The window stays labelled for
+  every other reader of it: another task's call, a task that only
+  observes, a capture of the window, its row in the window list. Only
+  the calls of the task whose work the window holds are answered
+  unlabelled, and only while everything sealed the window shows is that
+  one task's.
 - **What follows for an exposure.** A table computed for the task and
   published on its behalf can be read, checked, published again with
   `publish_result` and exposed without the conversation being labelled.

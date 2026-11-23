@@ -258,6 +258,14 @@ type labelledExecutorI interface {
 	executeLabelled(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(p runstream.Progress)) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, confined bool, err error)
 }
 
+// clearForExecutorI is labelledExecutorI for an executor that also reports
+// the task a result read from sealed data is unlabelled for: a lane that
+// finds it keeps the task with the result, so the window's label is lifted
+// for that task alone.
+type clearForExecutorI interface {
+	executeClearFor(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(p runstream.Progress)) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, confined bool, clearFor string, err error)
+}
+
 // Node is a query node. Compile produces the pushed-down SQL plus the signal
 // values it reads from the current signal env (ADR-0097: editor SQL →
 // nanopass pipeline → param resolution). In slice 1 Compile is supplied
@@ -290,6 +298,9 @@ type nodeResult struct {
 	// (ADR-0270 §SD4, extended to lanes): set by an executor that reports
 	// it (labelledExecutorI).
 	confined bool
+	// clearFor is the task the result is unlabelled for when it was read
+	// from sealed data and is not confined (clearForExecutorI).
+	clearFor string
 }
 
 // signalMeta is a signal's write provenance for the Signals chrome (ADR-0097

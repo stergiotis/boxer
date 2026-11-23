@@ -152,6 +152,14 @@ relied on the old behaviour.
   before this and expects the task to expose the result has to add the
   assertion; the service still overrides it for an input that is not
   the task's own clear publication (ADR-0407, same section).
+- **A window's label may name the one task it does not apply to.** An
+  app's `Confined` (declared with `appops.Set.Confined`) stays one label
+  for every reader and needs no change. An app whose sealed content can
+  be one task's own clear work declares `appops.Set.LabelFor` instead:
+  the label for every reader, and the task whose calls are answered
+  unlabelled. Play does. A module that reads `opengine.Engine.Confined`
+  or a window's `Confined` in a listing gets the label for every reader,
+  which is true for such a window (ADR-0407, same section).
 - **A read answers whose the revision is.** `adhocdata.ReadAll` returns
   `OwnClear`. A module that reads a dataset on a task's behalf may leave
   its outcome unlabelled only for a true answer; one that does not look

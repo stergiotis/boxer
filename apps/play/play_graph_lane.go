@@ -193,9 +193,20 @@ func (inst *nodeLane) peek() (view laneView) {
 
 // servesConfined reports the label of the result the lane serves.
 func (inst *nodeLane) servesConfined() (confined bool) {
+	confined, _ = inst.servesLabel()
+	return
+}
+
+// servesLabel reports the label of the result the lane serves and, when it
+// was read from sealed data and is not confined, the task it is unlabelled
+// for.
+func (inst *nodeLane) servesLabel() (confined bool, clearFor string) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	return !inst.closed && inst.result != nil && inst.result.confined
+	if inst.closed || inst.result == nil {
+		return
+	}
+	return inst.result.confined, inst.result.clearFor
 }
 
 // progressView returns the in-flight run's latest progress tick without
@@ -303,6 +314,7 @@ func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen ui
 	var summary Summary
 	var err error
 	var confined bool
+	var clearFor string
 	// The sink is generation-guarded: a superseded run's late ticks must
 	// not paint the new run's badge.
 	sink := func(p runstream.Progress) {
@@ -314,6 +326,8 @@ func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen ui
 		inst.mu.Unlock()
 	}
 	switch ex := inst.exec.(type) {
+	case clearForExecutorI:
+		rec, schema, summary, confined, clearFor, err = ex.executeClearFor(ctx, c, inst.alloc, sink)
 	case labelledExecutorI:
 		rec, schema, summary, confined, err = ex.executeLabelled(ctx, c, inst.alloc, sink)
 	case progressAwareExecutorI:
@@ -360,6 +374,7 @@ func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen ui
 		elapsed:     time.Since(start),
 		err:         err,
 		confined:    confined,
+		clearFor:    clearFor,
 	}
 	inst.servedKey = demandKey
 	if prev != nil && prev.rec != nil {
