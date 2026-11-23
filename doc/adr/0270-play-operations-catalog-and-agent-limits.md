@@ -1283,6 +1283,20 @@ observed an intermediate node, which the run resets. The footprint
 conformance test no longer observes `run` → `panes`, and that gap leaves
 its allowlist.
 
+
+### 2026-11-23 — `list_panes` says where a shown pane is
+
+A pane's row carries `Rect`: where its body showed in the last frame, in
+the frame's logical points, or nothing for a pane that did not draw. It is
+the crop a capture of play's window takes to hold that pane alone, which is
+how an agent puts one plot into the chat's artefact (ADR-0284, update of
+2026-11-23); `show_pane` raises a hidden pane first, and the rect follows a
+frame later. The rect is the body's clip rect, recorded at the top of the
+body with `captureUiClipRect`: inside a pane that scrolls, the rect the
+body may lay out in is shifted by the scroll offset, and the clip rect is
+what shows. It is read, not a resource of its own: a window moved or
+resized changes it without moving `panes`.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

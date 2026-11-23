@@ -245,6 +245,9 @@ type PaneState struct {
 	Visible  bool   `desc:"whether the pane's body drew in the last frame: a lazy pane draws only while its tab is in front, the others whenever the dock draws them"`
 	Zone     string `desc:"the dock leaf the pane starts in: body, editor, tools, side or bottom"`
 	Lazy     bool   `desc:"whether the pane draws only while in front; a hidden lazy pane's status is of its last draw, show_pane raises it"`
+	// Rect is where the pane's body showed in the last frame, so a capture
+	// can be cut to it.
+	Rect *PaneRect `json:",omitzero" desc:"where the pane's body showed in the last frame, in the frame's logical points: the crop that artefact_capture takes to capture this pane alone (with this window); absent for a pane that did not draw, which show_pane raises"`
 	// Ops points from the pane to its own operations.
 	Ops []string `json:",omitzero" desc:"the operations that read this pane (get_<pane> first, which says what the pane last drew) and drive it; empty for a pane read through describe_result and sample_rows alone"`
 }
@@ -488,7 +491,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 		})
 	// Untrusted: a status line quotes the data's values and lane errors.
 	appops.Query(s, app.OperationSpec{Name: opListPanes, Version: 2,
-		Summary: "list the panes: whether each can draw what it is fed and why not, what its last draw said, the node feeding it, the signals it writes, and the operations that read and drive it (get_<pane>, set_<pane>_options, a pane's select command)",
+		Summary: "list the panes: whether each can draw what it is fed and why not, what its last draw said, the node feeding it, the signals it writes, the operations that read and drive it (get_<pane>, set_<pane>_options, a pane's select command), and where a shown pane is on screen, to capture a plot alone",
 		Reads:   []string{opsResPanes, opsResResult, opsResSql}, Agents: true, Untrusted: true},
 		func(sn opsSnap, in appops.None) (PanesState, error) {
 			if !sn.mounted {

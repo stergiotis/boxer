@@ -1818,6 +1818,7 @@ func (inst *PlayApp) renderTabBody(spec *TabSpec, title string, f *TabFrame) {
 		}
 	}
 	inst.markPaneDrawn(spec.ID, f)
+	inst.capturePaneRect(spec.ID)
 	// A run replacing a result the pane is ALREADY showing: the body below
 	// keeps drawing the previous rows (last-good, no flicker — see
 	// nodeLane.demand), and without this strip nothing in the pane says a

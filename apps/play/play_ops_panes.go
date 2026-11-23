@@ -2,6 +2,8 @@ package play
 
 import (
 	"strings"
+
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
 // play_ops_panes.go: list_panes reads what each pane last drew (ADR-0270,
@@ -31,6 +33,37 @@ func (inst *PlayApp) markPaneDrawn(pane string, f *TabFrame) {
 		inst.paneDrawn = make(map[string]paneDrawnMark, 8)
 	}
 	inst.paneDrawn[pane] = paneDrawnMark{frame: inst.frame, result: f.Result, fed: f.Rec != nil}
+}
+
+// PaneRect is a rect of the frame in logical points, as a capture's crop
+// takes it: x and y of its top-left corner, w and h its size.
+type PaneRect struct {
+	X float32 `json:"x" desc:"left edge"`
+	Y float32 `json:"y" desc:"top edge"`
+	W float32 `json:"w" desc:"width"`
+	H float32 `json:"h" desc:"height"`
+}
+
+// paneRectSeq is the probe a pane's body area is captured under; vizSeed
+// makes it this window's own.
+func (inst *PlayApp) paneRectSeq(pane string) uint64 {
+	return c.ProbeSeq(pane, "play-pane-rect") ^ inst.vizSeed
+}
+
+// capturePaneRect records where the pane's body shows, at the top of the
+// body: its clip rect, the visible part of a body that scrolls.
+func (inst *PlayApp) capturePaneRect(pane string) {
+	c.CaptureUiClipRect(inst.paneRectSeq(pane))
+}
+
+// paneRect is the area the pane's body showed in when it last drew, read
+// back a frame after capturePaneRect.
+func (inst *PlayApp) paneRect(pane string) (r *PaneRect) {
+	ur, ok := c.CurrentApplicationState.StateManager.GetUiRect(inst.paneRectSeq(pane))
+	if !ok || ur.MaxX <= ur.MinX || ur.MaxY <= ur.MinY {
+		return nil
+	}
+	return &PaneRect{X: ur.MinX, Y: ur.MinY, W: ur.MaxX - ur.MinX, H: ur.MaxY - ur.MinY}
 }
 
 // paneVisible reports whether the pane's body drew in the last frame: a
@@ -64,6 +97,9 @@ func (inst *PlayApp) paneStatusState(spec *TabSpec, ps *PaneState) {
 	ps.Zone = tabZoneName(spec.Zone)
 	ps.Lazy = spec.Lazy
 	ps.Visible = inst.paneVisible(spec)
+	if ps.Visible {
+		ps.Rect = inst.paneRect(spec.ID)
+	}
 	if spec.Status == nil || ps.Draws == PaneDrawNo {
 		return
 	}

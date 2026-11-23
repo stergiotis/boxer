@@ -54,7 +54,7 @@ window's first frame.
 | `get_state` | query | the buffer, the parameters with their controls and defaults, the signals, Live, the main result's phase and notice, the destination a run needs, the bundle and the datasets followed | never, once mounted; read it first |
 | `describe_result` | query | columns, handles, types and row count of a result: the one the panels draw, a pane's, or a drawn node's | the pane or node is not drawn (*not drawn: show_pane …*); a result id that is not the one held |
 | `sample_rows` | query | up to 50 rows of a result as cell text, NULL kept apart from empty text | as `describe_result`; rows and an offset both given; a result id that is not the one held |
-| `list_panes` | query | the panes in dock order: whether each can draw what it is fed and why not, its last status line, the node feeding it, the signals it writes, and the operations that read and drive it | never, once mounted |
+| `list_panes` | query | the panes in dock order: whether each can draw what it is fed and why not, its last status line, the node feeding it, the signals it writes, the operations that read and drive it, and where a shown pane is on screen | never, once mounted |
 | `get_query_graph` | query | the buffer's split: nodes, what each reads, the panes each feeds, the observed node and the bindings | the window has no query graph yet |
 | `get_notebook` | query | the buffer as a sealed notebook's text (ADR-0371): each WITH query a record cell, the buffer's own SELECT the last record, one table cell over it; not sealed until `boxer markdown notebook collect` runs on it | the buffer starts with `SET` or reads a `{name:Type}` slot; its WITH list holds an expression or is RECURSIVE; a node is computed in play; a WITH query has the name the SELECT was to take (pass `sink`); the text is over 64 KiB |
 | `get_diagnostics` | query | whether the buffer parses and the server's verdict when not, skipped rewrites, unresolved leeway handles, the security class, the split, dropped emits, gloss directives that failed, the last run's full error | never, once mounted |
@@ -168,6 +168,12 @@ the operations that read and drive it. A pane that draws a result can be
 fed from one node of the buffer's split with `bind_pane`; a pane that
 reads named CTEs off the split (Timeline, Network, Sankey, Kanban, …)
 cannot be bound, and the refusal names the CTEs to write with `set_sql`.
+
+A shown pane's `list_panes` row carries `Rect`, where its body is in the
+frame, in logical points. It is the crop to capture that pane alone: the
+chat's `artefact_capture` with this window and the rect puts one plot into
+the artefact, as PNG or, for a map or a heatmap, as JPEG. A hidden pane
+has no rect; raise it with `show_pane` and read `list_panes` again.
 
 | Operation | Kind | What it does | Unavailable or refused when |
 | --- | --- | --- | --- |
