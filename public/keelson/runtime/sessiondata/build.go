@@ -220,8 +220,16 @@ func (inst *Service) build(o op, d *dataset, mode buildModeE) (rec AuditRecord, 
 		external = append(external, a.external)
 		rec.Attachments = append(rec.Attachments, a.ref())
 	}
+	rec.OwnClear = ownClearRefs(atts)
 	o.s.mu.Lock()
 	confined := len(atts) > 0
+	// The label follows what this build reads: the table holds only the
+	// building task's own publications at TLP:CLEAR when every dataset
+	// attached now was answered so and every confined data set it reads
+	// is held so for the same task. A replay judges again, on what it
+	// reads then.
+	task := ownClearTask(o.cc)
+	ownClear := task != "" && allOwnClear(atts)
 	tableOf := make(map[string]string, len(d.deps))
 	for _, dep := range d.deps {
 		dd := o.s.datasets[dep]
@@ -233,6 +241,7 @@ func (inst *Service) build(o op, d *dataset, mode buildModeE) (rec AuditRecord, 
 		}
 		tableOf[dep] = dd.table
 		confined = confined || dd.confined
+		ownClear = ownClear && (!dd.confined || dd.ownClearFor(task))
 		rec.Dependencies = append(rec.Dependencies, datasetRef(dd.name, dd.revision))
 	}
 	rowsUsed, _ := usageLocked(o.s, d.name)
@@ -303,6 +312,13 @@ func (inst *Service) build(o op, d *dataset, mode buildModeE) (rec AuditRecord, 
 	}
 	d.table, d.state, d.reason = table, DatasetStateLive, ""
 	d.rows, d.bytes, d.columns, d.confined = stat.rows, stat.bytes, cols, confined
+	d.clearFor = ""
+	if confined {
+		rec.Label = auditLabelConfined
+		if ownClear {
+			d.clearFor, rec.Label = task, auditLabelOwnClear
+		}
+	}
 	d.builds++
 	if mode == buildModeReplay {
 		d.replays++

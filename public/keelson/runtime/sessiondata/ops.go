@@ -201,7 +201,7 @@ func (inst *Service) Define(ctx context.Context, in DefineInput) (res DefineResu
 		dd.state, dd.reason = DatasetStateStale, "it reads "+in.Name+", which was redefined"
 		staleRefs = append(staleRefs, datasetRef(dd.name, dd.revision))
 	}
-	res.Dataset, res.Ticket = cand.info(), s.ticket
+	res.Dataset, res.Ticket = cand.info(ownClearTask(cc)), s.ticket
 	s.mu.Unlock()
 	inst.audit(ctx, made)
 	if oldTable != "" && oldTable != cand.table {
@@ -411,6 +411,11 @@ func (inst *Service) Prepare(ctx context.Context, in PrepareInput) (b Binding, e
 	}
 	tableOf := make(map[string]string, len(names))
 	confined := len(atts) > 0
+	// The label: everything sealed the statement reads is the reading
+	// task's own publication at TLP:CLEAR, read now or when a data set's
+	// table was last made.
+	task := ownClearTask(cc)
+	ownClear := task != "" && allOwnClear(atts)
 	for _, n := range names {
 		d := s.datasets[n]
 		if d == nil {
@@ -419,6 +424,7 @@ func (inst *Service) Prepare(ctx context.Context, in PrepareInput) (b Binding, e
 		}
 		tableOf[n] = d.table
 		confined = confined || d.confined
+		ownClear = ownClear && (!d.confined || d.ownClearFor(task))
 		b.Datasets = append(b.Datasets, datasetRef(d.name, d.revision))
 	}
 	b.Ticket = s.ticket
@@ -444,6 +450,7 @@ func (inst *Service) Prepare(ctx context.Context, in PrepareInput) (b Binding, e
 	}
 	if confined {
 		b.Sensitivity = queryengine.SensitivityConfined
+		b.OwnClear = ownClear
 	}
 	b.Settings = map[string]string{
 		"session_id":      srv.id,
@@ -455,7 +462,7 @@ func (inst *Service) Prepare(ctx context.Context, in PrepareInput) (b Binding, e
 	}
 	b.Lease = l.id
 	handed = true
-	inst.auditAttachments(ctx, s, cc, in.Caller, srv.host, atts)
+	inst.auditAttachments(ctx, s, cc, in.Caller, srv.host, atts, b.OwnClear)
 	return
 }
 
@@ -478,6 +485,7 @@ func (inst *Service) bindAttachments(ctx context.Context, in PrepareInput, cc op
 		}
 	}
 	b.Sensitivity = queryengine.SensitivityConfined
-	inst.auditAttachments(ctx, nil, cc, in.Caller, EndpointHost(in.Endpoint.URL), atts)
+	b.OwnClear = ownClearTask(cc) != "" && allOwnClear(atts)
+	inst.auditAttachments(ctx, nil, cc, in.Caller, EndpointHost(in.Endpoint.URL), atts, b.OwnClear)
 	return
 }

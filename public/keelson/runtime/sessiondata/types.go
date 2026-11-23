@@ -109,8 +109,16 @@ type DatasetInfo struct {
 	Rows     uint64        `json:"rows"`
 	Bytes    uint64        `json:"bytes"`
 	Columns  []Column      `json:"columns,omitempty"`
-	// Confined is set when it was derived from sealed data (ADR-0145).
+	// Confined is set when it was derived from sealed data (ADR-0145): a
+	// statement reading it goes only to an endpoint declared for sealed
+	// data.
 	Confined bool `json:"confined,omitempty"`
+	// OwnClear is set, with Confined, when everything sealed its table
+	// was last made from is the own publication at TLP:CLEAR of the task
+	// that asks: that task's reading of it is not labelled. It is false
+	// for the person, for another caller, and once a replay read anything
+	// else; a reader that does not look takes the data set as sealed.
+	OwnClear bool `json:"ownClear,omitempty"`
 	// Endpoint is the host it lives on, as a grant names it.
 	Endpoint string `json:"endpoint"`
 	// Table is its server-side table in the session.
@@ -138,8 +146,16 @@ type Binding struct {
 	// external data.
 	External []queryengine.ExternalTable `json:"external,omitempty"`
 	// Sensitivity is confined when the statement reads sealed data, an
-	// attached dataset or a data set derived from one.
+	// attached dataset or a data set derived from one: where it may be
+	// sent, whoever published the data.
 	Sensitivity queryengine.SensitivityE `json:"sensitivity,omitempty"`
+	// OwnClear is set, with a confined Sensitivity, when everything sealed
+	// the statement reads is the reading task's own publication at
+	// TLP:CLEAR, as the dataset service answered each read: the statement
+	// is sent as confined all the same, and its result need not be
+	// labelled as derived from sealed data. False for every other
+	// statement; a caller that does not look labels the result.
+	OwnClear bool `json:"ownClear,omitempty"`
 	// Lease holds the server session for this statement; empty when the
 	// statement reads no data set. A server session runs one statement at
 	// a time, so the next caller waits until it is released or expires.

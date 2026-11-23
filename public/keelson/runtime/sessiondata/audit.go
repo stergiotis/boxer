@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	"lukechampine.com/blake3"
@@ -40,6 +41,12 @@ const (
 	AuditAttach = "attach"
 )
 
+// The labels a trail row names for what was made of sealed data.
+const (
+	auditLabelConfined = "confined"
+	auditLabelOwnClear = "own-clear"
+)
+
 // The reference and attribute names of the capability's trail rows.
 const (
 	auditRefTask       = "agent-task"
@@ -65,12 +72,19 @@ type AuditRecord struct {
 	Datasets     []string
 	Dependencies []string
 	Attachments  []string
-	Definition   string
-	Stratum      string
-	Table        string
-	Rows         uint64
-	Bytes        uint64
-	Elapsed      time.Duration
+	// OwnClear are the attachments the dataset service answered as the
+	// reading task's own publication at TLP:CLEAR. Label says how what was
+	// made of sealed data is labelled, empty where none was read:
+	// "own-clear" when everything sealed was the reading task's own
+	// publication at TLP:CLEAR, so no label follows, "confined" otherwise.
+	OwnClear   []string
+	Label      string
+	Definition string
+	Stratum    string
+	Table      string
+	Rows       uint64
+	Bytes      uint64
+	Elapsed    time.Duration
 }
 
 // outcomeOf is the trail outcome of a refusal or a failure.
@@ -140,6 +154,8 @@ func (inst *Service) audit(ctx context.Context, r AuditRecord) {
 	}
 	attr("endpoint", r.Endpoint)
 	attr("reason", r.Reason)
+	attr("label", r.Label)
+	attr("own-clear", strings.Join(r.OwnClear, " "))
 	if r.Definition != "" {
 		attr("definition-digest", digest(r.Definition))
 		attr("definition", r.Definition)
@@ -170,12 +186,19 @@ func (inst *Service) audit(ctx context.Context, r AuditRecord) {
 	rec.FlushSoon()
 }
 
-// auditAttachments records the ad-hoc datasets a statement attached.
-func (inst *Service) auditAttachments(ctx context.Context, s *session, cc option.Option[app.CallContext], c Caller, host string, atts []attachment) {
+// auditAttachments records the ad-hoc datasets a statement attached, which
+// of them were read as the reading task's own publication at TLP:CLEAR,
+// and, with ownClear, that the statement's result carries no label for
+// what it read.
+func (inst *Service) auditAttachments(ctx context.Context, s *session, cc option.Option[app.CallContext], c Caller, host string, atts []attachment, ownClear bool) {
 	if len(atts) == 0 {
 		return
 	}
-	r := AuditRecord{Action: AuditAttach, Outcome: trail.OutcomeOk, Session: s, Context: cc, By: c.By, Endpoint: host}
+	r := AuditRecord{Action: AuditAttach, Outcome: trail.OutcomeOk, Session: s, Context: cc, By: c.By, Endpoint: host,
+		OwnClear: ownClearRefs(atts), Label: auditLabelConfined}
+	if ownClear {
+		r.Label = auditLabelOwnClear
+	}
 	for _, a := range atts {
 		r.Attachments = append(r.Attachments, a.ref())
 	}

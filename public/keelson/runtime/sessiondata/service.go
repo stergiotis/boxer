@@ -190,22 +190,37 @@ type dataset struct {
 	rows        uint64
 	bytes       uint64
 	columns     []Column
-	confined    bool
-	host        string
-	table       string
-	definedAt   time.Time
-	builtAt     time.Time
-	task        string
+	// confined says the data set derives from sealed data: a statement
+	// reading it goes only to an endpoint declared for sealed data.
+	// clearFor names the task whose own publications at TLP:CLEAR were
+	// everything sealed its table was last made from; empty when the
+	// table holds any other sealed data, which labels every reader.
+	confined  bool
+	clearFor  string
+	host      string
+	table     string
+	definedAt time.Time
+	builtAt   time.Time
+	task      string
 }
 
-func (inst *dataset) info() (d DatasetInfo) {
+// info is the data set as the catalog shows it to a caller of task, empty
+// for a person and the operator.
+func (inst *dataset) info(task string) (d DatasetInfo) {
 	return DatasetInfo{
 		Name: inst.name, SQL: inst.sql, Dependencies: slices.Clone(inst.deps), Attachments: slices.Clone(inst.attachments),
 		OrderBy: slices.Clone(inst.orderBy), Revision: inst.revision, Builds: inst.builds, Replays: inst.replays,
 		State: inst.state, Reason: inst.reason, Rows: inst.rows, Bytes: inst.bytes, Columns: slices.Clone(inst.columns),
-		Confined: inst.confined, Endpoint: inst.host, Table: inst.table, DefinedAt: inst.definedAt, BuiltAt: inst.builtAt,
+		Confined: inst.confined, OwnClear: inst.ownClearFor(task), Endpoint: inst.host, Table: inst.table, DefinedAt: inst.definedAt, BuiltAt: inst.builtAt,
 		Task: inst.task,
 	}
+}
+
+// ownClearFor reports whether everything sealed the data set's table holds
+// is the own publication at TLP:CLEAR of task, so task's reading of it is
+// not labelled.
+func (inst *dataset) ownClearFor(task string) (yes bool) {
+	return inst.confined && task != "" && inst.clearFor == task
 }
 
 // serverSession is the ClickHouse session one data session holds on one
@@ -617,13 +632,13 @@ func (inst Identity) isRuntime() (yes bool) { return inst.App == "" }
 // List returns the data sets of the caller's data session, sorted by name,
 // and the session's ticket; nothing when the caller's task has none yet.
 func (inst *Service) List(ctx context.Context, c Caller, ticket string) (infos []DatasetInfo, sessionTicket string, err error) {
-	s, _, err := inst.resolve(c, ticket, false)
+	s, cc, err := inst.resolve(c, ticket, false)
 	if err != nil || s == nil {
 		return
 	}
 	s.mu.Lock()
 	for _, d := range s.datasets {
-		infos = append(infos, d.info())
+		infos = append(infos, d.info(ownClearTask(cc)))
 	}
 	s.mu.Unlock()
 	sort.Slice(infos, func(i, j int) bool { return infos[i].Name < infos[j].Name })

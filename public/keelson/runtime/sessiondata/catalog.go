@@ -36,7 +36,7 @@ func (inst *Service) catalogRows() (rows []catalogRow) {
 		for _, d := range s.datasets {
 			rows = append(rows, catalogRow{
 				sessionKind: s.kind.String(), sessionDigest: digest(s.ticket), task: s.task,
-				owner: string(s.owner.App), info: d.info(), defDigest: digest(d.sql),
+				owner: string(s.owner.App), info: d.info(""), defDigest: digest(d.sql),
 			})
 		}
 		s.mu.Unlock()

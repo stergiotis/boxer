@@ -80,6 +80,10 @@ func (inst *fakeDispatcher) TaskLive(task string) (live bool) {
 type fakeAdhoc struct {
 	streams map[string][]byte
 	reads   []string
+	// ownClear names, per alias, the task the dataset service would answer
+	// a read as the own publication at TLP:CLEAR of; "*" answers so for
+	// every reader, which the dataset service never does.
+	ownClear map[string]string
 }
 
 func (inst *fakeAdhoc) Read(_ context.Context, alias string, _ adhocdata.Identity, obo *app.OnBehalfOf) (res adhocdata.ReadResult, err error) {
@@ -88,10 +92,15 @@ func (inst *fakeAdhoc) Read(_ context.Context, alias string, _ adhocdata.Identit
 	if !ok {
 		return res, adhocdata.ErrNoLiveDataset
 	}
-	if obo != nil && !slices.Contains(obo.Destinations, adhocdata.DestinationDataset(alias)) {
+	// A task reads what it published without a grant entry.
+	owner := inst.ownClear[alias]
+	own := owner != "" && obo != nil && obo.Task == owner
+	if obo != nil && !own && !slices.Contains(obo.Destinations, adhocdata.DestinationDataset(alias)) {
 		return res, &adhocdata.GrantError{Destination: adhocdata.DestinationDataset(alias), Reason: "the grant does not list " + adhocdata.DestinationDataset(alias)}
 	}
-	return adhocdata.ReadResult{Alias: alias, Handle: "adhoc_00000000000000aa", Revision: 3, Rows: 2, ArrowIPCStream: s, StreamDigest: "d1"}, nil
+	res = adhocdata.ReadResult{Alias: alias, Handle: "adhoc_00000000000000aa", Revision: 3, Rows: 2, ArrowIPCStream: s, StreamDigest: "d1"}
+	res.OwnClear = own || owner == "*"
+	return res, nil
 }
 
 // itemsStream is a two-row Arrow stream (id UInt64, label String).

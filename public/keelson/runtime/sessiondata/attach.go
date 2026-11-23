@@ -8,7 +8,9 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -22,6 +24,9 @@ type attachment struct {
 	revision uint64
 	digest   string
 	rows     uint64
+	// ownClear is the dataset service's answer for the read: the revision
+	// attached is the reading task's own publication at TLP:CLEAR.
+	ownClear bool
 }
 
 // attachAll reads each alias for c, as the dataset service lets c read it,
@@ -29,6 +34,10 @@ type attachment struct {
 // sealed, so a statement that attaches one is confined (ADR-0145 §SD3):
 // it goes only to an endpoint the caller declared may see sealed
 // plaintext, and the attached bytes together stay under the attach bound.
+// That holds whoever published the dataset. Whether the revision attached
+// is the reading task's own publication at TLP:CLEAR is the dataset
+// service's answer, taken with the bytes; it decides only the label of
+// what is made of them.
 func (inst *Service) attachAll(ctx context.Context, c Caller, e Endpoint, aliases []string) (out []attachment, err error) {
 	if len(aliases) == 0 {
 		return
@@ -66,6 +75,7 @@ func (inst *Service) attachAll(ctx context.Context, c Caller, e Endpoint, aliase
 			alias:    alias,
 			external: queryengine.ExternalTable{Name: externalName(i), Format: "ArrowStream", Structure: structure, Data: res.ArrowIPCStream},
 			handle:   res.Handle, revision: res.Revision, digest: res.StreamDigest, rows: res.Rows,
+			ownClear: res.OwnClear,
 		})
 	}
 	return
@@ -81,6 +91,38 @@ func streamStructure(stream []byte) (structure string, err error) {
 	}
 	defer rdr.Release()
 	return adhocdata.StructureFor(rdr.Schema())
+}
+
+// ownClearTask is the task a request's sealed reads may be the own clear
+// publications of: the task of the attested call, empty for a person's
+// request, which owns none.
+func ownClearTask(cc option.Option[app.CallContext]) (task string) {
+	if cc.Has {
+		task = cc.Val.Task
+	}
+	return
+}
+
+// ownClearRefs are the attachments the dataset service answered as the
+// reading task's own publication at TLP:CLEAR, as the trail names them.
+func ownClearRefs(atts []attachment) (refs []string) {
+	for _, a := range atts {
+		if a.ownClear {
+			refs = append(refs, a.ref())
+		}
+	}
+	return
+}
+
+// allOwnClear reports whether every attachment is the reading task's own
+// publication at TLP:CLEAR.
+func allOwnClear(atts []attachment) (yes bool) {
+	for _, a := range atts {
+		if !a.ownClear {
+			return false
+		}
+	}
+	return true
 }
 
 // ref names what was attached for the trail: alias, handle, revision and
