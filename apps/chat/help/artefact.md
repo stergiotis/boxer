@@ -13,7 +13,8 @@ A conversation may hold an **artefact**: one markdown document the model
 reads and edits through tools, under the ceiling, which you review beside
 the transcript as **Document** (ADR-0282). It is on when the Document option
 was on at the conversation's first message (`BOXER_CHAT_ARTEFACT` seeds it);
-**View** › **Document** opens the view, which says how to turn it on otherwise. The view
+**View** › **Document** opens the view; in a conversation started without a
+document the item is greyed and its hover says how to have one. The view
 comes forward by itself when the model first writes the document and when a
 decision waits in it. The document lives in memory with the
 conversation. A resume reads its revisions back from the journal, one per

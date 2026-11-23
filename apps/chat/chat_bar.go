@@ -34,6 +34,7 @@ const (
 var (
 	atomsMenuView         = c.Atoms().Text("View").Keep()
 	atomsMenuConversation = c.Atoms().Text("Conversation").Keep()
+	atomsMenuRename       = c.Atoms().Text(icons.PhPencilSimple + " Rename").Keep()
 )
 
 // renderBar is the bar: its row, the task's row while there is one, and at
@@ -125,25 +126,54 @@ func (inst *App) renderMenus() {
 	}
 }
 
-// renderConversationMenu is what this conversation tells the host, Watch
-// and Urgent, and Open in mdedit; each needs a conversation and a host.
+// renderConversationMenu holds the conversation's commands: a new one, its
+// name, what it tells the host (Watch, Urgent), and Open in mdedit. The
+// items are the same in every state. One that does not apply yet is drawn
+// disabled, and a line under them says why: a menu that opens on a sentence
+// and no items reads as a tooltip (keelson-ux C4).
 func (inst *App) renderConversationMenu() {
-	switch {
-	case !inst.conv.started:
-		weak("Watch, Urgent and Open in mdedit apply once the conversation has its first message.")
-		return
-	case inst.bus == nil:
-		weak("This window has no host to tell; Watch, Urgent and Open in mdedit need one.")
-		return
+	if c.Button(inst.ids.PrepareStr("menu-new"), atomsNew).SendResp().HasPrimaryClicked() {
+		inst.newConversation()
 	}
+	started := inst.conv.started
+	for range c.EnabledUi(started).KeepIter() {
+		if c.Button(inst.ids.PrepareStr("menu-rename"), atomsMenuRename).SendResp().HasPrimaryClicked() && started {
+			inst.startRename()
+		}
+	}
+	c.Separator().Send()
 	inst.renderWatchToggle()
 	inst.renderUrgentToggle()
 	c.Separator().Send()
+	hosted := started && inst.bus != nil
 	for range c.HoverText(tipMdedit).KeepIter() {
-		if c.Button(inst.ids.PrepareStr("open-mdedit"), atomsMdedit).SendResp().HasPrimaryClicked() {
-			inst.openInMdedit()
+		for range c.EnabledUi(hosted).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("open-mdedit"), atomsMdedit).SendResp().HasPrimaryClicked() && hosted {
+				inst.openInMdedit()
+			}
 		}
 	}
+	switch {
+	case !started:
+		c.Separator().Send()
+		weak(whyNotStarted)
+	case inst.bus == nil:
+		c.Separator().Send()
+		weak(whyNoHost)
+	}
+}
+
+// What the Conversation menu says under its disabled items.
+const (
+	whyNotStarted = "The rest apply after the first message."
+	whyNoHost     = "Watch, Urgent and Open in mdedit need a host."
+)
+
+// startRename puts the title into its edit, from the title's click or the
+// menu's Rename.
+func (inst *App) startRename() {
+	inst.renaming, inst.renameDraft = true, inst.conv.title
+	c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.renameDraft)
 }
 
 // menuViews are the views the View menu opens and the dock's column holds,
@@ -179,15 +209,35 @@ func (inst *App) renderMenuViews() {
 		if inst.compact() && (t == tabConversations || t == tabSettings || t == tabDefinition || t == tabArtefact) {
 			continue
 		}
-		on := inst.viewOpen(t)
-		box := on
-		for range c.HoverText(viewTips[t]).KeepIter() {
-			if c.Checkbox(inst.ids.PrepareSeq(uint64(t)), on, inst.viewTitle(t)).SendRespVal(&box).HasPrimaryClicked() {
-				inst.setView(t, !on)
+		if t == tabSettings && inst.coord != nil && !inst.artefactOn() && !inst.compact() {
+			inst.renderMenuView(t)
+			// The menu lists the document in every conversation, in its
+			// place; one started without it has the item disabled, with
+			// the reason in its hover.
+			off := false
+			for range c.HoverText(tipNoDocument).KeepIter() {
+				for range c.EnabledUi(false).KeepIter() {
+					c.Checkbox(inst.ids.PrepareStr("no-document"), false, tabArtefact.title()).SendRespVal(&off)
+				}
 			}
+			continue
+		}
+		inst.renderMenuView(t)
+	}
+}
+
+// renderMenuView is one view's checked item.
+func (inst *App) renderMenuView(t chatTabE) {
+	on := inst.viewOpen(t)
+	box := on
+	for range c.HoverText(viewTips[t]).KeepIter() {
+		if c.Checkbox(inst.ids.PrepareSeq(uint64(t)), on, inst.viewTitle(t)).SendRespVal(&box).HasPrimaryClicked() {
+			inst.setView(t, !on)
 		}
 	}
 }
+
+const tipNoDocument = "This conversation has no document. Whether it has one is fixed at its first message: tick Document before sending it."
 
 // renderConversationFacts is the state chip's inspector body (ADR-0404
 // §SD7): the conversation's id, what its first message fixed, the model and

@@ -219,8 +219,7 @@ func (inst *App) renderTitleText() {
 		title = short
 	}
 	if c.Button(inst.ids.PrepareStr("title"), c.Atoms().BeginRichText(title).Strong().End().Keep()).Frame(false).Extend().HoverText(tip).SendResp().HasPrimaryClicked() {
-		inst.renaming, inst.renameDraft = true, conv.title
-		c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.renameDraft)
+		inst.startRename()
 	}
 	if conv.titleAsked && conv.titleSource == titleFirstLine && conv.titleNote == "" {
 		c.Spinner().Send()

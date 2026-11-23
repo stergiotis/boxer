@@ -36,10 +36,13 @@ are the conditions that hold or end a conversation.
 ## The bar
 
 Above the bar is the window's menu bar, with two menus. **View** opens and
-closes the views beside the transcript — Conversations, Settings, Document
-when the conversation has one, Analytics (Definition in a chatlet) and
-Stops — each checked while it is open. **Conversation** holds **Watch**,
-**Urgent** and **Open in mdedit** once the conversation has started.
+closes the views beside the transcript — Conversations, Settings, Document,
+Analytics (Definition in a chatlet) and Stops — each checked while it is
+open; Document is greyed in a conversation started without one.
+**Conversation** holds **New conversation**, **Rename**, **Watch**,
+**Urgent** and **Open in mdedit**. Its items are the same in every state:
+before the first message all but New conversation are greyed, and a line
+under them says so.
 
 The bar is one row: **New conversation**; the conversation's title once it
 has one, which a click renames; the **state chip**, which says where the

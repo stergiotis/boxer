@@ -154,14 +154,12 @@ func cloneLevels(m map[attention.Key]attention.LevelE) (out map[attention.Key]at
 const tipWatch = "Watch: tell me when this conversation's turn ends. Its finished turns are raised to highlight (ADR-0323), " +
 	"and one that ends while you are in another window shows in the host's control, beside what waits on you. Untick to stop."
 
-// renderWatchToggle is Watch, a check box in the Conversation menu; absent
-// without a host to tell. The box shows the host's state; a click asks for
+// renderWatchToggle is Watch, a check box in the Conversation menu; drawn
+// disabled where it does not apply (canTellHost). The box shows the host's state; a click asks for
 // the other.
 func (inst *App) renderWatchToggle() {
-	if inst.bus == nil || !inst.levels.fetched {
-		return
-	}
-	on := inst.watching()
+	can := inst.canTellHost()
+	on := can && inst.watching()
 	inst.watchBox = on
 	// The word changes with the box: the tree a driver reads carries a
 	// check box's name and not its state.
@@ -170,10 +168,20 @@ func (inst *App) renderWatchToggle() {
 		label = icons.PhBellSimple + " Watching"
 	}
 	for range c.HoverText(tipWatch).KeepIter() {
-		if c.Checkbox(inst.ids.PrepareStr("watch-toggle"), on, label).SendRespVal(&inst.watchBox).HasPrimaryClicked() {
-			inst.setWatch(!on)
+		for range c.EnabledUi(can).KeepIter() {
+			if c.Checkbox(inst.ids.PrepareStr("watch-toggle"), on, label).SendRespVal(&inst.watchBox).HasPrimaryClicked() && can {
+				inst.setWatch(!on)
+			}
 		}
 	}
+}
+
+// canTellHost is whether Watch and Urgent apply: the conversation has its
+// first message, the window has a host, and the host's levels are read.
+// Where they do not, the menu draws both disabled rather than leaving them
+// out.
+func (inst *App) canTellHost() bool {
+	return inst.conv.started && inst.bus != nil && inst.levels.fetched
 }
 
 // turnEnded classifies a turn that landed: while the window has no focus
@@ -206,10 +214,8 @@ const tipUrgent = "Urgent: what this conversation asks of you opens at once, as 
 // host's, and the person confirms in the host's card, so the box shows the
 // host's state, not the click. Absent without a host.
 func (inst *App) renderUrgentToggle() {
-	if inst.bus == nil || !inst.levels.fetched {
-		return
-	}
-	on := inst.urgent()
+	can := inst.canTellHost()
+	on := can && inst.urgent()
 	inst.urgentBox = on
 	label := icons.PhSiren + " Urgent"
 	if on {
@@ -217,8 +223,10 @@ func (inst *App) renderUrgentToggle() {
 		label += " ✓"
 	}
 	for range c.HoverText(tipUrgent).KeepIter() {
-		if c.Checkbox(inst.ids.PrepareStr("urgent-toggle"), on, label).SendRespVal(&inst.urgentBox).HasPrimaryClicked() {
-			inst.askUrgent(!on)
+		for range c.EnabledUi(can).KeepIter() {
+			if c.Checkbox(inst.ids.PrepareStr("urgent-toggle"), on, label).SendRespVal(&inst.urgentBox).HasPrimaryClicked() && can {
+				inst.askUrgent(!on)
+			}
 		}
 	}
 }
