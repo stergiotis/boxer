@@ -634,6 +634,20 @@ dataset labelled. No live run of a model is behind the change.
 - A failed run is judged as a successful one; a statement refused before
   it is placed, or before it is sent (the agent limits), keeps the
   statement's label.
+- Known limitation: an undeclared tier is TLP:CLEAR. The tier a call
+  carries is a number whose zero is CLEAR, so a coordinator that
+  declares none (`apps/agentconsole`, a person issuing calls by hand, or
+  a coordinator outside this repository) publishes and exposes at CLEAR.
+  It predates this section. Closing it takes a declared/undeclared bit
+  beside the tier on the coordinator's call and on the dispatcher's
+  record of it, with undeclared read as above CLEAR by `standingOf`.
+- Known limitation: a run's dispatch decision and the statement it sends
+  come from two rewrites. An alias bound to a dataset between the two is
+  sent as an ordinary statement although it names a sealed handle, and
+  its result is unlabelled; a rebind from one handle to another is not
+  affected. It predates this section. Closing it takes one rewrite per
+  run, with the decision resolved from the residual that is sent, or a
+  second look at the sent residual that raises the request to confined.
 - A replay the person causes leaves a kept data set confined; the label
   lifts again only on a replay by the task that reads its own clear
   publication.
