@@ -183,6 +183,17 @@ is refused. A data set defined from one is confined too, and so is every
 statement that reads it. One statement attaches at most
 `BOXER_SESSIONDATA_MAX_ATTACH_BYTES` together.
 
+A task that reads back what its own call published at TLP:CLEAR is the one
+case where the result need not be labelled as derived from sealed data
+([ADR-0407](../adr/0407-an-exposed-dataset-a-program-on-this-machine-reads-an-ad-hoc-dataset-by-alias-and-token.md),
+proposed). The dataset service decides it with each read, and the service
+passes the answer on: `Binding.OwnClear` is set when everything sealed the
+statement reads is the reading task's own, `DatasetInfo.OwnClear` when
+that held for everything a data set's table was last made from. The
+binding is confined all the same and the endpoint needs the declaration;
+`OwnClear` says only that a caller which labels its results may leave the
+label off. A caller that does not look at it labels as before.
+
 ## 6. Look at what there is
 
 `sessiondata.List(ctx, bus, ticket, obo)` returns the session's data sets

@@ -151,10 +151,12 @@ operation:
 - `BOXER_PLAY_APP_WRITES=off` stops play's own writes: the Series verdicts
   in `boxer.tslabels`. An agent's call that would cause one needs the
   endpoint in its grant, as a run does.
-- A result labelled confined (`get_state` and `describe_result` say so)
-  is written only to an endpoint declared as allowed to see sealed data;
-  `publish_result` and `publish_projection` carry the label with the
-  datasets.
+- A result read from sealed data is written only to an endpoint declared
+  as allowed to see sealed data, whether it is labelled confined
+  (`get_state` and `describe_result` say so) or, as a task's own clear
+  publication read back, is not; `publish_result` and `publish_projection`
+  carry the label with the datasets, and a confined result that
+  `publish_result` publishes is recorded as derived from sealed data.
 
 ## Panes
 
@@ -214,9 +216,9 @@ cannot be bound, and the refusal names the CTEs to write with `set_sql`.
 | Operation | Kind | What it does | Unavailable or refused when |
 | --- | --- | --- | --- |
 | `bind_dataset` | command, document | binds an ad-hoc dataset alias in this window, so the buffer reads it with `keelson('<alias>')`; the window waits for a dataset not yet live and follows republishes | an alias that is not a bare identifier; a dataset handle in place of its alias; the window has no bus |
-| `list_datasets` | external read | the ad-hoc datasets bound here (home *window*) and the session data sets of the data session the window's runs read (home *session*): what reads each, the destination a run needs and whether the task may read it — a dataset the task published counts, without a grant entry — the columns, why a waiting alias waits, the rows, bytes and revision of each (an ad-hoc dataset's as the dataset service holds it, with its bundle), and a data set's state and what it reads; asked for by name, a data set's defining statement; which ad-hoc datasets are exposed, and every live exposure with its id, URL, revision, lapse and reads, never its token. It reads `session_datasets` and `exposures` | the window has no bus; a name neither home holds |
+| `list_datasets` | external read | the ad-hoc datasets bound here (home *window*) and the session data sets of the data session the window's runs read (home *session*): what reads each, the destination a run needs and whether the task may read it — a dataset the task published counts, without a grant entry — whether reading it confines the task (`confined`), the columns, why a waiting alias waits, the rows, bytes and revision of each (an ad-hoc dataset's as the dataset service holds it, with its bundle), and a data set's state and what it reads; asked for by name, a data set's defining statement; which ad-hoc datasets are exposed, and every live exposure with its id, URL, revision, lapse and reads, never its token. It reads `session_datasets` and `exposures` | the window has no bus; a name neither home holds |
 | `drop_dataset` | command, document, async | drops a session data set: its definition and its table on the server; `cascade` drops those that read it too. It needs no read of `session_datasets` first | the window is not wired to the session data service; no data set by that name; others read it and `cascade` is not set |
-| `expose_dataset` | command, document, async | exposes an ad-hoc dataset, named by its alias or its name in this window, to programs on this machine: the host serves it on its loopback port to a request presenting the token the answer carries, which nothing gives again. The answer is the URL and a CSV URL, the token, a `url()` expression a ClickHouse server on this machine reads it with, a `curl` line, the structure, rows, bytes, revision and when it lapses (60 minutes unless `minutes` says, at most 1440) | the window has no bus; a name that is not a bare identifier, or a handle; the grant lists no `expose:<prefix>` for a prefix of the alias; the task's own call did not publish it, or published it above TLP:CLEAR; no live dataset under the alias; no loopback listener serves the host's tables |
+| `expose_dataset` | command, document, async | exposes an ad-hoc dataset, named by its alias or its name in this window, to programs on this machine: the host serves it on its loopback port to a request presenting the token the answer carries, which nothing gives again. The answer is the URL and a CSV URL, the token, a `url()` expression a ClickHouse server on this machine reads it with, a `curl` line, the structure, rows, bytes, revision and when it lapses (60 minutes unless `minutes` says, at most 1440) | the window has no bus; a name that is not a bare identifier, or a handle; the grant lists no `expose:<prefix>` for a prefix of the alias; the task's own call did not publish it, or published it above TLP:CLEAR or from sealed data; the call is labelled above TLP:CLEAR; no live dataset under the alias; no loopback listener serves the host's tables |
 | `revoke_exposure` | command, document, async | ends an exposure by its id; its URL answers nothing from then on | the window has no bus; no live exposure by that id; the exposure is another task's |
 | `list_bundles` | external read | the live ad-hoc bundles with publisher, local names and each column summarised, and this window's last publish | the window has no bus; the catalog could not be read |
 | `open_bundle` | command, document | opens a bundle: its document replaces the buffer, its datasets are bound under the names the document reads, the window follows its republishes and runs | the host links no applet document parser; the host serves no introspection endpoint; an alias that is not a bare identifier |
@@ -239,11 +241,43 @@ dataset is retracted, when the window that made it closes, at the end of
 its lifetime and when the host stops, and `revoke_exposure` ends it at
 once. A task's exposure needs `expose:<prefix>` in its grant, as
 `request_access` asks for it, and is of a dataset the task's own call
-published; the person exposes any dataset from the Data sets tab, which
+published at TLP:CLEAR from nothing sealed, asked for by a call that is
+not labelled; the person exposes any dataset from the Data sets tab, which
 shows the `curl` and `url()` lines of an exposure the window made. The
 resource `exposures` names the live exposures as `id@alias`;
 `list_datasets` reads it, and the two commands write it without reading
 it first.
+
+### Sealed data: where a statement goes, and what its result carries
+
+Every ad-hoc dataset is sealed data (ADR-0145), and two things follow
+from a statement that reads one. They are decided apart.
+
+- **Where it goes.** A statement naming an ad-hoc dataset runs on this
+  host's own plane, or on an endpoint that has shown it may see sealed
+  data; joined with a server table it is attached there as external data
+  only after that. This is the same whoever published the dataset.
+- **What its result carries.** A result read from sealed data is labelled
+  confined, the window with it, and a coordinator labels its conversation
+  from the outcome: later model calls go only to a local or trusted
+  endpoint, and every later call of the task is labelled. A label is not
+  taken off again.
+- **A task's own clear work is the exception to the label** (ADR-0407). A
+  dataset the task's own call published at TLP:CLEAR, from nothing
+  sealed, does not label the task when it reads it back: not the query,
+  not a `check`, not a data set kept from it, not a run that fails. The
+  dataset service decides it for the revision read; `list_datasets` says
+  so per dataset in `confined`, and `keep_as` for the data set it made.
+  One other sealed input in the statement — a dataset a person or another
+  task published, a confined data set — labels it. So does a dataset
+  republished since by anyone else or under a label.
+- **What follows for an exposure.** A table computed for the task and
+  published on its behalf can be read, checked, published again with
+  `publish_result` and exposed without the conversation being labelled.
+  After one read of other sealed data the task's calls are labelled, what
+  `publish_result` publishes from a confined result is recorded as
+  derived from sealed data, and neither is the task's to expose: the
+  person exposes it from the Data sets tab.
 
 ### Session data sets
 

@@ -148,6 +148,27 @@ window not wired to the service, or a `keelson('…')` table of the host's
 own plane rather than an ad-hoc dataset, is still refused there: no
 endpoint serves both.
 
+### Publishing and reading on a task's behalf
+
+An app that publishes a table for a task and an app that takes a dataset
+in for one each state a fact the dataset service cannot see for itself
+([ADR-0407](../adr/0407-an-exposed-dataset-a-program-on-this-machine-reads-an-ad-hoc-dataset-by-alias-and-token.md),
+proposed).
+
+- **Publishing.** Set `DerivedFromSealed` on the bundle
+  (`playground.BundleSpec`, or `adhocdata.BundleProvenance`) when the rows
+  were computed from sealed data: a dataset read with
+  `adhocdata.ReadAll` whose answer was not `OwnClear`, a confined result.
+  The tier of the call that asked for the publish does not say it, since a
+  call declares the tier its conversation had when the model asked. Name
+  the datasets the rows were read from as `InputHandles` too; the service
+  checks those itself.
+- **Reading.** `adhocdata.ReadAll` answers `OwnClear` when the revision it
+  returns is the reading task's own publication at TLP:CLEAR from nothing
+  sealed. Only then may the app leave the outcome of the call that caused
+  the read unlabelled; for every other answer, and for an app that does
+  not look, the read is of sealed data and the outcome is confined.
+
 ## 7. Hand a dataset to a program on this machine
 
 An exposure makes one dataset readable outside the host's process, by a
@@ -161,8 +182,8 @@ the tab then shows a `curl` line and a `url()` line with Copy. An agent
 calls play's `expose_dataset` with the alias, or the name the window binds
 it under, and needs `expose:<alias>` — or `expose:<prefix>` for every alias
 starting with the prefix — in its grant; it exposes only a dataset its own
-call published. An app calls `adhocdata.ExposeRequest` and declares
-`adhocdata.ExposeCap`. The answer is the only place the token is given:
+call published at TLP:CLEAR from nothing sealed. An app calls
+`adhocdata.ExposeRequest` and declares `adhocdata.ExposeCap`. The answer is the only place the token is given:
 
 ```text
 url        http://127.0.0.1:41537/exposed/kernel_top__result
