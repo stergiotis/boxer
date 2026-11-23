@@ -197,7 +197,7 @@ func (inst *Service) Close() {
 		if err := inst.busClient.Close(); err != nil {
 			inst.log.Warn().Err(err).Msg("agent: closing the bus client")
 		}
-		if err := inst.cfg.Trail.Flush(context.Background()); err != nil {
+		if err := inst.cfg.Trail.Flush(context.WithoutCancel(inst.ctx)); err != nil {
 			inst.log.Warn().Err(err).Msg("agent: flush the action record at close")
 		}
 	})

@@ -76,7 +76,10 @@ type Worker struct {
 	wake   chan struct{}
 	unsub  func()
 	cancel context.CancelFunc
-	done   chan struct{}
+	// started is Start's ctx: what Stop declares the stop under, without
+	// its cancellation.
+	started context.Context
+	done    chan struct{}
 
 	// stopping is set by Stop before it cancels, and when the loop
 	// leaves; a run that ends after it records no outcome, since the row
@@ -155,6 +158,7 @@ func (inst *Worker) Start(ctx context.Context) (err error) {
 		}
 		return
 	}
+	inst.started = ctx
 	ctx, inst.cancel = context.WithCancel(ctx)
 	inst.done = make(chan struct{})
 	if inst.cfg.Presence != nil {
@@ -257,7 +261,7 @@ func (inst *Worker) Stop() {
 	inst.cancel()
 	<-inst.done
 	if inst.cfg.Presence != nil {
-		if perr := inst.cfg.Presence.Stopped(context.Background(), inst.Status()); perr != nil {
+		if perr := inst.cfg.Presence.Stopped(context.WithoutCancel(inst.started), inst.Status()); perr != nil {
 			inst.log.Warn().Err(perr).Msg("watchbill: presence stop not declared")
 		}
 	}

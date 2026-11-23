@@ -187,7 +187,7 @@ func (inst *Runtime) Close() (err error) {
 	}
 	inst.closeMu.Lock()
 	defer inst.closeMu.Unlock()
-	ctx := context.Background()
+	ctx := context.Background() //boxer:lint disable=CS020 reason="documented root: tearing down wasm modules held in memory; the runtime outlives the ctx NewRuntime was called with"
 	close(inst.pool)
 	var first error
 	for h := range inst.pool {

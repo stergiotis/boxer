@@ -129,6 +129,9 @@ type Coordinator struct {
 	wake    chan struct{}
 	unsub   func()
 	cancel  context.CancelFunc
+	// started is Start's ctx: what Stop stops the pool under, without its
+	// cancellation.
+	started context.Context
 	done    chan struct{}
 	wg      sync.WaitGroup
 	// Spawned counts children started, for tests and the status line.
@@ -233,6 +236,7 @@ func (inst *Coordinator) Start(ctx context.Context) (err error) {
 			return eh.Errorf("lane: subscribe changed: %w", err)
 		}
 	}
+	inst.started = ctx
 	ctx, inst.cancel = context.WithCancel(ctx)
 	inst.done = make(chan struct{})
 	go inst.loop(ctx)
@@ -279,7 +283,7 @@ func (inst *Coordinator) Stop() {
 	inst.backoff = map[string]*unclaimed{}
 	inst.mu.Unlock()
 	inst.wg.Wait()
-	sctx, cancel := context.WithTimeout(context.Background(), inst.cfg.KillGrace+time.Second)
+	sctx, cancel := context.WithTimeout(context.WithoutCancel(inst.started), inst.cfg.KillGrace+time.Second)
 	defer cancel()
 	_ = inst.pool.Stop(sctx)
 }
