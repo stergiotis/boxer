@@ -62,8 +62,12 @@ fi
 events=$(mktemp "${TMPDIR:-/tmp}/gotest-integration.XXXXXX")
 trap 'rm -f -- "$events"' EXIT
 rc=0
+# The copy is awk's, not tee's: the tee of uutils coreutils 0.10 aborts on an
+# assertion in its pipe-to-pipe path when the reader falls behind, which ends
+# the lane with the events it had.
 go test -race -json -count=1 -p 1 -tags "$tags" "${args[@]}" \
-  | tee "$events" | go tool tparse -progress -trimpath auto -slow 20 || rc=$?
+  | awk -v out="$events" '{ print > out; print; fflush() }' \
+  | go tool tparse -progress -trimpath auto -slow 20 || rc=$?
 
 # One "<package> <test>\t<reason>" line per skipped test, the package relative
 # to the module and the reason the first line the test logged (its t.Skip
