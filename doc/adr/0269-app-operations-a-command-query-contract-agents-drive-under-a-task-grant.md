@@ -859,6 +859,16 @@ for the edit-policy tiers.
 
 ## Updates
 
+### 2026-11-24 — a command's availability is read when it applies
+
+A queued command's availability is read off the instance in the frame that
+applies it, not off the view the previous frame stored. That view is taken
+before the frame's body and before the frame settles its asynchronous
+commands, so it could still say a run was in flight of a run that landed
+and settled in that same frame; a command sent on the settlement, as a
+model's next call is, was then refused for it. Queries still read the
+stored view. The cost is one view per applied command.
+
 ### 2026-11-14 — a confirmation shows the call's arguments
 
 The confirmation of a consequential command shows the call's arguments as

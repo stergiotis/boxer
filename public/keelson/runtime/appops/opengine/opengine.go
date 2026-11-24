@@ -651,11 +651,12 @@ func (inst *Engine) apply(c *call) (out opwire.Outcome) {
 				Revisions: pick(inst.revs, c.spec.Writes)}
 		}
 	}
-	view := inst.h.Snapshot
-	if s := inst.snap.Load(); s != nil && s.view != nil {
-		view = func() app.OperationsSnapshotI { return s.view }
-	}
-	if ok, reason := view().Available(c.spec.Name); !ok {
+	// Availability is read off the instance as it is now. The frame's stored
+	// view was taken before the previous frame's body and its settlements,
+	// so it still says "a run is in flight" of a run that landed and settled
+	// in that frame, and a command sent on that settlement would be refused
+	// for it.
+	if ok, reason := inst.h.Snapshot().Available(c.spec.Name); !ok {
 		return opwire.Outcome{Phase: opwire.PhaseRefused, Reason: reason}
 	}
 	before := make(map[string]any, len(c.spec.Writes))

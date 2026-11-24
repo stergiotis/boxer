@@ -404,6 +404,32 @@ func TestUnavailableCommandIsRefusedWithoutAView(t *testing.T) {
 	assert.Equal(t, "start", ed.text)
 }
 
+// A command is checked against the instance as it is when it applies: what
+// the previous frame's body changed after its view was taken counts, in
+// both directions.
+func TestAvailabilityIsReadWhenTheCommandApplies(t *testing.T) {
+	h := newHarness(t)
+	h.ed.disabled = true
+	h.frame(func() { h.ed.disabled = false }) // the view says read-only; the frame then lifts it
+	_, rev := h.read()
+	out := h.call("set_text", setTextArgs{Text: "agent"}, map[string]uint64{"text": rev})
+	require.Equal(t, opwire.PhaseAccepted, out.Phase)
+	h.frame(func() { h.ed.disabled = true }) // the view says writable; the frame then locks it
+	st, ok := h.eng.Status(string(rune('a' + h.n)))
+	require.True(t, ok)
+	assert.Equal(t, opwire.PhaseApplied, st.Phase, st.Reason)
+	assert.Equal(t, "agent", h.ed.text)
+
+	_, rev = h.read()
+	out = h.call("set_text", setTextArgs{Text: "again"}, map[string]uint64{"text": rev})
+	require.Equal(t, opwire.PhaseAccepted, out.Phase)
+	h.frame(nil)
+	st, ok = h.eng.Status(string(rune('a' + h.n)))
+	require.True(t, ok)
+	assert.Equal(t, opwire.PhaseRefused, st.Phase)
+	assert.Equal(t, "agent", h.ed.text)
+}
+
 type countingHandler struct {
 	app.OperationsHandlerI
 	views *int
