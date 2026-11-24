@@ -124,6 +124,7 @@ cat > "$STATE_DIR/_gen/main.go" <<'EOF'
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -136,7 +137,7 @@ func main() {
 		os.Exit(2)
 	}
 	driver.CodeGeneratorName = "TheStack (github.com/stergiotis/boxer/public/app)"
-	err := driver.GenerateRustFiles(os.Args[1])
+	err := driver.GenerateRustFiles(context.Background(), os.Args[1])
 	if err == nil {
 		err = driver.GenerateGoFiles("bindings", os.Args[2])
 	}
