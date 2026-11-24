@@ -94,8 +94,9 @@ func (p Projector) polyline(pts []Point, col color.Color, width float32) {
 // Polygon draws: projected, and — only when the ring is convex — simplified
 // and clipped to the padded viewport grown by the stroke width. A concave
 // ring is handed over whole, for the reason fillRing gives. The fill is ear-clipped, so a
-// concave ring renders right; strokeWidth 0 draws the fill alone. Holes are
-// not filled — stroke them as Polylines.
+// concave ring renders right, and its outline is drawn as a Polyline is:
+// clipped to the view and simplified. strokeWidth 0 draws the fill alone.
+// Holes are not filled — stroke them as Polylines.
 func (p Projector) Polygon(lats, lngs []float64, fill, stroke color.Color, strokeWidth float32) {
 	p.polygon(p.project(lats, lngs), fill, stroke, strokeWidth, false)
 }
@@ -155,7 +156,15 @@ func (p Projector) polygon(pts []Point, fill, stroke color.Color, strokeWidth fl
 	xs, ys := p.toF32(clipped)
 	f := c.PaintPolygonFilled(xs, ys, fill)
 	if !convex {
-		f = f.Concave()
+		// A concave ring is handed over whole, far outside the view or not,
+		// and with every turn pixel rounding gave it. That suits the fill and
+		// not the stroke, so the outline goes down the polyline lane: clipped
+		// to the view, simplified, and parted at its reversals.
+		f.Concave().Send()
+		if strokeWidth > 0 {
+			p.polyline(append(clipped, clipped[0]), stroke, strokeWidth)
+		}
+		return
 	}
 	if strokeWidth > 0 {
 		f = f.Stroke(stroke, strokeWidth)
@@ -337,10 +346,36 @@ func (p Projector) toF32(pts []Point) (xs, ys []float32) {
 	return
 }
 
+// paintPolyline sends a line of canvas points, in as many parts as it has
+// reversals (reversalAt): a part ends on the vertex the line turns back at
+// and the next one starts there.
 func (p Projector) paintPolyline(pts []Point, col color.Color, width float32) {
-	if len(pts) < 2 {
-		return
+	for len(pts) >= 2 {
+		end := reversalAt(pts)
+		xs, ys := p.toF32(pts[:end+1])
+		c.PaintPolyline(xs, ys, col, width).Send()
+		pts = pts[end:]
 	}
-	xs, ys := p.toF32(pts)
-	c.PaintPolyline(xs, ys, col, width).Send()
+}
+
+// reversalAt is the index of the first vertex at which a line turns straight
+// back on itself — the next segment runs along the one before it, the other
+// way — or the index of the last vertex when there is none.
+//
+// Projection rounds to whole pixels, so a narrow inlet or headland of an
+// outline comes out as a segment and its exact reverse. A stroke has no join
+// for a turn of half a circle: the client's tessellation of one put a vertex
+// far off the line, which showed as a hairline from the turn across the map
+// (seen on the country outlines at world view). Ending the part there draws
+// both segments with square ends and no join. The test is exact; a turn that
+// is merely sharp has a join and keeps it.
+func reversalAt(pts []Point) int {
+	for i := 1; i+1 < len(pts); i++ {
+		ux, uy := pts[i].X-pts[i-1].X, pts[i].Y-pts[i-1].Y
+		vx, vy := pts[i+1].X-pts[i].X, pts[i+1].Y-pts[i].Y
+		if ux*vy-uy*vx == 0 && ux*vx+uy*vy < 0 {
+			return i
+		}
+	}
+	return len(pts) - 1
 }

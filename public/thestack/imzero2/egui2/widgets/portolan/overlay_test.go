@@ -110,3 +110,37 @@ func TestFillRingDropsARingWhollyOutsideTheWindow(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, over, kept)
 }
+
+// A line that turns straight back on itself has no join, and the client's
+// stroke of one put a vertex far off the line: a hairline from the turn
+// across the map, seen on the country outlines at world view, where pixel
+// rounding makes a narrow inlet a segment and its exact reverse. The line is
+// sent in parts that end and start at such a turn.
+func TestReversalAtFindsTheTurnStraightBack(t *testing.T) {
+	// The outline it was seen on, at the Colombian coast.
+	inlet := []Point{{X: 364, Y: 529}, {X: 367, Y: 526}, {X: 366, Y: 527}, {X: 360, Y: 520}}
+	require.Equal(t, 1, reversalAt(inlet))
+	require.Equal(t, 2, reversalAt(inlet[1:]), "the rest of the line has no reversal: its last vertex")
+
+	// A sharp turn that is not a reversal keeps its join, and so does a
+	// straight continuation.
+	require.Equal(t, 2, reversalAt([]Point{{X: 0, Y: 0}, {X: 10, Y: 0}, {X: 0, Y: 1}}))
+	require.Equal(t, 2, reversalAt([]Point{{X: 0, Y: 0}, {X: 5, Y: 5}, {X: 9, Y: 9}}))
+
+	// Every part ends on the vertex the next one starts at, so a caller
+	// walking the parts terminates and loses no segment.
+	zigzag := []Point{{X: 0, Y: 0}, {X: 4, Y: 0}, {X: 1, Y: 0}, {X: 3, Y: 0}, {X: 3, Y: 5}}
+	var parts [][]Point
+	for rest := zigzag; len(rest) >= 2; {
+		end := reversalAt(rest)
+		parts = append(parts, rest[:end+1])
+		rest = rest[end:]
+	}
+	require.Equal(t, [][]Point{
+		{{X: 0, Y: 0}, {X: 4, Y: 0}},
+		{{X: 4, Y: 0}, {X: 1, Y: 0}},
+		{{X: 1, Y: 0}, {X: 3, Y: 0}, {X: 3, Y: 5}},
+	}, parts)
+	require.Equal(t, 0, reversalAt([]Point{{X: 1, Y: 1}}))
+	require.Equal(t, 1, reversalAt([]Point{{X: 1, Y: 1}, {X: 2, Y: 2}}))
+}
