@@ -15,7 +15,8 @@
 #   the drift check: the tests left the tree clean
 #   when the range touches the egui2 IDL, its generated bindings or
 #     rust/imzero2: boxer-idl-check.sh --force, rust_imzero2_check.sh and the
-#     browser host digest against browserhost.sum
+#     browser host digest against browserhost.sum; when it touches only the
+#     generator or the check's script, boxer-idl-check.sh --force alone
 #
 # The range runs from the merge-base of <rev> (default HEAD) with --base
 # (default origin/main) to <rev>. A change to go.mod, go.sum or ./tags selects
@@ -184,10 +185,15 @@ fi
 step "drift" scripts/ci/check_drift.sh
 
 # ---- egui2 IDL, bindings and the Rust host -----------------------------------
+# touches_gen: the generator or the check's own script changed and nothing
+# generated did. The check builds the generator, so it alone says whether the
+# two still fit; the Rust host is not a function of either.
 touches_idl=0
+touches_gen=0
 for f in "${changed[@]}"; do
     case "$f" in
         public/thestack/imzero2/egui2/definition/*|public/thestack/imzero2/egui2/bindings/*|rust/imzero2/*) touches_idl=1 ;;
+        public/thestack/imzero2/egui2/driver/*|public/thestack/fffi2/compiletime/*|scripts/dev/boxer-idl-check.sh) touches_gen=1 ;;
     esac
 done
 
@@ -223,6 +229,8 @@ if [ "$touches_idl" = 1 ]; then
     step "boxer-idl-check" noskip scripts/dev/boxer-idl-check.sh --force
     step "rust_imzero2_check" noskip scripts/ci/rust_imzero2_check.sh
     step "browser host digest" host_digest
+elif [ "$touches_gen" = 1 ]; then
+    step "boxer-idl-check" noskip scripts/dev/boxer-idl-check.sh --force
 fi
 
 # ---- summary -------------------------------------------------------------------
