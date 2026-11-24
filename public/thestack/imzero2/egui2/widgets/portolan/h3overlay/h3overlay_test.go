@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/science/geo/h3"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -84,4 +85,67 @@ func TestRegionDissolve(t *testing.T) {
 	assert.NotEqual(t, key, r.key)
 	require.Len(t, r.ringLats, 1)
 	assert.Len(t, r.ringLats[0], 7)
+}
+
+func TestWrapLngAndUnwrap(t *testing.T) {
+	for _, c := range []struct{ in, out float64 }{{0, 0}, {180, 180}, {-180, -180}, {190, -170}, {-190, 170}, {540, -180}, {365, 5}} {
+		assert.InDelta(t, c.out, wrapLng(c.in), 1e-9, "%v", c.in)
+	}
+	// A cell across the 180th meridian has corners at both ends of the
+	// longitudes; unwrapped, they are continuous at one end or the other.
+	lngs := []float64{179.2, -179.6, -179.1, 179.7}
+	assert.True(t, CrossesAntimeridian(lngs))
+	assert.False(t, CrossesAntimeridian([]float64{8.1, 8.4, 8.2}))
+	assert.False(t, CrossesAntimeridian(nil))
+	assert.InDeltaSlice(t, []float64{179.2, 180.4, 180.9, 179.7}, unwrap(nil, lngs, 360), 1e-9)
+	assert.InDeltaSlice(t, []float64{-180.8, -179.6, -179.1, -180.3}, unwrap(nil, lngs, -360), 1e-9)
+}
+
+// A view is asked of H3 in slices: one box wider than half a turn comes back
+// as its complement, the cells of the far side of the globe. Seen on a map at
+// world view, whose grid showed at the left and right edges only.
+func TestViewportCellsOfAWideView(t *testing.T) {
+	ctx := context.Background()
+	rt, err := h3.NewRuntime(ctx, h3.RuntimeConfig{PoolSize: 1})
+	require.NoError(t, err)
+	defer func() { _ = rt.Close() }()
+	h, err := rt.Acquire(ctx)
+	require.NoError(t, err)
+	defer h.Release()
+
+	cell := func(lat, lng float64) uint64 {
+		id, status, cErr := h.LatLngToCell(ctx, h3.ResolutionR1, lat, lng)
+		require.NoError(t, cErr)
+		require.Equal(t, h3.StatusOk, status)
+		return id
+	}
+	box := func(s, w, n, e float64) portolan.LatLngBounds {
+		return portolan.LatLngBounds{}.Extend(portolan.LL(s, w)).Extend(portolan.LL(n, e))
+	}
+	zurich, tokyo, fiji, lima := cell(47.37, 8.54), cell(35.68, 139.69), cell(-16.85, 179.99), cell(-12.05, -77.04)
+
+	// The world but for a strip at the antimeridian: the middle is in it.
+	world, err := ViewportCells(ctx, h, box(-60, -170, 70, 170), h3.ResolutionR1)
+	require.NoError(t, err)
+	assert.Contains(t, world, zurich)
+	assert.Contains(t, world, tokyo)
+	assert.Contains(t, world, lima)
+	once := map[uint64]struct{}{}
+	for _, id := range world {
+		once[id] = struct{}{}
+	}
+	assert.Len(t, once, len(world), "a cell on a slice's edge comes back once")
+
+	// A view panned across the 180th meridian: its longitudes run past 180.
+	pacific, err := ViewportCells(ctx, h, box(-40, 150, 40, 210), h3.ResolutionR1)
+	require.NoError(t, err)
+	assert.Contains(t, pacific, fiji)
+	assert.NotContains(t, pacific, zurich)
+	assert.NotContains(t, pacific, lima)
+
+	// A narrow view is one request, as before.
+	europe, err := ViewportCells(ctx, h, box(40, 0, 55, 20), h3.ResolutionR1)
+	require.NoError(t, err)
+	assert.Contains(t, europe, zurich)
+	assert.NotContains(t, europe, tokyo)
 }
