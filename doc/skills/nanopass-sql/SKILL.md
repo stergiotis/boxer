@@ -418,6 +418,33 @@ is case- and quoting-insensitive (`NormalizeCallName`). A registered macro that 
 *never* reducible to literals is an error — macros are not real ClickHouse
 functions, so leaving the call in the output would fail at query time.
 
+### Template: expression macros (arbitrary column-expression arguments)
+
+```go
+macros := passes.NewExprMacroExpander()
+err := macros.Register("MY_UDF_EXACT", 2, 2, func(args []string) (string, error) { // ExprMacroFuncI
+    // args[i] is the argument's source text, already parenthesised unless it is an atom
+    return "hasAny(" + args[0] + ", " + args[1] + ")", nil
+})
+// maxArgs < 0 makes the macro variadic; Register refuses a name that is not a bare identifier
+result, err := macros.Pass().Run(`SELECT a FROM t WHERE MY_UDF_EXACT("string:lv", {wanted: Array(String)})`)
+// → SELECT a FROM t WHERE /* MY_UDF_EXACT BEGIN */ (hasAny("string:lv", {wanted: Array(String)})) /* MY_UDF_EXACT END */
+```
+
+The sibling of `MacroExpander` for calls whose arguments are column expressions
+rather than literals. The pass, not the macro function, makes each argument safe
+to splice: an argument that is not an atom (identifier, unsigned literal, slot,
+call, array, tuple, parenthesised expression) arrives as `(a OR b)`; a lambda
+arrives unwrapped. Every expansion is parenthesised between `/* NAME BEGIN */` and
+`/* NAME END */` markers, NAME as registered, and must be one expression. The
+outermost call expands first and the calls in its arguments or its expansion on
+the next Apply, hence `NeedsFixedPoint`. Arity, DISTINCT, parameters, FILTER,
+OVER and macro-function errors fail the pass with the macro's name;
+unregistered calls and statements without a registered call pass through byte for
+byte. `macros.Mentions(sql)` answers, without parsing, whether a statement may
+call a registered macro (it can over-report, never under-report), for a caller
+that forwards the rest untouched.
+
 ### Template: compile-time function evaluation (Go-evaluable functions)
 
 ```go
@@ -519,7 +546,7 @@ func TestMyPassProperties(t *testing.T) {
 
 (See `passes_test/nanopass_passes_assert_properties_test.go` for the live sweep
 over every pass, including how factory passes — `MacroExpander`,
-`FunctionEvaluator`, `ExpandColumns` — get registries/schemas wired and a
+`ExprMacroExpander`, `FunctionEvaluator`, `ExpandColumns` — get registries/schemas wired and a
 nested-forms corpus for the `NeedsFixedPoint` passes.)
 
 ### 2. Explicit input/output pairs
@@ -678,9 +705,11 @@ the connection default; there is no ambient inheritance from sibling tables.
 | `WriteSettings(map)` / `ModifySettings(fn)` | set / read-modify-write the SETTINGS clause; mirror into `env.StatementSettings` | Idempotent / factory |
 | `ExtractLiterals(config)` | replace literals with `{name: Type}` slots; write Raw to `env.Params` | factory |
 | `InjectParamsAsCTE(prefix, predicate, mapper)` | turn selected params into WITH-clause CTE defs | Idempotent |
+| `InjectNamedParamsAsCTE(accept)` / `InjectNamedParamsAsCastCTE(accept)` | any-named param with a SET value and a slot → `value AS name` (or `CAST(value, 'Type') AS name`) on the outermost WITH, slots → the name; the value is never parsed, so run it last | Idempotent |
 | `PruneUnreferencedParams(prefix)` | drop `env.Params` entries no longer referenced by body | Idempotent |
 | `ValidateColumnNames(pattern)` | error if any projected column name fails a regex | Idempotent |
 | `MacroExpander.Pass()` | expand registered string macros (literal args) | NeedsFixedPoint |
+| `ExprMacroExpander.Pass()` | expand registered macros with column-expression args into marked, parenthesised SQL; `Mentions(sql)` pre-screens without parsing | NeedsFixedPoint |
 | `FunctionEvaluator.Pass()` | evaluate registered Go functions; partial/recursive eval; param-slot resolution | NeedsFixedPoint |
 | `nanopass.ValidateGrammar1` / `ValidateGrammar2` | parse-validate the body; pass it through unchanged | Idempotent |
 
@@ -688,7 +717,8 @@ Supporting types: `SchemaProviderI` (`GetColumns(db, table) (iter.Seq[string], i
 `NewStaticSchemaProvider(map[string][]string)`, `NewCachingSchemaProvider(maxAge, delegate, maxSize)`;
 `ExtractLiteralsConfig` (builder via `NewExtractLiteralsConfig(minLength)` + `SetPrefix`/`Blacklist`/…);
 `ConstructorFormE` (`ConstructorFormLiteral`=1, `ConstructorFormFunction`=2);
-`EvalFuncI = func([]any) (any, error)`; `ColumnNameValidationError` + `GetColumnNameViolations(err)`.
+`EvalFuncI = func([]any) (any, error)`; `ExprMacroFuncI = func(args []string) (string, error)`;
+`ColumnNameValidationError` + `GetColumnNameViolations(err)`.
 
 ## Analysis Functions (`analysis/`)
 

@@ -30,6 +30,9 @@ import (
 //
 // Existing WITH clauses in the query are preserved — new definitions are prepended.
 //
+// A parameter whose name does not carry ExtractLiterals' metadata is skipped;
+// for parameters named by the caller, use [InjectNamedParamsAsCTE].
+//
 // If mapCanonicalToClickHouse is nil, cast types are not reconstructed and bare
 // values are used in the CTE definitions.
 func InjectParamsAsCTE(

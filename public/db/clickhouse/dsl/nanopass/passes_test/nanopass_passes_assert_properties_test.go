@@ -72,6 +72,23 @@ func TestAssertProperties(t *testing.T) {
 		"SELECT apSeven(apSeven(1)) FROM t",
 	)
 
+	// ExprMacroExpander expands the outermost call first; a call in its
+	// arguments or in its expansion waits for the next Apply.
+	exprMacros := passes.NewExprMacroExpander()
+	require.NoError(t, exprMacros.Register("apSum", 2, 2, func(args []string) (string, error) {
+		return args[0] + " + " + args[1], nil
+	}))
+	require.NoError(t, exprMacros.Register("apNeg", 1, 1, func(args []string) (string, error) {
+		return "-" + args[0], nil
+	}))
+	require.NoError(t, exprMacros.Register("apSumSelf", 1, 1, func(args []string) (string, error) {
+		return "apSum(" + args[0] + ", " + args[0] + ")", nil
+	}))
+	exprMacroCorpus := append(append([]string{}, nestedCorpus...),
+		"SELECT apSum(apNeg(a), b OR c) FROM t",
+		"SELECT apSumSelf(a) FROM t WHERE arrayExists(x -> apNeg(x) > 0, arr)",
+	)
+
 	expandSchema := passes.NewStaticSchemaProvider(map[string][]string{
 		"t":  {"a", "b"},
 		"t1": {"x", "y"},
@@ -109,10 +126,13 @@ func TestAssertProperties(t *testing.T) {
 		{name: "RemoveFormat", pass: passes.RemoveFormat},
 		{name: "PruneUnreferencedParams", pass: passes.PruneUnreferencedParams("")},
 		{name: "InjectParamsAsCTE", pass: passes.InjectParamsAsCTE("", nil, nil)},
+		{name: "InjectNamedParamsAsCTE", pass: passes.InjectNamedParamsAsCTE(nil)},
+		{name: "InjectNamedParamsAsCastCTE", pass: passes.InjectNamedParamsAsCastCTE(nil)},
 		{name: "ExtractLiterals", pass: passes.ExtractLiterals(passes.NewExtractLiteralsConfig(0))},
 
 		{name: "MacroExpander", pass: macroExpander.Pass(), corpus: macroCorpus},
 		{name: "FunctionEvaluator", pass: evaluator.Pass(), corpus: evalCorpus},
+		{name: "ExprMacroExpander", pass: exprMacros.Pass(), corpus: exprMacroCorpus},
 		{name: "ExpandColumns", pass: passes.ExpandColumns(expandSchema, "db")},
 		{name: "WriteSettings", pass: passes.WriteSettings(map[string]any{"max_threads": int64(8)})},
 

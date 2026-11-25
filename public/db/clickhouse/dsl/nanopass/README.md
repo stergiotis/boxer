@@ -184,6 +184,7 @@ state, structural reordering, or a node-conditional token rename
 |------|-------------|-----------|
 | `ExtractLiterals(config)` | Walks body, replaces qualifying literals with `{name: Type}` slots, writes Raw values to `env.Params` | (factory) |
 | `InjectParamsAsCTE(prefix, predicate, mapper)` | Selected `env.Params` entries become WITH-clause CTE definitions; their slots become bare references | Idempotent |
+| `InjectNamedParamsAsCTE(accept)` / `InjectNamedParamsAsCastCTE(accept)` | A parameter of any name with both a SET value and a `{name: Type}` slot becomes `value AS name` (the cast form: `CAST(value, 'Type') AS name`) on the outermost query's WITH, in name order, and its slots become the name; its SET line is dropped. The value text is never parsed, so it may exceed `MaxInputBytes`; a later pass would parse it, so run this one last | Idempotent |
 | `PruneUnreferencedParams(prefix)` | Drops `env.Params` entries no longer referenced by body | Idempotent |
 
 ### Validation
@@ -200,6 +201,7 @@ state, structural reordering, or a node-conditional token rename
 |-----------|-------------|
 | `MacroExpander` | Expands registered function calls with literal arguments into SQL fragments. Declares `NeedsFixedPoint` (nested macros). A registered macro whose arguments never become literals is an error — macros are not real ClickHouse functions. Name matching is case- and quoting-insensitive. |
 | `FunctionEvaluator` | Evaluates registered functions in Go, with recursive nested evaluation, partial evaluation, and `env.Params` slot resolution. Evaluation and serialisation failures fail the pass. |
+| `ExprMacroExpander` (`passes/`) | Expands registered calls whose arguments are column expressions — identifiers, slots, arrays, nested calls, lambdas — into `/* NAME BEGIN */ (<expansion>) /* NAME END */`. Each argument reaches the macro function as its source text, parenthesised unless it is an atom; the expansion must be one expression. Declares `NeedsFixedPoint` (outermost call first; calls in arguments and expansions follow). Arity, DISTINCT, parameters, FILTER, OVER and macro-function errors fail the pass with the macro's name. `Mentions(sql)` reports without parsing whether a statement may call a registered macro; it can over-report but not under-report. |
 
 `FunctionEvaluator.Pass()` declares `NeedsFixedPoint: true`. It handles:
 
@@ -216,7 +218,7 @@ state, structural reordering, or a node-conditional token rename
 - `Idempotent` and `NeedsFixedPoint` not both set.
 - A declared property must be *exercised*: if `Apply` fails on every corpus entry the check fails instead of passing vacuously.
 
-The sweep covers factory-built passes too: `MacroExpander.Pass()` and `FunctionEvaluator.Pass()` run against corpora containing registered call sites (the evaluator's `NeedsFixedPoint` is justified by the `VerbatimSql` escape hatch — plain nested literal calls fold in a single Apply via recursion), and `ValidateGrammar2` runs against the canonicalised corpus.
+The sweep covers factory-built passes too: `MacroExpander.Pass()`, `ExprMacroExpander.Pass()` and `FunctionEvaluator.Pass()` run against corpora containing registered call sites (the evaluator's `NeedsFixedPoint` is justified by the `VerbatimSql` escape hatch — plain nested literal calls fold in a single Apply via recursion), and `ValidateGrammar2` runs against the canonicalised corpus.
 
 `TestAssertProperties` in [`passes_test/`](passes_test/nanopass_passes_assert_properties_test.go) covers every exported pass against the shared `testdata/corpus/`, with a small additional nested-forms corpus for passes that declare `NeedsFixedPoint`.
 
@@ -248,6 +250,21 @@ result, err := nanopass.Sequence("expand+validate",
     expander.Pass(),
     nanopass.ValidateGrammar1,
 ).Run(sql)
+```
+
+### Expression Macros
+
+```go
+macros := passes.NewExprMacroExpander()
+err := macros.Register("MY_UDF_EXACT", 2, 2, func(args []string) (string, error) {
+    return "hasAny(" + args[0] + ", " + args[1] + ")", nil
+})
+
+if macros.Mentions(sql) {
+    sql, err = macros.Pass().Run(sql)
+}
+// MY_UDF_EXACT(tags, {wanted: Array(String)})
+// → /* MY_UDF_EXACT BEGIN */ (hasAny(tags, {wanted: Array(String)})) /* MY_UDF_EXACT END */
 ```
 
 ### Compile-Time Function Evaluation
