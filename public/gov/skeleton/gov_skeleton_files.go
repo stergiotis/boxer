@@ -345,8 +345,8 @@ functions.
 ` + "`scripts/new-doc.sh`" + `, ` + "`./{{.Name}}.sh`" + ` and
 ` + "`CLAUDE.md`" + ` are emitted by ` + "`gov skeleton`" + ` and carry a
 DO NOT EDIT header; editing one is reverted at the next reconciliation. Local
-lint steps belong in ` + "`scripts/ci/lint-local.sh`" + `, which is never
-generated.
+lint steps belong in a ` + "`lint-local.sh`" + ` beside ` + "`scripts/ci/lint.sh`" + `, which
+is never generated.
 
 This file, ` + "`tags`" + ` and ` + "`{{.AppPackage}}`" + ` are yours: seeded
 once when absent, never overwritten.
@@ -404,7 +404,7 @@ through the existing ` + "`go.mod`" + ` pin, or by copying the text in.
 ## Decision
 
 We adopt boxer's ` + "`CODINGSTANDARDS.md`" + `,
-` + "`doc/DOCUMENTATION_STANDARD.md`" + ` and ` + "`doc/ENGINEERING_PRACTICES.md`" + `
+` + "`DOCUMENTATION_STANDARD.md`" + ` and ` + "`ENGINEERING_PRACTICES.md`" + `
 as authoritative, referenced through the ` + "`go.mod`" + ` pin. **No standard
 text is copied into this repository.** It is read at the resolved module
 directory:
@@ -455,6 +455,6 @@ Status lifecycle: ` + "`Proposed → Accepted → (Deferred | Deprecated | Super
 ## References
 
 - [boxer ` + "`CODINGSTANDARDS.md`" + `](https://github.com/stergiotis/boxer/blob/main/CODINGSTANDARDS.md)
-- [boxer ` + "`doc/DOCUMENTATION_STANDARD.md`" + `](https://github.com/stergiotis/boxer/blob/main/doc/DOCUMENTATION_STANDARD.md)
+- [boxer ` + "`DOCUMENTATION_STANDARD.md`" + `](https://github.com/stergiotis/boxer/blob/main/doc/DOCUMENTATION_STANDARD.md)
 - [Diátaxis](https://diataxis.fr/)
 `
