@@ -77,7 +77,7 @@ type describedOperation struct {
 	ArgsSchema   jsontext.Value `json:"args_schema,omitempty"`
 	ResultSchema jsontext.Value `json:"result_schema,omitempty"`
 	// LinkExamples spell the operation as links a person can click
-	// (ADR-0409, proposed); make_link mints one that runs under the grant.
+	// (ADR-0409); make_link mints one that runs under the grant.
 	LinkExamples []string `json:"link_examples,omitempty"`
 }
 

@@ -75,8 +75,8 @@ var manifest = app.Manifest{
 		fsbroker.DialogReadCap("mdedit: Open — raise the file picker to load a document the user chooses"),
 		fsbroker.DialogWriteCap("mdedit: Save — raise the save picker; later saves reuse the granted handle"),
 		windowopen.OpenCap("mdedit: Send to play — open the playground on the document persisted as a boxer.facts row (ADR-0347)"),
-		applink.FollowCap("mdedit: follow a boxer: link, mdedit:// among them, clicked in the preview, the notebook or Blocks (ADR-0409, proposed)"),
-		applink.DescribeCap("mdedit: the hover of a boxer: link in the preview, the notebook or Blocks (ADR-0409, proposed)"),
+		applink.FollowCap("mdedit: follow a boxer: link, mdedit:// among them, clicked in the preview, the notebook or Blocks (ADR-0409)"),
+		applink.DescribeCap("mdedit: the hover of a boxer: link in the preview, the notebook or Blocks (ADR-0409)"),
 		// Restore, open, save and send run as keelson tasks owned by the
 		// window.
 		task.ProducerCaps()[0],

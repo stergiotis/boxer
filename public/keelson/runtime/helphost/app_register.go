@@ -51,8 +51,8 @@ var manifest = app.Manifest{
 	// the windowed host drains the queued text into an egui copy_text op.
 	Caps: []app.SubjectFilter{
 		clipboardbroker.WriteCap("copy help code blocks to the clipboard"),
-		applink.FollowCap("follow a boxer: link in a help page, mdedit:// among them (ADR-0409, proposed)"),
-		applink.DescribeCap("the hover of a boxer: link in a help page (ADR-0409, proposed)"),
+		applink.FollowCap("follow a boxer: link in a help page, mdedit:// among them (ADR-0409)"),
+		applink.DescribeCap("the hover of a boxer: link in a help page (ADR-0409)"),
 	},
 	// Self-documenting corpus: an overview of the Help app and a
 	// how-to for wiring help docs into a new app's manifest. Anyone

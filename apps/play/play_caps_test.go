@@ -203,7 +203,7 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// expose_dataset, revoke_exposure, list_datasets and the Data sets tab.
 	// runtime.link.follow and runtime.link.describe for a boxer: link clicked
 	// in a cell, the docs, a snippet or the definition, and its hover
-	// (ADR-0409, proposed).
+	// (ADR-0409).
 	require.Len(t, m.Caps, 32)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {

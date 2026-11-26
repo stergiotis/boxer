@@ -186,7 +186,7 @@ func (inst *Inst) OpsStatus(key uint64, callId string) (out opwire.Outcome, ok b
 
 // OpsSubmit hands a call to a window's operations engine from off the
 // render goroutine, as the operations service does for the dispatcher: the
-// host's own callers — a followed link (ADR-0409 (proposed)) — reach a
+// host's own callers — a followed link (ADR-0409) — reach a
 // window this way, never over the operation subjects, which only the
 // dispatcher publishes on. ok is false when the window has no engine: it is
 // gone, not yet mounted, or serves no catalog. The caller mints a CallId

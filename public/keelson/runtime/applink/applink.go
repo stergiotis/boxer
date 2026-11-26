@@ -1,4 +1,4 @@
-// Package applink is the `boxer:` link (ADR-0409 (proposed)): a link that
+// Package applink is the `boxer:` link (ADR-0409): a link that
 // carries an operation call, or a launch config, with the target it names.
 // The host owns the envelope — the scheme, the target, the app or kind, the
 // operation and its version — and the target app owns the tail, through

@@ -234,17 +234,17 @@ type OperationSpec struct {
 	Async   bool
 	DryRun  string
 	// Link is the codec that spells the operation's arguments in the tail
-	// of a `boxer:` link (ADR-0409 (proposed) §SD3); nil means no link
+	// of a `boxer:` link (ADR-0409 §SD3); nil means no link
 	// names the operation. Its presence is the opt-in.
 	Link LinkCodecI
 	// LinkStage names a document-effect command of the same catalog, with
 	// the same argument type, that puts a run operation's arguments in
 	// place without running them; an authorless link calls it instead of
-	// the run (ADR-0409 (proposed) §SD5).
+	// the run (ADR-0409 §SD5).
 	LinkStage string
 }
 
-// linkCodecProblem round-trips a codec's examples (ADR-0409 (proposed)
+// linkCodecProblem round-trips a codec's examples (ADR-0409
 // §SD3): each formats to a tail a link carries, parses back to the same
 // arguments, and formats to the same tail again. A codec that fails spells
 // one call two ways or reads back another, so its catalog is withdrawn at
@@ -295,7 +295,7 @@ func linkTailCarried(tail string) bool {
 
 // LinkCodecI spells one operation's arguments — or one launch kind's config
 // — as the tail of a `boxer:` link, and reads them back (ADR-0409
-// (proposed) §SD3). Arguments cross it as their CBOR (buscodec), the
+// §SD3). Arguments cross it as their CBOR (buscodec), the
 // encoding every call carries. A codec is a pure function of its input:
 // no I/O, no state, bounded work for a bounded input, and strict — an
 // unknown key or a malformed value is an error, never a default. appops
@@ -456,7 +456,7 @@ func (inst *OperationsCatalog) Validate() (err error) {
 	}
 	for _, o := range inst.Operations {
 		// A link stage is a document command of the same catalog that takes
-		// the run's arguments (ADR-0409 (proposed) §SD3).
+		// the run's arguments (ADR-0409 §SD3).
 		if o.LinkStage == "" {
 			continue
 		}
@@ -487,7 +487,7 @@ func (inst OperationSpec) problem(resources map[string]bool) (problem string) {
 	case inst.Direct && !inst.Agents:
 		return "a direct operation is a tool of an agent's model; it declares Agents"
 	}
-	// Links (ADR-0409 (proposed) §SD3): nothing that writes outside the app
+	// Links (ADR-0409 §SD3): nothing that writes outside the app
 	// is reachable from a click on someone else's text, a reference names
 	// something a URL cannot carry, and only a run operation is staged.
 	if inst.Link != nil {
@@ -701,7 +701,7 @@ type OperationCall struct {
 	// context on every onward request it makes (ADR-0269 §SD6). nil on the
 	// person's gestures.
 	OnBehalfOf *OnBehalfOf
-	// Link is set on a call a followed link made (ADR-0409 (proposed)
+	// Link is set on a call a followed link made (ADR-0409
 	// §SD5): who wrote the link, by the label of the text it was found in,
 	// and where it was clicked. A handler marks what such a call writes,
 	// when Level is 2 or above, as it marks what a task wrote. nil on
@@ -712,7 +712,7 @@ type OperationCall struct {
 }
 
 // LinkOrigin is the author of a followed link and the surface it was
-// clicked on (ADR-0409 (proposed) §SD5). Level and Tier are the ADR-0311
+// clicked on (ADR-0409 §SD5). Level and Tier are the ADR-0311
 // label of the text that carried the link (agentrun.LevelE and TierE).
 type LinkOrigin struct {
 	Level   uint8

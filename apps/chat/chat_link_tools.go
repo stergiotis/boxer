@@ -9,7 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 )
 
-// The coordinator's link tools (ADR-0409 (proposed) §SD6): make_link asks
+// The coordinator's link tools (ADR-0409 §SD6): make_link asks
 // the dispatcher to check a call and the host to mint a link that runs it
 // under the task's grant when the person clicks it; read_link reads a
 // link the model met into what it names, so the model makes the calls

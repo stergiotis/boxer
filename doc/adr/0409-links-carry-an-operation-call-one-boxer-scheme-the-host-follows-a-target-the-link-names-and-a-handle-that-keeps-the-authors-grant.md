@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-26
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-26
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted. Built with the decision (2026-11-26): the leaf `runtime/applink`, the host's `runtime/linkhost`, the dispatcher's minting and click, the surfaces, the hover, and play as the first app whose operations take links; see *Status*. The owner's answers of 2026-11-26 are recorded under *Decided with the owner*.
 
 # ADR-0409: Links carry an operation call — one `boxer:` scheme the host follows, a target the link names, and a handle that keeps the author's grant
 
@@ -558,7 +556,7 @@ carries.
 
 ## Status
 
-Proposed — awaiting review by the owner. Built with the decision
+Accepted 2026-11-26. Built with the decision
 (2026-11-26): every section but SD10, which stays deferred, and play as
 the first app whose operations take links.
 

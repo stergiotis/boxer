@@ -12,7 +12,7 @@ import (
 )
 
 // linkCall submits a call an authorless link made: the person's click, a
-// link origin, no task and no expected revision (ADR-0409 (proposed) §SD5).
+// link origin, no task and no expected revision (ADR-0409 §SD5).
 func (inst *harness) linkCall(op string, args any) {
 	inst.n++
 	raw, err := buscodec.Encode(args)

@@ -627,7 +627,7 @@ func (inst *Engine) ApplyQueued() {
 
 func (inst *Engine) apply(c *call) (out opwire.Outcome) {
 	// An authorless link's call is the person's click on text someone else
-	// wrote (ADR-0409 (proposed) §SD5): it read nothing, so it expects no
+	// wrote (ADR-0409 §SD5): it read nothing, so it expects no
 	// revision, as a gesture expects none; the person editing still wins.
 	authorlessLink := c.call.Link != nil && c.call.OnBehalfOf == nil
 	if !c.spec.AnyRevision && !authorlessLink {

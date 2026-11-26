@@ -169,7 +169,7 @@ type App struct {
 	// its own.
 	scope *lifetime.Scope
 	// linkHovers holds what the host said of each link the window shows,
-	// for its hover (ADR-0409, proposed); built on first use.
+	// for its hover (ADR-0409); built on first use.
 	linkHovers *applink.HoverSet
 	// confinedTier is the tier the host's declaration maps confined
 	// content to (cell.OfMount), handed to every coordinator.

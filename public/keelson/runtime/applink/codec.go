@@ -8,7 +8,7 @@ import (
 
 // Codec spells a value of type T — an operation's arguments, or a
 // launch kind's config — as the tail of a `boxer:` link (ADR-0409
-// (proposed) §SD3). Set it as an operation's app.OperationSpec.Link, or
+// §SD3). Set it as an operation's app.OperationSpec.Link, or
 // register it for a kind with RegisterKind. Format and Parse are
 // the app's spelling; ParseTail and Tail give them the URL
 // pieces. Parse is strict: an unknown key or a malformed value is an

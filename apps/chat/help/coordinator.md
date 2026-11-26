@@ -128,6 +128,6 @@ your click runs it under the task's grant, checked again then. Hover the
 link to read what it does and under whose grant. Once the task has ended,
 the click is your own, and a link written by a model then changes only
 what such a link may: the view of an open window, or a new window, where
-work is put in place for you to run (ADR-0409, proposed). `read_link` reads
+work is put in place for you to run (ADR-0409). `read_link` reads
 a link the model met into what it names; the model then makes those calls
 itself, under its own grant.

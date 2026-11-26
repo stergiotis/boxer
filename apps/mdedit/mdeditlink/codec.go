@@ -12,7 +12,7 @@ import (
 )
 
 // LinkCodec spells mdedit's launch config as the tail of a `boxer:` link
-// (ADR-0409 (proposed) §SD3): the tail is this package's grammar after the
+// (ADR-0409 §SD3): the tail is this package's grammar after the
 // scheme, so `mdedit://<rest>` and `boxer:open/kind/mdeditLaunch/<rest>`
 // are one link. Only a config a link can name has a spelling: a snapshot
 // document with no handed text, named by its path's last segment.

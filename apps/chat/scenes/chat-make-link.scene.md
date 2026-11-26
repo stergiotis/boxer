@@ -18,7 +18,7 @@ scene:
 
 # chat — a link the model minted runs under its task's grant, and after the task as the person's own click
 
-ADR-0409 (proposed) on the headless host, against the scripted model in
+ADR-0409 on the headless host, against the scripted model in
 [chat-make-link.script.jsonl](./chat-make-link.script.jsonl). A test grant
 stands in for the person's approval.
 

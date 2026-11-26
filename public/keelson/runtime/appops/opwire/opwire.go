@@ -239,7 +239,7 @@ type CallRequest struct {
 	// OnBehalfOf is the context the dispatcher stamped (ADR-0269 §SD6).
 	OnBehalfOf *app.OnBehalfOf `json:"on_behalf_of,omitempty"`
 	// Link is set on a call a followed link made: its author's label and
-	// the surface it was clicked on (ADR-0409 (proposed) §SD5).
+	// the surface it was clicked on (ADR-0409 §SD5).
 	Link *app.LinkOrigin `json:"link,omitempty"`
 }
 

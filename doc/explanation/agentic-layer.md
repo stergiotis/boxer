@@ -102,8 +102,8 @@ declared operation can be refused, previewed, undone and audited.
 An operation can also travel as a **link**: `boxer:open/app/play/query@2?sql=…`
 names an app, a command and its arguments, spelled by the app's own codec,
 and every surface that renders markdown hands a click on one to the host
-([ADR-0409](../adr/0409-links-carry-an-operation-call-one-boxer-scheme-the-host-follows-a-target-the-link-names-and-a-handle-that-keeps-the-authors-grant.md),
-proposed). A link a task minted with `make_link` runs under that task's
+([ADR-0409](../adr/0409-links-carry-an-operation-call-one-boxer-scheme-the-host-follows-a-target-the-link-names-and-a-handle-that-keeps-the-authors-grant.md)).
+A link a task minted with `make_link` runs under that task's
 grant, checked again at the click. Any other link is the person's click on
 text someone else wrote: it may change a view, or a new window's document,
 and a run is only put in place, marked with who wrote the link. The hover

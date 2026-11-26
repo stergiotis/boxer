@@ -390,7 +390,7 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 				// linkTips gives link k the hover text tips[k], shown at the
 				// pointer while it is over that link; an empty tip shows
 				// none. A host that claims a link says through it what the
-				// link does (ADR-0409, proposed).
+				// link does (ADR-0409).
 				BeginMethod("linkTips").Arg("tips", ctabb.Sh).CodeClientRust(rustClientCode("link_tips = tips;\n")).EndMethod().
 				Build()...).
 			WithSettingImmediate(true).

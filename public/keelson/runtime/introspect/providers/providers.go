@@ -26,7 +26,7 @@ import (
 // sbom, sql_passes, extbin, listeners, adr/subtask/coderef/adrcontent,
 // capability/capsection/caprelation, components, panel_shapes, link_codecs)
 // into r (ADR-0094 §SD8, ADR-0108 §SD5, ADR-0118, ADR-0082, ADR-0122 §SD4,
-// ADR-0126 §SD5, ADR-0168 §SD8, ADR-0170 §SD5, ADR-0409 (proposed)).
+// ADR-0126 §SD5, ADR-0168 §SD8, ADR-0170 §SD5, ADR-0409).
 //
 // The ADR and capability tables register unconditionally, like the rest:
 // off-repo they are empty rather than absent, so the set of table names does

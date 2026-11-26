@@ -111,7 +111,7 @@ type Service struct {
 	// leftBy names, per window a task launched and then ended, the task
 	// that left it to the person.
 	leftBy map[uint64]string
-	// links keeps the links tasks mint (ADR-0409 (proposed) §SD7).
+	// links keeps the links tasks mint (ADR-0409 §SD7).
 	links LinkMinterI
 
 	// helpCache holds the help books served, by app.

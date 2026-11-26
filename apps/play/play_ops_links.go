@@ -1,6 +1,6 @@
 package play
 
-// Links into play (ADR-0409, proposed): set_sql and query take boxer:
+// Links into play (ADR-0409): set_sql and query take boxer:
 // links, spelled with the statement as the query's sql key —
 //
 //	boxer:open/app/play/set_sql@1?sql=SELECT+1

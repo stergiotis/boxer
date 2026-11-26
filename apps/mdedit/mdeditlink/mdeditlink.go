@@ -9,7 +9,7 @@
 // them (sftptree), so the link's authority and path are the file's path in
 // that tree. The fragment names a location (ParseLocation): a heading slug,
 // `^id` for an Obsidian block id, or `L<n>` for a line. The scheme is an
-// alias of mdedit's launch kind (ADR-0409 (proposed) §SD3): [LinkCodec]
+// alias of mdedit's launch kind (ADR-0409 §SD3): [LinkCodec]
 // spells the launch config, and the host follows the link as it follows
 // every `boxer:` link; a surface claims it with applink.Claimed.
 //

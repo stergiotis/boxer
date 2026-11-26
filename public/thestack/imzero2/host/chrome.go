@@ -66,7 +66,7 @@ type ChromeConfig struct {
 	Workstatelets *WorkstateletMenu
 	// CopyWindowLink, when non-nil, puts "Copy link to this window" in the
 	// Window menu: the active window's boxer: link on the clipboard, which
-	// raises that window when followed (ADR-0409, proposed). Host boot sets
+	// raises that window when followed (ADR-0409). Host boot sets
 	// it where the link service runs; it is called on the render goroutine
 	// and must not block. May be nil.
 	CopyWindowLink func(key uint64)

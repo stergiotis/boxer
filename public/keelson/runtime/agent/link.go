@@ -14,7 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
-// Links a task mints and the person follows (ADR-0409 (proposed) §SD6): a
+// Links a task mints and the person follows (ADR-0409 §SD6): a
 // task asks for a link through the dispatcher, which checks the call it
 // describes as it would check the call and does not run it; the host's
 // link service keeps the record and hands back a handle. A click runs the

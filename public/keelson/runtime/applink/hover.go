@@ -10,7 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/hostwake"
 )
 
-// Hovers answers a markdown surface's link hover (ADR-0409 (proposed)
+// Hovers answers a markdown surface's link hover (ADR-0409
 // §SD8) from what the host said of each link: Text runs on the render
 // goroutine once per claimed link each frame and never blocks, so it
 // returns the last answer and, for a link not yet asked about, asks the

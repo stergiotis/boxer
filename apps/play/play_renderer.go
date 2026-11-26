@@ -142,7 +142,7 @@ const (
 
 type PlayApp struct {
 	// linkHovers holds what the host said of each link the window shows,
-	// for its hover (ADR-0409, proposed); built on first use.
+	// for its hover (ADR-0409); built on first use.
 	linkHovers *applink.HoverSet
 	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
 	// run under when no call of its own carries one.
@@ -272,7 +272,7 @@ type PlayApp struct {
 	// the status-bar line naming what was cycling once the breaker unchecks
 	// Live. A human Run clears both.
 	// linkNotice marks a buffer a link written by someone else put in
-	// place, while it still holds linkSql (ADR-0409, proposed).
+	// place, while it still holds linkSql (ADR-0409).
 	linkNotice        string
 	linkSql           string
 	autoRunStreak     int

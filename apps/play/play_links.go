@@ -1,6 +1,6 @@
 package play
 
-// Links in what play renders (ADR-0409, proposed, which takes over
+// Links in what play renders (ADR-0409, which takes over
 // ADR-0347 §SD5's per-surface claim): a markdown detail cell, the docs
 // panel, a snippet, the definition or the preamble may carry a boxer:
 // link or an alias such as mdedit://, and a click asks the host to follow

@@ -79,7 +79,7 @@ const (
 // App is one tally window.
 type App struct {
 	// linkHovers holds what the host said of each link a preview shows,
-	// for its hover (ADR-0409, proposed); built on first use.
+	// for its hover (ADR-0409); built on first use.
 	linkHovers *applink.Hovers
 	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
 	// run under when no call of its own carries one.

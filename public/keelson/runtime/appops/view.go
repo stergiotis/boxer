@@ -34,7 +34,7 @@ type View struct {
 	ArgsSchema   string
 	ResultSchema string
 	// Links says the operation takes links and LinkStage the command an
-	// authorless link to it calls instead (ADR-0409, proposed);
+	// authorless link to it calls instead (ADR-0409);
 	// applink.Examples spells the codec's examples as links.
 	Links     bool
 	LinkStage string

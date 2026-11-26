@@ -201,7 +201,7 @@ var viewModes = []struct {
 // App is the per-window mdedit instance.
 type App struct {
 	// linkHovers holds what the host said of each link the document
-	// shows, for its hover (ADR-0409, proposed); built on first use.
+	// shows, for its hover (ADR-0409); built on first use.
 	linkHovers *applink.Hovers
 	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
 	// run under when no call of its own carries one.
@@ -1239,7 +1239,7 @@ func (inst *App) renderPreview() {
 	// markdown.Render opens its own scope under ScopeKey, so the preview and
 	// the proposal preview in the same window cannot collide.
 	// boxer: links, mdedit:// among them, are followed by the host, as from
-	// every surface (ADR-0409, proposed); every other link stays a
+	// every surface (ADR-0409); every other link stays a
 	// hyperlink.
 	in := markdown.Input{Ids: inst.ids, ScopeKey: "preview", Doc: inst.doc, LinkClaims: applink.Claimed, LinkHover: inst.linkHover}
 	if inst.viewMode == viewRead {

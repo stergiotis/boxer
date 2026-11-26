@@ -246,7 +246,7 @@ type Input struct {
 	// is over it; "" shows none. It runs every frame, once per claimed link,
 	// under LinkClaims's purity rule, so a host answers from what it already
 	// knows. A host that follows a link says through it what the link does
-	// (ADR-0409, proposed). Nil shows no hover text.
+	// (ADR-0409). Nil shows no hover text.
 	LinkHover func(url string) string
 
 	// SectionFilter renders only the sections it admits: the region before

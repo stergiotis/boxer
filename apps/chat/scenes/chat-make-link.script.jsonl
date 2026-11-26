@@ -1,4 +1,4 @@
-# The scripted model of chat-make-link.scene.md (ADR-0409, proposed): one
+# The scripted model of chat-make-link.scene.md (ADR-0409): one
 # reply per line, picked by the conversation's position.
 # Turn 1: ask to open play, mint a link that puts a statement in a new play
 # window, and write it into the artefact.

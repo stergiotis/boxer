@@ -14,7 +14,7 @@ import (
 const TableLinkCodecs = "link_codecs"
 
 // linkCodecsProvider lists every codec that spells a boxer: link
-// (ADR-0409, proposed): an operation's, from its catalog, and a launch
+// (ADR-0409): an operation's, from its catalog, and a launch
 // kind's, with the alias scheme that stands for it. Which links this host
 // can follow, and how each app spells them, is then one query.
 type linkCodecsProvider struct{}

@@ -33,7 +33,7 @@ func (operationsProvider) Snapshot(ctx context.Context, proj introspect.Projecti
 }
 
 // linkExamplesOf is, in the order appops.Views lists operations, each
-// operation's codec examples spelled as links (ADR-0409, proposed).
+// operation's codec examples spelled as links (ADR-0409).
 func linkExamplesOf(regs []app.Registration) (out [][]string) {
 	for _, r := range regs {
 		if r.Manifest.Operations == nil {
@@ -79,7 +79,7 @@ func operationsTable(vs []appops.View, examples [][]string) *introspect.Table {
 		String("result_schema", func(i int) string { return v(i).ResultSchema }).
 		// The operation takes boxer: links, the command an authorless link
 		// calls instead of a run, and the codec's examples as links
-		// (ADR-0409, proposed).
+		// (ADR-0409).
 		Bool("links", func(i int) bool { return v(i).Links }).
 		String("link_stage", func(i int) string { return v(i).LinkStage }).
 		StringList("link_examples", func(i int) []string {

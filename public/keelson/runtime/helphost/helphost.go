@@ -622,7 +622,7 @@ func spawnBare(f func(ctx context.Context)) (started bool) {
 }
 
 // helpHovers holds what the host said of each link a help page shows, for
-// its hover (ADR-0409, proposed): one cache for the process's bus, since
+// its hover (ADR-0409): one cache for the process's bus, since
 // the help center's pages are drawn by free functions.
 var (
 	helpHoversMu sync.Mutex
@@ -644,7 +644,7 @@ func renderRendered(ctx context.Context, ids *c.WidgetIdStack, doc *markdown.Doc
 	if bus != nil {
 		in.ActionLabels = []string{"Copy"}
 		// A boxer: link in a help page, or an alias such as mdedit://, is
-		// followed by the host as from every surface (ADR-0409, proposed);
+		// followed by the host as from every surface (ADR-0409);
 		// without a bus it stays a hyperlink rather than a dead click.
 		in.LinkClaims, in.LinkHover = applink.Claimed, helpLinkHover(bus)
 	}

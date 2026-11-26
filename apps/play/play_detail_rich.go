@@ -199,7 +199,7 @@ type richCellCache struct {
 	ids     *c.WidgetIdStack
 	tracker *c.ImageVersionTracker[string]
 	// openLink follows a boxer: link clicked in a markdown cell
-	// (ADR-0409, proposed); nil leaves every link a hyperlink, for a cache
+	// (ADR-0409); nil leaves every link a hyperlink, for a cache
 	// whose owner cannot follow one. linkHover is such a link's hover.
 	openLink  func(url string)
 	linkHover func(url string) string

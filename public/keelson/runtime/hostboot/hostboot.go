@@ -421,7 +421,7 @@ type Runtime struct {
 	// Host is the window host; nil in screenshot mode and under
 	// NoWindowHost.
 	Host *windowhost.Inst
-	// Links is the link service (ADR-0409, proposed); nil without a
+	// Links is the link service (ADR-0409); nil without a
 	// window host.
 	Links *linkhost.Service
 	// Services is the service host (ADR-0352 §SD2): the headless
@@ -1139,7 +1139,7 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	if _, osErr := windowhost.NewOpenService(rt.Bus, host, logger); osErr != nil {
 		logger.Warn().Err(osErr).Msg("hostboot: windowhost open service unavailable; runtime.windowhost.open requests will time out")
 	}
-	// Links (ADR-0409, proposed): the host follows and describes every
+	// Links (ADR-0409): the host follows and describes every
 	// boxer: link a surface renders, and keeps the records handles name.
 	// A scene fixes the handle key, so its trace sees the same handle on
 	// every run (§SD7).
@@ -1459,7 +1459,7 @@ func (rt *Runtime) bootAgent() {
 		rt.SessionData.SetDispatcher(svc)
 	}
 	// A task mints links through the dispatcher, and a click on one runs
-	// under the task's grant, checked again (ADR-0409, proposed).
+	// under the task's grant, checked again (ADR-0409).
 	if rt.Links != nil {
 		svc.SetLinks(rt.Links)
 		rt.Links.SetFollower(svc)

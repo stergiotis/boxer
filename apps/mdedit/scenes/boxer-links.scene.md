@@ -15,7 +15,7 @@ scene:
 # mdedit — a boxer: link shows the host's reading on hover and is followed by the host
 
 Every surface that renders markdown claims `boxer:` links and asks the host
-what each does (ADR-0409, proposed). The hover is the host's reading, not
+what each does (ADR-0409). The hover is the host's reading, not
 the link's words: the app the link reaches, the target, who wrote the text
 it was found in — a document's author is not known, so external text — and
 what a click would do. A link the host would refuse says so before anyone

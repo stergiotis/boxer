@@ -27,7 +27,7 @@ A paragraph whose text carries a link is one label (`labelAtomsLinked`,
 ADR-0180's tenth-run update): the host matches the pointer against the
 link's glyphs and reports the click as the link's index, and mdedit asks
 the host to follow a link it claims (`applink.Claimed`; `mdedit://` is an
-alias of mdedit's launch kind, ADR-0409, proposed). The trace clicks the
+alias of mdedit's launch kind, ADR-0409). The trace clicks the
 paragraph at its centre with the pointer — the paragraph is the link, so
 the centre is on its words — and reads the status line mdedit writes when
 it follows a link, which proves the click reached the Go side as a link

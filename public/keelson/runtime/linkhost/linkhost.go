@@ -1,6 +1,6 @@
-// Package linkhost is the host's side of `boxer:` links (ADR-0409
-// (proposed)): it keeps the records handles name, in memory, and follows
-// and describes links for every surface that renders them. A link minted
+// Package linkhost is the host's side of `boxer:` links (ADR-0409): it
+// keeps the records handles name, in memory, and follows and describes
+// links for every surface that renders them. A link minted
 // by a task runs under that task's grant, checked again at the click by the
 // agent dispatcher; any other link — inline, or minted under a grant that
 // no longer authorises it — is followed with the person as the trigger and

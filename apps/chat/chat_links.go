@@ -1,6 +1,6 @@
 package chat
 
-// Links in what the chat renders (ADR-0409, proposed, which takes over
+// Links in what the chat renders (ADR-0409, which takes over
 // ADR-0347 §SD5's per-surface claim): a message body or the artefact may
 // carry a boxer: link or an alias such as mdedit:// — written by the model,
 // or pasted by the person — and a click asks the host to follow it, naming

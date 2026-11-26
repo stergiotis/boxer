@@ -71,7 +71,7 @@ type previewContent struct {
 
 // renderPreviewDoc draws a markdown preview; a nil doc draws nothing. A
 // boxer: link in it, or an alias such as mdedit://, is followed by the
-// host as from every surface (ADR-0409, proposed); the file's text is
+// host as from every surface (ADR-0409); the file's text is
 // external content, so the host applies the rules for a link someone else
 // wrote. Without a bus a link stays a hyperlink.
 func (inst *App) renderPreviewDoc(content previewContent) {

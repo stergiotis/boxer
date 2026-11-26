@@ -284,6 +284,27 @@ edges, all fixed with the decision unchanged:
   offers its own link only once that text is in the buffer.
 - The chat claims the scheme only with a bus, as the other surfaces do.
 
+### 2026-11-26 — the claim and the follow are the host's (ADR-0409)
+
+[ADR-0409](./0409-links-carry-an-operation-call-one-boxer-scheme-the-host-follows-a-target-the-link-names-and-a-handle-that-keeps-the-authors-grant.md)
+moves §SD5 from the surfaces to the host, with the decision unchanged: one
+spelling, the same behaviour on every surface.
+
+- `mdedit://` is an alias of mdedit's launch kind: `mdedit://<rest>` reads as
+  `boxer:open/kind/mdeditLaunch/<rest>`, and `mdeditlink.LinkCodec` is the
+  kind's codec. The grammar of §SD1–SD3 is unchanged.
+- Surfaces claim with `applink.Claimed` and follow through the host's
+  `runtime.link.follow`, naming who wrote the text the link was in;
+  `mdeditlink.Claimed` stays for parsing, and `mdeditlink.Open` and
+  `mdeditlink.Follow` are removed. A surface declares the link service's
+  subjects instead of `runtime.windowhost.open`; the help center no longer
+  declares the latter.
+- `mdeditlink.Format` escapes the bytes of a fragment a link cannot carry
+  as they are, so a heading slug with a letter outside ASCII, `#` or `%` —
+  which §SD6's Copy link writes — opens; `#^id` is written as before.
+- Window reuse (§SD7) stays deferred for `mdedit://`, which opens a window
+  per click; a `boxer:` link names its own target, `raise` among them.
+
 ## References
 
 - [ADR-0135](./0135-app-launch-requests.md) — the launch request and the

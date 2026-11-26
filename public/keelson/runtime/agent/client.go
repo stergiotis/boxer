@@ -94,7 +94,7 @@ type Operation struct {
 	ResultSchema string
 	// LinkExamples are the operation's link codec's examples spelled as
 	// links, with its schemas: how a model learns the app's spelling
-	// (ADR-0409, proposed).
+	// (ADR-0409).
 	LinkExamples []string
 }
 

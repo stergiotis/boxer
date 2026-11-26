@@ -164,7 +164,7 @@ operation:
 
 ## Links into play
 
-`set_sql` and `query` take `boxer:` links (ADR-0409, proposed), which any
+`set_sql` and `query` take `boxer:` links (ADR-0409), which any
 surface that renders markdown follows through the host:
 
 ```text

@@ -42,8 +42,8 @@ var manifest = app.Manifest{
 			Reason:    "open the selection in play as a query over the store",
 			Direction: app.CapDirectionPub,
 		},
-		applink.FollowCap("follow a boxer: link in a previewed document (ADR-0409, proposed)"),
-		applink.DescribeCap("the hover of a boxer: link in a previewed document (ADR-0409, proposed)"),
+		applink.FollowCap("follow a boxer: link in a previewed document (ADR-0409)"),
+		applink.DescribeCap("the hover of a boxer: link in a previewed document (ADR-0409)"),
 		{
 			Pattern:   clipboardbroker.SubjectWrite,
 			Reason:    "copy a snapshot path or an rclone mount command",

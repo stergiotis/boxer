@@ -6,7 +6,7 @@ package mdedit
 // refers to is the one in the buffer, which for a snapshot handover is
 // after the read lands. Out: a `boxer:` link in the preview or a rendered
 // block, `mdedit://` among them, is followed by the host as from every
-// surface (ADR-0409, proposed), and a document read from a snapshot offers
+// surface (ADR-0409), and a document read from a snapshot offers
 // its own link at the caret's section.
 //
 // A location resolves against the parsed document, so it waits in
@@ -184,7 +184,7 @@ func indexByteFrom(s string, from int, b byte) int {
 
 // followLink follows a link clicked in this window: the host follows a
 // boxer: link or an alias such as mdedit://, as from every surface
-// (ADR-0409, proposed). A document's author is not known, so the host
+// (ADR-0409). A document's author is not known, so the host
 // applies the rules for a link someone else wrote. The request runs off
 // the render thread; the status line says what was asked for.
 func (inst *App) followLink(link string) {

@@ -201,7 +201,7 @@ func CheckCodec(codec app.LinkCodecI) (err error) {
 
 // Examples are an operation's codec examples spelled as links that open a
 // window of the app: how a reader, or a model, learns the app's spelling
-// (ADR-0409 (proposed) §SD3). An example the codec cannot format is left
+// (ADR-0409 §SD3). An example the codec cannot format is left
 // out.
 func Examples(m app.Manifest, o app.OperationSpec) (links []string) {
 	if o.Link == nil {
