@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
@@ -110,6 +111,8 @@ type Service struct {
 	// leftBy names, per window a task launched and then ended, the task
 	// that left it to the person.
 	leftBy map[uint64]string
+	// links keeps the links tasks mint (ADR-0409 (proposed) §SD7).
+	links LinkMinterI
 
 	// helpCache holds the help books served, by app.
 	helpMu    sync.Mutex
@@ -256,6 +259,8 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		inst.reply(msg.Reply, inst.turn(msg))
 	case SubjectLaunch:
 		inst.reply(msg.Reply, inst.launch(msg))
+	case SubjectLink:
+		inst.reply(msg.Reply, inst.makeLink(msg))
 	case SubjectAuthority:
 		inst.reply(msg.Reply, inst.authority(msg))
 	case SubjectDisclose:
@@ -386,6 +391,7 @@ func wireOperationOf(m app.Manifest, o app.OperationSpec, withSchemas bool) (w w
 	if withSchemas {
 		v := appops.ViewOf(m, o)
 		w.ArgsSchema, w.ResultSchema = v.ArgsSchema, v.ResultSchema
+		w.LinkExamples = applink.Examples(m, o)
 	}
 	return
 }

@@ -33,6 +33,11 @@ type View struct {
 	DryRun       string
 	ArgsSchema   string
 	ResultSchema string
+	// Links says the operation takes links and LinkStage the command an
+	// authorless link to it calls instead (ADR-0409, proposed);
+	// applink.Examples spells the codec's examples as links.
+	Links     bool
+	LinkStage string
 }
 
 // Views lists the operations of every registration, in registry order and
@@ -65,5 +70,6 @@ func ViewOf(m app.Manifest, o app.OperationSpec) (v View) {
 	if s, err := opjson.Schema(o.Result); err == nil {
 		v.ResultSchema = string(s)
 	}
+	v.Links, v.LinkStage = o.Link != nil, o.LinkStage
 	return
 }

@@ -7,5 +7,5 @@
 # both lines with:
 #
 #   go run ./public/thestack/cmd/imzero2tab hostdigest --write
-sha256 3ee75052f7af2998139d09ded4e232adbc1a9d08848453f1dbf5e760999139f1
-idl f4d0c0ea27c6b168
+sha256 b53cc97d3569dacf84b038c0b17ac7d3b2e845731836cdb306816299015af316
+idl c81002463536ad07

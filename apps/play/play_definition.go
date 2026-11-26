@@ -154,7 +154,7 @@ func (inst *PlayApp) renderDatasetNotice() {
 	for range c.PanelTopInside(ids.PrepareStr("datasetNoticePanel")).Resizable(false).KeepIter() {
 		// Its own scope key, for the reason the preamble has one: more than
 		// one markdown doc renders per frame.
-		inst.followMdeditLinks(markdown.Render(markdown.Input{Ids: ids, ScopeKey: "datasetNoticeBody", Doc: inst.datasetNotice, LinkClaims: inst.mdeditLinkClaims()}))
+		inst.followLinks(markdown.Render(markdown.Input{Ids: ids, ScopeKey: "datasetNoticeBody", Doc: inst.datasetNotice, LinkClaims: inst.linkClaims(), LinkHover: inst.linkHover(dataAuthor)}), dataAuthor)
 		c.Separator().Send()
 	}
 }
@@ -174,7 +174,7 @@ func (inst *PlayApp) renderPreamble() {
 		// Its own scope key — the same invariant the Definition drawer
 		// observes, and it matters more here: both documents can be on
 		// screen in the same frame.
-		inst.followMdeditLinks(markdown.Render(markdown.Input{Ids: ids, ScopeKey: "preambleBody", Doc: inst.preamble, LinkClaims: inst.mdeditLinkClaims()}))
+		inst.followLinks(markdown.Render(markdown.Input{Ids: ids, ScopeKey: "preambleBody", Doc: inst.preamble, LinkClaims: inst.linkClaims(), LinkHover: inst.linkHover(dataAuthor)}), dataAuthor)
 		c.Separator().Send()
 	}
 }
@@ -187,13 +187,13 @@ func (inst *PlayApp) renderPreamble() {
 // sqlBlockActionable stance: an affordance that does nothing is worse than
 // no affordance).
 func (inst *PlayApp) renderDefinitionDoc(doc *markdown.Doc) {
-	in := markdown.Input{Ids: inst.ids, ScopeKey: "definition-doc", Doc: doc, LinkClaims: inst.mdeditLinkClaims()}
+	in := markdown.Input{Ids: inst.ids, ScopeKey: "definition-doc", Doc: doc, LinkClaims: inst.linkClaims(), LinkHover: inst.linkHover(dataAuthor)}
 	if inst.bus != nil {
 		in.ActionLabels = []string{"Copy"}
 		in.CodeActionFilter = sqlBlockActionable
 	}
 	res := markdown.Render(in)
-	inst.followMdeditLinks(res)
+	inst.followLinks(res, dataAuthor)
 	for _, act := range res.Actions {
 		inst.copyToClipboard("the fence", act.Text)
 	}

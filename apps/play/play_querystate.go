@@ -345,6 +345,9 @@ func (inst *PlayApp) queryNotice() (s string) {
 	// unfilled-input refusal (5e, D3) retires as soon as the inputs are
 	// filled or edited away, no Run needed; the class ceiling's and the
 	// agent-write refusal stand until the next Run clears them.
+	// A link written by someone else put the buffer in place (ADR-0409,
+	// proposed); every refusal below outranks the mark.
+	s = inst.linkNoticeNow()
 	if inst.runBlockedReason != "" && (!inst.runBlockedUnfilled || len(inst.unfilledInputs()) > 0) {
 		s = "Run blocked: " + inst.runBlockedReason
 	}

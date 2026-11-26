@@ -1,0 +1,11 @@
+# The scripted model of chat-make-link.scene.md (ADR-0409, proposed): one
+# reply per line, picked by the conversation's position.
+# Turn 1: ask to open play, mint a link that puts a statement in a new play
+# window, and write it into the artefact.
+{"tool":"request_access","args":{"plan":"give the person a link that puts a statement in play","open":[{"app":"play","count":2}]}}
+{"tool":"make_link","args":{"target":"open","app":"play","operation":"set_sql","args":{"sql":"SELECT 42 AS answer"},"label":"Put the answer in play"}}
+{"tool":"artefact_write","args":{"title":"Writing the link","base_revision":0,"text":"$markdown"}}
+{"content":"The link is in the artefact."}
+# Turn 2: the task ends.
+{"tool":"stop_task","args":{}}
+{"content":"Stopped the task."}

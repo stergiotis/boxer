@@ -25,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -77,6 +78,9 @@ const (
 
 // App is one tally window.
 type App struct {
+	// linkHovers holds what the host said of each link a preview shows,
+	// for its hover (ADR-0409, proposed); built on first use.
+	linkHovers *applink.Hovers
 	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
 	// run under when no call of its own carries one.
 	ioCtx   context.Context

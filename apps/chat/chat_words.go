@@ -24,6 +24,8 @@ var toolWords = map[string]string{
 	"ask_user":              "asked you",
 	"request_access":        "asked for access",
 	"open_window":           "opened a window",
+	"make_link":             "made a link",
+	"read_link":             "read a link",
 	"query_windows":         "read the windows",
 	"call_operation":        "worked in a window",
 	"point_out":             "pointed something out",

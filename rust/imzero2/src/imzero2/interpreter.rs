@@ -6498,6 +6498,7 @@ egui::Grid::new(i);
                     }
                     imzero2_egui::style::linked::LinkedLabel::new(lj, link_of_section)
                 };
+                let mut link_tips: Vec<String> = Vec::new();
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(LabelAtomsLinkedBuilderMethodId::from_repr)?;
@@ -6528,6 +6529,14 @@ egui::Grid::new(i);
                             // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
                             w = w.selection_column();
                         }
+                        LabelAtomsLinkedBuilderMethodId::LinkTips => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!(
+                                "match LabelAtomsLinkedBuilderMethodId::LinkTips"
+                            );
+                            let mut tips = self.io.read_plain_sh()?;
+                            link_tips = tips;
+                        }
                     }
                 }
                 if d == 0 {
@@ -6539,6 +6548,11 @@ egui::Grid::new(i);
                 if u.is_some() {
                     let ui = u.as_mut().unwrap();
                     let out = w.show(ui);
+                    if let Some(tip) =
+                        out.hovered.and_then(|k| link_tips.get(k)).filter(|t| !t.is_empty())
+                    {
+                        let _ = out.response.clone().on_hover_text_at_pointer(tip.as_str());
+                    }
                     if let Some(k) = out.clicked {
                         if link_open.get(k).copied().unwrap_or(0) != 0 {
                             if let Some(url) = link_urls.get(k) {

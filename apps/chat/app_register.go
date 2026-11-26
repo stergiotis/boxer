@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
@@ -98,6 +99,8 @@ var manifest = app.Manifest{
 			adhocdata.PublishCap("chat: publish the window's token and answer statistics and its agent surface as ad-hoc datasets for Open in play (ADR-0240)"),
 			windowopen.OpenCap("chat: Open in play — a play window on the statistics, a reply's SQL or a failed call's record — Open in mdedit on the conversation, and Open in trail viewer on the conversation (ADR-0135, ADR-0350)"),
 			windowopen.RaiseCap("chat: the roster's Raise brings the chat window that holds a conversation to the front"),
+			applink.FollowCap("chat: follow a boxer: link clicked in a message or the artefact, naming who wrote it (ADR-0409, proposed)"),
+			applink.DescribeCap("chat: read_link, and the hover of a link in a message or the artefact (ADR-0409, proposed)"),
 			clipboardbroker.WriteCap("chat: copy a message, a code block or a failure's details to the clipboard"),
 			fsbroker.DialogReadCap("chat: Add image — the system file picker chooses one PNG or JPEG file, which is read once through the handle the reply carries, into the artefact's images (ADR-0385)"),
 			{Pattern: ladingpublish.Subject(exportMountTag), Direction: app.CapDirectionPub,

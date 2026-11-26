@@ -25,12 +25,13 @@ scene:
 
 A paragraph whose text carries a link is one label (`labelAtomsLinked`,
 ADR-0180's tenth-run update): the host matches the pointer against the
-link's glyphs and reports the click as the link's index, and mdedit follows
-a link it claims (`mdeditlink.Claimed`). The trace clicks the paragraph at
-its centre with the pointer — the paragraph is the link, so the centre is
-on its words — and reads the status line mdedit writes when it follows a
-link, which proves the click reached the Go side as a link click and not
-as a press on prose. The second paragraph is prose; a click on it leaves
+link's glyphs and reports the click as the link's index, and mdedit asks
+the host to follow a link it claims (`applink.Claimed`; `mdedit://` is an
+alias of mdedit's launch kind, ADR-0409, proposed). The trace clicks the
+paragraph at its centre with the pointer — the paragraph is the link, so
+the centre is on its words — and reads the status line mdedit writes when
+it follows a link, which proves the click reached the Go side as a link
+click and not as a press on prose. The second paragraph is prose; a click on it leaves
 the status alone. The link names a snapshot that does not exist, so the
 window it opens shows the handed-over text and says the snapshot cannot be
 read; that window is not this scene's concern.
@@ -39,8 +40,8 @@ read; that window is not this scene's concern.
 {"do":"wait","role":"multiline_text_input","settleMs":800,"comment":"the window is up in Split; the source pane holds the seeded document"}
 {"do":"click","contains":"Read","role":"button","settleMs":800,"comment":"the reading mode: the preview alone"}
 {"do":"click","valueContains":"Open the notes","role":"label","pointer":true,"settleMs":600,"comment":"a pointer press on the paragraph's centre, which is on the link's words"}
-{"do":"read","valueContains":"opening a.md","role":"label","on":"value","pattern":"^(?P<status>opening a\\.md in a new window)$","comment":"mdedit followed the link: the status says so"}
+{"do":"read","valueContains":"following the link","role":"label","on":"value","pattern":"^(?P<status>following the link)$","comment":"mdedit followed the link: the status says so"}
 {"do":"click","valueContains":"The paragraph after it","role":"label","pointer":true,"settleMs":600,"comment":"a press on prose"}
-{"do":"read","valueContains":"opening a.md","role":"label","on":"value","pattern":"^(?P<still>opening a\\.md in a new window)$","comment":"the status is as it was: prose reports no link"}
+{"do":"read","valueContains":"following the link","role":"label","on":"value","pattern":"^(?P<still>following the link)$","comment":"the status is as it was: prose reports no link"}
 {"do":"capture","text":"links","sidecars":["svg","tree"]}
 ```

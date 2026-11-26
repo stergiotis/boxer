@@ -92,6 +92,10 @@ type Operation struct {
 	Consent      string
 	ArgsSchema   string
 	ResultSchema string
+	// LinkExamples are the operation's link codec's examples spelled as
+	// links, with its schemas: how a model learns the app's spelling
+	// (ADR-0409, proposed).
+	LinkExamples []string
 }
 
 // AppOperations is one app's operations agents may call. WhenToUse is the

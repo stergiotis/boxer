@@ -58,6 +58,7 @@ type wireOperation struct {
 	Consent      string   `json:"consent,omitempty"`
 	ArgsSchema   string   `json:"args_schema,omitempty"`
 	ResultSchema string   `json:"result_schema,omitempty"`
+	LinkExamples []string `json:"link_examples,omitempty"`
 }
 
 type wireApp struct {

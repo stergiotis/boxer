@@ -126,6 +126,7 @@ func RenderBlock(in Input, index int) (res Result) {
 			actionsEnabled: len(in.ActionLabels) > 0,
 			actionLabels:   in.ActionLabels,
 			linkClaims:     in.LinkClaims,
+			linkHover:      in.LinkHover,
 			actionAccept:   in.CodeActionFilter,
 			actionMask:     in.CodeActionMask,
 		}

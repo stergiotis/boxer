@@ -85,6 +85,7 @@ func addQueryOp(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 		Effect:  app.OperationEffectRun, Reads: []string{opsResParams, opsResSignals}, Writes: []string{opsResSql, opsResResult},
 		Agents: true, Direct: true, Untrusted: true, Async: true,
 		Rebuild: app.OperationRebuildVolatile, Fork: app.OperationForkPerInstance,
+		Link: queryLinkCodec, LinkStage: opStageQuery,
 		Follows: []string{"the buffer holds the SQL afterwards, and the result replaces the main result, as set_sql and run leave them",
 			"a run the checks refuse is refused at the call and leaves the buffer as it was",
 			"about to reuse a derivation (a CTE, a filtered or tokenised table) in later statements? keep it once with keep_as: '<name>' and read session('<name>') afterwards, instead of repeating its SQL in every statement",

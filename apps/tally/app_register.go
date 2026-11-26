@@ -5,6 +5,7 @@ import (
 
 	"github.com/stergiotis/boxer/apps/tally/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audioout"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
@@ -41,6 +42,8 @@ var manifest = app.Manifest{
 			Reason:    "open the selection in play as a query over the store",
 			Direction: app.CapDirectionPub,
 		},
+		applink.FollowCap("follow a boxer: link in a previewed document (ADR-0409, proposed)"),
+		applink.DescribeCap("the hover of a boxer: link in a previewed document (ADR-0409, proposed)"),
 		{
 			Pattern:   clipboardbroker.SubjectWrite,
 			Reason:    "copy a snapshot path or an rclone mount command",

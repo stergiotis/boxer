@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/stergiotis/boxer/apps/mdedit/mdeditlink"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"strconv"
 	"strings"
 	"time"
@@ -198,10 +198,11 @@ type richEntry struct {
 type richCellCache struct {
 	ids     *c.WidgetIdStack
 	tracker *c.ImageVersionTracker[string]
-	// openLink follows an mdedit:// link clicked in a markdown cell
-	// (ADR-0347 §SD5); nil leaves every link a hyperlink, for a cache whose
-	// owner cannot open a window.
-	openLink func(url string)
+	// openLink follows a boxer: link clicked in a markdown cell
+	// (ADR-0409, proposed); nil leaves every link a hyperlink, for a cache
+	// whose owner cannot follow one. linkHover is such a link's hover.
+	openLink  func(url string)
+	linkHover func(url string) string
 
 	forExecuted time.Time
 	forRow      int64
@@ -623,7 +624,7 @@ func (inst *richCellCache) renderBody(key richKey, d gloss.Declaration, e *richE
 		for range c.IdScope(inst.ids.PrepareStr(key.String())) {
 			in := markdown.Input{Ids: inst.ids, ScopeKey: "play-detail-md", Doc: e.doc}
 			if inst.openLink != nil {
-				in.LinkClaims = mdeditlink.Claimed
+				in.LinkClaims, in.LinkHover = applink.Claimed, inst.linkHover
 			}
 			for _, l := range markdown.Render(in).Links {
 				inst.openLink(l.URL)

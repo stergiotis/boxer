@@ -105,7 +105,10 @@ const (
 
 // coordinator is one conversation's side of the contract.
 type coordinator struct {
-	cli *agent.Client
+	// describeLink reads a link as the host does, for read_link
+	// (ADR-0409, proposed); nil without a bus.
+	describeLink linkDescriber
+	cli          *agent.Client
 	// captureHook stands in for the host's capture service in tests.
 	captureHook func(ctx context.Context, windows []uint64, crop *[4]float32) (data []byte, reason string)
 	// discloseHook stands in for the host's disclosure record in tests.

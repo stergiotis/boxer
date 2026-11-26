@@ -74,6 +74,7 @@ window's first frame.
 | Operation | Kind | What it does | Unavailable or refused when |
 | --- | --- | --- | --- |
 | `set_sql` | command, document | replaces the SQL buffer; the parameter slots follow after a short debounce | never, once mounted |
+| `stage_query` | command, document | puts a `query`'s statement in the buffer without running it: what a link to `query` does when no task's grant runs it, marked on the status line until you edit or run it. Not offered to agents | never, once mounted |
 | `set_notebook` | command, document | replaces the SQL buffer with a notebook's records (ADR-0371): each record cell a WITH query in document order, the last the buffer's own SELECT; `get_notebook` the other way | the text holds no record cell; a record is not one SELECT, or two share a name |
 | `set_param` | command, document | sets one parameter in its tier: a pinned one rewrites its SET line, a live one writes its signal | the slot is not in the buffer yet (conflict: read `get_state` again); an enum value the slot does not offer; a value outside a range control's shape |
 | `set_signal` | command, document | sets one signal with the task as its writer; `selection` is a row of a node's result, and `selection_node`, `selection_id` and `selection_key` follow it from that row | a signal a pane publishes and does not take back (`tl_from`, `vp_min_x`, `gv_selection`, …), naming the pane's command instead; a selection that is not a row number, names a node not on screen, or a row the result lacks; `node` with any signal but `selection` |
@@ -160,6 +161,27 @@ operation:
   for the task that publishes it; a confined result, and a result of one
   task's own publications published by the person or by another task,
   goes out without the assertion and is sealed data to every reader.
+
+## Links into play
+
+`set_sql` and `query` take `boxer:` links (ADR-0409, proposed), which any
+surface that renders markdown follows through the host:
+
+```text
+boxer:open/app/play/set_sql@1?sql=SELECT+1
+boxer:open/app/play/query@2?sql=SELECT+1&statement=1&limit=10
+```
+
+The statement is the `sql` key; `query` also takes `statement` and `limit`,
+and nothing else: `fields`, `keep_as` and `order_by` have no spelling in a
+link. Hover a link to read what the host makes of it before you click.
+
+A link a task minted with `make_link` runs `query` under that task's grant,
+checked again when you click. Any other link — one a model wrote into its
+reply, a cell, a document — opens a new window and calls `stage_query`
+instead: the statement lands in the buffer and nothing runs. The status line
+says a link put it there until you edit or run it, and Live does not run it
+on its own, since Live reruns only a statement already run.
 
 ## Panes
 

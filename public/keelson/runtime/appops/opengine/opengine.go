@@ -297,7 +297,7 @@ func agentCaused(call app.OperationCall) (yes bool) {
 // run under ctx.
 func callOf(ctx context.Context, req opwire.CallRequest) (oc app.OperationCall) {
 	oc = app.OperationCall{Writer: req.Writer, Key: req.Key, Reason: req.Reason, RefData: req.RefData,
-		OnBehalfOf: req.OnBehalfOf}.WithContext(ctx)
+		OnBehalfOf: req.OnBehalfOf, Link: req.Link}.WithContext(ctx)
 	return
 }
 
@@ -626,7 +626,11 @@ func (inst *Engine) ApplyQueued() {
 }
 
 func (inst *Engine) apply(c *call) (out opwire.Outcome) {
-	if !c.spec.AnyRevision {
+	// An authorless link's call is the person's click on text someone else
+	// wrote (ADR-0409 (proposed) §SD5): it read nothing, so it expects no
+	// revision, as a gesture expects none; the person editing still wins.
+	authorlessLink := c.call.Link != nil && c.call.OnBehalfOf == nil
+	if !c.spec.AnyRevision && !authorlessLink {
 		for _, r := range c.spec.Writes {
 			exp, ok := c.expects[r]
 			if !ok {

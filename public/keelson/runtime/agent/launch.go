@@ -173,21 +173,37 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 		inst.mu.Unlock()
 		return
 	}
-	le.used++
-	mode := le.mode
-	inst.mu.Unlock()
-	// A window opening is a change the person sees, paced like the rest.
-	inst.pace(t)
-	key, err := inst.cfg.Host.OpsOpen(id, req.Kind, req.Config)
+	key, load, loadReason, err := inst.openFor(t, id, le, req.Kind, req.Config)
 	if err != nil {
 		inst.mu.Lock()
-		le.used--
 		rep.Reason = "the host did not open it: " + err.Error()
 		rec.outcome = phaseOutcome(opwire.PhaseFailed, rep.Reason)
 		inst.mu.Unlock()
 		return
 	}
-	load, loadReason := inst.waitLoaded(key)
+	rep.Ok, rep.Instance = true, key
+	rep.Load, rep.LoadReason = load.String(), loadReason
+	return
+}
+
+// openFor opens a window of id for t under its launch entry le, which the
+// caller checked: the launch is counted, the window joins the task in the
+// entry's mode, and what it showed as it opened is what the task has read
+// of it. The caller holds mu; openFor releases it and returns without it.
+func (inst *Service) openFor(t *task, id app.AppIdT, le *launchEntry, kind string, config []byte) (key uint64, load opwire.LoadE, loadReason string, err error) {
+	le.used++
+	mode := le.mode
+	inst.mu.Unlock()
+	// A window opening is a change the person sees, paced like the rest.
+	inst.pace(t)
+	key, err = inst.cfg.Host.OpsOpen(id, kind, config)
+	if err != nil {
+		inst.mu.Lock()
+		le.used--
+		inst.mu.Unlock()
+		return
+	}
+	load, loadReason = inst.waitLoaded(key)
 	opened := inst.openedRevisions(id, key)
 	inst.mu.Lock()
 	t.entries[key] = &entry{instance: key, app: id, alias: app.AliasOf(id), mode: mode}
@@ -202,8 +218,6 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 		// A mount error is the app's text (ADR-0269 §SD7).
 		inst.taint(t)
 	}
-	rep.Ok, rep.Instance = true, key
-	rep.Load, rep.LoadReason = load.String(), loadReason
 	return
 }
 

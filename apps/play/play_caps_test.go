@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
@@ -200,7 +201,10 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// runtime.adhoc.expose, .expose.revoke and .expose.list for exposing an
 	// ad-hoc dataset to programs on this machine (ADR-0407, proposed):
 	// expose_dataset, revoke_exposure, list_datasets and the Data sets tab.
-	require.Len(t, m.Caps, 30)
+	// runtime.link.follow and runtime.link.describe for a boxer: link clicked
+	// in a cell, the docs, a snippet or the definition, and its hover
+	// (ADR-0409, proposed).
+	require.Len(t, m.Caps, 32)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {
 		patterns = append(patterns, cap.Pattern)
@@ -217,6 +221,8 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	}
 	assert.Contains(t, patterns, "runtime.ch.local.exec."+timerangepicker.PoolName)
 	assert.Contains(t, patterns, windowopen.OpenSubject)
+	assert.Contains(t, patterns, applink.FollowSubject)
+	assert.Contains(t, patterns, applink.DescribeSubject)
 	assert.Contains(t, patterns, adhocdata.SubjectPublish)
 	assert.Contains(t, patterns, adhocdata.SubjectBundleResolve)
 	assert.Contains(t, patterns, adhocdata.SubjectBundleEventAll)

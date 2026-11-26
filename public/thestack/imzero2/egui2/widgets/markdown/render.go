@@ -669,14 +669,26 @@ func renderAtomsRun(r *paragraphRun, rc *renderCtx) {
 	seq := rc.idSeq
 	rc.idSeq++
 	open := make([]uint8, len(r.links))
+	var tips []string
 	for i := range r.links {
 		if rc.linkClaims == nil || !rc.linkClaims(r.links[i].url) {
 			open[i] = 1
+			continue
+		}
+		if rc.linkHover != nil {
+			if tip := rc.linkHover(r.links[i].url); tip != "" {
+				if tips == nil {
+					tips = make([]string, len(r.links))
+				}
+				tips[i] = tip
+			}
 		}
 	}
-	c.LabelAtomsLinked(rc.ids.PrepareSeq(seq), r.atoms, r.linkAtoms, r.linkURLs, open).
-		Wrap().
-		SendRespVal(&r.clicked)
+	l := c.LabelAtomsLinked(rc.ids.PrepareSeq(seq), r.atoms, r.linkAtoms, r.linkURLs, open).Wrap()
+	if tips != nil {
+		l = l.LinkTips(tips)
+	}
+	l.SendRespVal(&r.clicked)
 	if k := r.clicked; k != noLink {
 		r.clicked = noLink
 		if k < uint64(len(r.links)) && open[k] == 0 {

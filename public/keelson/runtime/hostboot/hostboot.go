@@ -28,6 +28,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appcenter"
 	appcenterlaunch "github.com/stergiotis/boxer/public/keelson/runtime/appcenter/launchcfg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appoverride"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
@@ -53,6 +54,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
 	"github.com/stergiotis/boxer/public/keelson/runtime/launcher"
 	"github.com/stergiotis/boxer/public/keelson/runtime/launchlimit"
+	"github.com/stergiotis/boxer/public/keelson/runtime/linkhost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/loghost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/moderator"
@@ -419,6 +421,9 @@ type Runtime struct {
 	// Host is the window host; nil in screenshot mode and under
 	// NoWindowHost.
 	Host *windowhost.Inst
+	// Links is the link service (ADR-0409, proposed); nil without a
+	// window host.
+	Links *linkhost.Service
 	// Services is the service host (ADR-0352 §SD2): the headless
 	// apps KEELSON_SERVICES_WHERE selected, mounted at boot. nil in
 	// screenshot mode.
@@ -1134,6 +1139,21 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	if _, osErr := windowhost.NewOpenService(rt.Bus, host, logger); osErr != nil {
 		logger.Warn().Err(osErr).Msg("hostboot: windowhost open service unavailable; runtime.windowhost.open requests will time out")
 	}
+	// Links (ADR-0409, proposed): the host follows and describes every
+	// boxer: link a surface renders, and keeps the records handles name.
+	// A scene fixes the handle key, so its trace sees the same handle on
+	// every run (§SD7).
+	linkCfg := linkhost.Config{Bus: rt.Bus, Host: host, Registry: reg, Log: logger,
+		Recorder: linkhost.TrailRecorder{Rec: rt.Trail, Log: logger}}
+	if sceneLaunched() {
+		linkCfg.Key = sceneLinkKey
+	}
+	if links, lErr := linkhost.New(linkCfg); lErr != nil {
+		logger.Warn().Err(lErr).Msg("hostboot: link service unavailable; boxer: links will not open")
+	} else {
+		rt.Links = links
+		rt.onClose(links.Close)
+	}
 	for _, a := range rt.opts.LaunchApps {
 		id := a.Manifest().Id
 		if _, openErr := host.Open(id); openErr != nil {
@@ -1438,6 +1458,12 @@ func (rt *Runtime) bootAgent() {
 	if rt.SessionData != nil {
 		rt.SessionData.SetDispatcher(svc)
 	}
+	// A task mints links through the dispatcher, and a click on one runs
+	// under the task's grant, checked again (ADR-0409, proposed).
+	if rt.Links != nil {
+		svc.SetLinks(rt.Links)
+		rt.Links.SetFollower(svc)
+	}
 	if rt.Host != nil {
 		// The person's side: the badge in each window a task works in and
 		// the dialog in which requests are decided (ADR-0269 §SD5).
@@ -1513,6 +1539,29 @@ func unattendedStatus(on bool) (st runtimestatus.UnattendedE) {
 func testLaneOnly(requested bool, scene bool) (on bool) {
 	return requested && scene
 }
+
+// copyWindowLink is the Window menu's Copy link to this window: off the
+// render goroutine, since the clipboard broker answers over the bus; nil
+// without the link service.
+func (rt *Runtime) copyWindowLink() func(key uint64) {
+	links := rt.Links
+	if links == nil {
+		return nil
+	}
+	logger := rt.opts.Log
+	return func(key uint64) {
+		go func() {
+			if err := links.CopyWindowLink(rt.ctx, key); err != nil {
+				logger.Warn().Err(err).Uint64("window", key).Msg("Window menu: the window's link was not copied")
+			}
+		}()
+	}
+}
+
+// sceneLinkKey is the handle key a scene's host mints under: fixed, so a
+// scene's trace sees the same handle on every run (ADR-0409 §SD7). Only a
+// host a scene launched uses it.
+var sceneLinkKey = applink.Key{'s', 'c', 'e', 'n', 'e'}
 
 // sceneLaunched says this host is one scene.Launch started: headless, and
 // under a scene-* component mark. Being headless alone is not the test: a
@@ -1712,13 +1761,14 @@ func (rt *Runtime) chrome(extraMenus func(), host *windowhost.Inst) imzhost.Chro
 		showRunning = rt.showRunning
 	}
 	return imzhost.ChromeConfig{
-		ExtraMenus:    extraMenus,
-		Status:        rt.Status,
-		Host:          host,
-		VideoOutput:   rt.opts.VideoOutput,
-		HelpHost:      rt.opts.HelpHost,
-		ShowRunning:   showRunning,
-		Workstatelets: rt.workstateletMenuFor(host),
+		ExtraMenus:     extraMenus,
+		Status:         rt.Status,
+		Host:           host,
+		VideoOutput:    rt.opts.VideoOutput,
+		HelpHost:       rt.opts.HelpHost,
+		ShowRunning:    showRunning,
+		Workstatelets:  rt.workstateletMenuFor(host),
+		CopyWindowLink: rt.copyWindowLink(),
 		// The launcher is bound wherever a window host exists — it is that
 		// host's own surface (ADR-0214 §SD1), not an optional service, and the
 		// only path that has no window host is the screenshot tour, which does

@@ -314,6 +314,19 @@ var coordinatorTools = []toolSpec{
 		exec: func(ctx context.Context, inst *coordinator, spec *toolSpec, o toolOrigin, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
 			return inst.openWindow(ctx, o, call.Id, argString(args, "app"))
 		}},
+	{name: "make_link", group: toolGroupFixed,
+		description: "Make a link the person can click: it opens a window (target open, with app), raises one of the task's windows of an app or opens one (raise, with app), or raises one window (window, with its key), and optionally makes one command there with its arguments. The dispatcher checks the call now as call_operation would, without running it; a click runs it under this task's grant, checked again then. A query or a consequential command is never linked. The answer carries the link and the markdown to write it with. The link lasts as long as this session.",
+		schema:      `{"type":"object","properties":{"target":{"type":"string","enum":["open","raise","window"]},"app":{"type":"string"},"window":{"type":"integer"},"operation":{"type":"string"},"args":{"type":"object"},"label":{"type":"string","description":"the words the person clicks, for the markdown the answer carries"}},"required":["target"],"additionalProperties":false}`,
+		exec: func(ctx context.Context, inst *coordinator, spec *toolSpec, o toolOrigin, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
+			return inst.makeLink(ctx, o, call.Id, args)
+		}},
+	{name: "read_link", group: toolGroupFixed,
+		description:  "Read a boxer link — boxer:…, or a scheme an app registered such as mdedit:// — into the app, operation, arguments and target it names. A link grants nothing: to do what it names, open or find the window and call the operation yourself.",
+		schema:       `{"type":"object","properties":{"link":{"type":"string"}},"required":["link"],"additionalProperties":false}`,
+		parallelSafe: true,
+		exec: func(ctx context.Context, inst *coordinator, spec *toolSpec, o toolOrigin, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
+			return inst.readLink(ctx, args)
+		}},
 	{name: "query_windows", group: toolGroupFixed,
 		description:  "Run a SELECT over keelson('windows') — every open window: key, app_id, display, title, x, y, w, h, need_w, need_h, stack, active, maximized, collapsed, shown, tiled, floating, order, agent_tasks — or over keelson('desktop'), the work area (work_x, work_y, work_w, work_h), the active window's key, the arrangement in progress, and the layout (floating, main-stack, tile, columns, rows, monocle) with main_ratio and main_count. Rows come back as JSON lines.",
 		schema:       `{"type":"object","properties":{"table":{"type":"string","enum":["windows","desktop"]},"sql":{"type":"string","description":"a SELECT naming keelson('<table>'), without FORMAT"}},"required":["table","sql"],"additionalProperties":false}`,

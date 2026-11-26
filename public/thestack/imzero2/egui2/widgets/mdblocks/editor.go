@@ -24,6 +24,9 @@ type Opts struct {
 	// LinkClaims routes link clicks in rendered blocks to Events.Links, the
 	// markdown widget's own contract; nil leaves every link a hyperlink.
 	LinkClaims func(url string) bool
+	// LinkHover is a claimed link's hover text, as
+	// [markdown.Input.LinkHover]; nil shows none.
+	LinkHover func(url string) string
 	// HintText is what an empty block shows while nothing is typed.
 	HintText string
 }
@@ -890,7 +893,7 @@ func (e *Editor) renderBlock(i int, selected bool) (links []markdown.LinkClick, 
 			case blk.docIndex < 0:
 				markdown.RenderFrontmatter(e.doc)
 			default:
-				res := markdown.RenderBlock(markdown.Input{Ids: e.ids, ScopeKey: "block", Doc: e.doc, LinkClaims: e.opts.LinkClaims}, blk.docIndex)
+				res := markdown.RenderBlock(markdown.Input{Ids: e.ids, ScopeKey: "block", Doc: e.doc, LinkClaims: e.opts.LinkClaims, LinkHover: e.opts.LinkHover}, blk.docIndex)
 				links = res.Links
 				e.pendingTasks = append(e.pendingTasks, res.Tasks...)
 			}

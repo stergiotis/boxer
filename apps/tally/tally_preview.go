@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/stergiotis/boxer/apps/mdedit/mdeditlink"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"io/fs"
 	"path"
 	"strings"
@@ -69,16 +69,21 @@ type previewContent struct {
 	imgH   uint32
 }
 
-// renderPreviewDoc draws a markdown preview; a nil doc draws nothing. An
-// mdedit:// link in it opens a new mdedit window, as from every surface
-// (ADR-0347 §SD5); without a bus it stays a hyperlink.
+// renderPreviewDoc draws a markdown preview; a nil doc draws nothing. A
+// boxer: link in it, or an alias such as mdedit://, is followed by the
+// host as from every surface (ADR-0409, proposed); the file's text is
+// external content, so the host applies the rules for a link someone else
+// wrote. Without a bus a link stays a hyperlink.
 func (inst *App) renderPreviewDoc(content previewContent) {
 	in := markdown.Input{Ids: inst.ids, ScopeKey: "doc", Doc: content.doc}
 	if inst.bus != nil {
-		in.LinkClaims = mdeditlink.Claimed
+		if inst.linkHovers == nil {
+			inst.linkHovers = applink.NewHovers(inst.bus, applink.UnknownAuthor, inst.spawn)
+		}
+		in.LinkClaims, in.LinkHover = applink.Claimed, inst.linkHovers.Text
 	}
 	for _, l := range markdown.Render(in).Links {
-		mdeditlink.Follow(inst.bus, inst.log, l.URL, inst.spawn)
+		applink.FollowLogged(inst.bus, inst.log, l.URL, applink.UnknownAuthor, inst.spawn)
 	}
 }
 

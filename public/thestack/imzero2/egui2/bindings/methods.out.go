@@ -6,6 +6,8 @@ import "github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 
 import "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 
+import "github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
+
 import (
 	"github.com/stergiotis/boxer/public/functional"
 	"iter"
@@ -2122,6 +2124,14 @@ func (inst LabelAtomsLinkedFluid) Wrap() LabelAtomsLinkedFluid {
 func (inst LabelAtomsLinkedFluid) SelectionColumn() LabelAtomsLinkedFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(LabelAtomsLinkedMethodIdSelectionColumn))
+
+	return inst
+}
+
+func (inst LabelAtomsLinkedFluid) LinkTips(tips []string) LabelAtomsLinkedFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelAtomsLinkedMethodIdLinkTips))
+	runtime.PutStringSliceArg(r, tips)
 
 	return inst
 }

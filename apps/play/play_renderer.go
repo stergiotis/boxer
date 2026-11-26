@@ -29,6 +29,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -140,6 +141,9 @@ const (
 )
 
 type PlayApp struct {
+	// linkHovers holds what the host said of each link the window shows,
+	// for its hover (ADR-0409, proposed); built on first use.
+	linkHovers *applink.HoverSet
 	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
 	// run under when no call of its own carries one.
 	ioCtx  context.Context
@@ -267,6 +271,10 @@ type PlayApp struct {
 	// autoRunStreakSql (the buffer they ran), and liveSuspendReason carries
 	// the status-bar line naming what was cycling once the breaker unchecks
 	// Live. A human Run clears both.
+	// linkNotice marks a buffer a link written by someone else put in
+	// place, while it still holds linkSql (ADR-0409, proposed).
+	linkNotice        string
+	linkSql           string
 	autoRunStreak     int
 	autoRunStreakSql  string
 	liveSuspendReason string
@@ -1334,7 +1342,13 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.projPublish = newProjectionPublishState()
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
-	inst.richCells.openLink = inst.openMdeditLink
+	inst.richCells.openLink = inst.followDataLink
+	inst.richCells.linkHover = func(url string) string {
+		if h := inst.linkHover(dataAuthor); h != nil {
+			return h(url)
+		}
+		return ""
+	}
 	inst.detailTimeline = NewDetailTimeline(mk())
 	inst.components = newComponentDetail(mk())
 	inst.projector.componentPresence = inst.components.presenceRows

@@ -102,9 +102,3 @@ func TestLaunch(t *testing.T) {
 	_, ok = ParseMode("Read")
 	assert.False(t, ok, "mode names are lower-case")
 }
-
-// Open refuses a link that does not parse before touching the bus.
-func TestOpenRefusesABadLinkWithoutABus(t *testing.T) {
-	_, err := Open(t.Context(), nil, "https://example.com")
-	assert.Error(t, err)
-}

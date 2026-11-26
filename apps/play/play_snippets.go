@@ -300,9 +300,10 @@ func (inst *PlayApp) renderSnippetsDoc(doc *markdown.Doc, sectionFilter func(slu
 		ActionLabels:     snippetActionLabels,
 		CodeActionFilter: sqlBlockActionable,
 		SectionFilter:    sectionFilter,
-		LinkClaims:       inst.mdeditLinkClaims(),
+		LinkClaims:       inst.linkClaims(),
+		LinkHover:        inst.linkHover(shippedAuthor),
 	})
-	inst.followMdeditLinks(res)
+	inst.followLinks(res, shippedAuthor)
 	for _, act := range res.Actions {
 		switch act.Button {
 		case snippetButtonInsert:

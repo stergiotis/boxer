@@ -387,6 +387,11 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 				// side-by-side cells — which egui otherwise treats as another
 				// column (ADR-0363 §M6, proposed).
 				BeginMethod("selectionColumn").CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.selection_column();\n")).EndMethod().
+				// linkTips gives link k the hover text tips[k], shown at the
+				// pointer while it is over that link; an empty tip shows
+				// none. A host that claims a link says through it what the
+				// link does (ADR-0409, proposed).
+				BeginMethod("linkTips").Arg("tips", ctabb.Sh).CodeClientRust(rustClientCode("link_tips = tips;\n")).EndMethod().
 				Build()...).
 			WithSettingImmediate(true).
 			WithSettingRetained(true).
@@ -436,11 +441,15 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 	}
 	imzero2_egui::style::linked::LinkedLabel::new(lj, link_of_section)
 };
+let mut link_tips: Vec<String> = Vec::new();
 `)).
 			WithApplyCodeClientRust(rustClientCode(`
 if {{EguiUiOptionalOuter}}.is_some() {
 	let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
 	let out = {{Instance}}.show(ui);
+	if let Some(tip) = out.hovered.and_then(|k| link_tips.get(k)).filter(|t| !t.is_empty()) {
+		let _ = out.response.clone().on_hover_text_at_pointer(tip.as_str());
+	}
 	if let Some(k) = out.clicked {
 		if link_open.get(k).copied().unwrap_or(0) != 0 {
 			if let Some(url) = link_urls.get(k) {

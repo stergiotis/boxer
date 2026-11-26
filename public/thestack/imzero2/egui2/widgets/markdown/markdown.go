@@ -242,6 +242,12 @@ type Input struct {
 	// ordinary hyperlink. It runs every frame, once per link, and must be a
 	// pure function of the URL. Nil disables routing.
 	LinkClaims func(url string) bool
+	// LinkHover gives a claimed link the hover text shown while the pointer
+	// is over it; "" shows none. It runs every frame, once per claimed link,
+	// under LinkClaims's purity rule, so a host answers from what it already
+	// knows. A host that follows a link says through it what the link does
+	// (ADR-0409, proposed). Nil shows no hover text.
+	LinkHover func(url string) string
 
 	// SectionFilter renders only the sections it admits: the region before
 	// the first heading is consulted as slug "", each top-level heading
@@ -394,6 +400,7 @@ func (inst *Doc) render(in Input) (res Result) {
 		actionsEnabled: len(in.ActionLabels) > 0,
 		actionLabels:   in.ActionLabels,
 		linkClaims:     in.LinkClaims,
+		linkHover:      in.LinkHover,
 		actionAccept:   in.CodeActionFilter,
 		actionMask:     in.CodeActionMask,
 	}
@@ -498,6 +505,7 @@ type renderCtx struct {
 	// which is what keeps every link an ordinary hyperlink; claimed clicks
 	// collect in links.
 	linkClaims func(url string) bool
+	linkHover  func(url string) string
 	links      []LinkClick
 	// tasks collects the task boxes clicked this frame.
 	tasks []TaskClick

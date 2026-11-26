@@ -5,10 +5,10 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
 )
 
 // helpFS embeds the HelpHost's own help corpus — "Help about Help".
@@ -51,7 +51,8 @@ var manifest = app.Manifest{
 	// the windowed host drains the queued text into an egui copy_text op.
 	Caps: []app.SubjectFilter{
 		clipboardbroker.WriteCap("copy help code blocks to the clipboard"),
-		windowopen.OpenCap("follow an mdedit:// link in a help page: open an mdedit window on the snapshot document it names (ADR-0347)"),
+		applink.FollowCap("follow a boxer: link in a help page, mdedit:// among them (ADR-0409, proposed)"),
+		applink.DescribeCap("the hover of a boxer: link in a help page (ADR-0409, proposed)"),
 	},
 	// Self-documenting corpus: an overview of the Help app and a
 	// how-to for wiring help docs into a new app's manifest. Anyone

@@ -6,6 +6,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
@@ -23,14 +24,29 @@ type operationsProvider struct{}
 
 func (operationsProvider) Name() string                         { return TableAppOperations }
 func (operationsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
-func (operationsProvider) Schema() *arrow.Schema                { return operationsTable(nil).Schema() }
+func (operationsProvider) Schema() *arrow.Schema                { return operationsTable(nil, nil).Schema() }
 
 func (operationsProvider) Snapshot(ctx context.Context, proj introspect.Projection) (arrow.RecordBatch, error) {
-	vs := appops.Views(app.AllRegistrations())
-	return operationsTable(vs).Build(proj, len(vs)), nil
+	regs := app.AllRegistrations()
+	vs := appops.Views(regs)
+	return operationsTable(vs, linkExamplesOf(regs)).Build(proj, len(vs)), nil
 }
 
-func operationsTable(vs []appops.View) *introspect.Table {
+// linkExamplesOf is, in the order appops.Views lists operations, each
+// operation's codec examples spelled as links (ADR-0409, proposed).
+func linkExamplesOf(regs []app.Registration) (out [][]string) {
+	for _, r := range regs {
+		if r.Manifest.Operations == nil {
+			continue
+		}
+		for _, o := range r.Manifest.Operations.Operations {
+			out = append(out, applink.Examples(r.Manifest, o))
+		}
+	}
+	return
+}
+
+func operationsTable(vs []appops.View, examples [][]string) *introspect.Table {
 	v := func(i int) *appops.View { return &vs[i] }
 	return introspect.NewTable().
 		String("app_id", func(i int) string { return string(v(i).App) }).
@@ -60,5 +76,16 @@ func operationsTable(vs []appops.View) *introspect.Table {
 		Bool("async", func(i int) bool { return v(i).Async }).
 		String("dry_run", func(i int) string { return v(i).DryRun }).
 		String("args_schema", func(i int) string { return v(i).ArgsSchema }).
-		String("result_schema", func(i int) string { return v(i).ResultSchema })
+		String("result_schema", func(i int) string { return v(i).ResultSchema }).
+		// The operation takes boxer: links, the command an authorless link
+		// calls instead of a run, and the codec's examples as links
+		// (ADR-0409, proposed).
+		Bool("links", func(i int) bool { return v(i).Links }).
+		String("link_stage", func(i int) string { return v(i).LinkStage }).
+		StringList("link_examples", func(i int) []string {
+			if i < len(examples) {
+				return examples[i]
+			}
+			return nil
+		})
 }

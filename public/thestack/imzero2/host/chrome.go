@@ -64,6 +64,12 @@ type ChromeConfig struct {
 	// Window menu (ADR-0369). Host boot sets it where captured
 	// documents can be stored. May be nil.
 	Workstatelets *WorkstateletMenu
+	// CopyWindowLink, when non-nil, puts "Copy link to this window" in the
+	// Window menu: the active window's boxer: link on the clipboard, which
+	// raises that window when followed (ADR-0409, proposed). Host boot sets
+	// it where the link service runs; it is called on the render goroutine
+	// and must not block. May be nil.
+	CopyWindowLink func(key uint64)
 }
 
 // WorkstateletMenu is what the Window menu's "Save desktop as workstatelet"
@@ -305,6 +311,15 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 								}
 							}
 							c.Separator().Horizontal().Send()
+						}
+					}
+					// The active window's link, which raises it from any
+					// surface for as long as this session lasts.
+					if cc.CopyWindowLink != nil && cc.Host != nil {
+						if key := cc.Host.ActiveWindow(); key != 0 {
+							if c.Button(ids.PrepareStr("copyWindowLink"), c.Atoms().Text("Copy link to this window").Keep()).SendResp().HasPrimaryClicked() {
+								cc.CopyWindowLink(uint64(key))
+							}
 						}
 					}
 					// Forgets every window's position and size; egui then

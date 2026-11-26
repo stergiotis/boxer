@@ -106,7 +106,7 @@ status: draft
 | Indent | BuilderFactory | Yes | 0 | 0 | 0 | Immediate, BlockIterator |
 | Label | BuilderFactory | No | 1 | 0 | 4 | Immediate, Retained |
 | LabelAtoms | BuilderFactory | No | 0 | 1 | 4 | Immediate, Retained |
-| LabelAtomsLinked | BuilderFactory | Yes | 3 | 1 | 3 | Immediate, Retained |
+| LabelAtomsLinked | BuilderFactory | Yes | 3 | 1 | 4 | Immediate, Retained |
 | LabelWidgetText | BuilderFactory | No | 0 | 1 | 0 | Immediate, Retained |
 | MeasureText | Procedural | No | 4 | 0 | - | - |
 | MeasureTextSize | Procedural | No | 5 | 0 | - | - |
@@ -1219,6 +1219,7 @@ Label
 - **Selectable**(val: b)
 - **Wrap**()
 - **SelectionColumn**()
+- **LinkTips**(tips: sh)
 
 #### Return Type
 

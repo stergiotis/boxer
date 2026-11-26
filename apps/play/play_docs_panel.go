@@ -11,7 +11,7 @@ package play
 
 import (
 	"fmt"
-	"github.com/stergiotis/boxer/apps/mdedit/mdeditlink"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -161,6 +161,7 @@ func (inst *PlayApp) renderDocsTab() {
 				Ids: ids, ScopeKey: "docsBody", Doc: entry.rendered(),
 				ActionLabels:     snippetActionLabels,
 				LinkClaims:       inst.docsLinkClaimed,
+				LinkHover:        inst.docsLinkHover(),
 				CodeActionFilter: sqlBlockActionable,
 			})
 			for _, act := range res.Actions {
@@ -172,8 +173,8 @@ func (inst *PlayApp) renderDocsTab() {
 				}
 			}
 			for _, l := range res.Links {
-				if mdeditlink.Claimed(l.URL) {
-					inst.openMdeditLink(l.URL)
+				if applink.Claimed(l.URL) {
+					inst.followLink(l.URL, shippedAuthor)
 					continue
 				}
 				inst.followDocsLink(l.Label, l.URL)

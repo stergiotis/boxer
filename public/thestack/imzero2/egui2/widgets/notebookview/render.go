@@ -308,7 +308,7 @@ func (inst *View) recording(i int, cell *mdnotebook.Cell, cv *cellView) {
 // is the prose cell the text is, nil for a statement: scrolling and task
 // boxes are prose's.
 func (inst *View) markdown(doc *markdown.Doc, cell *mdnotebook.Cell) {
-	in := markdown.Input{Ids: inst.ids, ScopeKey: "text", Doc: doc, LinkClaims: inst.claims}
+	in := markdown.Input{Ids: inst.ids, ScopeKey: "text", Doc: doc, LinkClaims: inst.claims, LinkHover: inst.Opts.LinkHover}
 	if cell != nil {
 		in.ScrollToSection = inst.scrollSection
 		if off := inst.scrollOffset; off >= cell.Start && off < cell.Stop {

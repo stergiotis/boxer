@@ -17,7 +17,7 @@ import (
 	"context"
 	"io/fs"
 
-	"github.com/stergiotis/boxer/apps/mdedit/mdeditlink"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -119,7 +119,8 @@ func (inst *App) renderNotebook() (drawn bool) {
 		if n.view == nil {
 			n.view = notebookview.New(inst.ids, "notebook", notebookview.Options{
 				Statements: notebookview.StatementsHidden,
-				LinkClaims: mdeditlink.Claimed,
+				LinkClaims: applink.Claimed,
+				LinkHover:  inst.linkHover,
 			})
 		}
 		if n.given != prepared {

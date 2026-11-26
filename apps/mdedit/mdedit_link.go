@@ -4,10 +4,10 @@ package mdedit
 // config says how the handed-over document is shown — a view mode, and a
 // location to open at — and the location is applied once the document it
 // refers to is the one in the buffer, which for a snapshot handover is
-// after the read lands. Out: an `mdedit://` link in the preview or a
-// rendered block opens a new window, as every surface opens one
-// (mdeditlink.Open), and a document read from a snapshot offers its own
-// link at the caret's section.
+// after the read lands. Out: a `boxer:` link in the preview or a rendered
+// block, `mdedit://` among them, is followed by the host as from every
+// surface (ADR-0409, proposed), and a document read from a snapshot offers
+// its own link at the caret's section.
 //
 // A location resolves against the parsed document, so it waits in
 // pendingLocation for the frame in which refreshDerived has parsed the
@@ -17,12 +17,12 @@ package mdedit
 // block target back to its heading.
 
 import (
-	"path"
 	"strconv"
 
 	"github.com/stergiotis/boxer/apps/mdedit/launchcfg"
 	"github.com/stergiotis/boxer/apps/mdedit/mdeditlink"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -182,21 +182,30 @@ func indexByteFrom(s string, from int, b byte) int {
 	return -1
 }
 
-// followLink opens an mdedit:// link clicked in this window: a new window,
-// as from every surface (ADR-0347 §SD5). The request runs off the render
-// thread; the status line says what was asked for.
+// followLink follows a link clicked in this window: the host follows a
+// boxer: link or an alias such as mdedit://, as from every surface
+// (ADR-0409, proposed). A document's author is not known, so the host
+// applies the rules for a link someone else wrote. The request runs off
+// the render thread; the status line says what was asked for.
 func (inst *App) followLink(link string) {
 	if inst.bus == nil {
-		inst.status = "no bus wired — cannot open a link"
+		inst.status = "no bus wired — cannot follow a link"
 		return
 	}
-	r, err := mdeditlink.Parse(link)
-	if err != nil {
-		inst.status = "the link does not parse: " + err.Error()
-		return
+	applink.FollowLogged(inst.bus, inst.logger, link, applink.UnknownAuthor, inst.spawn)
+	inst.status = "following the link"
+}
+
+// linkHover is a link's hover: the host's reading of it, asked for off
+// the render goroutine (ADR-0409 §SD8). A document's author is not known.
+func (inst *App) linkHover(link string) string {
+	if inst.bus == nil {
+		return ""
 	}
-	mdeditlink.Follow(inst.bus, inst.logger, link, inst.spawn)
-	inst.status = "opening " + path.Base(r.Path) + " in a new window"
+	if inst.linkHovers == nil {
+		inst.linkHovers = applink.NewHovers(inst.bus, applink.UnknownAuthor, inst.spawn)
+	}
+	return inst.linkHovers.Text(link)
 }
 
 // linkHere is the link to this document at the caret's section, in the

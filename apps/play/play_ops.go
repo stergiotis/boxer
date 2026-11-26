@@ -424,13 +424,15 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 	appops.Command(s, app.OperationSpec{Name: opSetSql, Version: 1, Summary: "replace the SQL buffer",
 		Effect: app.OperationEffectDocument, Writes: []string{opsResSql}, Agents: true, Gesture: "typing in the editor",
 		Rebuild: app.OperationRebuildRefold, Fork: app.OperationForkPerInstance,
-		Follows: []string{"the parameter slots follow the new buffer after a short debounce"}},
+		Follows: []string{"the parameter slots follow the new buffer after a short debounce"},
+		Link:    setSqlLinkCodec},
 		func(inst *PlayLauncher, call app.OperationCall, in SetSqlArgs) (appops.None, error) {
 			if inst.inner == nil {
 				return appops.None{}, app.RefuseOperation("the window has not mounted")
 			}
 			inst.inner.swapSql(in.Sql)
 			inst.inner.markAgent(call.OnBehalfOf)
+			inst.inner.markLink(call)
 			return appops.None{}, nil
 		})
 	appops.Command(s, app.OperationSpec{Name: opSetSignal, Version: 2, Summary: "set one signal, with the task as its writer",
@@ -513,6 +515,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 		})
 	addRunOps(s)
 	addQueryOp(s)
+	addLinkStageOp(s)
 	addReferenceOps(s)
 	addSchemaOps(s)
 	addCheckOp(s)
@@ -850,6 +853,8 @@ func (inst *PlayApp) takeAgentForRun(auto bool) (obo *app.OnBehalfOf) {
 		return inst.agentDriven
 	}
 	inst.setAgentDriven(nil)
+	// The person's own Run retires a link's mark: they ran what it put there.
+	inst.linkNotice = ""
 	return
 }
 

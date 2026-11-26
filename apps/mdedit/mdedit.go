@@ -33,6 +33,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mddocfacts"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 
@@ -40,7 +41,6 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/apps/mdedit/launchcfg"
-	"github.com/stergiotis/boxer/apps/mdedit/mdeditlink"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsftp/sftptree"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -200,6 +200,9 @@ var viewModes = []struct {
 
 // App is the per-window mdedit instance.
 type App struct {
+	// linkHovers holds what the host said of each link the document
+	// shows, for its hover (ADR-0409, proposed); built on first use.
+	linkHovers *applink.Hovers
 	// ioCtx is app.ContextOf(mountCtx): the ctx its persist and bus calls
 	// run under when no call of its own carries one.
 	ioCtx context.Context
@@ -1235,9 +1238,10 @@ func (inst *App) renderPreview() {
 	}
 	// markdown.Render opens its own scope under ScopeKey, so the preview and
 	// the proposal preview in the same window cannot collide.
-	// mdedit:// links open a new window, as from every surface (ADR-0347
-	// §SD5); every other link stays a hyperlink.
-	in := markdown.Input{Ids: inst.ids, ScopeKey: "preview", Doc: inst.doc, LinkClaims: mdeditlink.Claimed}
+	// boxer: links, mdedit:// among them, are followed by the host, as from
+	// every surface (ADR-0409, proposed); every other link stays a
+	// hyperlink.
+	in := markdown.Input{Ids: inst.ids, ScopeKey: "preview", Doc: inst.doc, LinkClaims: applink.Claimed, LinkHover: inst.linkHover}
 	if inst.viewMode == viewRead {
 		// The reading mode owns the whole window, so the design system's
 		// column fits; Split's preview pane may be narrower than it, and an

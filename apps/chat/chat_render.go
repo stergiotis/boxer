@@ -733,8 +733,8 @@ func (inst *App) renderWaiting() {
 // got no answer, and its actions.
 func (inst *App) renderEntry(i int, e *entry) {
 	res := markdown.Render(markdown.Input{Ids: inst.ids, ScopeKey: "doc", Doc: e.doc,
-		ActionLabels: codeLabels, CodeActionMask: codeMask, LinkClaims: inst.mdeditLinkClaims()})
-	inst.followMdeditLinks(res)
+		ActionLabels: codeLabels, CodeActionMask: codeMask, LinkClaims: inst.linkClaims(), LinkHover: inst.linkHover(authorOfEntry(e))})
+	inst.followLinks(res, authorOfEntry(e))
 	for _, a := range res.Actions {
 		switch a.Button {
 		case codeCopy:

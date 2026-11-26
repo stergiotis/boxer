@@ -20,13 +20,14 @@ package helphost
 
 import (
 	"context"
+	"sync"
 
 	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/apps/mdedit/mdeditlink"
 	"strconv"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
@@ -620,14 +621,32 @@ func spawnBare(f func(ctx context.Context)) (started bool) {
 	return true
 }
 
+// helpHovers holds what the host said of each link a help page shows, for
+// its hover (ADR-0409, proposed): one cache for the process's bus, since
+// the help center's pages are drawn by free functions.
+var (
+	helpHoversMu sync.Mutex
+	helpHovers   *applink.Hovers
+	helpHoversOn app.BusI
+)
+
+func helpLinkHover(bus app.BusI) func(link string) string {
+	helpHoversMu.Lock()
+	defer helpHoversMu.Unlock()
+	if helpHovers == nil || helpHoversOn != bus {
+		helpHovers, helpHoversOn = applink.NewHovers(bus, applink.Author{Level: applink.LevelSystem}, spawnBare), bus
+	}
+	return helpHovers.Text
+}
+
 func renderRendered(ctx context.Context, ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection string, scrollTop bool, bus app.BusI) {
 	in := markdown.Input{Ids: ids, ScopeKey: "doc-render-2", Doc: doc, ScrollToSection: scrollToSection}
 	if bus != nil {
 		in.ActionLabels = []string{"Copy"}
-		// An mdedit:// link in a help page opens a new mdedit window, as it
-		// does from every surface (ADR-0347 §SD5); without a bus it stays a
-		// hyperlink rather than a dead click.
-		in.LinkClaims = mdeditlink.Claimed
+		// A boxer: link in a help page, or an alias such as mdedit://, is
+		// followed by the host as from every surface (ADR-0409, proposed);
+		// without a bus it stays a hyperlink rather than a dead click.
+		in.LinkClaims, in.LinkHover = applink.Claimed, helpLinkHover(bus)
 	}
 	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 		if scrollTop {
@@ -645,7 +664,8 @@ func renderRendered(ctx context.Context, ids *c.WidgetIdStack, doc *markdown.Doc
 			}()
 		}
 		for _, l := range res.Links {
-			mdeditlink.Follow(bus, log.Logger, l.URL, spawnBare)
+			// A help book ships with the binary: the system wrote it.
+			applink.FollowLogged(bus, log.Logger, l.URL, applink.Author{Level: applink.LevelSystem}, spawnBare)
 		}
 	}
 }

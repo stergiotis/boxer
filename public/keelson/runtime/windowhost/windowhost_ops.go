@@ -1,6 +1,7 @@
 package windowhost
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -181,6 +182,21 @@ func (inst *Inst) OpsStatus(key uint64, callId string) (out opwire.Outcome, ok b
 		out, ok = eng.Status(callId)
 	}
 	return
+}
+
+// OpsSubmit hands a call to a window's operations engine from off the
+// render goroutine, as the operations service does for the dispatcher: the
+// host's own callers — a followed link (ADR-0409 (proposed)) — reach a
+// window this way, never over the operation subjects, which only the
+// dispatcher publishes on. ok is false when the window has no engine: it is
+// gone, not yet mounted, or serves no catalog. The caller mints a CallId
+// unique within the host and reads the outcome with OpsStatus.
+func (inst *Inst) OpsSubmit(ctx context.Context, key uint64, op string, req opwire.CallRequest) (out opwire.Outcome, ok bool) {
+	eng, w := inst.engineOf("", key)
+	if w == nil || eng == nil {
+		return
+	}
+	return eng.Submit(ctx, op, req), true
 }
 
 // OpsCancel withdraws a queued command.

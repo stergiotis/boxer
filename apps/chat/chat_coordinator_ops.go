@@ -76,6 +76,9 @@ type describedOperation struct {
 	Tool         string         `json:"tool,omitempty"`
 	ArgsSchema   jsontext.Value `json:"args_schema,omitempty"`
 	ResultSchema jsontext.Value `json:"result_schema,omitempty"`
+	// LinkExamples spell the operation as links a person can click
+	// (ADR-0409, proposed); make_link mints one that runs under the grant.
+	LinkExamples []string `json:"link_examples,omitempty"`
 }
 
 type describedResource struct {
@@ -146,7 +149,8 @@ func describeView(apps []agent.AppOperations, directs []directOp) (out []describ
 		for _, o := range a.Operations {
 			d.Operations = append(d.Operations, describedOperation{Name: o.Name, Summary: o.Summary, Class: o.Class, Effect: o.Effect,
 				Reads: o.Reads, Writes: o.Writes, Refs: o.Refs, Follows: o.Follows, Untrusted: o.Untrusted, Gesture: o.Gesture, Consent: o.Consent,
-				Tool: directToolFor(directs, a.App, o.Name), ArgsSchema: schemaValue(o.ArgsSchema), ResultSchema: schemaValue(o.ResultSchema)})
+				Tool: directToolFor(directs, a.App, o.Name), ArgsSchema: schemaValue(o.ArgsSchema), ResultSchema: schemaValue(o.ResultSchema),
+				LinkExamples: o.LinkExamples})
 		}
 		out = append(out, d)
 	}

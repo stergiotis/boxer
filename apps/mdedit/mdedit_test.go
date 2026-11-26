@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
@@ -659,12 +660,14 @@ func TestManifestRegisters(t *testing.T) {
 // never exercises is the §SD10 gate's other failure mode, so growth has to be
 // deliberate enough to edit a test for. No runtime.llm.* subject: mdedit reaches a
 // model only through the harness, over its operations (ADR-0318).
-func TestManifestDeclaresExactlyTheFiveSubjects(t *testing.T) {
+func TestManifestDeclaresExactlyTheSevenSubjects(t *testing.T) {
 	want := []string{
 		clipboardbroker.SubjectWrite,
 		fsbroker.SubjectDialogRead,
 		fsbroker.SubjectDialogWrite,
 		windowopen.OpenSubject,
+		applink.FollowSubject,
+		applink.DescribeSubject,
 		task.PatternAll,
 	}
 	got := make([]string, 0, len(manifest.Caps))

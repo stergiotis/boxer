@@ -8,9 +8,10 @@
 // The mount and the snapshot are spelled as the lading SFTP tree spells
 // them (sftptree), so the link's authority and path are the file's path in
 // that tree. The fragment names a location (ParseLocation): a heading slug,
-// `^id` for an Obsidian block id, or `L<n>` for a line. A surface that
-// renders markdown passes [Claimed] as its link claim and follows a click
-// with [Open], off the render thread; there is no per-surface behaviour.
+// `^id` for an Obsidian block id, or `L<n>` for a line. The scheme is an
+// alias of mdedit's launch kind (ADR-0409 (proposed) §SD3): [LinkCodec]
+// spells the launch config, and the host follows the link as it follows
+// every `boxer:` link; a surface claims it with applink.Claimed.
 //
 // It is a leaf beside launchcfg so a caller does not import the app and its
 // registering init(). Parse is strict, as docref's is: links are written
@@ -19,7 +20,6 @@
 package mdeditlink
 
 import (
-	"context"
 	"io/fs"
 	"net/url"
 	"path"
@@ -27,16 +27,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rs/zerolog"
-
 	"github.com/stergiotis/boxer/apps/mdedit/launchcfg"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsftp/sftptree"
 	"github.com/stergiotis/boxer/public/identity/identifier"
-	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowopen"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/semistructured/cbor/buscodec"
 )
 
 // Scheme is the URL scheme.
@@ -172,8 +166,25 @@ func Parse(link string) (r Ref, err error) {
 			return
 		}
 	}
+	if !fragmentCarried(u.Fragment) {
+		err = eb.Build().Str("link", link).Errorf("mdeditlink: the fragment holds characters a link writes only escaped; a location is a slug, ^id or L<n>")
+		return
+	}
 	r = Ref{Mount: mount, Snap: snap, Path: docPath, Mode: mode, Fragment: u.Fragment}
 	return
+}
+
+// fragmentCarried says Format writes a fragment as Parse reads it: printable
+// ASCII with no space, '%' or '#'. A fragment that needs escaping is not a
+// location this grammar names, and accepting one would let one link read
+// back as another after Format wrote it.
+func fragmentCarried(fragment string) bool {
+	for i := 0; i < len(fragment); i++ {
+		if c := fragment[i]; c <= 0x20 || c >= 0x7f || c == '%' || c == '#' {
+			return false
+		}
+	}
+	return true
 }
 
 // LocationKindE is what a fragment names.
@@ -258,45 +269,5 @@ func Launch(r Ref) launchcfg.MdeditLaunch {
 		Path:      r.Path,
 		Mode:      r.Mode.String(),
 		Location:  r.Fragment,
-	}
-}
-
-// Open follows a link: a new mdedit window per call (ADR-0135 §SD5), over
-// the audited open subject, which the caller's manifest declares. It blocks
-// on the bus round-trip, so call it off the render thread; [Follow] is the
-// fire-and-log form.
-func Open(ctx context.Context, bus app.BusI, link string) (windowKey uint64, err error) {
-	r, err := Parse(link)
-	if err != nil {
-		return
-	}
-	cfg, err := buscodec.Encode(Launch(r))
-	if err != nil {
-		err = eh.Errorf("mdeditlink: encode the launch config: %w", err)
-		return
-	}
-	return windowopen.RequestOpen(ctx, bus, launchcfg.AppId, launchcfg.Kind, cfg)
-}
-
-// Follow is [Open] off the caller's goroutine, logging a failure. For a
-// surface with no status line of its own to report to.
-//
-// spawn starts the open: an app passes the Go of its window's lifetime
-// scope, or its own wrapper over it (ADR-0322), so the host's drain counts
-// the bus round trip. A refused start — the scope retired, the window is
-// leaving — opens nothing. A caller outside the apps tree with no scope
-// passes a spawn of its own. A nil spawn opens nothing and says so.
-func Follow(bus app.BusI, logger zerolog.Logger, link string, spawn func(f func(ctx context.Context)) (started bool)) {
-	if spawn == nil {
-		logger.Warn().Str("link", link).Msg("mdeditlink: no spawn given, the link was not opened")
-		return
-	}
-	started := spawn(func(ctx context.Context) {
-		if _, err := Open(ctx, bus, link); err != nil {
-			logger.Warn().Err(err).Str("link", link).Msg("mdeditlink: the link did not open")
-		}
-	})
-	if !started {
-		logger.Debug().Str("link", link).Msg("mdeditlink: the window is closing, the link was not opened")
 	}
 }

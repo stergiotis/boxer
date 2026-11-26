@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audioout"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
@@ -273,6 +274,8 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 			fsbroker.DialogReadCap("Load .sql via Powerbox picker"),
 			chlocalbroker.ExecCap(timerangepicker.PoolName, "evaluate user time-range expressions (ADR-0016 Phase 4)"),
 			windowopen.OpenCap("open the applet creator window (ADR-0135 §SD7 / ADR-0132 O4)"),
+			applink.FollowCap("follow a boxer: link clicked in a cell, the docs, a snippet or the definition (ADR-0409, proposed)"),
+			applink.DescribeCap("the hover of a boxer: link (ADR-0409, proposed)"),
 			adhocdata.PublishCap("publish the generated timeseries fixture and the projection as ad-hoc datasets (ADR-0163 §SD7, ADR-0238)"),
 			adhocdata.ResolveCap("a window opened with a launch config that declares dataset aliases resolves them (ADR-0240 §SD7)"),
 			adhocdata.EventsCap("and follows their publish and retract events"),

@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
@@ -167,6 +168,9 @@ type App struct {
 	// it closes the bus. nil without a host, where each coordinator owns
 	// its own.
 	scope *lifetime.Scope
+	// linkHovers holds what the host said of each link the window shows,
+	// for its hover (ADR-0409, proposed); built on first use.
+	linkHovers *applink.HoverSet
 	// confinedTier is the tier the host's declaration maps confined
 	// content to (cell.OfMount), handed to every coordinator.
 	confinedTier agentrun.TierE
@@ -637,6 +641,12 @@ func (inst *App) newCoordinator(conversation string) (coord *coordinator) {
 		coord.ask.focused = inst.windowFocused.Load
 	}
 	coord.setStopRunner(stopRunnerFor(inst.bus))
+	if inst.bus != nil {
+		bus := inst.bus
+		coord.describeLink = func(ctx context.Context, link string) (applink.DescribeReply, error) {
+			return applink.Describe(ctx, bus, link, applink.Author{Level: applink.LevelOwnModel})
+		}
+	}
 	switch {
 	case inst.journals != nil:
 		coord.store = inst.journals

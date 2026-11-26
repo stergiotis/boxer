@@ -42,6 +42,9 @@ pub struct LinkedOut {
     pub response: Response,
     /// The link clicked this frame, if any.
     pub clicked: Option<usize>,
+    /// The link under the pointer this frame, if any: what a caller hangs
+    /// a link's own hover text on.
+    pub hovered: Option<usize>,
     /// Every row-run of every link: the link's index and the run's logical
     /// box — the line's full height, which is what a pointer over the
     /// line hits and what an exporter wrapping that row's text wants.
@@ -111,6 +114,7 @@ impl LinkedLabel {
             egui::WidgetInfo::labeled(egui::WidgetType::Label, ui.is_enabled(), galley.text())
         });
         let mut clicked = None;
+        let mut hovered_link = None;
         let mut zones = Vec::new();
         let color = ui.style().visuals.text_color();
         if !ui.is_rect_visible(response.rect) {
@@ -144,6 +148,7 @@ impl LinkedLabel {
             }
             let hit = |p: Pos2| links.iter().find(|l| l.2.contains(p)).map(|l| l.0);
             let hovered = response.hover_pos().and_then(hit);
+            hovered_link = hovered;
             if response.clicked() {
                 clicked = response.interact_pointer_pos().and_then(hit);
             }
@@ -196,6 +201,7 @@ impl LinkedLabel {
         LinkedOut {
             response,
             clicked,
+            hovered: hovered_link,
             zones,
         }
     }
@@ -292,6 +298,28 @@ mod tests {
         let beside = pos2(zones[1].1.right() + 40.0, zones[1].1.center().y);
         assert_eq!(
             click(&ctx, beside),
+            None,
+            "prose after the last link is not a link"
+        );
+    }
+
+    #[test]
+    fn the_link_under_the_pointer_is_reported_and_prose_is_not() {
+        let ctx = egui::Context::default();
+        let zones = frame(&ctx, egui::RawInput::default()).zones;
+        let hover = |ctx: &egui::Context, pos: Pos2| -> Option<usize> {
+            let mut input = egui::RawInput::default();
+            input.events.push(egui::Event::PointerMoved(pos));
+            frame(ctx, input);
+            let mut input = egui::RawInput::default();
+            input.events.push(egui::Event::PointerMoved(pos));
+            frame(ctx, input).hovered
+        };
+        assert_eq!(hover(&ctx, zones[1].1.center()), Some(1));
+        assert_eq!(hover(&ctx, zones[0].1.center()), Some(0));
+        let beside = pos2(zones[1].1.right() + 40.0, zones[1].1.center().y);
+        assert_eq!(
+            hover(&ctx, beside),
             None,
             "prose after the last link is not a link"
         );

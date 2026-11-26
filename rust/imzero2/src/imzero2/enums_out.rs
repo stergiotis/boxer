@@ -209,7 +209,7 @@ pub enum FuncProcId {
 /// The IDL this client was generated from, as ir.Fingerprint digests it; the
 /// Go server's generated enums carry the same value from the same generation
 /// (ADR-0278 SD6).
-pub const IDL_FINGERPRINT: u64 = 0xf4d0c0ea27c6b168;
+pub const IDL_FINGERPRINT: u64 = 0xc81002463536ad07;
 #[derive(strum::FromRepr, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum AccessibleListBuilderMethodId {
@@ -659,6 +659,7 @@ pub enum LabelAtomsLinkedBuilderMethodId {
     Selectable = 1,
     Wrap = 2,
     SelectionColumn = 3,
+    LinkTips = 4,
 }
 
 #[derive(strum::FromRepr, Debug, PartialEq, Eq)]

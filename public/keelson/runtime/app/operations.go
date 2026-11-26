@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"reflect"
 	"regexp"
@@ -232,6 +233,83 @@ type OperationSpec struct {
 	Fork    OperationForkE
 	Async   bool
 	DryRun  string
+	// Link is the codec that spells the operation's arguments in the tail
+	// of a `boxer:` link (ADR-0409 (proposed) §SD3); nil means no link
+	// names the operation. Its presence is the opt-in.
+	Link LinkCodecI
+	// LinkStage names a document-effect command of the same catalog, with
+	// the same argument type, that puts a run operation's arguments in
+	// place without running them; an authorless link calls it instead of
+	// the run (ADR-0409 (proposed) §SD5).
+	LinkStage string
+}
+
+// linkCodecProblem round-trips a codec's examples (ADR-0409 (proposed)
+// §SD3): each formats to a tail a link carries, parses back to the same
+// arguments, and formats to the same tail again. A codec that fails spells
+// one call two ways or reads back another, so its catalog is withdrawn at
+// registration. applink.CheckCodec is the same check for a kind's codec.
+func linkCodecProblem(codec LinkCodecI) (problem string) {
+	examples := codec.LinkExamples()
+	if len(examples) == 0 {
+		return "a link codec carries at least one example"
+	}
+	for _, ex := range examples {
+		tail, err := codec.FormatLink(ex)
+		if err != nil {
+			return "the link codec does not format its example: " + err.Error()
+		}
+		if !linkTailCarried(tail) {
+			return "the link codec formats a tail a link cannot carry: " + tail
+		}
+		back, err := codec.ParseLink(tail)
+		if err != nil {
+			return "the link codec does not read back its example: " + err.Error()
+		}
+		if !bytes.Equal(back, ex) {
+			return "the link codec reads its example back as other arguments: " + tail
+		}
+		if again, err := codec.FormatLink(back); err != nil || again != tail {
+			return "the link codec spells its example two ways: " + tail
+		}
+	}
+	return
+}
+
+// linkTailCarried says a tail is one a link carries: empty, or starting
+// with '/', '?' or '#', in printable ASCII.
+func linkTailCarried(tail string) bool {
+	if tail == "" {
+		return true
+	}
+	if c := tail[0]; c != '/' && c != '?' && c != '#' {
+		return false
+	}
+	for i := 0; i < len(tail); i++ {
+		if tail[i] <= 0x20 || tail[i] >= 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+// LinkCodecI spells one operation's arguments — or one launch kind's config
+// — as the tail of a `boxer:` link, and reads them back (ADR-0409
+// (proposed) §SD3). Arguments cross it as their CBOR (buscodec), the
+// encoding every call carries. A codec is a pure function of its input:
+// no I/O, no state, bounded work for a bounded input, and strict — an
+// unknown key or a malformed value is an error, never a default. appops
+// builds one over a typed argument struct.
+type LinkCodecI interface {
+	// FormatLink spells args as a tail: empty, or starting with '/', '?'
+	// or '#'.
+	FormatLink(args []byte) (tail string, err error)
+	// ParseLink reads a tail back into the arguments' CBOR.
+	ParseLink(tail string) (args []byte, err error)
+	// LinkExamples are argument values, as CBOR, that the codec spells; a
+	// conformance test round-trips each, and a coordinator's describe
+	// shows them as links.
+	LinkExamples() (examples [][]byte)
 }
 
 // OperationConsent names how a task's grant covers a consequential call
@@ -376,6 +454,20 @@ func (inst *OperationsCatalog) Validate() (err error) {
 			return &CatalogError{Operation: o.Name, Problem: "dry_run twin " + o.DryRun + " takes other arguments than the command"}
 		}
 	}
+	for _, o := range inst.Operations {
+		// A link stage is a document command of the same catalog that takes
+		// the run's arguments (ADR-0409 (proposed) §SD3).
+		if o.LinkStage == "" {
+			continue
+		}
+		stage, ok := inst.Lookup(o.LinkStage)
+		if !ok || stage.Class != OperationClassCommand || stage.Effect != OperationEffectDocument {
+			return &CatalogError{Operation: o.Name, Problem: "link_stage names no document command of the catalog: " + o.LinkStage}
+		}
+		if stage.Args != o.Args {
+			return &CatalogError{Operation: o.Name, Problem: "link_stage " + o.LinkStage + " takes other arguments than the run"}
+		}
+	}
 	return
 }
 
@@ -394,6 +486,26 @@ func (inst OperationSpec) problem(resources map[string]bool) (problem string) {
 		return "unspecified effect"
 	case inst.Direct && !inst.Agents:
 		return "a direct operation is a tool of an agent's model; it declares Agents"
+	}
+	// Links (ADR-0409 (proposed) §SD3): nothing that writes outside the app
+	// is reachable from a click on someone else's text, a reference names
+	// something a URL cannot carry, and only a run operation is staged.
+	if inst.Link != nil {
+		if inst.Class != OperationClassCommand {
+			return "only a command takes a link codec: a query's answer would have nowhere to go"
+		}
+		if inst.Effect == OperationEffectConsequential {
+			return "a consequential operation takes no link codec"
+		}
+		if len(inst.Refs) > 0 {
+			return "an operation whose arguments carry references takes no link codec"
+		}
+		if problem := linkCodecProblem(inst.Link); problem != "" {
+			return problem
+		}
+	}
+	if inst.LinkStage != "" && (inst.Link == nil || inst.Effect != OperationEffectRun) {
+		return "only a run operation with a link codec names a link stage"
 	}
 	// The stateful-tool contract (ADR-0315 §SD4–§SD7): each field is one
 	// of its enumerated values or unspecified; a rebuild class is a
@@ -589,8 +701,31 @@ type OperationCall struct {
 	// context on every onward request it makes (ADR-0269 §SD6). nil on the
 	// person's gestures.
 	OnBehalfOf *OnBehalfOf
+	// Link is set on a call a followed link made (ADR-0409 (proposed)
+	// §SD5): who wrote the link, by the label of the text it was found in,
+	// and where it was clicked. A handler marks what such a call writes,
+	// when Level is 2 or above, as it marks what a task wrote. nil on
+	// every other call.
+	Link *LinkOrigin
 
 	ctx context.Context
+}
+
+// LinkOrigin is the author of a followed link and the surface it was
+// clicked on (ADR-0409 (proposed) §SD5). Level and Tier are the ADR-0311
+// label of the text that carried the link (agentrun.LevelE and TierE).
+type LinkOrigin struct {
+	Level   uint8
+	Tier    uint8
+	Surface AppIdT
+	// Digest names the resolved link, as the follow record does.
+	Digest string
+}
+
+// LinkMarked says the call was made by a link whose author is not the
+// person or the system: what it writes is marked as a task's is.
+func (inst OperationCall) LinkMarked() (marked bool) {
+	return inst.Link != nil && inst.Link.Level >= 2
 }
 
 // Context is what the handler does the call's I/O under (ADR-0396 §4): for

@@ -53,6 +53,9 @@ type Options struct {
 	// arrives in [Events.Links]. The view claims `val:` links itself. Nil
 	// leaves every other link a hyperlink.
 	LinkClaims func(url string) bool
+	// LinkHover is a claimed link's hover text, as
+	// [markdown.Input.LinkHover]; nil shows none.
+	LinkHover func(url string) string
 	// ResultMaxHeight is the ceiling of a drawn result, in points; zero
 	// means 360. A table takes what its rows need below it. A renderer is
 	// handed a box of this height at most: one written to fill its pane
