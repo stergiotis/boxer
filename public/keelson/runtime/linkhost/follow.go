@@ -80,6 +80,7 @@ func (inst *Service) follow(ctx context.Context, req applink.FollowRequest, surf
 	click := inst.clicks
 	follower := inst.follower
 	inst.mu.Unlock()
+	var opened uint64
 	if r.minted {
 		if follower != nil {
 			fl := follower.FollowLink(ctx, agent.LinkClick{Record: r.rec, Candidates: inst.topmost(r.appId), Surface: surface, Click: click})
@@ -93,22 +94,30 @@ func (inst *Service) follow(ctx context.Context, req applink.FollowRequest, surf
 				return
 			}
 			rep.Reason = fl.Reason
+			if fl.Opened {
+				// The click opened a window for the task before the call
+				// was refused: the link is followed there, as in the new
+				// window it would otherwise open.
+				opened = fl.Window
+			}
 		} else {
 			rep.Reason = "this host runs no dispatcher"
 		}
 		rep.Authorless = true
 	}
-	inst.followAuthorless(ctx, r, surface, click, &rep)
+	inst.followAuthorless(ctx, r, surface, click, opened, &rep)
 	rep.Note = noteOf(r, rep, rep.Authorless)
 	return
 }
 
 // followAuthorless reaches the link's window and makes its call with the
-// person as the trigger.
-func (inst *Service) followAuthorless(ctx context.Context, r resolved, surface app.AppIdT, click uint64, rep *applink.FollowReply) {
+// person as the trigger. opened, when set, is a window the click already
+// opened for the link, which counts as the new window.
+func (inst *Service) followAuthorless(ctx context.Context, r resolved, surface app.AppIdT, click uint64, opened uint64, rep *applink.FollowReply) {
 	why := rep.Reason
 	var key uint64
 	switch {
+	case opened != 0:
 	case r.rec.Window != 0:
 		if _, open := inst.instance(r.rec.Window); !open {
 			rep.Decision, rep.Reason = applink.DecisionRefused, "the window the link names has closed"
@@ -120,13 +129,19 @@ func (inst *Service) followAuthorless(ctx context.Context, r resolved, surface a
 			key = keys[0]
 		}
 	}
-	fresh := key == 0
+	fresh := key == 0 || opened != 0
 	op, decision, reason := authorless(r.spec, r.rec.Operation != "", fresh)
 	if decision == applink.DecisionRefused {
 		rep.Decision, rep.Reason = decision, joinReason(why, reason)
 		return
 	}
-	if fresh {
+	if opened != 0 {
+		key = opened
+		if err := inst.cfg.Host.OpsRaise(key); err != nil {
+			rep.Decision, rep.Reason = applink.DecisionRefused, joinReason(why, err.Error())
+			return
+		}
+	} else if fresh {
 		var err error
 		if key, err = inst.cfg.Host.OpsOpen(r.appId, r.rec.Kind, r.rec.Config); err != nil {
 			rep.Decision, rep.Reason = applink.DecisionRefused, joinReason(why, "the host did not open the window: "+err.Error())
@@ -275,7 +290,7 @@ func (inst *Service) Describe(link string, author applink.Author) (rep applink.D
 		inst.mu.Lock()
 		follower := inst.follower
 		inst.mu.Unlock()
-		if follower != nil && follower.TaskLive(r.rec.Task) {
+		if follower != nil && follower.LinkLive(r.rec.Task, r.rec.Epoch) {
 			rep.Would = "runs under the task's grant, checked again at the click"
 			return
 		}

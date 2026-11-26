@@ -104,8 +104,10 @@ boxer:l/<handle>
 The host parses the envelope strictly, as `docref` and `mdeditlink` parse:
 an unknown verb, a missing version or a malformed alias is refused. It
 refuses a link longer than a bound (8 KiB) before any codec sees it; a call
-too large to spell in that is a handle. `boxer:clip/` stays the clipboard
-broker's and is not a link.
+too large to spell in that is a handle. A tail is UTF-8 with no space or
+control character: a letter outside ASCII is carried as written, as a link
+typed into a document has it, and a codec's own spelling escapes it.
+`boxer:clip/` stays the clipboard broker's and is not a link.
 
 ### SD3 — Each operation that takes links brings its codec
 
@@ -151,9 +153,11 @@ broker's and is not a link.
   own, which reads as the `boxer:` link it resolves to. `mdedit://` is the
   first: mdedit's launch kind registers the codec, and `mdedit://<mount>/<snapshot>/<path>?mode=…#…`
   resolves to `boxer:open/kind/<mdedit's kind>/<mount>/<snapshot>/<path>?mode=…#…`
-  with the grammar of ADR-0347 §SD1–SD3 unchanged, except that a fragment
-  holding characters a link writes only escaped is refused: accepted, it
-  would read back as another location after `mdeditlink.Format` wrote it.
+  with the grammar of ADR-0347 §SD1–SD3 unchanged. `mdeditlink.Format`
+  escapes the bytes of a fragment a link cannot carry as they are — a
+  space, `#`, `%`, a letter outside ASCII — so a heading slug such as
+  `überblick` or `c#-notes` round-trips and `#^id` still reads as Obsidian
+  writes it.
   Registration refuses a second codec for a scheme, and the schemes `boxer`,
   `http`, `https`, `mailto` and `file`.
 
@@ -250,6 +254,10 @@ authorises one call, the one checked when it was made.
 At the click the dispatcher checks again — grant live, epoch unmoved, entry
 still covering the target in a mode that allows the effect, budgets, ceiling
 — and stamps the act chain *person clicked → task's grant → target window*.
+What would refuse the call in a window the click has to open is checked
+before the window opens, so a refused click leaves no empty window behind;
+should the call still be refused once the window is open, the link is
+followed in that window as an authorless one, not in a second.
 
 - **The work is agent-caused.** `OnBehalfOf` is set, so the agent limits
   apply: a run-effect link runs, as a read under `readonly = 2` against a
@@ -331,10 +339,15 @@ second way to make a call, checked by a second path; reading it keeps one.
   off the render goroutine. A link the codec refuses says so in the hover,
   before anyone clicks it. The markdown widget takes the text as
   `markdown.Input.LinkHover`, under `LinkClaims`'s per-frame purity rule, so
-  a surface answers from `applink.Hovers`: the last answer, a line saying
-  the host is being asked, and a fresh ask off the render goroutine once an
-  answer is older than a few seconds, since a minted link's reading changes
-  when its task ends. The paragraph's links are one Rust widget
+  a surface answers from `applink.Hovers`: the last answer, or a line saying
+  the host is being asked while it is asked off the render goroutine, a few
+  links at a time. An inline link's answer is kept; a handle's is asked
+  again once it is a few seconds old, since a minted link's reading changes
+  when its task ends. A link drawn in the last seconds is never forgotten,
+  however many a page holds, so no frame asks again what the last one asked.
+  The hover's promise that a click runs under a task's grant follows the
+  same checks as the click's first ones: the task live at the link's epoch
+  and before its deadline. The paragraph's links are one Rust widget
   (`labelAtomsLinked`), which reports the link under the pointer and shows
   its text through the builder method `linkTips`.
 

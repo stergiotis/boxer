@@ -11,6 +11,7 @@ import (
 	"context"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/applink"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
 
@@ -76,8 +77,12 @@ func (inst *App) followLink(link string, author applink.Author) {
 	bus := inst.bus
 	inst.runAction("chat-follow-link", "follow a link", func(ctx context.Context) (note string, err error) {
 		rep, err := applink.Follow(ctx, bus, link, author)
-		if err != nil {
+		switch {
+		case err != nil:
 			return
+		case rep.Decision == applink.DecisionRefused, rep.Decision == applink.DecisionConflict:
+			// Not followed: the action line says so as a failure.
+			return "", eh.New(rep.Note)
 		}
 		return rep.Note, nil
 	}, nil)

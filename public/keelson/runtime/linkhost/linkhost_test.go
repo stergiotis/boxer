@@ -146,10 +146,16 @@ func (inst *fakeHost) WindowInfos() (out []windowhost.WindowInfo) {
 type fakeFollower struct {
 	live     bool
 	followed []agent.LinkClick
+	// openedThenRefused stands for a click that opened a window for the
+	// task before its call was refused.
+	openedThenRefused uint64
 }
 
 func (inst *fakeFollower) FollowLink(ctx context.Context, c agent.LinkClick) (out agent.LinkFollowed) {
 	inst.followed = append(inst.followed, c)
+	if inst.openedThenRefused != 0 {
+		return agent.LinkFollowed{Window: inst.openedThenRefused, Opened: true, Reason: "the task's call budget is spent"}
+	}
 	if !inst.live {
 		out.Reason = "the task that made the link has ended"
 		return
@@ -157,7 +163,7 @@ func (inst *fakeFollower) FollowLink(ctx context.Context, c agent.LinkClick) (ou
 	return agent.LinkFollowed{Authorised: true, Window: 55, Outcome: opwire.Outcome{Phase: opwire.PhaseRendered}}
 }
 
-func (inst *fakeFollower) TaskLive(taskId string) bool { return inst.live }
+func (inst *fakeFollower) LinkLive(taskId string, epoch uint64) bool { return inst.live }
 
 type rig struct {
 	svc  *Service
@@ -346,4 +352,33 @@ func TestWindowLink_RaisesOnlyItsWindow(t *testing.T) {
 	r.host.windows = nil
 	rep = r.svc.follow(t.Context(), applink.FollowRequest{Link: link}, "chat")
 	assert.Equal(t, applink.DecisionRefused, rep.Decision)
+}
+
+// A click that opened a window for the task before its call was refused is
+// followed in that window, not in a second one (review, 2026-11-26).
+func TestFollow_AWindowTheClickOpenedIsReused(t *testing.T) {
+	r := newRig(t)
+	r.host.windows = []windowhost.WindowInfo{{Key: 55, AppId: testAppId}}
+	r.svc.SetFollower(&fakeFollower{openedThenRefused: 55})
+	args, err := buscodec.Encode(sqlArgs{Sql: "SELECT 3"})
+	require.NoError(t, err)
+	link, err := r.svc.MintTask(applink.Record{Verb: applink.VerbOpen, App: "sheet", Operation: "set_sql", Version: 1, Args: args,
+		AuthorLevel: applink.LevelOwnModel, Task: "task-1", Epoch: 1})
+	require.NoError(t, err)
+	rep := r.svc.follow(t.Context(), applink.FollowRequest{Link: link}, "mdedit")
+	require.Equal(t, applink.DecisionApplied, rep.Decision, rep.Reason)
+	assert.True(t, rep.Authorless)
+	assert.Equal(t, uint64(55), rep.Window)
+	assert.Empty(t, r.host.opened, "no second window")
+	require.Len(t, r.host.submitted, 1)
+	assert.Equal(t, uint64(55), r.host.submitted[0].key)
+}
+
+func TestFollow_AnAppWithoutACatalogHasNoSuchOperation(t *testing.T) {
+	r := newRig(t)
+	require.NoError(t, r.svc.cfg.Registry.RegisterFactory(app.Manifest{Id: "example.org/apps/bare", Alias: "bare", Display: "Bare", Summary: "no catalog",
+		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.Topics()[0]}}, func() (app.AppI, error) { return nil, nil }))
+	rep := r.svc.follow(t.Context(), applink.FollowRequest{Link: "boxer:open/app/bare/foo@1", Author: modelText}, "chat")
+	assert.Equal(t, applink.DecisionRefused, rep.Decision)
+	assert.Contains(t, rep.Reason, "no such operation")
 }

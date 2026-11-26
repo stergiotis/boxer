@@ -141,3 +141,57 @@ func TestFollowLink_NotAuthorisedOnceTheGrantStopsCovering(t *testing.T) {
 	assert.False(t, out.Authorised)
 	assert.Contains(t, out.Reason, "ended")
 }
+
+// A click whose call the launch would not run opens no window: the window
+// would be left behind with nothing in it (review, 2026-11-26).
+func TestFollowLink_ARefusedCallOpensNoWindow(t *testing.T) {
+	r, m := linkRig(t)
+	g, err := r.cli.Request(context.Background(), GrantRequest{Plan: "write a doc", Launches: []GrantLaunch{{App: "doc", Mode: ModeAct, Count: 2}}})
+	require.NoError(t, err)
+	_, err = r.cli.MakeLink(context.Background(), MakeLinkRequest{CallRequest: CallRequest{Handle: g.Handle, Key: "k1", Operation: "set_text", Args: `{"text":"linked"}`},
+		Target: LinkTargetOpen, App: "doc"})
+	require.NoError(t, err)
+	rec := m.last()
+	r.svc.mu.Lock()
+	r.svc.tasks[g.Handle].callsUsed = r.svc.tasks[g.Handle].callsBudget
+	r.svc.mu.Unlock()
+	r.host.mu.Lock()
+	before := len(r.host.engines)
+	r.host.mu.Unlock()
+	out := r.svc.FollowLink(context.Background(), LinkClick{Record: rec, Click: 1})
+	assert.False(t, out.Authorised)
+	assert.False(t, out.Opened)
+	assert.Contains(t, out.Reason, "budget")
+	r.host.mu.Lock()
+	assert.Equal(t, before, len(r.host.engines), "no window was opened")
+	r.host.mu.Unlock()
+}
+
+// A raise link is minted when any way the grant gives to reach the app runs
+// the call, whatever order the grant's windows are met in.
+func TestMakeLink_RaiseIsDecidedOverEveryWindowOfTheApp(t *testing.T) {
+	for i := 0; i < 20; i++ {
+		r, _ := linkRig(t)
+		g, err := r.cli.Request(context.Background(), GrantRequest{Plan: "edit", Entries: []GrantEntry{{Instance: r.docKey, Mode: ModeAct}}})
+		require.NoError(t, err)
+		r.svc.mu.Lock()
+		t0 := r.svc.tasks[g.Handle]
+		t0.entries[99] = &entry{instance: 99, app: docAppId, alias: "doc", mode: ModeObserve}
+		r.svc.mu.Unlock()
+		_, err = r.cli.MakeLink(context.Background(), MakeLinkRequest{CallRequest: CallRequest{Handle: g.Handle, Key: "k1", Operation: "set_text", Args: `{"text":"x"}`},
+			Target: LinkTargetRaise, App: "doc"})
+		require.NoError(t, err, "the act-mode window runs it")
+	}
+}
+
+func TestLinkLive_FollowsTheEpochAndTheDeadline(t *testing.T) {
+	r, _ := linkRig(t)
+	g := r.grant(ModeAct)
+	r.svc.mu.Lock()
+	epoch := r.svc.tasks[g.Handle].epoch
+	r.svc.mu.Unlock()
+	assert.True(t, r.svc.LinkLive(g.Task, epoch))
+	assert.False(t, r.svc.LinkLive(g.Task, epoch+1), "another epoch")
+	r.expire(g)
+	assert.False(t, r.svc.LinkLive(g.Task, epoch), "past the deadline")
+}

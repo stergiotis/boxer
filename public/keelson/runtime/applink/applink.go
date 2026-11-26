@@ -22,6 +22,7 @@ package applink
 import (
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -263,8 +264,10 @@ func Format(e Envelope) (link string) {
 		b.WriteString(e.Operation)
 		b.WriteByte('@')
 		b.WriteString(strconv.FormatUint(uint64(e.Version), 10))
-		b.WriteString(e.Tail)
 	}
+	// A tail with no operation is written too, so the link is one Parse
+	// refuses rather than one that drops the arguments.
+	b.WriteString(e.Tail)
 	return b.String()
 }
 
@@ -321,9 +324,11 @@ func parseVersion(s string) (v uint16, ok bool) {
 	return uint16(n), true
 }
 
-// checkTail refuses a tail a URL cannot carry: one that does not start
-// with '/', '?' or '#', a byte outside printable ASCII, or a broken
-// percent escape. What the tail means is the codec's.
+// checkTail refuses a tail a link cannot carry: one that does not start
+// with '/', '?' or '#', a space, a control byte, text that is not UTF-8, or
+// a broken percent escape. A letter outside ASCII is carried as written,
+// as a link typed into a document has it; a codec's own spelling escapes
+// it. What the tail means is the codec's.
 func checkTail(tail string) (err error) {
 	if tail == "" {
 		return
@@ -331,10 +336,13 @@ func checkTail(tail string) (err error) {
 	if c := tail[0]; c != '/' && c != '?' && c != '#' {
 		return eb.Build().Errorf("applink: a tail starts with '/', '?' or '#'")
 	}
+	if !utf8.ValidString(tail) {
+		return eb.Build().Errorf("applink: a link is UTF-8 text")
+	}
 	for i := 0; i < len(tail); i++ {
 		c := tail[i]
-		if c <= 0x20 || c >= 0x7f {
-			return eb.Build().Int("offset", i).Errorf("applink: a link carries printable ASCII only; percent-encode the rest")
+		if c <= 0x20 || c == 0x7f {
+			return eb.Build().Int("offset", i).Errorf("applink: a link carries no space or control character; percent-encode it")
 		}
 		if c == '%' {
 			if i+2 >= len(tail) || !isHex(tail[i+1]) || !isHex(tail[i+2]) {

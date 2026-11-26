@@ -16,6 +16,7 @@ func TestParse_RoundTripsEveryForm(t *testing.T) {
 		"boxer:open/app/play/set_sql@1/a/b?x=1&y=2#frag",
 		"boxer:raise/app/map-view/show_area@12?bbox=1,2,3,4",
 		"boxer:open/kind/mdeditLaunch",
+		"boxer:open/app/play/set_sql@1?sql=größe",
 		"boxer:open/kind/mdeditLaunch/00000000000000aa/20260101T000000Z/notes/a.md?mode=read#L3",
 		"boxer:l/" + strings.Repeat("0a", HandleBytes),
 	}
@@ -56,6 +57,8 @@ func TestParse_Refuses(t *testing.T) {
 		"raise a kind":         "boxer:raise/kind/mdeditLaunch",
 		"kind with underscore": "boxer:open/kind/md_edit",
 		"space in tail":        "boxer:open/app/play/set_sql@1?sql=a b",
+		"control byte":         "boxer:open/app/play/set_sql@1?sql=a\x01",
+		"not UTF-8":            "boxer:open/app/play/set_sql@1?sql=\xff",
 		"broken escape":        "boxer:open/app/play/set_sql@1?sql=%zz",
 		"short handle":         "boxer:l/abcd",
 		"upper-case handle":    "boxer:l/" + strings.Repeat("AB", HandleBytes),
@@ -114,4 +117,10 @@ func TestHandle_IsKeyedAndStable(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, h, back)
 	assert.Len(t, h.String(), 2*HandleBytes)
+}
+
+func TestFormat_KeepsATailParseWillRefuse(t *testing.T) {
+	link := Format(Envelope{Form: FormApp, Verb: VerbOpen, App: "play", Tail: "?sql=x"})
+	_, err := Parse(link)
+	assert.Error(t, err, "a tail with no operation is refused, not dropped: %s", link)
 }

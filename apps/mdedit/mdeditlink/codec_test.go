@@ -56,3 +56,20 @@ func FuzzLinkCodec(f *testing.F) {
 		}
 	})
 }
+
+// A heading slug may hold letters outside ASCII, '#' and '%': mdedit's own
+// Copy link writes it, so the link opens and reads back the same location.
+func TestFormat_EscapesWhatAFragmentCannotCarry(t *testing.T) {
+	for _, slug := range []string{"überblick", "c#-notes", "50%-done", "^block-1", "L12", "a b"} {
+		ref := Ref{Mount: identifier.TaggedId(0x84000003A3EC7AEA), Snap: time.Unix(0, 1761574725307515194), Path: "notes/doc.md", Fragment: slug}
+		link := Format(ref)
+		back, err := Parse(link)
+		require.NoError(t, err, link)
+		assert.Equal(t, slug, back.Fragment, link)
+		e, err := applink.Parse(link)
+		require.NoError(t, err, link)
+		require.NoError(t, applink.CheckParsed(LinkCodec, e.Tail), link)
+	}
+	assert.Contains(t, Format(Ref{Mount: identifier.TaggedId(0x84000003A3EC7AEA), Snap: time.Unix(0, 1761574725307515194), Path: "a.md", Fragment: "^id"}), "#^id",
+		"a block id reads as Obsidian writes it")
+}

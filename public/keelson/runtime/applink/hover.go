@@ -2,6 +2,7 @@ package applink
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,10 +13,13 @@ import (
 // Hovers answers a markdown surface's link hover (ADR-0409 (proposed)
 // §SD8) from what the host said of each link: Text runs on the render
 // goroutine once per claimed link each frame and never blocks, so it
-// returns the last answer and, for a link not yet asked about or asked
-// about too long ago, asks the host off the render goroutine and wakes a
-// pass when the answer lands. A minted link's reading can change — its
-// task ends — so an answer is kept for a while, not for good.
+// returns the last answer and, for a link not yet asked about, asks the
+// host off the render goroutine and wakes a pass when the answer lands. An
+// inline link's reading follows from the registry and is kept; a handle's
+// changes when its task ends, so it is asked again once its answer has
+// aged. A page with many links is asked about a few at a time, and a link
+// still on screen is never forgotten, so no frame asks again what the
+// previous frame asked.
 type Hovers struct {
 	bus    app.BusI
 	author Author
@@ -24,19 +28,25 @@ type Hovers struct {
 	mu      sync.Mutex
 	entries map[string]*hoverEntry
 	order   []string
+	pending int
 }
 
 type hoverEntry struct {
 	text    string
 	at      time.Time
+	used    time.Time
 	pending bool
 }
 
-// hoverFresh is how long an answer is shown before the host is asked
-// again; maxHovers bounds the links remembered, oldest forgotten first.
+// hoverFresh is how long a handle's answer is shown before the host is
+// asked again; maxHovers is the number of links remembered past which
+// links not drawn for hoverIdle are forgotten, oldest first; maxAsking
+// bounds the asks in flight.
 const (
 	hoverFresh = 10 * time.Second
+	hoverIdle  = 2 * time.Second
 	maxHovers  = 256
+	maxAsking  = 4
 )
 
 // hoverAsking is what a link's hover shows until the host answers.
@@ -55,20 +65,21 @@ func (inst *Hovers) Text(link string) (text string) {
 	if inst == nil || inst.bus == nil || inst.spawn == nil {
 		return ""
 	}
+	now := time.Now()
 	inst.mu.Lock()
 	e := inst.entries[link]
 	if e == nil {
-		e = &hoverEntry{text: hoverAsking}
+		e = &hoverEntry{text: hoverAsking, used: now}
 		inst.entries[link] = e
 		inst.order = append(inst.order, link)
-		for len(inst.order) > maxHovers {
-			delete(inst.entries, inst.order[0])
-			inst.order = inst.order[1:]
-		}
+		inst.forgetIdle(now)
 	}
-	ask := !e.pending && (e.at.IsZero() || time.Since(e.at) > hoverFresh)
+	e.used = now
+	stale := e.at.IsZero() || (strings.HasPrefix(link, Prefix+"l/") && now.Sub(e.at) > hoverFresh)
+	ask := !e.pending && stale && inst.pending < maxAsking
 	if ask {
 		e.pending = true
+		inst.pending++
 	}
 	text = e.text
 	inst.mu.Unlock()
@@ -82,16 +93,38 @@ func (inst *Hovers) Text(link string) (text string) {
 			}
 			inst.mu.Lock()
 			e.text, e.at, e.pending = t, time.Now(), false
+			inst.pending--
 			inst.mu.Unlock()
 			hostwake.Wake()
 		})
 		if !started {
 			inst.mu.Lock()
 			e.pending = false
+			inst.pending--
 			inst.mu.Unlock()
 		}
 	}
 	return
+}
+
+// forgetIdle forgets, oldest first, links not drawn for hoverIdle while
+// more than maxHovers are remembered. A link drawn recently stays however
+// many there are: forgetting it would ask about it again next frame. The
+// caller holds mu.
+func (inst *Hovers) forgetIdle(now time.Time) {
+	if len(inst.order) <= maxHovers {
+		return
+	}
+	kept := inst.order[:0]
+	for _, l := range inst.order {
+		e := inst.entries[l]
+		if len(inst.entries) > maxHovers && !e.pending && now.Sub(e.used) > hoverIdle {
+			delete(inst.entries, l)
+			continue
+		}
+		kept = append(kept, l)
+	}
+	inst.order = kept
 }
 
 // HoverSet keeps one Hovers per author, for a surface whose texts have

@@ -56,7 +56,7 @@ var _ HostI = (*windowhost.Inst)(nil)
 // dispatcher.
 type FollowerI interface {
 	FollowLink(ctx context.Context, c agent.LinkClick) (out agent.LinkFollowed)
-	TaskLive(taskId string) (live bool)
+	LinkLive(taskId string, epoch uint64) (live bool)
 }
 
 var _ FollowerI = (*agent.Service)(nil)
@@ -268,6 +268,7 @@ func (inst *Service) resolve(link string, author applink.Author) (r resolved, er
 	if r.rec.Operation == "" {
 		return
 	}
+	ok = false
 	if r.m.Operations != nil {
 		r.spec, ok = r.m.Operations.Lookup(r.rec.Operation)
 	}

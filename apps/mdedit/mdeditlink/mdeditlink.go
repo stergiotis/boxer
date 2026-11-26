@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/apps/mdedit/launchcfg"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsftp/sftptree"
@@ -87,9 +88,10 @@ type Ref struct {
 }
 
 // Format renders the link. The path is percent-encoded per segment; the
-// fragment is written as it is, so `#^id` reads as Obsidian writes it — a
-// slug, a block id and a line need no escaping, and a fragment with
-// characters a URL fragment cannot carry is not one of ours.
+// fragment escapes only what a link cannot carry as it is — a space, '#',
+// '%', a control byte and every byte of a non-ASCII letter — so `#^id` and
+// a plain slug read as Obsidian writes them, and a slug of `## Überblick`
+// or `## C# notes` still opens.
 func Format(r Ref) (s string) {
 	var b strings.Builder
 	b.WriteString(Prefix)
@@ -106,7 +108,25 @@ func Format(r Ref) (s string) {
 	}
 	if r.Fragment != "" {
 		b.WriteByte('#')
-		b.WriteString(r.Fragment)
+		b.WriteString(escapeFragment(r.Fragment))
+	}
+	return b.String()
+}
+
+// escapeFragment percent-encodes the bytes of a fragment a link cannot
+// carry as they are; url.Parse decodes them back.
+func escapeFragment(f string) string {
+	const hexDigits = "0123456789ABCDEF"
+	var b strings.Builder
+	for i := 0; i < len(f); i++ {
+		c := f[i]
+		if c > 0x20 && c < 0x7f && c != '#' && c != '%' {
+			b.WriteByte(c)
+			continue
+		}
+		b.WriteByte('%')
+		b.WriteByte(hexDigits[c>>4])
+		b.WriteByte(hexDigits[c&0xf])
 	}
 	return b.String()
 }
@@ -166,25 +186,12 @@ func Parse(link string) (r Ref, err error) {
 			return
 		}
 	}
-	if !fragmentCarried(u.Fragment) {
-		err = eb.Build().Str("link", link).Errorf("mdeditlink: the fragment holds characters a link writes only escaped; a location is a slug, ^id or L<n>")
+	if !utf8.ValidString(u.Fragment) || !utf8.ValidString(docPath) {
+		err = eb.Build().Str("link", link).Errorf("mdeditlink: an escape decodes to bytes that are not UTF-8")
 		return
 	}
 	r = Ref{Mount: mount, Snap: snap, Path: docPath, Mode: mode, Fragment: u.Fragment}
 	return
-}
-
-// fragmentCarried says Format writes a fragment as Parse reads it: printable
-// ASCII with no space, '%' or '#'. A fragment that needs escaping is not a
-// location this grammar names, and accepting one would let one link read
-// back as another after Format wrote it.
-func fragmentCarried(fragment string) bool {
-	for i := 0; i < len(fragment); i++ {
-		if c := fragment[i]; c <= 0x20 || c >= 0x7f || c == '%' || c == '#' {
-			return false
-		}
-	}
-	return true
 }
 
 // LocationKindE is what a fragment names.

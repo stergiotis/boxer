@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"reflect"
+	"slices"
 	"strconv"
 	"time"
 
@@ -147,13 +148,21 @@ func (inst *Service) makeLink(msg *app.Msg) (rep wireMakeLinkReply) {
 	return
 }
 
-// linkRecord checks a requested link and builds its record. The caller
-// holds mu.
+// linkWay is one way a minted link may reach a window: a window the
+// grant covers, or a launch of the app it names, with the mode it gives.
+type linkWay struct {
+	mode     ModeE
+	coversOp func(op string) bool
+}
+
+// linkRecord checks a requested link and builds its record. A link to an
+// app is checked against every way it may reach a window — the windows of
+// the app the grant covers, in key order, and a launch — and is minted
+// when one of them runs the call. The caller holds mu.
 func (inst *Service) linkRecord(t *task, req wireMakeLink) (rec applink.Record, spec app.OperationSpec, id app.AppIdT, why string) {
 	rec = applink.Record{V: applink.RecordVersion, AuthorLevel: applink.LevelOwnModel, AuthorTier: req.Tier,
 		Task: t.id, Epoch: t.epoch, Conversation: t.conversation}
-	var mode ModeE
-	coversOp := func(string) bool { return true }
+	var ways []linkWay
 	switch req.Target {
 	case LinkTargetWindow:
 		e := t.entries[req.Window]
@@ -161,7 +170,8 @@ func (inst *Service) linkRecord(t *task, req wireMakeLink) (rec applink.Record, 
 			why = "the grant does not cover that window"
 			return
 		}
-		id, mode, coversOp = e.app, e.mode, e.covers
+		id = e.app
+		ways = append(ways, linkWay{mode: e.mode, coversOp: e.covers})
 		rec.Verb, rec.Window = applink.VerbRaise, req.Window
 	case LinkTargetOpen, LinkTargetRaise:
 		var known bool
@@ -169,22 +179,25 @@ func (inst *Service) linkRecord(t *task, req wireMakeLink) (rec applink.Record, 
 			why = inst.unknownAppReason(req.App)
 			return
 		}
-		le := t.launches[id]
-		launchable := decideLaunch(t.ceiling, le != nil, launchCount(le), launchUsed(le)) == decisionGranted
-		if le != nil {
-			mode = le.mode
-		}
 		rec.Verb = applink.VerbOpen
 		if req.Target == LinkTargetRaise {
 			rec.Verb = applink.VerbRaise
-			for _, e := range t.entries {
+			keys := make([]uint64, 0, len(t.entries))
+			for k, e := range t.entries {
 				if e.app == id {
-					mode, coversOp, launchable = e.mode, e.covers, true
-					break
+					keys = append(keys, k)
 				}
 			}
+			slices.Sort(keys)
+			for _, k := range keys {
+				e := t.entries[k]
+				ways = append(ways, linkWay{mode: e.mode, coversOp: e.covers})
+			}
 		}
-		if !launchable {
+		if le := t.launches[id]; decideLaunch(t.ceiling, le != nil, launchCount(le), launchUsed(le)) == decisionGranted {
+			ways = append(ways, linkWay{mode: le.mode, coversOp: func(string) bool { return true }})
+		}
+		if len(ways) == 0 {
 			why = "the grant lets the task neither open nor reach a window of " + string(id) + "; ask for it with request_access first"
 			return
 		}
@@ -217,11 +230,20 @@ func (inst *Service) linkRecord(t *task, req wireMakeLink) (rec applink.Record, 
 		why = "a link never carries a consequential command"
 		return
 	}
-	switch decideOperation(t.ceiling, operationFacts{covered: true, coversOp: coversOp(spec.Name), mode: mode, effect: spec.Effect}) {
-	case decisionAboveCeiling:
+	granted, above := false, false
+	for _, w := range ways {
+		switch decideOperation(t.ceiling, operationFacts{covered: true, coversOp: w.coversOp(spec.Name), mode: w.mode, effect: spec.Effect}) {
+		case decisionGranted:
+			granted = true
+		case decisionAboveCeiling:
+			above = true
+		}
+	}
+	switch {
+	case granted:
+	case above:
 		why = t.ceiling.refuseEffect(spec.Effect)
 		return
-	case decisionGranted:
 	default:
 		why = "the grant does not cover this call in a mode that runs it; ask for it with request_access first"
 		return
@@ -270,8 +292,12 @@ type LinkClick struct {
 type LinkFollowed struct {
 	Authorised bool
 	Window     uint64
-	Outcome    opwire.Outcome
-	Reason     string
+	// Opened says Window is a window the click opened for the task; when
+	// the call is then not authorised, the link service follows the link
+	// in it rather than opening another.
+	Opened  bool
+	Outcome opwire.Outcome
+	Reason  string
 }
 
 // linkSettle bounds how long a click waits for its call to apply.
@@ -312,6 +338,18 @@ func (inst *Service) FollowLink(ctx context.Context, c LinkClick) (out LinkFollo
 		out.Reason = inst.unknownAppReason(r.App)
 		return
 	}
+	// The call is read before any window is reached, so a link whose call
+	// cannot run opens nothing.
+	var spec app.OperationSpec
+	var js string
+	if r.Operation != "" {
+		var why string
+		if spec, js, why = inst.linkCall(id, r); why != "" {
+			inst.mu.Unlock()
+			out.Reason = why
+			return
+		}
+	}
 	var key uint64
 	switch {
 	case r.Window != 0:
@@ -337,12 +375,23 @@ func (inst *Service) FollowLink(ctx context.Context, c LinkClick) (out LinkFollo
 			out.Reason = "the grant no longer lets the task open a window of " + string(id)
 			return
 		}
+		// What check would refuse in the window the launch opens is refused
+		// before it opens: a window opened for a call that then does not
+		// run would be left behind.
+		if r.Operation != "" {
+			if why := launchedCallRefusal(t, le, spec); why != "" {
+				inst.mu.Unlock()
+				out.Reason = why
+				return
+			}
+		}
 		var err error
 		key, _, _, err = inst.openFor(t, id, le, r.Kind, r.Config)
 		if err != nil {
 			out.Reason = "the host did not open it: " + err.Error()
 			return
 		}
+		out.Opened = true
 		inst.mu.Lock()
 	}
 	out.Window = key
@@ -352,33 +401,16 @@ func (inst *Service) FollowLink(ctx context.Context, c LinkClick) (out LinkFollo
 		out.Outcome = phaseOutcome(opwire.PhaseCompleted, "")
 		return
 	}
-	req := wireCall{Instance: key, Operation: r.Operation, Key: "link-" + r.Digest()[:16] + "-" + strconv.FormatUint(c.Click, 10),
+	req := wireCall{Instance: key, Operation: r.Operation, Key: linkCallKey(r, c.Click), Args: js,
 		Reason: "followed a link", Title: "followed a link from " + string(c.Surface), Tier: r.AuthorTier}
 	if key == r.Window {
 		req.Expects = r.Expects
 	}
-	m, _ := inst.cfg.Registry.LookupManifest(id)
-	if m.Operations != nil {
-		if spec, ok := m.Operations.Lookup(r.Operation); ok {
-			if spec.Version != r.Version {
-				inst.mu.Unlock()
-				out.Reason = "the link names version " + strconv.Itoa(int(r.Version)) + " of " + r.Operation + "; the app serves version " + strconv.Itoa(int(spec.Version))
-				return
-			}
-			js, err := argsJSON(spec, r.Args)
-			if err != nil {
-				inst.mu.Unlock()
-				out.Reason = "the link's arguments do not read: " + err.Error()
-				return
-			}
-			req.Args = js
-		}
-	}
 	rec := &callRec{key: req.Key, instance: key, argsDigest: digest(req.Args), created: time.Now(), tier: req.Tier,
 		title: req.Title, why: req.Reason}
 	t.keys[req.Key] = rec
-	o, spec, e, _, _, consent := inst.check(t, req)
-	rec.spec, rec.consent = spec, consent
+	o, checked, e, _, _, consent := inst.check(t, req)
+	rec.spec, rec.consent = checked, consent
 	if e != nil {
 		rec.app = e.app
 	}
@@ -387,7 +419,7 @@ func (inst *Service) FollowLink(ctx context.Context, c LinkClick) (out LinkFollo
 	case opwire.PhaseProposed:
 		t.callsUsed++
 		rec.req, rec.entry = req, e
-		rec.proposal = &proposal{expects: inst.expectsFor(t, req, spec)}
+		rec.proposal = &proposal{expects: inst.expectsFor(t, req, checked)}
 		if why := inst.admitConfirmation(t, rec); why != "" {
 			t.callsUsed--
 			o = phaseOutcome(opwire.PhaseRefused, why)
@@ -414,16 +446,88 @@ func (inst *Service) FollowLink(ctx context.Context, c LinkClick) (out LinkFollo
 	}
 	t.callsUsed++
 	inst.mu.Unlock()
-	if spec.Effect != app.OperationEffectNone {
+	if checked.Effect != app.OperationEffectNone {
 		inst.pace(t)
 	}
-	inst.route(ctx, t, rec, req, spec, e)
+	inst.route(ctx, t, rec, req, checked, e)
 	inst.mu.Lock()
 	_ = inst.outcomeOf(t, rec, linkSettle)
 	out.Outcome = rec.outcome
 	inst.mu.Unlock()
 	out.Authorised = true
 	return
+}
+
+// linkCall reads a minted link's call against the app's catalog as it
+// stands: the operation, its version, and the arguments as the model's
+// JSON, the form the dispatcher checks and routes.
+func (inst *Service) linkCall(id app.AppIdT, r applink.Record) (spec app.OperationSpec, js string, why string) {
+	m, ok := inst.cfg.Registry.LookupManifest(id)
+	if ok && m.Operations != nil {
+		spec, ok = m.Operations.Lookup(r.Operation)
+	} else {
+		ok = false
+	}
+	switch {
+	case !ok:
+		why = "the app has no operation " + r.Operation
+	case spec.Version != r.Version:
+		why = "the link names version " + strconv.Itoa(int(r.Version)) + " of " + r.Operation + "; the app serves version " + strconv.Itoa(int(spec.Version))
+	default:
+		var err error
+		if js, err = argsJSON(spec, r.Args); err != nil {
+			why = "the link's arguments do not read: " + err.Error()
+		}
+	}
+	return
+}
+
+// launchedCallRefusal is what check would refuse of a call in a window the
+// task's launch entry le opens: an operation not exposed to agents, an
+// effect the entry's mode or the ceiling does not run, a spent call budget.
+// Busy and paused do not apply to a window not yet open. The caller holds
+// mu.
+func launchedCallRefusal(t *task, le *launchEntry, spec app.OperationSpec) (why string) {
+	switch {
+	case !spec.Agents:
+		return "the operation is not exposed to agents"
+	case spec.Effect == app.OperationEffectConsequential:
+		return "a link never carries a consequential command"
+	case t.callsUsed >= t.callsBudget:
+		return "the task's call budget is spent"
+	}
+	switch decideOperation(t.ceiling, operationFacts{covered: true, coversOp: true, mode: le.mode, effect: spec.Effect}) {
+	case decisionGranted:
+		return ""
+	case decisionAboveCeiling:
+		return t.ceiling.refuseEffect(spec.Effect)
+	}
+	return "the task's launch of the app does not run this call in its mode"
+}
+
+// linkCallKey is a click's call key: per click, so a second click is a
+// second call, and named by the link's digest so the action record says
+// which link it was.
+func linkCallKey(r applink.Record, click uint64) (key string) {
+	d := r.Digest()
+	if len(d) > 16 {
+		d = d[:16]
+	}
+	return "link-" + d + "-" + strconv.FormatUint(click, 10)
+}
+
+// LinkLive says a minted link's grant could still authorise a click: its
+// task live at the epoch it was minted under, and before its deadline. It
+// is what a hover says; the click checks the rest.
+func (inst *Service) LinkLive(taskId string, epoch uint64) (live bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	for _, t := range inst.tasks {
+		if t.id == taskId {
+			return t.revoked == "" && t.epoch == epoch && time.Now().Before(t.deadline)
+		}
+	}
+	return false
 }
 
 // argsJSON is a call's CBOR arguments as the model's JSON, the form the
